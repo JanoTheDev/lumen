@@ -37,4 +37,9 @@ describe('classifyQuery', () => {
     const r = classifyQuery('how do I add a color grade in DaVinci Resolve')
     expect(r.mode).toBe('guide')
   })
+
+  it('classifies "show me how" as guide not locate', () => {
+    const r = classifyQuery('show me how to add a color grade')
+    expect(r.mode).toBe('guide')
+  })
 })

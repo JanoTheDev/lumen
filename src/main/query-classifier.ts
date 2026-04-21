@@ -1,4 +1,4 @@
-export type QueryMode = 'answer' | 'action' | 'text_insert' | 'guide' | 'locate'
+export type QueryMode = 'answer' | 'action' | 'guide' | 'locate'
 
 export interface QueryIntent {
   mode: QueryMode
@@ -11,7 +11,7 @@ const ACTION_RE_GLOBAL = /\b(open|go to|navigate|click|type|compose|send|create|
 const MULTI_INTENT_RE = /\b(and then|and also|after that|then|also)\b|,\s*(then|and)\b/i
 const GUIDE_RE = /^(how (do|can|should) (i|we)|what (are )?the steps|show me how|walk me through|explain how|what steps)\b/i
 const QUESTION_RE = /^(what|why|when|where|who|which|is there|are there|tell me|explain|describe)\b/i
-const LOCATE_RE = /\b(where is|where are|show me|find|highlight|point to|locate|can you show)\b/i
+const LOCATE_RE = /\b(where is|where are|show me(?! how)|find|highlight|point to|locate|can you show)\b/i
 const CONTINUATION_RE = /^(do it|just do it|yes|yes go ahead|go ahead|ok do it|do that|proceed|yes please|yes do it|sure go ahead|yep do it|ok yes)\b\.?$/i
 
 export function classifyQuery(prompt: string): QueryIntent {
