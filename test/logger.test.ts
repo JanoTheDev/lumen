@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { log } from '../src/main/logger'
 
 describe('logger', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('formats [plan] tag with message', () => {
@@ -16,24 +20,46 @@ describe('logger', () => {
     )
   })
 
-  it('includes model when provided', () => {
+  it('pads tag to 9 characters', () => {
+    log('plan', 'msg')
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[plan\]\s{3}/)  // [plan] = 6 chars, padded to 9 = 3 spaces
+    )
+    vi.clearAllMocks()
+    log('verify', 'msg')
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringMatching(/^\[verify\]\s{1}/)  // [verify] = 8 chars, padded to 9 = 1 space
+    )
+  })
+
+  it('includes model with pipe separator', () => {
     log('verify', 'page changed', { model: 'gpt-5-nano' })
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('gpt-5-nano')
+      expect.stringContaining('| gpt-5-nano')
     )
   })
 
-  it('formats cost to 5 decimal places', () => {
-    log('done', 'complete', { cost: 0.00123 })
+  it('formats cost to 5 decimal places (trailing zeros)', () => {
+    log('done', 'complete', { cost: 0.001 })
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('$0.00123')
+      expect.stringContaining('$0.00100')
     )
   })
 
-  it('formats timeMs as seconds', () => {
+  it('formats timeMs as seconds with pipe separator', () => {
     log('step', 'navigate', { timeMs: 2500 })
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('2.5s')
+      expect.stringContaining('| 2.5s')
     )
+  })
+
+  it('assembles full format with all meta fields', () => {
+    log('verify', 'done', { model: 'gpt-5-nano', cost: 0.00008, timeMs: 1200 })
+    const call = (console.log as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    expect(call).toMatch(/^\[verify\]/)
+    expect(call).toContain('done')
+    expect(call).toContain('| gpt-5-nano')
+    expect(call).toContain('| $0.00008')
+    expect(call).toContain('| 1.2s')
   })
 })
