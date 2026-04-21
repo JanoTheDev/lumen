@@ -1,3 +1,5 @@
+import { loadConfig } from './config'
+
 export type ModelFunction = 'planning' | 'execution' | 'verification'
 export type Provider = 'anthropic' | 'openai'
 
@@ -21,5 +23,7 @@ export function getProvider(): Provider {
 }
 
 export function getModel(fn: ModelFunction): string {
+  const override = loadConfig().models[fn]
+  if (override && override.trim()) return override.trim()
   return MODELS[getProvider()][fn]
 }

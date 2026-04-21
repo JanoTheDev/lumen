@@ -109,6 +109,25 @@
       <span class="hint">Release to send</span>
     </div>
     <script>
+      const THEME_MAP = {
+        dark:            { bg: '#0d0f14', fg: '#e6e8ee', acc: '#5b8cff' },
+        light:           { bg: '#ffffff', fg: '#0f172a', acc: '#2563eb' },
+        'high-contrast': { bg: '#000000', fg: '#ffffff', acc: '#ffff00' },
+        ocean:           { bg: '#031728', fg: '#e0f2fe', acc: '#06b6d4' },
+        forest:          { bg: '#0a1f14', fg: '#dcfce7', acc: '#22c55e' },
+        sunset:          { bg: '#1f1209', fg: '#fed7aa', acc: '#f97316' },
+        midnight:        { bg: '#0f0a1f', fg: '#ede9fe', acc: '#a855f7' }
+      }
+      function applyThemeVars(name) {
+        const t = THEME_MAP[name] || THEME_MAP.dark
+        const r = document.documentElement
+        r.style.setProperty('--ai-background', t.bg)
+        r.style.setProperty('--ai-foreground', t.fg)
+        r.style.setProperty('--ai-accent', t.acc)
+      }
+      window.api?.getConfig?.().then(c => applyThemeVars(c.theme)).catch(() => applyThemeVars('dark'))
+      window.api?.onConfigChanged?.((c) => applyThemeVars(c.theme))
+
       const el = document.getElementById('t')
       if (window.api?.onVoiceUpdate) {
         window.api.onVoiceUpdate((text) => {

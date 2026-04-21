@@ -23,12 +23,19 @@ describe('logger', () => {
   it('pads tag to 9 characters', () => {
     log('plan', 'msg')
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/^\[plan\]\s{3}/)  // [plan] = 6 chars, padded to 9 = 3 spaces
+      expect.stringMatching(/\[plan\]\s{3}/)  // [plan] = 6 chars, padded to 9 = 3 spaces
     )
     vi.clearAllMocks()
     log('verify', 'msg')
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/^\[verify\]\s{1}/)  // [verify] = 8 chars, padded to 9 = 1 space
+      expect.stringMatching(/\[verify\]\s{1}/)  // [verify] = 8 chars, padded to 9 = 1 space
+    )
+  })
+
+  it('prepends wall-clock timestamp HH:MM:SS.mmm', () => {
+    log('plan', 'msg')
+    expect(console.log).toHaveBeenCalledWith(
+      expect.stringMatching(/^\d{2}:\d{2}:\d{2}\.\d{3}\s\[plan\]/)
     )
   })
 
@@ -49,17 +56,17 @@ describe('logger', () => {
   it('formats timeMs as seconds with pipe separator', () => {
     log('step', 'navigate', { timeMs: 2500 })
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('| 2.5s')
+      expect.stringContaining('| 2.50s')
     )
   })
 
   it('assembles full format with all meta fields', () => {
     log('verify', 'done', { model: 'gpt-5-nano', cost: 0.00008, timeMs: 1200 })
     const call = (console.log as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
-    expect(call).toMatch(/^\[verify\]/)
+    expect(call).toMatch(/\[verify\]/)
     expect(call).toContain('done')
     expect(call).toContain('| gpt-5-nano')
     expect(call).toContain('| $0.00008')
-    expect(call).toContain('| 1.2s')
+    expect(call).toContain('| 1.20s')
   })
 })

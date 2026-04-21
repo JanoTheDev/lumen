@@ -8,7 +8,10 @@ import {
   BrowserWindow,
   ipcMain,
   screen,
-  globalShortcut
+  globalShortcut,
+  Tray,
+  Menu,
+  nativeImage
 } from 'electron'
 import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -17,14 +20,65 @@ import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
 import { createReadStream } from 'fs'
-import { classifyQuery } from './query-classifier'
-import { buildPlan, executePlan } from './task-planner'
-import { log } from './logger'
+import { classifyQuery, isResearchIntent } from './query-classifier'
+import { buildPlan, executePlan, runResearchAgent } from './task-planner'
+import { log, startTimer } from './logger'
+import { TaskQueue } from './task-queue'
+import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
+import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
 
 let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
 let answerOverlayWindow: BrowserWindow | null = null
+let settingsWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let agent: AgentBridge | null = null
+
+function createSettingsWindow(): void {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus()
+    return
+  }
+  settingsWindow = new BrowserWindow({
+    width: 720,
+    height: 560,
+    title: 'AI Overlay Settings',
+    frame: true,
+    resizable: true,
+    show: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true
+    }
+  })
+  settingsWindow.once('ready-to-show', () => settingsWindow?.show())
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/settings.html`)
+  } else {
+    settingsWindow.loadFile(join(__dirname, '../renderer/settings.html'))
+  }
+  settingsWindow.on('closed', () => { settingsWindow = null })
+}
+
+function broadcastConfig(cfg: AppConfig): void {
+  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
+  }
+}
+
+function createTray(): void {
+  const emptyIcon = nativeImage.createEmpty()
+  tray = new Tray(emptyIcon)
+  tray.setToolTip('AI Overlay')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Settings', click: () => createSettingsWindow() },
+    { label: 'Open config folder', click: () => shell.showItemInFolder(configPath()) },
+    { type: 'separator' },
+    { label: 'Quit', click: () => app.quit() },
+  ]))
+  tray.on('click', () => createSettingsWindow())
+}
 
 function createHUDWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
@@ -136,6 +190,8 @@ app.whenReady().then(async () => {
   createHUDWindow()
   createHighlightWindow()
   createAnswerOverlayWindow()
+  createTray()
+  loadConfig()  // warm cache
 
   agent.onEvent('hotkey-down', () => {
     console.log('[hotkey] down — showing HUD, starting recording')
@@ -201,9 +257,21 @@ app.whenReady().then(async () => {
   })
 
   let lastTaskContext: string | null = null
+  let currentAbort: AbortController | null = null
+  const userQueue = new TaskQueue(1, 'request-queue')
 
-  ipcMain.handle('query', async (_event, prompt: string, opts: CallOptions = {}) => {
+  ipcMain.on('cancel-current', () => {
+    if (currentAbort) {
+      log('skip', 'cancel-current received — aborting in-flight query')
+      currentAbort.abort()
+    }
+  })
+
+  async function runQuery(prompt: string, opts: CallOptions): Promise<ClaudeResponse> {
     if (!agent) throw new Error('Agent not ready')
+    const abortController = new AbortController()
+    currentAbort = abortController
+    const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
     log('plan', `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}`)
 
     const needsShot = needsScreenshot(prompt)
@@ -233,6 +301,7 @@ app.whenReady().then(async () => {
       }
       screenshot = needsShot ? await agent.screenshot() : null
     }
+    timer.split('context gathered (screenshot + active window)')
     log('plan', `active window: ${activeWindow}`)
 
     // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
@@ -243,19 +312,22 @@ app.whenReady().then(async () => {
     // Locate/show queries — AI ignores cluster-splitting rule, inject hard override.
     const LOCATE_RE = /\b(show me|where is|where are|find|highlight|point to|locate|can you show)\b/i
 
+    // Classify intent on the ORIGINAL prompt — SYSTEM OVERRIDE injections add verbs that
+    // falsely inflate actionVerbCount → planRequired=true for single-shot queries.
+    const intent = classifyQuery(prompt)
+
     let effectivePrompt = prompt
     if (!opts.lowDetail) {
       if (ORDINAL_RE.test(prompt)) {
         effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]`
       } else if (DIRECT_ACTION_RE.test(prompt)) {
         effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]`
-      } else if (LOCATE_RE.test(prompt)) {
+      } else if (LOCATE_RE.test(prompt) && intent.mode === 'locate') {
+        // Only apply locate override when classifier also said locate. Research intents
+        // ("show me positions for X") are action+planner — they must NOT take this path.
         effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with bbox [0,0,0,0].]`
       }
     }
-
-    // Classify intent before calling AI
-    const intent = classifyQuery(effectivePrompt)
 
     // Continuation: user said "do it" after AI gave answer — re-run with original task
     if (intent.isContinuation && lastTaskContext) {
@@ -272,35 +344,84 @@ app.whenReady().then(async () => {
 
     let result: ClaudeResponse
 
-    if (!opts.lowDetail && intent.planRequired) {
+    const researchMode = !opts.lowDetail && isResearchIntent(prompt)
+
+    if (researchMode) {
+      // Autonomous loop: keep navigating/clicking/scrolling until the info is found or stuck.
+      result = await runResearchAgent(
+        prompt,
+        activeWindow,
+        (p, s, w) => callClaude(p, s, w, opts),
+        () => agent!.screenshot(),
+        async (actions) => {
+          const { scale } = screenshotDimensions()
+          for (const action of actions as Action[]) {
+            const scaled = scaleActionForAgent(action, scale)
+            if (scaled.type === 'open_url' && scaled.url) {
+              await shell.openExternal(scaled.url)
+              await sleep(400)
+              await agent!.execute({ type: 'focus_browser' } as Action)
+            } else if (scaled.type === 'navigate_url' && scaled.url) {
+              await agent!.execute(scaled)
+              await sleep(1500)
+            } else {
+              await agent!.execute(scaled)
+            }
+            await sleep(scaled.type === 'hotkey' ? 300 : 150)
+          }
+        },
+        (progress) => { hudWindow?.webContents.send('plan-progress', progress) },
+        abortController.signal
+      )
+      timer.split('research agent done')
+    } else if (!opts.lowDetail && intent.planRequired) {
       // Multi-step: build plan, execute with verification
-      const plan = await buildPlan(effectivePrompt, screenshot, activeWindow)
+      const plan = await buildPlan(effectivePrompt, null, activeWindow)
+      timer.split('buildPlan done')
       result = await executePlan(
         plan,
         activeWindow,
         (p, s, w) => callClaude(p, s, w, opts),
         () => agent!.screenshot(),
         async (actions) => {
-          // Simplified execution — bypasses coordinate scaling and Computer Use refinement.
-          // Phase 2 will extract the full execute-action logic into a shared function.
-          for (const action of actions) {
-            await agent!.execute(action as Action)
-            await new Promise(r => setTimeout(r, 150))
+          const { scale } = screenshotDimensions()
+          for (const action of actions as Action[]) {
+            const scaled = scaleActionForAgent(action, scale)
+            if (scaled.type === 'open_url' && scaled.url) {
+              await shell.openExternal(scaled.url)
+              await sleep(400)
+              await agent!.execute({ type: 'focus_browser' } as Action)
+            } else if (scaled.type === 'navigate_url' && scaled.url) {
+              await agent!.execute(scaled)
+              await sleep(1500)
+            } else {
+              await agent!.execute(scaled)
+            }
+            await sleep(scaled.type === 'hotkey' ? 300 : 150)
           }
         },
         (progress) => {
           hudWindow?.webContents.send('plan-progress', progress)
         }
       )
+      timer.split('executePlan done')
+      // Plan already executed every step. Strip any trailing follow_up so the renderer
+      // doesn't fire an extra query that would re-trigger actions outside the plan.
+      if (result.mode === 'action' && result.follow_up) {
+        log('plan', 'stripping trailing follow_up from planned result')
+        delete result.follow_up
+      }
     } else {
       result = correctNthElement(await callClaude(effectivePrompt, screenshot, activeWindow, opts))
+      timer.split('callClaude done')
     }
 
     log('done', `mode: ${result.mode}`)
+    timer.total()
 
     // Locate request → action+navigate+follow_up: AI generates action follow_up, but we need locate.
     // Replace the AI's follow_up with a proper locate query so highlights appear after navigation.
-    if (!opts.lowDetail && LOCATE_RE.test(prompt) && result.mode === 'action' && result.follow_up) {
+    if (!opts.lowDetail && intent.mode === 'locate' && LOCATE_RE.test(prompt) && result.mode === 'action' && result.follow_up) {
       result.follow_up.query = `The page is loaded. Highlight where the user can find: "${prompt}". Respond ONLY with {"mode":"locate","items":[...]} — each item bbox tightly wraps only the matching visible rows/elements. Do NOT click, navigate, or open anything.`
       console.log('[locate-chain] replaced follow_up with locate query')
     }
@@ -388,11 +509,34 @@ app.whenReady().then(async () => {
       highlightWindow?.webContents.send('clear-highlights')
     }
 
+    if (currentAbort === abortController) currentAbort = null
     return result
+  }  // end runQuery
+
+  ipcMain.handle('query', async (_event, prompt: string, opts: CallOptions = {}) => {
+    // Level 2: split read-only prompts into parallel subtasks.
+    // Bypasses the serializing queue — each subtask is an independent AI call.
+    if (!opts.lowDetail) {
+      const subtasks = splitSubtasks(prompt)
+      if (canParallelize(subtasks)) {
+        return userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
+          log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
+          const timer = startTimer(`parallel subtasks (${subtasks.length})`)
+          const answers = await Promise.all(subtasks.map(st => runQuery(st, opts)))
+          timer.total()
+          const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
+          return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
+        })
+      }
+    }
+
+    // Level 1: serialize user requests through the queue.
+    return userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts))
   })
 
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
     if (!agent) throw new Error('Agent not ready')
+    const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
     const { scale } = screenshotDimensions()
     log('step', `execute: ${actions.map(a => a.type).join(', ')} | scale: ${scale}`)
     let reachedBottom = false
@@ -402,9 +546,11 @@ app.whenReady().then(async () => {
       let scaled: Action
 
       if (action.type === 'scroll') {
-        scaled = action.x != null && action.y != null
-          ? { ...action, x: Math.round(action.x * scale), y: Math.round(action.y * scale) }
-          : action
+        const cappedAmount = action.amount != null ? Math.min(Math.max(1, action.amount), 2) : 1
+        const base = { ...action, amount: cappedAmount }
+        scaled = base.x != null && base.y != null
+          ? { ...base, x: Math.round(base.x * scale), y: Math.round(base.y * scale) } as Action
+          : base as Action
       } else if (action.type === 'click_bbox' && action.bbox) {
         const [x1, y1, x2, y2] = action.bbox
         const sx1 = Math.round(x1 * scale), sy1 = Math.round(y1 * scale)
@@ -489,6 +635,7 @@ app.whenReady().then(async () => {
 
     highlightWindow?.hide()
     log('done', 'execute complete')
+    execTimer.total()
     return { done: true, reached_bottom: reachedBottom }
   })
 
@@ -496,6 +643,14 @@ app.whenReady().then(async () => {
     highlightWindow?.hide()
     highlightWindow?.webContents.send('clear-highlights')
   })
+
+  ipcMain.handle('config-get', () => loadConfig())
+  ipcMain.handle('config-save', (_e, patch: Partial<AppConfig>) => {
+    const next = saveConfig(patch)
+    broadcastConfig(next)
+    return next
+  })
+  ipcMain.on('settings-open', () => createSettingsWindow())
 
   ipcMain.handle('transcribe', async (_event, audio: ArrayBuffer) => {
     if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
@@ -543,6 +698,35 @@ app.on('window-all-closed', () => {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function scaleActionForAgent(action: Action, scale: number): Action {
+  if (action.type === 'scroll') {
+    // Cap AI-chosen scroll amounts to prevent full-page jumps that overshoot target content.
+    const cappedAmount = action.amount != null ? Math.min(Math.max(1, action.amount), 2) : 1
+    const base = { ...action, amount: cappedAmount }
+    if (base.x != null && base.y != null) {
+      return { ...base, x: Math.round(base.x * scale), y: Math.round(base.y * scale) } as Action
+    }
+    return base as Action
+  }
+  if (action.type === 'click_bbox' && action.bbox) {
+    const [x1, y1, x2, y2] = action.bbox
+    const cx = Math.round(((x1 + x2) / 2) * scale)
+    const cy = Math.round(((y1 + y2) / 2) * scale)
+    return { type: 'click', x: cx, y: cy, button: action.button ?? 'left' }
+  }
+  if ((action.type === 'click' || action.type === 'move') && action.x != null && action.y != null) {
+    return { ...action, x: Math.round(action.x * scale), y: Math.round(action.y * scale) }
+  }
+  if (action.type === 'click_element' && action.bbox) {
+    const [x1, y1, x2, y2] = action.bbox
+    return {
+      ...action,
+      bbox: [Math.round(x1 * scale), Math.round(y1 * scale), Math.round(x2 * scale), Math.round(y2 * scale)]
+    } as Action
+  }
+  return action
 }
 
 export type Action =

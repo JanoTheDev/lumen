@@ -39,7 +39,14 @@ const api = {
     ipcRenderer.on('stop-recording', () => cb())
   },
   transcribe: (audio: ArrayBuffer) => ipcRenderer.invoke('transcribe', audio),
-  resizeAnswerOverlay: (h: number) => ipcRenderer.send('resize-answer-overlay', h)
+  resizeAnswerOverlay: (h: number) => ipcRenderer.send('resize-answer-overlay', h),
+  getConfig: () => ipcRenderer.invoke('config-get'),
+  saveConfig: (patch: Record<string, unknown>) => ipcRenderer.invoke('config-save', patch),
+  openSettings: () => ipcRenderer.send('settings-open'),
+  cancelCurrent: () => ipcRenderer.send('cancel-current'),
+  onConfigChanged: (cb: (cfg: Record<string, unknown>) => void) => {
+    ipcRenderer.on('config-changed', (_e, cfg) => cb(cfg))
+  }
 }
 
 if (process.contextIsolated) {

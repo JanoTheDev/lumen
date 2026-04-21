@@ -33,6 +33,8 @@ export default function App(): JSX.Element {
       cancelledRef.current = true
       queryFiredRef.current = false
       if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
+      // Signal main process to abort any in-flight research/plan/callClaude loop
+      ;(window.api as { cancelCurrent?: () => void }).cancelCurrent?.()
       setPhase('listening')
       window.api.closeHUD()
     })
@@ -86,7 +88,7 @@ export default function App(): JSX.Element {
 
   const handleResult = async (text: string): Promise<void> => {
     console.log('[voice] result:', text)
-    if (!text.trim() || queryFiredRef.current) {
+    if (!text.trim()) {
       window.api.closeHUD()
       setPhase('listening')
       return
@@ -96,6 +98,8 @@ export default function App(): JSX.Element {
       window.api.closeHUD()
       return
     }
+    // queryFiredRef blocked queued requests — main-process TaskQueue handles serialization.
+    // Fire every valid transcript; queue waits if another query is in flight.
     queryFiredRef.current = true
     setPhase('processing')
     // Safety net: if processing stalls >60s, auto-reset
@@ -174,29 +178,27 @@ export default function App(): JSX.Element {
         alignItems: 'center',
         justifyContent: 'center',
         borderRadius: 999,
-        background: 'linear-gradient(160deg, rgba(255,255,255,0.32) 0%, rgba(255,255,255,0.10) 50%, rgba(255,255,255,0.20) 100%)',
+        background: 'color-mix(in srgb, var(--ai-background, #0d0f14) 88%, transparent)',
         backdropFilter: 'blur(40px) saturate(180%)',
         WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid rgba(255,255,255,0.50)',
+        border: '1px solid color-mix(in srgb, var(--ai-accent, #5b8cff) 40%, transparent)',
         boxShadow: [
-          '0 8px 32px rgba(0,0,0,0.14)',
-          '0 2px 6px rgba(0,0,0,0.08)',
-          'inset 0 2px 0 rgba(255,255,255,0.70)',
-          'inset 0 -1px 0 rgba(0,0,0,0.06)',
-          'inset 1px 0 0 rgba(255,255,255,0.30)',
-          'inset -1px 0 0 rgba(255,255,255,0.20)',
+          '0 8px 32px rgba(0,0,0,0.38)',
+          '0 2px 6px rgba(0,0,0,0.22)',
+          'inset 0 1px 0 color-mix(in srgb, var(--ai-foreground, #fff) 14%, transparent)',
+          '0 0 20px color-mix(in srgb, var(--ai-accent, #5b8cff) 18%, transparent)',
         ].join(', '),
         animation: 'pill-in 0.2s cubic-bezier(0.34,1.56,0.64,1) both',
       }}>
 
         {hasError ? (
-          <span style={{ fontSize: 13, color: 'rgba(180,50,50,0.9)' }}>⚠</span>
+          <span style={{ fontSize: 13, color: 'var(--ai-error, #f87171)' }}>⚠</span>
         ) : analyzing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {[0, 1, 2].map((i) => (
               <div key={i} style={{
                 width: 5, height: 5, borderRadius: '50%',
-                background: 'rgba(0,0,0,0.38)',
+                background: 'var(--ai-accent, #5b8cff)',
                 animation: `dot-bounce 1.2s ease-in-out ${i * 0.18}s infinite`,
               }} />
             ))}
@@ -212,7 +214,7 @@ export default function App(): JSX.Element {
                   width: 2.5,
                   height: Math.max(base, barH),
                   borderRadius: 99,
-                  background: 'rgba(0,0,0,0.32)',
+                  background: 'var(--ai-accent, #5b8cff)',
                   transition: 'height 0.06s ease-out',
                 }} />
               )

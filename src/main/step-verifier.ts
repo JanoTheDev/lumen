@@ -4,8 +4,11 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getProvider, type Provider } from './model-router'
 import { log } from './logger'
 
+// Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
+// as failures (e.g. "Gmail loading screen" → retry → opens Gmail 4x).
+// Hash-diff in executePlan already confirms the navigation changed the screen.
 const VERIFY_ACTION_TYPES = new Set([
-  'navigate_url', 'open_url', 'type', 'hotkey',
+  'type', 'hotkey',
   'click_element', 'click_bbox', 'click'
 ])
 
@@ -52,7 +55,14 @@ export async function verifyStep(
   }
   const model = VERIFY_MODEL[provider]
   const start = Date.now()
-  const prompt = `Step was: "${stepDescription}". Did it succeed? Reply only with JSON: {"success":true,"detail":"brief reason"}`
+  const prompt = `You verify if a screen action succeeded by looking at the resulting screenshot.
+Action attempted: "${stepDescription}"
+Rules:
+- If the expected app/page/state is visible (even loading, partially rendered, or with cookie banners) → success: true
+- If an obviously wrong page, error message, or blocked dialog is visible → success: false
+- If you cannot tell → success: true (do not retry on uncertainty)
+- NEVER refuse. NEVER say "I cannot verify". Always choose true or false.
+Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
 
   let success = true
   let detail = 'page changed'
@@ -82,8 +92,8 @@ export async function verifyStep(
       const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
       const resp = await client.chat.completions.create({
         model,
-        max_completion_tokens: 64,
-        response_format: { type: 'json_object' },
+        max_completion_tokens: 512,
+        reasoning_effort: 'minimal',
         messages: [{
           role: 'user',
           content: [
@@ -91,9 +101,13 @@ export async function verifyStep(
             { type: 'text', text: prompt }
           ]
         }]
-      })
-      const raw = resp.choices[0]?.message?.content ?? '{}'
-      const parsed = JSON.parse(raw) as { success?: boolean; detail?: string }
+      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' })
+      const rawVerify = resp.choices[0]?.message?.content
+      if (!rawVerify) {
+        log('verify', 'no response from model, assuming success', { model, cost: 0, timeMs: Date.now() - start })
+        return { success: true, detail: 'no response, assuming success', cost: 0 }
+      }
+      const parsed = JSON.parse(rawVerify.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()) as { success?: boolean; detail?: string }
       success = parsed.success ?? true
       detail = parsed.detail ?? 'ok'
       const usage = resp.usage
@@ -104,6 +118,13 @@ export async function verifyStep(
     }
   } catch (e) {
     detail = `verify error: ${(e as Error).message}`
+  }
+
+  // Safety net: verifier sometimes returns refusal/uncertainty phrased as success=false.
+  // Those are not real failures — coerce to success to prevent wasted retries.
+  if (!success && /\b(cannot|can't|unable to|unsure|not sure|don't know|dont know)\b/i.test(detail)) {
+    log('verify', `coercing uncertain verdict to success: "${detail}"`, { model, cost, timeMs: Date.now() - start })
+    return { success: true, detail: `uncertain (coerced): ${detail}`, cost }
   }
 
   log('verify', detail, { model, cost, timeMs: Date.now() - start })

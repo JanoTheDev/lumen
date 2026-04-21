@@ -13,8 +13,12 @@ describe('step-verifier', () => {
     expect(hashScreenshot(a)).not.toBe(hashScreenshot(b))
   })
 
-  it('marks navigate_url as requiring verification', () => {
-    expect(shouldVerifyStep('navigate_url')).toBe(true)
+  it('excludes navigate_url from verification (verifier misjudges slow loads)', () => {
+    expect(shouldVerifyStep('navigate_url')).toBe(false)
+  })
+
+  it('excludes open_url from verification', () => {
+    expect(shouldVerifyStep('open_url')).toBe(false)
   })
 
   it('marks type as requiring verification', () => {
