@@ -8,3 +8,6 @@ out
 # secrets — never commit
 .env
 agent/.venv
+agent/__pycache__/
+**/__pycache__/
+*.pyc
