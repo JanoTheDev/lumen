@@ -1,0 +1,121 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Voice Bar</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { background: transparent; width: 100%; height: 100%; overflow: hidden; }
+
+      .bar {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 0 20px;
+        border-radius: 999px;
+        font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+
+        background: linear-gradient(
+          135deg,
+          rgba(255,255,255,0.14) 0%,
+          rgba(255,255,255,0.06) 50%,
+          rgba(255,255,255,0.10) 100%
+        );
+        backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+        -webkit-backdrop-filter: blur(40px) saturate(200%) brightness(1.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        box-shadow:
+          inset 0 1px 0 rgba(255,255,255,0.25),
+          inset 0 -1px 0 rgba(0,0,0,0.1),
+          0 16px 40px rgba(0,0,0,0.5),
+          0 0 0 0.5px rgba(168,85,247,0.2);
+      }
+
+      /* Waveform bars */
+      .waves {
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+      .wave {
+        width: 3px;
+        border-radius: 99px;
+        background: linear-gradient(to top, rgba(168,85,247,0.9), rgba(99,102,241,0.6));
+        animation: wave 0.6s ease-in-out infinite;
+      }
+      .wave:nth-child(1) { animation-delay: 0s;    --h: 6px;  }
+      .wave:nth-child(2) { animation-delay: 0.1s;  --h: 14px; }
+      .wave:nth-child(3) { animation-delay: 0.05s; --h: 20px; }
+      .wave:nth-child(4) { animation-delay: 0.15s; --h: 24px; }
+      .wave:nth-child(5) { animation-delay: 0.08s; --h: 16px; }
+      .wave:nth-child(6) { animation-delay: 0.12s; --h: 10px; }
+      .wave:nth-child(7) { animation-delay: 0.03s; --h: 6px;  }
+      @keyframes wave {
+        0%, 100% { height: calc(var(--h) * 0.3); }
+        50%       { height: var(--h); }
+      }
+
+      .mic-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(168,85,247,0.9);
+        box-shadow: 0 0 8px rgba(168,85,247,0.7);
+        flex-shrink: 0;
+        animation: blink 1s ease-in-out infinite;
+      }
+      @keyframes blink {
+        0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+      }
+
+      .transcript {
+        flex: 1;
+        font-size: 13px;
+        font-weight: 500;
+        color: rgba(255,255,255,0.82);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        letter-spacing: -0.01em;
+      }
+      .transcript.empty {
+        color: rgba(255,255,255,0.35);
+        font-weight: 400;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: rgba(255,255,255,0.25);
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <div class="mic-dot"></div>
+      <div class="waves">
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+        <div class="wave"></div>
+      </div>
+      <span class="transcript empty" id="t">Listening…</span>
+      <span class="hint">Release to send</span>
+    </div>
+    <script>
+      const el = document.getElementById('t')
+      if (window.api?.onVoiceUpdate) {
+        window.api.onVoiceUpdate((text) => {
+          el.textContent = text || 'Listening…'
+          el.className = 'transcript' + (text ? '' : ' empty')
+        })
+      }
+    </script>
+  </body>
+</html>
