@@ -12,11 +12,14 @@ import {
 } from 'electron'
 import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { callClaude, needsScreenshot, screenshotDimensions, isBrowser, warmupConnection, addToHistory, findClickCoordinates, type CallOptions } from './claude'
+import { callClaude, needsScreenshot, screenshotDimensions, isBrowser, warmupConnection, addToHistory, findClickCoordinates, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
 import { createReadStream } from 'fs'
+import { classifyQuery } from './query-classifier'
+import { buildPlan, executePlan } from './task-planner'
+import { log } from './logger'
 
 let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
@@ -197,9 +200,11 @@ app.whenReady().then(async () => {
     answerOverlayWindow?.setSize(360, clamped)
   })
 
+  let lastTaskContext: string | null = null
+
   ipcMain.handle('query', async (_event, prompt: string, opts: CallOptions = {}) => {
     if (!agent) throw new Error('Agent not ready')
-    console.log('[query] prompt:', prompt, opts.lowDetail ? '[low-detail]' : '')
+    log('plan', `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}`)
 
     const needsShot = needsScreenshot(prompt)
     console.log('[query] needs screenshot:', needsShot)
@@ -228,7 +233,7 @@ app.whenReady().then(async () => {
       }
       screenshot = needsShot ? await agent.screenshot() : null
     }
-    console.log('[query] active window:', activeWindow)
+    log('plan', `active window: ${activeWindow}`)
 
     // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
     // AI ignores rule from system prompt alone — inject a hard override into the prompt.
@@ -249,9 +254,49 @@ app.whenReady().then(async () => {
       }
     }
 
-    console.log('[query] calling AI...')
-    const result = correctNthElement(await callClaude(effectivePrompt, screenshot, activeWindow, opts))
-    console.log('[query] result:', JSON.stringify(result))
+    // Classify intent before calling AI
+    const intent = classifyQuery(effectivePrompt)
+
+    // Continuation: user said "do it" after AI gave answer — re-run with original task
+    if (intent.isContinuation && lastTaskContext) {
+      log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
+      effectivePrompt = `${lastTaskContext}\n\n[User confirmed: proceed with action mode. Execute the task now.]`
+    }
+
+    // Store task context for potential continuation (not for low-detail follow-up queries)
+    if (!opts.lowDetail && !intent.isContinuation) {
+      lastTaskContext = effectivePrompt
+    }
+
+    log('plan', `query: "${effectivePrompt.slice(0, 80)}"`)
+
+    let result: ClaudeResponse
+
+    if (!opts.lowDetail && intent.planRequired) {
+      // Multi-step: build plan, execute with verification
+      const plan = await buildPlan(effectivePrompt, screenshot, activeWindow)
+      result = await executePlan(
+        plan,
+        activeWindow,
+        (p, s, w) => callClaude(p, s, w, opts),
+        () => agent!.screenshot(),
+        async (actions) => {
+          // Simplified execution — bypasses coordinate scaling and Computer Use refinement.
+          // Phase 2 will extract the full execute-action logic into a shared function.
+          for (const action of actions) {
+            await agent!.execute(action as Action)
+            await new Promise(r => setTimeout(r, 150))
+          }
+        },
+        (progress) => {
+          hudWindow?.webContents.send('plan-progress', progress)
+        }
+      )
+    } else {
+      result = correctNthElement(await callClaude(effectivePrompt, screenshot, activeWindow, opts))
+    }
+
+    log('done', `mode: ${result.mode}`)
 
     // Locate request → action+navigate+follow_up: AI generates action follow_up, but we need locate.
     // Replace the AI's follow_up with a proper locate query so highlights appear after navigation.
