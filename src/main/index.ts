@@ -207,14 +207,14 @@ app.whenReady().then(async () => {
     log('plan', `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}`)
 
     const needsShot = needsScreenshot(prompt)
-    console.log('[query] needs screenshot:', needsShot)
+    log('plan', `needs screenshot: ${needsShot}`)
 
     let activeWindow: string
     let screenshot: string | null
 
     const SPEC_TTL = 4000  // use speculative cache if taken within 4s
     if (needsShot && speculativeShot && Date.now() - speculativeShot.ts < SPEC_TTL) {
-      console.log('[query] using speculative screenshot (age:', Date.now() - speculativeShot.ts, 'ms)')
+      log('plan', `using speculative screenshot (age: ${Date.now() - speculativeShot.ts}ms)`)
       activeWindow = speculativeShot.activeWindow
       screenshot = speculativeShot.screenshot
       speculativeShot = null
@@ -394,7 +394,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
     if (!agent) throw new Error('Agent not ready')
     const { scale } = screenshotDimensions()
-    console.log('[execute] actions:', JSON.stringify(actions), '| coordScale:', scale)
+    log('step', `execute: ${actions.map(a => a.type).join(', ')} | scale: ${scale}`)
     let reachedBottom = false
 
     let firstClick = true
@@ -488,7 +488,7 @@ app.whenReady().then(async () => {
     }
 
     highlightWindow?.hide()
-    console.log('[execute] done')
+    log('done', 'execute complete')
     return { done: true, reached_bottom: reachedBottom }
   })
 
