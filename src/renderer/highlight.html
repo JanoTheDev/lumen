@@ -1,0 +1,326 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Highlight Overlay</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: transparent; overflow: hidden; }
+      canvas { position: fixed; top: 0; left: 0; pointer-events: none; }
+
+      /* Shared glass mixin */
+      .label, .pointer-label, .locate-label {
+        backdrop-filter: blur(32px) saturate(180%);
+        -webkit-backdrop-filter: blur(32px) saturate(180%);
+      }
+
+      /* Step label next to bbox */
+      .label {
+        position: fixed;
+        pointer-events: none;
+        background: linear-gradient(160deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.10) 55%, rgba(255,255,255,0.18) 100%);
+        border: 1px solid rgba(255,255,255,0.50);
+        border-radius: 12px;
+        padding: 6px 11px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        color: rgba(0,0,0,0.88);
+        letter-spacing: -0.01em;
+        white-space: normal;
+        max-width: 240px;
+        box-shadow:
+          0 6px 24px rgba(0,0,0,0.14),
+          0 1px 3px rgba(0,0,0,0.08),
+          inset 0 1.5px 0 rgba(255,255,255,0.68),
+          inset 0 -1px 0 rgba(0,0,0,0.04);
+        animation: label-in 0.18s cubic-bezier(0.34,1.4,0.64,1) both;
+      }
+      .step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        background: rgba(0,0,0,0.10);
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 700;
+        color: rgba(0,0,0,0.65);
+      }
+
+      /* Cursor pointer label */
+      .pointer-label {
+        position: fixed;
+        pointer-events: none;
+        background: linear-gradient(160deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.10) 55%, rgba(255,255,255,0.18) 100%);
+        border: 1px solid rgba(255,255,255,0.50);
+        border-radius: 12px;
+        padding: 7px 13px;
+        font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+        font-size: 14px;
+        font-weight: 500;
+        color: rgba(0,0,0,0.88);
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        box-shadow:
+          0 6px 24px rgba(0,0,0,0.14),
+          0 1px 3px rgba(0,0,0,0.08),
+          inset 0 1.5px 0 rgba(255,255,255,0.68),
+          inset 0 -1px 0 rgba(0,0,0,0.04);
+        animation: label-in 0.18s cubic-bezier(0.34,1.4,0.64,1) both;
+      }
+
+      @keyframes label-in {
+        from { opacity: 0; transform: scale(0.94) translateY(4px); }
+        to   { opacity: 1; transform: scale(1)    translateY(0); }
+      }
+      @keyframes locate-in {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+      }
+      /* Locate label */
+      .locate-label {
+        position: fixed;
+        pointer-events: none;
+        background: linear-gradient(160deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.10) 55%, rgba(255,255,255,0.18) 100%);
+        border: 1px solid rgba(255,255,255,0.50);
+        border-radius: 12px;
+        padding: 7px 13px 7px 10px;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        font-family: -apple-system, 'SF Pro Text', system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        color: rgba(0,0,0,0.90);
+        letter-spacing: -0.01em;
+        white-space: normal;
+        max-width: 280px;
+        line-height: 1.42;
+        box-shadow:
+          0 6px 28px rgba(0,0,0,0.16),
+          0 1px 4px rgba(0,0,0,0.08),
+          inset 0 1.5px 0 rgba(255,255,255,0.68),
+          inset 0 -1px 0 rgba(0,0,0,0.04);
+        animation: locate-in 0.22s ease both;
+      }
+      .locate-dot {
+        width: 8px;
+        height: 8px;
+        min-width: 8px;
+        margin-top: 3px;
+        background: rgba(66,153,225,0.9);
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      @keyframes ping {
+        0%   { transform: scale(1); opacity: 0.6; }
+        100% { transform: scale(2.6); opacity: 0; }
+      }
+      .pulse-ring {
+        position: fixed;
+        border: 1.5px solid rgba(0,0,0,0.35);
+        border-radius: 50%;
+        pointer-events: none;
+        animation: ping 1.1s ease-out infinite;
+      }
+      .pulse-dot {
+        position: fixed;
+        background: rgba(0,0,0,0.65);
+        border-radius: 50%;
+        pointer-events: none;
+        width: 8px;
+        height: 8px;
+        box-shadow: 0 0 0 2px rgba(255,255,255,0.9);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="c"></canvas>
+
+    <script>
+      const canvas = document.getElementById('c')
+      const ctx = canvas.getContext('2d')
+      canvas.width = window.screen.width
+      canvas.height = window.screen.height
+
+      let domElements = []
+      function clearDom() { domElements.forEach(el => el.remove()); domElements = [] }
+      function addEl(el) { document.body.appendChild(el); domElements.push(el) }
+
+      function drawHighlights(steps) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        clearDom()
+
+        steps.forEach((step, i) => {
+          if (!step.bbox) return
+          const [x, y, w, h] = step.bbox
+          const cx = x + w / 2
+          const cy = y + h / 2
+
+          // highlight rect — subtle fill + clean border
+          ctx.strokeStyle = 'rgba(0,0,0,0.22)'
+          ctx.lineWidth = 1.5
+          ctx.setLineDash([4, 3])
+          ctx.strokeRect(x + 0.5, y + 0.5, w, h)
+          ctx.setLineDash([])
+          ctx.fillStyle = 'rgba(0,0,0,0.04)'
+          ctx.fillRect(x, y, w, h)
+
+          // pulse ring + dot
+          const ring = document.createElement('div')
+          ring.className = 'pulse-ring'
+          ring.style.cssText = `left:${cx-13}px;top:${cy-13}px;width:26px;height:26px;animation-delay:${i * 0.15}s`
+          addEl(ring)
+
+          const dot = document.createElement('div')
+          dot.className = 'pulse-dot'
+          dot.style.cssText = `left:${cx-4}px;top:${cy-4}px`
+          addEl(dot)
+
+          // label
+          const label = document.createElement('div')
+          label.className = 'label'
+          const num = document.createElement('span')
+          num.className = 'step-num'
+          num.textContent = i + 1
+          label.appendChild(num)
+          label.appendChild(document.createTextNode(step.label || step.target_hint || ''))
+
+          const labelY = (y + h + 10 < window.screen.height - 40) ? (y + h + 10) : (y - 52)
+          const labelX = Math.min(x, window.screen.width - 260)
+          label.style.cssText = `left:${labelX}px;top:${labelY}px`
+          addEl(label)
+        })
+      }
+
+      function showPointer(x, y, text) {
+        clearDom()
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        const ring = document.createElement('div')
+        ring.className = 'pulse-ring'
+        ring.style.cssText = `left:${x-14}px;top:${y-14}px;width:28px;height:28px`
+        addEl(ring)
+
+        const dot = document.createElement('div')
+        dot.className = 'pulse-dot'
+        dot.style.cssText = `left:${x-4}px;top:${y-4}px`
+        addEl(dot)
+
+        if (text) {
+          const label = document.createElement('div')
+          label.className = 'pointer-label'
+          label.textContent = text
+          // position right of cursor, flip left if near edge
+          const lx = (x + 20 + 260 < window.screen.width) ? x + 20 : x - 280
+          const ly = Math.max(8, y - 18)
+          label.style.cssText = `left:${lx}px;top:${ly}px`
+          addEl(label)
+        }
+      }
+
+      function clearAll() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+        clearDom()
+      }
+
+      function unionBbox(a, b) {
+        const minX = Math.min(a[0], b[0])
+        const minY = Math.min(a[1], b[1])
+        const maxX = Math.max(a[0] + a[2], b[0] + b[2])
+        const maxY = Math.max(a[1] + a[3], b[1] + b[3])
+        return [minX, minY, maxX - minX, maxY - minY]
+      }
+
+      // Merge items whose bboxes overlap or are within `gap` pixels of each other
+      function mergeAdjacent(items, gap) {
+        if (items.length <= 1) return items
+        const result = items.map(i => ({ ...i, bbox: [...i.bbox] }))
+        let changed = true
+        while (changed) {
+          changed = false
+          outer: for (let i = 0; i < result.length; i++) {
+            for (let j = i + 1; j < result.length; j++) {
+              const [ax, ay, aw, ah] = result[i].bbox
+              const [bx, by, bw, bh] = result[j].bbox
+              const xClose = ax < bx + bw + gap && ax + aw + gap > bx
+              const yClose = ay < by + bh + gap && ay + ah + gap > by
+              if (xClose && yClose) {
+                result[i].bbox = unionBbox(result[i].bbox, result[j].bbox)
+                result.splice(j, 1)
+                changed = true
+                break outer
+              }
+            }
+          }
+        }
+        return result
+      }
+
+      function showLocate(rawItems) {
+        const items = mergeAdjacent(rawItems, 4)
+        clearDom()
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        // Single dim pass over entire screen
+        ctx.fillStyle = 'rgba(0,0,0,0.60)'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+        const pad = 8
+
+        items.forEach(({ label, bbox, description }) => {
+          const [x, y, w, h] = bbox
+
+          // Punch hole to reveal element
+          ctx.clearRect(x - pad, y - pad, w + pad * 2, h + pad * 2)
+
+          // Border
+          const bx = x - pad + 0.5, by = y - pad + 0.5
+          const bw = w + pad * 2 - 1, bh = h + pad * 2 - 1
+          ctx.strokeStyle = 'rgba(66,153,225,0.85)'
+          ctx.lineWidth = 2.5
+          ctx.setLineDash([])
+          ctx.strokeRect(bx, by, bw, bh)
+
+          // Corner brackets for large components
+          if (w > 100 || h > 70) {
+            const cLen = Math.min(20, w * 0.14, h * 0.14)
+            ctx.strokeStyle = 'rgba(66,153,225,0.9)'
+            ctx.lineWidth = 3
+            ctx.beginPath(); ctx.moveTo(bx, by + cLen); ctx.lineTo(bx, by); ctx.lineTo(bx + cLen, by); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(bx + bw - cLen, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cLen); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(bx, by + bh - cLen); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cLen, by + bh); ctx.stroke()
+            ctx.beginPath(); ctx.moveTo(bx + bw - cLen, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cLen); ctx.stroke()
+          }
+
+          // Label — outside, anchored to top edge of box (above if room, below if near screen top)
+          const labelEl = document.createElement('div')
+          labelEl.className = 'locate-label'
+          const dot = document.createElement('span')
+          dot.className = 'locate-dot'
+          labelEl.appendChild(dot)
+          labelEl.appendChild(document.createTextNode(description || label))
+          const labelX = Math.max(8, Math.min(x - pad, canvas.width - 296))
+          const aboveRoom = y - pad > 60
+          const labelY = aboveRoom ? (y - pad - 6) : (y + h + pad + 10)
+          labelEl.style.cssText = `left:${labelX}px;top:${labelY}px${aboveRoom ? ';transform:translateY(-100%)' : ''}`
+          addEl(labelEl)
+        })
+      }
+
+      if (window.api) {
+        window.api.onShowHighlights((steps) => drawHighlights(steps))
+        window.api.onClearHighlights(() => clearAll())
+        if (window.api.onShowPointer) window.api.onShowPointer(({ x, y, text }) => showPointer(x, y, text))
+        if (window.api.onShowLocate) window.api.onShowLocate((items) => showLocate(items))
+      }
+    </script>
+  </body>
+</html>
