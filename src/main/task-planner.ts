@@ -123,7 +123,7 @@ export async function executePlan(
             log('retry', `${retries}/${MAX_RETRIES} — ${detail}`)
             if (retries >= MAX_RETRIES) {
               log('fail', `step ${step.index} failed after ${MAX_RETRIES} retries: ${detail}`)
-              onProgress({ stepIndex: step.index, totalSteps, description: step.description, status: 'failed' })
+              break
             }
             continue
           }
