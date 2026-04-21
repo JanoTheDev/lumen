@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
-import { getModel, getProvider } from './model-router'
+import { getProvider, type Provider } from './model-router'
 import { log } from './logger'
 
 const VERIFY_ACTION_TYPES = new Set([
@@ -41,12 +41,16 @@ export async function verifyStep(
 ): Promise<VerifyResult> {
   const afterHash = hashScreenshot(afterScreenshot)
   if (afterHash === beforeHash) {
-    log('verify', 'page unchanged — step likely failed')
+    log('verify', 'page unchanged', { cost: 0, timeMs: 0 })
     return { success: false, detail: 'page unchanged', cost: 0 }
   }
 
-  const model = getModel('verification')
   const provider = getProvider()
+  const VERIFY_MODEL: Record<Provider, string> = {
+    anthropic: 'claude-haiku-4-5-20251001',
+    openai: 'gpt-5-nano',
+  }
+  const model = VERIFY_MODEL[provider]
   const start = Date.now()
   const prompt = `Step was: "${stepDescription}". Did it succeed? Reply only with JSON: {"success":true,"detail":"brief reason"}`
 
