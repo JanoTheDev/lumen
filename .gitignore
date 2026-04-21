@@ -5,6 +5,10 @@ out
 .eslintcache
 *.log*
 
+# local planning / design docs — never commit
+docs/superpowers/
+*.tsbuildinfo
+
 # secrets — never commit
 .env
 agent/.venv
