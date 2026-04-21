@@ -80,7 +80,8 @@ Each step should be one discrete action. Max 8 steps. Return ONLY the JSON.`
     log('plan', `task: "${plan.task}"`)
     log('plan', `steps: ${plan.steps.length} | model: ${model}`, { timeMs: Date.now() - start })
     return plan
-  } catch {
+  } catch (e) {
+    log('fail', `plan parse failed: ${(e as Error).message} | raw: ${raw.slice(0, 200)}`)
     return { task: prompt, steps: [{ index: 1, description: prompt }] }
   }
 }

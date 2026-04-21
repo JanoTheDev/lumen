@@ -389,7 +389,7 @@ async function callOpenAI(
 
   const completion = await client.chat.completions.create({
     model: getModel('execution'),
-    max_completion_tokens: opts.lowDetail ? 512 : 1024,
+    max_completion_tokens: opts.lowDetail ? 512 : 4096,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: systemPrompt },
