@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Settings as IcGeneral, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X } from 'lucide-react'
+import { Settings as IcGeneral, Mic as IcVoice, Accessibility as IcA11y, LayoutDashboard as IcInterface, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X } from 'lucide-react'
 import { THEMES, applyTheme, type ThemeName } from '../themes'
 import { HotkeyCapture } from './HotkeyCapture'
 
-type Panel = 'general' | 'models' | 'appearance'
+type Panel = 'general' | 'voice' | 'accessibility' | 'interface' | 'models' | 'appearance'
 
 interface ThemeCustom {
   accent: string
@@ -27,6 +27,8 @@ interface Config {
   historyEnabled: boolean
   explainBeforeDo: boolean
   uiScale: number
+  handsFreeMode: boolean
+  cancelVoice: { enabled: boolean; phrases: string }
 }
 
 // window.api is typed globally in src/renderer/src/api.d.ts
@@ -109,6 +111,9 @@ export function SettingsApp(): JSX.Element {
           </div>
           <nav className="sx-nav">
             <NavItem icon={<IcGeneral size={15} />} label="General" active={panel === 'general'} onClick={() => setPanel('general')} />
+            <NavItem icon={<IcVoice size={15} />} label="Voice" active={panel === 'voice'} onClick={() => setPanel('voice')} />
+            <NavItem icon={<IcA11y size={15} />} label="Accessibility" active={panel === 'accessibility'} onClick={() => setPanel('accessibility')} />
+            <NavItem icon={<IcInterface size={15} />} label="Interface" active={panel === 'interface'} onClick={() => setPanel('interface')} />
             <NavItem icon={<IcModels size={15} />} label="Models" active={panel === 'models'} onClick={() => setPanel('models')} />
             <NavItem icon={<IcAppearance size={15} />} label="Appearance" active={panel === 'appearance'} onClick={() => setPanel('appearance')} />
           </nav>
@@ -117,6 +122,9 @@ export function SettingsApp(): JSX.Element {
 
         <main className="sx-main">
           {panel === 'general' && <GeneralPanel cfg={cfg} patch={patch} />}
+          {panel === 'voice' && <VoicePanel cfg={cfg} patch={patch} />}
+          {panel === 'accessibility' && <AccessibilityPanel cfg={cfg} patch={patch} />}
+          {panel === 'interface' && <InterfacePanel cfg={cfg} patch={patch} />}
           {panel === 'models' && <ModelsPanel cfg={cfg} patch={patch} />}
           {panel === 'appearance' && <AppearancePanel cfg={cfg} patch={patch} />}
         </main>
@@ -191,40 +199,63 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
 function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) => Promise<void> }): JSX.Element {
   return (
     <>
-      <PanelHeader title="General" subtitle="Hotkeys, timings, and assistant behavior." />
-      <Card title="Activation" description="How you invoke the assistant.">
+      <PanelHeader title="General" subtitle="How you invoke Lumen and what it remembers." />
+
+      <Card title="Activation" description="Hotkey and hands-free behavior.">
         <Field label="Global hotkey" hint="Press the button, then hit the key combination you want.">
           <HotkeyCapture value={cfg.hotkey} onChange={v => patch({ hotkey: v })} />
         </Field>
-        <Field label="Wake word">
-          <Toggle checked={cfg.wakeWord.enabled} onChange={v => patch({ wakeWord: { ...cfg.wakeWord, enabled: v } })} label="Enable always-on wake word" />
+        <Field label="Hands-free mode" hint="Tap the hotkey instead of holding it. Recording auto-stops on ~1.5s of silence. Helpful for motor-limited use.">
+          <Toggle checked={cfg.handsFreeMode} onChange={v => patch({ handsFreeMode: v })} label="Tap-to-talk with silence auto-stop" />
+        </Field>
+      </Card>
+
+      <Card title="Conversation" description="Short-term memory between queries.">
+        <Field label="History">
+          <Toggle checked={cfg.historyEnabled} onChange={v => patch({ historyEnabled: v })} label="Remember the last 5 exchanges" />
+        </Field>
+      </Card>
+    </>
+  )
+}
+
+function VoicePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) => Promise<void> }): JSX.Element {
+  return (
+    <>
+      <PanelHeader title="Voice" subtitle="Wake word, recognition vocabulary, and voice commands." />
+
+      <Card title="Wake word" description="Offline phrase that opens Lumen hands-free.">
+        <Field label="Enable">
+          <Toggle checked={cfg.wakeWord.enabled} onChange={v => patch({ wakeWord: { ...cfg.wakeWord, enabled: v } })} label="Always-on wake word" />
+        </Field>
+        <Field label="Phrase" hint="Keep it short and unusual. Uses offline Vosk — no cloud cost.">
           <input
             className="sx-input"
-            style={{ marginTop: 10 }}
             placeholder="hey lumen"
             value={cfg.wakeWord.phrase}
             onChange={e => patch({ wakeWord: { ...cfg.wakeWord, phrase: e.target.value } })}
           />
+        </Field>
+        <Field label="Offline model">
           <WakeModelManager />
         </Field>
       </Card>
 
-      <Card title="Timings" description="Auto-close delays for overlay windows.">
-        <Field label="HUD auto-close" hint="Milliseconds before the pill hides after a query.">
-          <NumberStepper value={cfg.hudAutoCloseMs} step={500} min={1000} max={30000} onChange={v => patch({ hudAutoCloseMs: v })} suffix="ms" />
+      <Card title="Voice commands" description="Say any of these while a guide or action is running.">
+        <Field label="Cancel voice" hint="Lets you stop in-flight actions hands-free. Keeps the mic active while enabled.">
+          <Toggle checked={cfg.cancelVoice.enabled} onChange={v => patch({ cancelVoice: { ...cfg.cancelVoice, enabled: v } })} label="Listen for cancel phrases" />
         </Field>
-        <Field label="Answer overlay auto-close" hint="Milliseconds before the answer card dismisses.">
-          <NumberStepper value={cfg.answerAutoCloseMs} step={500} min={2000} max={60000} onChange={v => patch({ answerAutoCloseMs: v })} suffix="ms" />
+        <Field label="Cancel phrases" hint="Comma-separated. Default: stop, cancel, abort, never mind.">
+          <input
+            className="sx-input"
+            placeholder="stop, cancel, abort"
+            value={cfg.cancelVoice.phrases}
+            onChange={e => patch({ cancelVoice: { ...cfg.cancelVoice, phrases: e.target.value } })}
+          />
         </Field>
       </Card>
 
-      <Card title="Status bubble" description="Small indicator at the bottom-center showing what Lumen is doing.">
-        <Field label="Visibility" hint="Shows listening / transcribing / thinking / acting, plus step counters during multi-step plans.">
-          <Toggle checked={cfg.statusBubble.enabled} onChange={v => patch({ statusBubble: { enabled: v } })} label="Show status bubble" />
-        </Field>
-      </Card>
-
-      <Card title="Voice vocabulary" description="Give Whisper a hint for brand names, people, or jargon you often say.">
+      <Card title="Vocabulary" description="Give Whisper a hint for brand names, people, or jargon.">
         <Field label="Custom words" hint="Comma or newline separated. Example: Exness, Kubernetes, Janokins.">
           <textarea
             className="sx-input"
@@ -235,8 +266,16 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
           />
         </Field>
       </Card>
+    </>
+  )
+}
 
-      <Card title="Accessibility" description="Make overlays easier to see and actions easier to follow.">
+function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) => Promise<void> }): JSX.Element {
+  return (
+    <>
+      <PanelHeader title="Accessibility" subtitle="Make Lumen easier to see, hear, and follow." />
+
+      <Card title="Visibility">
         <Field label="UI scale" hint="Scales the pill, answer card, and status bubble. Helpful for low vision.">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 380 }}>
             <input
@@ -259,14 +298,34 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
             </span>
           </div>
         </Field>
-        <Field label="Narrate actions" hint="Before running an action, show a plain-English description for ~1 second. Great for learning.">
+      </Card>
+
+      <Card title="Learning aids" description="Useful when learning a new app or for users who benefit from narration.">
+        <Field label="Narrate actions" hint="Before running an action, show a plain-English description for ~1 second.">
           <Toggle checked={cfg.explainBeforeDo} onChange={v => patch({ explainBeforeDo: v })} label="Explain before executing" />
         </Field>
       </Card>
+    </>
+  )
+}
 
-      <Card title="Conversation" description="Short-term memory between queries.">
-        <Field label="History">
-          <Toggle checked={cfg.historyEnabled} onChange={v => patch({ historyEnabled: v })} label="Remember the last 5 exchanges" />
+function InterfacePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) => Promise<void> }): JSX.Element {
+  return (
+    <>
+      <PanelHeader title="Interface" subtitle="On-screen overlays and their behavior." />
+
+      <Card title="Status bubble" description="Small indicator at the bottom-center showing what Lumen is doing.">
+        <Field label="Visibility" hint="Shows listening / transcribing / thinking / acting, plus step counters during multi-step plans.">
+          <Toggle checked={cfg.statusBubble.enabled} onChange={v => patch({ statusBubble: { enabled: v } })} label="Show status bubble" />
+        </Field>
+      </Card>
+
+      <Card title="Timings" description="Auto-close delays for overlay windows.">
+        <Field label="HUD auto-close" hint="Milliseconds before the pill hides after a query.">
+          <NumberStepper value={cfg.hudAutoCloseMs} step={500} min={1000} max={30000} onChange={v => patch({ hudAutoCloseMs: v })} suffix="ms" />
+        </Field>
+        <Field label="Answer overlay auto-close" hint="Milliseconds before the answer card dismisses.">
+          <NumberStepper value={cfg.answerAutoCloseMs} step={500} min={2000} max={60000} onChange={v => patch({ answerAutoCloseMs: v })} suffix="ms" />
         </Field>
       </Card>
     </>

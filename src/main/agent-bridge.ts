@@ -9,9 +9,9 @@ export class AgentBridge {
   private pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
   private idCounter = 0
   private buffer = ''
-  private eventHandlers: Record<string, Array<() => void>> = {}
+  private eventHandlers: Record<string, Array<(data?: Record<string, unknown>) => void>> = {}
 
-  onEvent(event: string, cb: () => void): void {
+  onEvent(event: string, cb: (data?: Record<string, unknown>) => void): void {
     if (!this.eventHandlers[event]) this.eventHandlers[event] = []
     this.eventHandlers[event].push(cb)
   }
@@ -43,7 +43,8 @@ export class AgentBridge {
           if (msg.event) {
             if (msg.event !== 'mouse-moved') console.log('[bridge] event:', msg.event)
             const handlers = this.eventHandlers[msg.event] ?? []
-            handlers.forEach((h) => h())
+            const data = msg as unknown as Record<string, unknown>
+            handlers.forEach((h) => h(data))
             continue
           }
           const pending = this.pending.get(msg.id!)
@@ -98,11 +99,11 @@ export class AgentBridge {
     return this.call('set_hotkey', { combo })
   }
 
-  async enableWakeWord(phrase: string): Promise<unknown> {
-    return this.call('wake_enable', { phrase })
+  async enableListener(phrase: string, cancelPhrases: string[]): Promise<unknown> {
+    return this.call('wake_enable', { phrase, cancel_phrases: cancelPhrases })
   }
 
-  async disableWakeWord(): Promise<unknown> {
+  async disableListener(): Promise<unknown> {
     return this.call('wake_disable', {})
   }
 

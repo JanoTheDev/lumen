@@ -138,10 +138,16 @@ def main():
                 except Exception as e:
                     respond(id, error=f"set_hotkey failed: {e}")
             elif cmd == "wake_enable":
-                phrase = msg.get("phrase", "hey lumen")
+                phrase = msg.get("phrase", "")
+                cancel_phrases = msg.get("cancel_phrases", [])
                 try:
-                    wake.start(phrase, lambda: emit_event('wake-detected'))
-                    respond(id, {"ok": True, "phrase": phrase})
+                    def on_match(kind, matched):
+                        if kind == 'wake':
+                            emit_event('wake-detected')
+                        elif kind == 'cancel':
+                            emit_event('voice-cancel', {"phrase": matched})
+                    wake.start(phrase, cancel_phrases, on_match)
+                    respond(id, {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases})
                 except Exception as e:
                     respond(id, error=f"wake_enable failed: {e}")
             elif cmd == "wake_disable":

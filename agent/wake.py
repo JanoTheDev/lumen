@@ -38,7 +38,8 @@ def _load_model():
     _state['model'] = Model(path)
     return _state['model']
 
-def _listen_loop(phrase: str, on_detect, stop_event: threading.Event):
+def _listen_loop(phrase_map: dict, on_detect, stop_event: threading.Event):
+    # phrase_map: { 'wake': ['hey lumen'], 'cancel': ['stop', 'cancel', ...] }
     try:
         import sounddevice as sd
         from vosk import KaldiRecognizer
@@ -62,45 +63,67 @@ def _listen_loop(phrase: str, on_detect, stop_event: threading.Event):
             pass
         q.put(bytes(indata))
 
-    norm_phrase = _normalize(phrase)
+    # Build { kind -> [normalized phrases] }
+    norm_map = {kind: [_normalize(p) for p in phrases if p.strip()]
+                for kind, phrases in phrase_map.items()}
+    norm_map = {k: v for k, v in norm_map.items() if v}
+    if not norm_map:
+        print('[listener] no phrases to match, exiting', flush=True)
+        return
 
     try:
         with sd.RawInputStream(samplerate=sample_rate, blocksize=8000, dtype='int16',
                                channels=1, callback=_cb):
-            print(f'[wake] listening for "{phrase}" (offline)', flush=True)
+            summary = ', '.join(f'{k}={v}' for k, v in norm_map.items())
+            print(f'[listener] listening (offline) — {summary}', flush=True)
             while not stop_event.is_set():
                 try:
                     data = q.get(timeout=0.25)
                 except queue.Empty:
                     continue
                 is_final = rec.AcceptWaveform(data)
-                text = ''
                 if is_final:
                     text = json.loads(rec.Result()).get('text', '')
                 else:
                     text = json.loads(rec.PartialResult()).get('partial', '')
                 if not text:
                     continue
-                if norm_phrase in _normalize(text):
-                    print(f'[wake] detected in: "{text}"', flush=True)
-                    rec = KaldiRecognizer(model, sample_rate)  # reset
-                    try: on_detect()
-                    except Exception as e: print(f'[wake] on_detect error: {e}', flush=True)
+                norm_text = _normalize(text)
+                matched_kind = None
+                matched_phrase = None
+                for kind, phrases in norm_map.items():
+                    for p in phrases:
+                        if p and p in norm_text:
+                            matched_kind = kind
+                            matched_phrase = p
+                            break
+                    if matched_kind:
+                        break
+                if matched_kind:
+                    print(f'[listener] matched {matched_kind}="{matched_phrase}" in: "{text}"', flush=True)
+                    rec = KaldiRecognizer(model, sample_rate)
+                    try: on_detect(matched_kind, matched_phrase)
+                    except Exception as e: print(f'[listener] on_detect error: {e}', flush=True)
     except Exception as e:
         _state['last_error'] = str(e)
-        print(f'[wake] loop error: {e}', flush=True)
-    print('[wake] stopped', flush=True)
+        print(f'[listener] loop error: {e}', flush=True)
+    print('[listener] stopped', flush=True)
 
-def start(phrase: str, on_detect):
+def start(wake_phrase: str = '', cancel_phrases=None, on_detect=None):
     stop()
-    phrase = (phrase or '').strip()
-    if not phrase:
-        raise ValueError('empty phrase')
+    cancel_phrases = cancel_phrases or []
+    phrase_map = {}
+    if wake_phrase and wake_phrase.strip():
+        phrase_map['wake'] = [wake_phrase.strip()]
+    if cancel_phrases:
+        phrase_map['cancel'] = [p.strip() for p in cancel_phrases if p and p.strip()]
+    if not phrase_map:
+        raise ValueError('no phrases provided')
     stop_event = threading.Event()
-    t = threading.Thread(target=_listen_loop, args=(phrase, on_detect, stop_event), daemon=True)
+    t = threading.Thread(target=_listen_loop, args=(phrase_map, on_detect, stop_event), daemon=True)
     _state['thread'] = t
     _state['stop_event'] = stop_event
-    _state['phrase'] = phrase
+    _state['phrase'] = ' / '.join(f'{k}:{",".join(v)}' for k, v in phrase_map.items())
     _state['on_detect'] = on_detect
     t.start()
 

@@ -67,6 +67,29 @@ function createSettingsWindow(): void {
   settingsWindow.on('closed', () => { settingsWindow = null })
 }
 
+function cancelPhraseList(cfg: AppConfig): string[] {
+  if (!cfg.cancelVoice.enabled) return []
+  return cfg.cancelVoice.phrases.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+}
+
+function applyListenerState(cfg: AppConfig): void {
+  if (!agent) return
+  const wakeOn = cfg.wakeWord.enabled && cfg.wakeWord.phrase.trim().length > 0
+  const cancelOn = cfg.cancelVoice.enabled
+  if (!wakeOn && !cancelOn) {
+    agent.disableListener().catch(() => {})
+    return
+  }
+  if (!modelInstalled()) {
+    installModel()
+      .then(() => agent?.enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg)))
+      .catch(e => console.error('[listener] model install failed:', (e as Error).message))
+    return
+  }
+  agent.enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg))
+    .catch(e => console.error('[listener] enable failed:', (e as Error).message))
+}
+
 function broadcastConfig(cfg: AppConfig): void {
   for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
@@ -322,14 +345,7 @@ app.whenReady().then(async () => {
   } catch (e) {
     console.error('[hotkey] initial bind failed:', (e as Error).message)
   }
-  if (initialCfg.wakeWord.enabled && initialCfg.wakeWord.phrase.trim()) {
-    if (modelInstalled()) {
-      agent.enableWakeWord(initialCfg.wakeWord.phrase).catch(e =>
-        console.error('[wake] initial enable failed:', (e as Error).message))
-    } else {
-      console.log('[wake] enabled but model missing — will install on first settings visit or on toggle')
-    }
-  }
+  applyListenerState(initialCfg)
   warmupConnection()
 
   createHUDWindow()
@@ -349,7 +365,8 @@ app.whenReady().then(async () => {
   loadConfig()  // warm cache
 
   agent.onEvent('hotkey-down', () => {
-    console.log('[hotkey] down — showing HUD, starting recording')
+    const handsFree = loadConfig().handsFreeMode
+    console.log(`[hotkey] down — handsFree=${handsFree}`)
     if (!globalShortcut.isRegistered('Escape')) {
       globalShortcut.register('Escape', () => {
         hudWindow?.webContents.send('cancel-request')
@@ -357,8 +374,29 @@ app.whenReady().then(async () => {
     }
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
-    hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
-    setStatus('listening', 'Listening…')
+    if (handsFree) {
+      // Tap-to-talk: same auto-stop-on-silence path as wake-word activation
+      hudWindow?.webContents.executeJavaScript('window.__wakeVoiceStart?.()', true).catch(() => {})
+      setStatus('listening', 'Listening (hands-free)…')
+    } else {
+      hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
+      setStatus('listening', 'Listening…')
+    }
+  })
+
+  agent.onEvent('voice-cancel', (data) => {
+    const phrase = (data?.phrase as string | undefined) ?? 'cancel'
+    console.log(`[cancel-voice] matched "${phrase}"`)
+    if (currentAbort && !currentAbort.signal.aborted) {
+      setStatus('error', 'Cancelled by voice', undefined, 1600)
+      currentAbort.abort()
+    } else {
+      // Not in a query — treat as "close any active UI"
+      hudWindow?.webContents.send('cancel-request')
+      activeGuide = null
+      highlightWindow?.hide()
+      highlightWindow?.webContents.send('clear-highlights')
+    }
   })
 
   agent.onEvent('wake-detected', () => {
@@ -379,6 +417,10 @@ app.whenReady().then(async () => {
   let speculativeShot: { screenshot: string; activeWindow: string; ts: number } | null = null
 
   agent.onEvent('hotkey-up', () => {
+    if (loadConfig().handsFreeMode) {
+      // In hands-free mode the VAD loop stops recording automatically; ignore release.
+      return
+    }
     console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
     hudWindow?.webContents.executeJavaScript('window.__voiceStop?.()', true).catch(() => {})
     setStatus('transcribing', 'Transcribing…')
@@ -880,26 +922,8 @@ app.whenReady().then(async () => {
     if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
       hideStatus()
     }
-    if (patch.wakeWord) {
-      const wasOn = prev.wakeWord.enabled
-      const nowOn = next.wakeWord.enabled
-      const phraseChanged = prev.wakeWord.phrase !== next.wakeWord.phrase
-      try {
-        if (!nowOn && wasOn) {
-          await agent?.disableWakeWord()
-        } else if (nowOn && (!wasOn || phraseChanged)) {
-          if (!modelInstalled()) {
-            // Kick off auto-install; agent will be enabled when install completes.
-            installModel().then(() => agent?.enableWakeWord(next.wakeWord.phrase))
-              .catch(e => console.error('[wake] model install failed:', (e as Error).message))
-          } else {
-            await agent?.enableWakeWord(next.wakeWord.phrase)
-          }
-        }
-      } catch (e) {
-        console.error('[wake] toggle failed:', (e as Error).message)
-      }
-    }
+    const listenerAffected = patch.wakeWord || patch.cancelVoice
+    if (listenerAffected) applyListenerState(next)
     return next
   })
 

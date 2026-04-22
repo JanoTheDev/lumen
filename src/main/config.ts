@@ -36,6 +36,11 @@ export interface AppConfig {
   historyEnabled: boolean
   explainBeforeDo: boolean
   uiScale: number
+  handsFreeMode: boolean
+  cancelVoice: {
+    enabled: boolean
+    phrases: string
+  }
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -51,6 +56,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   historyEnabled: true,
   explainBeforeDo: true,
   uiScale: 1,
+  handsFreeMode: false,
+  cancelVoice: { enabled: false, phrases: 'stop, cancel, abort, never mind' },
 }
 
 const CONFIG_DIR = join(homedir(), '.ai-overlay')
@@ -110,5 +117,7 @@ function mergeWithDefaults(partial: Partial<AppConfig>): AppConfig {
     historyEnabled: partial.historyEnabled ?? DEFAULT_CONFIG.historyEnabled,
     explainBeforeDo: partial.explainBeforeDo ?? DEFAULT_CONFIG.explainBeforeDo,
     uiScale: partial.uiScale ?? DEFAULT_CONFIG.uiScale,
+    handsFreeMode: partial.handsFreeMode ?? DEFAULT_CONFIG.handsFreeMode,
+    cancelVoice: { ...DEFAULT_CONFIG.cancelVoice, ...(partial.cancelVoice ?? {}) },
   }
 }
