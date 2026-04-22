@@ -36,10 +36,10 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 - OCR for click targeting, with bbox fallback and Computer Use refinement on accurate models.
 
 **Voice-first**
-- Global hotkey (rebindable via Settings).
+- Global hotkey — rebindable live from Settings, pushed to the Python agent without restart.
 - Hold-to-talk → release to send.
-- Whisper (OpenAI) for transcription; Web Speech API fallback.
-- Wake-word support planned (OpenWakeWord, CPU-only).
+- Whisper (OpenAI) for transcription.
+- **Offline wake word** ("hey lumen") — Vosk-based, runs locally, zero cloud cost. Toggle from Settings. One-click model download (~40MB) on first use. Auto-stops on silence via client-side VAD.
 
 **Five response modes**
 | Mode | Use | UI |
@@ -52,7 +52,8 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 
 **Settings + themes**
 - Tray icon → Settings window with panels: General / Models / Appearance.
-- Click-to-capture hotkey picker.
+- Click-to-capture hotkey picker — live rebinds the Python hook, no restart.
+- Wake-word toggle + phrase input + inline offline-model installer with progress bar.
 - Model override per role (Planning / Execution / Verification) — text + dropdown.
 - 7 themes: Dark, Light, High Contrast, Ocean, Forest, Sunset, Midnight.
 - Config persisted to `~/.ai-overlay/config.json`, live-broadcast to all overlay windows.
@@ -89,11 +90,12 @@ Every query tagged and timed — copy the terminal output and paste it into an i
 ┌──────────────────────────┐
 │  Python agent            │
 │  (agent/)                │
-│  • global hotkey         │
+│  • global hotkey (dyn.)  │
 │  • mouse + keyboard      │
 │  • screenshot (mss)      │
 │  • OCR (pytesseract)     │
 │  • active window         │
+│  • wake word (Vosk)      │
 └──────────────────────────┘
 ```
 
@@ -142,9 +144,20 @@ Windows setup helper:
 |---|---|
 | Start speaking | Hold `Ctrl+Shift+Space` (default, rebindable) |
 | Send | Release the hotkey |
+| Hands-free | Say "hey lumen &lt;your question&gt;" — wake word must be enabled in Settings |
 | Cancel in-flight | Press `Escape` — aborts research/plan loops |
 | Open Settings | Left-click tray icon or right-click → Settings |
 | Edit config file | Right-click tray → Open config folder |
+
+### Wake word
+
+Offline, free, local. Powered by [Vosk](https://alphacephei.com/vosk/).
+
+1. Settings → General → Wake word → click **Install offline model** (~40MB, one-time).
+2. Toggle **Enable always-on wake word** ON. Default phrase: `hey lumen`.
+3. Say the phrase followed by your query. HUD opens; recording auto-stops after ~1.5s of silence.
+
+Model lives at `~/.ai-overlay/vosk-model/`. Delete that folder to force re-download.
 
 ---
 
@@ -232,6 +245,10 @@ test/            Vitest unit tests
 
 **Research agent overshoots page** → Reduce `amount` in scroll rules or hit `Escape` and rephrase.
 
+**Wake word not firing** → Check Python console for `[wake] listening for "…" (offline)`. If absent: model missing (install from Settings) or `vosk`/`sounddevice` not installed (`pip install -r agent/requirements.txt`).
+
+**"Vosk model not found" on toggle** → Auto-installer failed (firewall / proxy). Download `vosk-model-small-en-us-0.15.zip` from https://alphacephei.com/vosk/models and extract contents directly into `~/.ai-overlay/vosk-model/` (must contain `am/`, `conf/` folders at the top level).
+
 ---
 
 ## Roadmap
@@ -240,7 +257,8 @@ test/            Vitest unit tests
 - [x] Request queue + parallel read-only subtasks
 - [x] Config file + Settings UI + 7 themes
 - [x] Autonomous research agent
-- [ ] Wake-word (OpenWakeWord, always-on, CPU-only)
+- [x] Offline wake-word (Vosk, CPU-only, free)
+- [x] Live hotkey rebind (no restart)
 - [ ] Guide mode voice nav ("next step", "repeat that", "go back")
 - [ ] First-run onboarding wizard
 - [ ] macOS support for the Python agent
