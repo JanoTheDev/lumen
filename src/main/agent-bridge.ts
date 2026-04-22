@@ -94,6 +94,18 @@ export class AgentBridge {
     return this.call('execute', { action })
   }
 
+  async setHotkey(combo: string): Promise<unknown> {
+    return this.call('set_hotkey', { combo })
+  }
+
+  async enableWakeWord(phrase: string): Promise<unknown> {
+    return this.call('wake_enable', { phrase })
+  }
+
+  async disableWakeWord(): Promise<unknown> {
+    return this.call('wake_disable', {})
+  }
+
   private call(cmd: string, params: Record<string, unknown>): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.proc?.stdin) {

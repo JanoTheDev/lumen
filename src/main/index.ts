@@ -26,6 +26,7 @@ import { log, startTimer } from './logger'
 import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
 import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
+import { modelInstalled, installModel, modelRoot } from './wake-model'
 
 let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
@@ -185,6 +186,20 @@ app.whenReady().then(async () => {
 
   agent = new AgentBridge()
   await agent.start()
+  const initialCfg = loadConfig()
+  try {
+    await agent.setHotkey(initialCfg.hotkey)
+  } catch (e) {
+    console.error('[hotkey] initial bind failed:', (e as Error).message)
+  }
+  if (initialCfg.wakeWord.enabled && initialCfg.wakeWord.phrase.trim()) {
+    if (modelInstalled()) {
+      agent.enableWakeWord(initialCfg.wakeWord.phrase).catch(e =>
+        console.error('[wake] initial enable failed:', (e as Error).message))
+    } else {
+      console.log('[wake] enabled but model missing — will install on first settings visit or on toggle')
+    }
+  }
   warmupConnection()
 
   createHUDWindow()
@@ -203,6 +218,18 @@ app.whenReady().then(async () => {
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
     hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
+  })
+
+  agent.onEvent('wake-detected', () => {
+    console.log('[wake] detected — showing HUD, starting recording with VAD auto-stop')
+    if (!globalShortcut.isRegistered('Escape')) {
+      globalShortcut.register('Escape', () => {
+        hudWindow?.webContents.send('cancel-request')
+      })
+    }
+    hudWindow?.setOpacity(1)
+    hudWindow?.setIgnoreMouseEvents(false)
+    hudWindow?.webContents.executeJavaScript('window.__wakeVoiceStart?.()', true).catch(() => {})
   })
 
   // Speculative screenshot: fire focus+capture immediately on hotkey-up while Whisper transcribes.
@@ -236,6 +263,16 @@ app.whenReady().then(async () => {
     globalShortcut.unregister('Escape')
     hudWindow?.setOpacity(0)
     hudWindow?.setIgnoreMouseEvents(true)
+  })
+
+  ipcMain.on('hud-show', () => {
+    if (!globalShortcut.isRegistered('Escape')) {
+      globalShortcut.register('Escape', () => {
+        hudWindow?.webContents.send('cancel-request')
+      })
+    }
+    hudWindow?.setOpacity(1)
+    hudWindow?.setIgnoreMouseEvents(false)
   })
 
   agent.onEvent('mouse-moved', () => {
@@ -645,10 +682,51 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('config-get', () => loadConfig())
-  ipcMain.handle('config-save', (_e, patch: Partial<AppConfig>) => {
+  ipcMain.handle('config-save', async (_e, patch: Partial<AppConfig>) => {
+    const prev = loadConfig()
     const next = saveConfig(patch)
     broadcastConfig(next)
+    if (patch.hotkey && patch.hotkey !== prev.hotkey) {
+      try {
+        await agent?.setHotkey(next.hotkey)
+      } catch (e) {
+        console.error('[hotkey] rebind failed:', (e as Error).message)
+      }
+    }
+    if (patch.wakeWord) {
+      const wasOn = prev.wakeWord.enabled
+      const nowOn = next.wakeWord.enabled
+      const phraseChanged = prev.wakeWord.phrase !== next.wakeWord.phrase
+      try {
+        if (!nowOn && wasOn) {
+          await agent?.disableWakeWord()
+        } else if (nowOn && (!wasOn || phraseChanged)) {
+          if (!modelInstalled()) {
+            // Kick off auto-install; agent will be enabled when install completes.
+            installModel().then(() => agent?.enableWakeWord(next.wakeWord.phrase))
+              .catch(e => console.error('[wake] model install failed:', (e as Error).message))
+          } else {
+            await agent?.enableWakeWord(next.wakeWord.phrase)
+          }
+        }
+      } catch (e) {
+        console.error('[wake] toggle failed:', (e as Error).message)
+      }
+    }
     return next
+  })
+
+  ipcMain.handle('wake-model-status', () => ({
+    installed: modelInstalled(),
+    path: modelRoot(),
+  }))
+  ipcMain.handle('wake-model-install', async () => {
+    try {
+      await installModel()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
   })
   ipcMain.on('settings-open', () => createSettingsWindow())
 
