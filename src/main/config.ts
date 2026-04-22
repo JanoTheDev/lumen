@@ -79,7 +79,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   showConfidence: false,
   dwellClick: { enabled: false, dwellMs: 1400, cooldownMs: 1500 },
   vad: { silenceMs: 1500, maxWaitMs: 8000, speechThreshold: 0.04 },
-  guideAutoDismissOnMove: true,
+  guideAutoDismissOnMove: false,
   historyExchanges: 5,
 }
 

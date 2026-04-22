@@ -512,9 +512,11 @@ app.whenReady().then(async () => {
   agent.onEvent('voice-cancel', (data) => {
     const phrase = (data?.phrase as string | undefined) ?? 'cancel'
     console.log(`[cancel-voice] matched "${phrase}"`)
-    if (currentAbort && !currentAbort.signal.aborted) {
+    if ((currentAbort && !currentAbort.signal.aborted) || currentExecuteAbort) {
       setStatus('error', 'Cancelled by voice', undefined, 1600)
-      currentAbort.abort()
+      executionAborted = true
+      if (currentAbort && !currentAbort.signal.aborted) currentAbort.abort()
+      if (currentExecuteAbort && !currentExecuteAbort.signal.aborted) currentExecuteAbort.abort()
     } else {
       // Not in a query — treat as "close any active UI"
       hudWindow?.webContents.send('cancel-request')
@@ -548,7 +550,7 @@ app.whenReady().then(async () => {
     }
     console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
     hudWindow?.webContents.executeJavaScript('window.__voiceStop?.()', true).catch(() => {})
-    setStatus('transcribing', 'Transcribing…')
+    setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
 
     // Fire speculative screenshot in background — don't await
     ;(async () => {
@@ -596,11 +598,7 @@ app.whenReady().then(async () => {
   ipcMain.on('show-answer-overlay', (_e, text: string) => {
     answerOverlayWindow?.webContents.send('show-answer', text)
     answerOverlayWindow?.show()
-    const cfg = loadConfig()
-    if (cfg.tts.enabled && text && text.trim()) {
-      speakAnswer(text.trim(), cfg.tts.voice).catch(e =>
-        console.warn('[tts] synth failed:', (e as Error).message))
-    }
+    // NOTE: TTS is kicked off inside runQuery (earlier) to minimize perceived delay.
   })
   ipcMain.handle('tts-speak', async (_e, text: string) => {
     const cfg = loadConfig()
@@ -623,6 +621,8 @@ app.whenReady().then(async () => {
 
   let lastTaskContext: string | null = null
   let currentAbort: AbortController | null = null
+  let currentExecuteAbort: AbortController | null = null
+  let executionAborted = false
   const userQueue = new TaskQueue(1, 'request-queue')
 
   ipcMain.on('cancel-current', () => {
@@ -808,6 +808,15 @@ app.whenReady().then(async () => {
       }
     }
 
+    // Start TTS synth early — parallel to renderer showing the answer card
+    if (result.mode === 'answer' && result.text?.trim()) {
+      const cfgNow = loadConfig()
+      if (cfgNow.tts.enabled) {
+        speakAnswer(result.text.trim(), cfgNow.tts.voice).catch(e =>
+          console.warn('[tts] early synth failed:', (e as Error).message))
+      }
+    }
+
     // Save exchange to history (text only — images not stored)
     if (!opts.lowDetail) {
       const summary =
@@ -921,7 +930,7 @@ app.whenReady().then(async () => {
       highlightWindow?.show()
       return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
     }
-    setStatus('thinking', 'Thinking…')
+    setStatus('thinking', 'Thinking', { index: 2, total: 3 })
     try {
       // Level 2: split read-only prompts into parallel subtasks.
       if (!opts.lowDetail) {
@@ -943,9 +952,9 @@ app.whenReady().then(async () => {
       // Level 1: serialize user requests through the queue.
       const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts))
       const modeLabel = (result as { mode?: string }).mode
-      if (modeLabel === 'action') setStatus('acting', 'Executing action…', undefined, 2000)
+      if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
       else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
-      else setStatus('answer', 'Done', undefined, 1400)
+      else setStatus('answer', 'Done', { index: 3, total: 3 }, 1400)
       return result
     } catch (e) {
       setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
@@ -970,6 +979,8 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
     if (!agent) throw new Error('Agent not ready')
+    executionAborted = false
+    currentExecuteAbort = new AbortController()
     const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
     const { scale } = screenshotDimensions()
     log('step', `execute: ${actions.map(a => a.type).join(', ')} | scale: ${scale}`)
@@ -977,6 +988,10 @@ app.whenReady().then(async () => {
 
     let firstClick = true
     for (const action of actions) {
+      if (executionAborted) {
+        log('skip', 'execution aborted by user')
+        break
+      }
       let scaled: Action
 
       if (action.type === 'scroll') {
@@ -1068,9 +1083,12 @@ app.whenReady().then(async () => {
     }
 
     highlightWindow?.hide()
-    log('done', 'execute complete')
+    const aborted = executionAborted
+    log('done', aborted ? 'execute cancelled' : 'execute complete')
     execTimer.total()
-    return { done: true, reached_bottom: reachedBottom }
+    currentExecuteAbort = null
+    executionAborted = false
+    return { done: !aborted, cancelled: aborted, reached_bottom: reachedBottom }
   })
 
   ipcMain.handle('hide-highlights', () => {
