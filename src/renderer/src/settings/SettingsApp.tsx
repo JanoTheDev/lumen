@@ -25,6 +25,8 @@ interface Config {
   statusBubble: { enabled: boolean }
   voiceVocab: string
   historyEnabled: boolean
+  explainBeforeDo: boolean
+  uiScale: number
 }
 
 // window.api is typed globally in src/renderer/src/api.d.ts
@@ -231,6 +233,34 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
             value={cfg.voiceVocab}
             onChange={e => patch({ voiceVocab: e.target.value })}
           />
+        </Field>
+      </Card>
+
+      <Card title="Accessibility" description="Make overlays easier to see and actions easier to follow.">
+        <Field label="UI scale" hint="Scales the pill, answer card, and status bubble. Helpful for low vision.">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, maxWidth: 380 }}>
+            <input
+              type="range"
+              min={0.75}
+              max={1.6}
+              step={0.05}
+              value={cfg.uiScale}
+              onChange={e => patch({ uiScale: Number(e.target.value) })}
+              style={{ flex: 1 }}
+            />
+            <span style={{
+              fontVariantNumeric: 'tabular-nums',
+              minWidth: 44,
+              fontFamily: 'JetBrains Mono, SF Mono, ui-monospace, monospace',
+              color: 'var(--ai-muted-strong)',
+              fontSize: 12,
+            }}>
+              {Math.round(cfg.uiScale * 100)}%
+            </span>
+          </div>
+        </Field>
+        <Field label="Narrate actions" hint="Before running an action, show a plain-English description for ~1 second. Great for learning.">
+          <Toggle checked={cfg.explainBeforeDo} onChange={v => patch({ explainBeforeDo: v })} label="Explain before executing" />
         </Field>
       </Card>
 

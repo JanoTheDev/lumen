@@ -61,6 +61,7 @@ const api = {
   settingsWindowClose: () => ipcRenderer.send('settings-window-close'),
   settingsWindowMinimize: () => ipcRenderer.send('settings-window-minimize'),
   settingsWindowMaximize: () => ipcRenderer.send('settings-window-maximize'),
+  announceAction: (summary: string) => ipcRenderer.invoke('announce-action', summary),
 }
 
 if (process.contextIsolated) {

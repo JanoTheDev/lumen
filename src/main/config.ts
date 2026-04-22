@@ -34,6 +34,8 @@ export interface AppConfig {
   }
   voiceVocab: string
   historyEnabled: boolean
+  explainBeforeDo: boolean
+  uiScale: number
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -47,6 +49,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   statusBubble: { enabled: true },
   voiceVocab: '',
   historyEnabled: true,
+  explainBeforeDo: true,
+  uiScale: 1,
 }
 
 const CONFIG_DIR = join(homedir(), '.ai-overlay')
@@ -104,5 +108,7 @@ function mergeWithDefaults(partial: Partial<AppConfig>): AppConfig {
     statusBubble: { ...DEFAULT_CONFIG.statusBubble, ...(partial.statusBubble ?? {}) },
     voiceVocab: partial.voiceVocab ?? DEFAULT_CONFIG.voiceVocab,
     historyEnabled: partial.historyEnabled ?? DEFAULT_CONFIG.historyEnabled,
+    explainBeforeDo: partial.explainBeforeDo ?? DEFAULT_CONFIG.explainBeforeDo,
+    uiScale: partial.uiScale ?? DEFAULT_CONFIG.uiScale,
   }
 }

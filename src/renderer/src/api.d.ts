@@ -44,6 +44,7 @@ interface ElectronAPI {
   settingsWindowClose: () => void
   settingsWindowMinimize: () => void
   settingsWindowMaximize: () => void
+  announceAction: (summary: string) => Promise<{ delayMs: number }>
 }
 
 interface Window {

@@ -68,8 +68,17 @@ function createSettingsWindow(): void {
 }
 
 function broadcastConfig(cfg: AppConfig): void {
-  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow]) {
+  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
+  }
+  applyUiScale(cfg.uiScale)
+}
+
+function applyUiScale(scale: number): void {
+  const s = Math.max(0.75, Math.min(1.6, scale || 1))
+  // Only zoom overlays the user-facing chrome sits on; keep settings/highlight at 1.
+  for (const win of [hudWindow, answerOverlayWindow, statusWindow]) {
+    if (win && !win.isDestroyed()) win.webContents.setZoomFactor(s)
   }
 }
 
@@ -167,6 +176,9 @@ interface ActiveGuide {
   index: number
 }
 let activeGuide: ActiveGuide | null = null
+let lastGuide: { task: string; steps: ActiveGuide['steps']; savedAt: number } | null = null
+
+const REPLAY_RE = /\b(replay|show\s+(me\s+)?(the\s+)?guide\s+again|open\s+(the\s+)?last\s+guide|last\s+guide|guide\s+replay|do\s+the\s+guide\s+again|one\s+more\s+time)\b/i
 
 const NAV_NEXT = /\b(next|next step|continue|go on|advance|forward)\b/i
 const NAV_PREV = /\b(previous|prev|back|go back|last step)\b/i
@@ -325,6 +337,15 @@ app.whenReady().then(async () => {
   createAnswerOverlayWindow()
   createStatusWindow()
   createTray()
+  // Apply saved UI scale once windows finish loading
+  const scaleCfg = loadConfig().uiScale
+  const winsForScale = [hudWindow, answerOverlayWindow, statusWindow]
+  for (const w of winsForScale) {
+    if (!w) continue
+    w.webContents.once('did-finish-load', () => {
+      if (!w.isDestroyed()) w.webContents.setZoomFactor(Math.max(0.75, Math.min(1.6, scaleCfg || 1)))
+    })
+  }
   loadConfig()  // warm cache
 
   agent.onEvent('hotkey-down', () => {
@@ -649,6 +670,7 @@ app.whenReady().then(async () => {
         ] as [number, number, number, number] : undefined
       }))
       activeGuide = { steps: bboxSteps, index: 0 }
+      lastGuide = { task: prompt, steps: bboxSteps, savedAt: Date.now() }
       setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
       highlightWindow?.webContents.send('show-highlights', bboxSteps)
       highlightWindow?.show()
@@ -685,6 +707,15 @@ app.whenReady().then(async () => {
     // Guide voice nav: "next step", "back", "repeat", "done"
     const nav = handleGuideNavCommand(prompt)
     if (nav.handled) return nav.response
+
+    // Guide replay: "replay last guide", "do the guide again"
+    if (lastGuide && REPLAY_RE.test(prompt.trim())) {
+      activeGuide = { steps: lastGuide.steps, index: 0 }
+      setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
+      highlightWindow?.webContents.send('show-highlights', lastGuide.steps)
+      highlightWindow?.show()
+      return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
+    }
     setStatus('thinking', 'Thinking…')
     try {
       // Level 2: split read-only prompts into parallel subtasks.
@@ -715,6 +746,13 @@ app.whenReady().then(async () => {
       setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
       throw e
     }
+  })
+
+  ipcMain.handle('announce-action', async (_event, summary: string) => {
+    if (!loadConfig().explainBeforeDo) return { delayMs: 0 }
+    if (!summary || !summary.trim()) return { delayMs: 0 }
+    setStatus('acting', `About to: ${summary.trim()}`, undefined, 2600)
+    return { delayMs: 1200 }
   })
 
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
