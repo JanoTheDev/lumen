@@ -23,7 +23,8 @@ export default defineConfig({
           highlight: resolve('src/renderer/highlight.html'),
           voicebar: resolve('src/renderer/voicebar.html'),
           answeroverlay: resolve('src/renderer/answeroverlay.html'),
-          settings: resolve('src/renderer/settings.html')
+          settings: resolve('src/renderer/settings.html'),
+          status: resolve('src/renderer/status.html')
         }
       }
     }

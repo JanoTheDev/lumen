@@ -32,6 +32,7 @@ let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
 let answerOverlayWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
+let statusWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let agent: AgentBridge | null = null
 
@@ -120,6 +121,119 @@ function createHUDWindow(): void {
   }
 }
 
+function createStatusWindow(): void {
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize
+  const w = 420
+  const h = 44
+
+  statusWindow = new BrowserWindow({
+    width: w,
+    height: h,
+    x: Math.round((width - w) / 2),
+    y: height - h - 78,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    show: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+    },
+  })
+  statusWindow.setIgnoreMouseEvents(true)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    statusWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/status.html`)
+  } else {
+    statusWindow.loadFile(join(__dirname, '../renderer/status.html'))
+  }
+}
+
+type StatusKind = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'acting' | 'answer' | 'error' | 'step'
+
+let statusHideTimer: ReturnType<typeof setTimeout> | null = null
+
+interface ActiveGuide {
+  steps: Array<{ label: string; target_hint: string; bbox?: [number, number, number, number] }>
+  index: number
+}
+let activeGuide: ActiveGuide | null = null
+
+const NAV_NEXT = /\b(next|next step|continue|go on|advance|forward)\b/i
+const NAV_PREV = /\b(previous|prev|back|go back|last step)\b/i
+const NAV_REPEAT = /\b(repeat|again|say again|what)\b/i
+const NAV_DONE = /\b(done|finished|finish|stop|close|dismiss|cancel|exit|never mind)\b/i
+
+function handleGuideNavCommand(prompt: string): { handled: boolean; response?: unknown } {
+  if (!activeGuide) return { handled: false }
+  const text = prompt.trim()
+  if (!text || text.length > 60) return { handled: false }
+
+  const showStep = (idx: number): void => {
+    if (!activeGuide) return
+    const clamped = Math.max(0, Math.min(activeGuide.steps.length - 1, idx))
+    activeGuide.index = clamped
+    const step = activeGuide.steps[clamped]
+    setStatus('step', step.label, { index: clamped + 1, total: activeGuide.steps.length })
+    if (step.bbox) {
+      highlightWindow?.webContents.send('show-highlights', [step])
+      highlightWindow?.show()
+      const [bx, by, bw, bh] = step.bbox
+      highlightWindow?.webContents.send('show-pointer', {
+        x: Math.round(bx + bw / 2), y: Math.round(by + bh / 2), text: step.label,
+      })
+    }
+  }
+
+  if (NAV_DONE.test(text)) {
+    activeGuide = null
+    highlightWindow?.hide()
+    highlightWindow?.webContents.send('clear-highlights')
+    setStatus('idle', 'Guide closed', undefined, 900)
+    return { handled: true, response: { mode: 'answer', text: 'Guide closed.' } }
+  }
+  if (NAV_NEXT.test(text)) {
+    if (activeGuide.index >= activeGuide.steps.length - 1) {
+      setStatus('answer', 'Last step', undefined, 1400)
+      return { handled: true, response: { mode: 'answer', text: 'You are on the last step.' } }
+    }
+    showStep(activeGuide.index + 1)
+    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
+  }
+  if (NAV_PREV.test(text)) {
+    showStep(Math.max(0, activeGuide.index - 1))
+    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
+  }
+  if (NAV_REPEAT.test(text)) {
+    const step = activeGuide.steps[activeGuide.index]
+    setStatus('step', step.label, { index: activeGuide.index + 1, total: activeGuide.steps.length })
+    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` } }
+  }
+  return { handled: false }
+}
+
+function setStatus(kind: StatusKind, text: string, step?: { index: number; total: number }, autoHideMs?: number): void {
+  if (!loadConfig().statusBubble.enabled) return
+  if (!statusWindow || statusWindow.isDestroyed()) return
+  if (statusHideTimer) { clearTimeout(statusHideTimer); statusHideTimer = null }
+  statusWindow.showInactive()
+  statusWindow.webContents.send('status-set', { kind, text, step })
+  if (autoHideMs && autoHideMs > 0) {
+    statusHideTimer = setTimeout(() => hideStatus(), autoHideMs)
+  }
+}
+
+function hideStatus(): void {
+  if (!statusWindow || statusWindow.isDestroyed()) return
+  statusWindow.webContents.send('status-hide')
+  setTimeout(() => { if (statusWindow && !statusWindow.isDestroyed()) statusWindow.hide() }, 220)
+}
+
 function createAnswerOverlayWindow(): void {
   const { width } = screen.getPrimaryDisplay().workAreaSize
 
@@ -205,6 +319,7 @@ app.whenReady().then(async () => {
   createHUDWindow()
   createHighlightWindow()
   createAnswerOverlayWindow()
+  createStatusWindow()
   createTray()
   loadConfig()  // warm cache
 
@@ -218,6 +333,7 @@ app.whenReady().then(async () => {
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
     hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
+    setStatus('listening', 'Listening…')
   })
 
   agent.onEvent('wake-detected', () => {
@@ -230,6 +346,7 @@ app.whenReady().then(async () => {
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
     hudWindow?.webContents.executeJavaScript('window.__wakeVoiceStart?.()', true).catch(() => {})
+    setStatus('listening', 'Wake word detected — listening…')
   })
 
   // Speculative screenshot: fire focus+capture immediately on hotkey-up while Whisper transcribes.
@@ -239,6 +356,7 @@ app.whenReady().then(async () => {
   agent.onEvent('hotkey-up', () => {
     console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
     hudWindow?.webContents.executeJavaScript('window.__voiceStop?.()', true).catch(() => {})
+    setStatus('transcribing', 'Transcribing…')
 
     // Fire speculative screenshot in background — don't await
     ;(async () => {
@@ -263,6 +381,7 @@ app.whenReady().then(async () => {
     globalShortcut.unregister('Escape')
     hudWindow?.setOpacity(0)
     hudWindow?.setIgnoreMouseEvents(true)
+    hideStatus()
   })
 
   ipcMain.on('hud-show', () => {
@@ -278,6 +397,7 @@ app.whenReady().then(async () => {
   agent.onEvent('mouse-moved', () => {
     highlightWindow?.hide()
     highlightWindow?.webContents.send('clear-highlights')
+    activeGuide = null
   })
 
   ipcMain.on('show-answer-overlay', (_e, text: string) => {
@@ -439,6 +559,11 @@ app.whenReady().then(async () => {
         },
         (progress) => {
           hudWindow?.webContents.send('plan-progress', progress)
+          const p = progress as { stepIndex?: number; totalSteps?: number; description?: string; status?: string }
+          if (p.stepIndex && p.totalSteps && p.description) {
+            const statusKind: StatusKind = p.status === 'failed' ? 'error' : 'step'
+            setStatus(statusKind, p.description, { index: p.stepIndex, total: p.totalSteps })
+          }
         }
       )
       timer.split('executePlan done')
@@ -519,6 +644,8 @@ app.whenReady().then(async () => {
           Math.round(s.bbox[2] * scale), Math.round(s.bbox[3] * scale)
         ] as [number, number, number, number] : undefined
       }))
+      activeGuide = { steps: bboxSteps, index: 0 }
+      setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
       highlightWindow?.webContents.send('show-highlights', bboxSteps)
       highlightWindow?.show()
 
@@ -551,24 +678,39 @@ app.whenReady().then(async () => {
   }  // end runQuery
 
   ipcMain.handle('query', async (_event, prompt: string, opts: CallOptions = {}) => {
-    // Level 2: split read-only prompts into parallel subtasks.
-    // Bypasses the serializing queue — each subtask is an independent AI call.
-    if (!opts.lowDetail) {
-      const subtasks = splitSubtasks(prompt)
-      if (canParallelize(subtasks)) {
-        return userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
-          log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
-          const timer = startTimer(`parallel subtasks (${subtasks.length})`)
-          const answers = await Promise.all(subtasks.map(st => runQuery(st, opts)))
-          timer.total()
-          const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
-          return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
-        })
+    // Guide voice nav: "next step", "back", "repeat", "done"
+    const nav = handleGuideNavCommand(prompt)
+    if (nav.handled) return nav.response
+    setStatus('thinking', 'Thinking…')
+    try {
+      // Level 2: split read-only prompts into parallel subtasks.
+      if (!opts.lowDetail) {
+        const subtasks = splitSubtasks(prompt)
+        if (canParallelize(subtasks)) {
+          const result = await userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
+            log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
+            const timer = startTimer(`parallel subtasks (${subtasks.length})`)
+            const answers = await Promise.all(subtasks.map(st => runQuery(st, opts)))
+            timer.total()
+            const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
+            return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
+          })
+          setStatus('answer', 'Done', undefined, 1400)
+          return result
+        }
       }
-    }
 
-    // Level 1: serialize user requests through the queue.
-    return userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts))
+      // Level 1: serialize user requests through the queue.
+      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts))
+      const modeLabel = (result as { mode?: string }).mode
+      if (modeLabel === 'action') setStatus('acting', 'Executing action…', undefined, 2000)
+      else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
+      else setStatus('answer', 'Done', undefined, 1400)
+      return result
+    } catch (e) {
+      setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
+      throw e
+    }
   })
 
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
@@ -692,6 +834,9 @@ app.whenReady().then(async () => {
       } catch (e) {
         console.error('[hotkey] rebind failed:', (e as Error).message)
       }
+    }
+    if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
+      hideStatus()
     }
     if (patch.wakeWord) {
       const wasOn = prev.wakeWord.enabled

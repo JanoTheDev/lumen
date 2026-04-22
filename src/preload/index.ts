@@ -51,6 +51,12 @@ const api = {
   wakeModelInstall: () => ipcRenderer.invoke('wake-model-install'),
   onWakeModelProgress: (cb: (p: { phase: string; percent?: number; bytes?: number; total?: number; message?: string }) => void) => {
     ipcRenderer.on('wake-model-progress', (_e, p) => cb(p))
+  },
+  onStatus: (cb: (m: { kind: string; text: string; step?: { index: number; total: number } }) => void) => {
+    ipcRenderer.on('status-set', (_e, m) => cb(m))
+  },
+  onStatusHide: (cb: () => void) => {
+    ipcRenderer.on('status-hide', () => cb())
   }
 }
 

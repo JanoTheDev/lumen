@@ -39,6 +39,8 @@ interface ElectronAPI {
   wakeModelStatus: () => Promise<WakeModelStatus>
   wakeModelInstall: () => Promise<{ ok: boolean; error?: string }>
   onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => void
+  onStatus: (cb: (m: { kind: string; text: string; step?: { index: number; total: number } }) => void) => void
+  onStatusHide: (cb: () => void) => void
 }
 
 interface Window {

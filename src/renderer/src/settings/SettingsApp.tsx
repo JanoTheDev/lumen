@@ -12,6 +12,7 @@ interface Config {
   hudAutoCloseMs: number
   answerAutoCloseMs: number
   wakeWord: { enabled: boolean; phrase: string }
+  statusBubble: { enabled: boolean }
   historyEnabled: boolean
 }
 
@@ -152,6 +153,12 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
         </Field>
         <Field label="Answer overlay auto-close" hint="Milliseconds before the answer card dismisses.">
           <NumberStepper value={cfg.answerAutoCloseMs} step={500} min={2000} max={60000} onChange={v => patch({ answerAutoCloseMs: v })} suffix="ms" />
+        </Field>
+      </Card>
+
+      <Card title="Status bubble" description="Small indicator at the bottom-center showing what Lumen is doing.">
+        <Field label="Visibility" hint="Shows listening / transcribing / thinking / acting, plus step counters during multi-step plans.">
+          <Toggle checked={cfg.statusBubble.enabled} onChange={v => patch({ statusBubble: { enabled: v } })} label="Show status bubble" />
         </Field>
       </Card>
 

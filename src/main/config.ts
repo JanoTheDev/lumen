@@ -29,6 +29,9 @@ export interface AppConfig {
     enabled: boolean
     phrase: string
   }
+  statusBubble: {
+    enabled: boolean
+  }
   historyEnabled: boolean
 }
 
@@ -40,6 +43,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   hudAutoCloseMs: 5000,
   answerAutoCloseMs: 10000,
   wakeWord: { enabled: false, phrase: 'hey lumen' },
+  statusBubble: { enabled: true },
   historyEnabled: true,
 }
 
@@ -95,6 +99,7 @@ function mergeWithDefaults(partial: Partial<AppConfig>): AppConfig {
     hudAutoCloseMs: partial.hudAutoCloseMs ?? DEFAULT_CONFIG.hudAutoCloseMs,
     answerAutoCloseMs: partial.answerAutoCloseMs ?? DEFAULT_CONFIG.answerAutoCloseMs,
     wakeWord: { ...DEFAULT_CONFIG.wakeWord, ...(partial.wakeWord ?? {}) },
+    statusBubble: { ...DEFAULT_CONFIG.statusBubble, ...(partial.statusBubble ?? {}) },
     historyEnabled: partial.historyEnabled ?? DEFAULT_CONFIG.historyEnabled,
   }
 }
