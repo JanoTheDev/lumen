@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 
 interface UseVoiceReturn {
   listening: boolean
@@ -29,10 +29,9 @@ export function useVoice(onResult: (text: string) => void, onError?: (err: unkno
   const audioCtxRef = useRef<AudioContext | null>(null)
   const animFrameRef = useRef<number>(0)
 
-  // Pre-warm mic permission on mount so first recording has no delay
-  useEffect(() => {
-    getStream().catch(() => {})
-  }, [])
+  // Note: mic stream is NOT pre-warmed on mount. Pre-warming kept the mic active
+  // (tray "in use" indicator) even when idle. Stream opens lazily on first start()
+  // and is reused across recordings until the page unloads.
 
   const start = useCallback(async () => {
     try {

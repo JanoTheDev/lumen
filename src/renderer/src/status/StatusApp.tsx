@@ -8,15 +8,18 @@ interface StatusMsg {
   step?: { index: number; total: number }
 }
 
+const ACCENT = 'var(--ai-accent, #5b8cff)'
+const ACCENT_MIX = 'color-mix(in srgb, var(--ai-accent, #5b8cff) 22%, transparent)'
+
 const KIND_STYLE: Record<StatusKind, { dot: string; accent: string }> = {
   idle:          { dot: 'rgba(255,255,255,0.25)', accent: 'rgba(255,255,255,0.08)' },
-  listening:     { dot: '#5b8cff',                accent: 'rgba(91,140,255,0.22)' },
-  transcribing:  { dot: '#a78bfa',                accent: 'rgba(167,139,250,0.22)' },
-  thinking:      { dot: '#a78bfa',                accent: 'rgba(167,139,250,0.22)' },
+  listening:     { dot: ACCENT,                   accent: ACCENT_MIX },
+  transcribing:  { dot: ACCENT,                   accent: ACCENT_MIX },
+  thinking:      { dot: ACCENT,                   accent: ACCENT_MIX },
   acting:        { dot: '#facc15',                accent: 'rgba(250,204,21,0.22)' },
-  step:          { dot: '#38bdf8',                accent: 'rgba(56,189,248,0.22)' },
-  answer:        { dot: '#4ade80',                accent: 'rgba(74,222,128,0.22)' },
-  error:         { dot: '#f87171',                accent: 'rgba(248,113,113,0.22)' },
+  step:          { dot: ACCENT,                   accent: ACCENT_MIX },
+  answer:        { dot: 'var(--ai-success, #4ade80)', accent: 'rgba(74,222,128,0.22)' },
+  error:         { dot: 'var(--ai-error, #f87171)',   accent: 'rgba(248,113,113,0.22)' },
 }
 
 export function StatusApp(): JSX.Element {

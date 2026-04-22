@@ -93,9 +93,15 @@
         sunset:          { bg: '#1f1209', fg: '#fed7aa', acc: '#f97316' },
         midnight:        { bg: '#0f0a1f', fg: '#ede9fe', acc: '#a855f7' }
       }
-      function applyThemeVars(name) {
-        const t = THEME_MAP[name] || THEME_MAP.dark
+      function applyThemeVars(name, custom) {
         const r = document.documentElement
+        if (name === 'custom' && custom) {
+          r.style.setProperty('--ai-background', custom.background)
+          r.style.setProperty('--ai-foreground', custom.foreground)
+          r.style.setProperty('--ai-accent', custom.accent)
+          return
+        }
+        const t = THEME_MAP[name] || THEME_MAP.dark
         r.style.setProperty('--ai-background', t.bg)
         r.style.setProperty('--ai-foreground', t.fg)
         r.style.setProperty('--ai-accent', t.acc)
@@ -104,11 +110,11 @@
         try {
           const cfg = await window.api?.getConfig?.()
           if (cfg) {
-            applyThemeVars(cfg.theme)
+            applyThemeVars(cfg.theme, cfg.themeCustom)
             if (cfg.answerAutoCloseMs) CLOSE_MS = cfg.answerAutoCloseMs
           }
           window.api?.onConfigChanged?.((c) => {
-            applyThemeVars(c.theme)
+            applyThemeVars(c.theme, c.themeCustom)
             if (c.answerAutoCloseMs) CLOSE_MS = c.answerAutoCloseMs
           })
         } catch (e) { applyThemeVars('dark') }
