@@ -252,8 +252,14 @@ function createDwellRingWindow(): void {
     },
   })
   dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
-  // Always-on-top with screen-saver level so ring stays above fullscreen apps
   try { dwellRingWindow.setAlwaysOnTop(true, 'screen-saver') } catch { /* noop */ }
+
+  // Show immediately after load — transparent content is invisible until progress arrives.
+  dwellRingWindow.webContents.once('did-finish-load', () => {
+    if (dwellRingWindow && !dwellRingWindow.isDestroyed() && loadConfig().dwellClick.enabled) {
+      dwellRingWindow.showInactive()
+    }
+  })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     dwellRingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/dwellring.html`)
@@ -541,17 +547,21 @@ app.whenReady().then(async () => {
   agent.onEvent('dwell-progress', (data) => {
     if (!loadConfig().dwellClick.enabled) return
     if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
-    const x = data?.x as number | undefined
-    const y = data?.y as number | undefined
-    if (typeof x !== 'number' || typeof y !== 'number') return
-    // Suppress over Lumen's own visible windows
+    const xPhys = data?.x as number | undefined
+    const yPhys = data?.y as number | undefined
+    if (typeof xPhys !== 'number' || typeof yPhys !== 'number') return
+    // pyautogui returns physical pixel coords; Electron CSS uses logical.
+    const sf = screen.getPrimaryDisplay().scaleFactor || 1
+    const x = Math.round(xPhys / sf)
+    const y = Math.round(yPhys / sf)
+    // Suppress over Lumen's own visible windows (those use logical coords too)
     const overOwn = [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
       if (!w || w.isDestroyed() || !w.isVisible()) return false
       const b = w.getBounds()
       return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
     })
     if (overOwn) return
-    dwellRingWindow.webContents.send('dwell-progress', data)
+    dwellRingWindow.webContents.send('dwell-progress', { ...data, x, y })
   })
 
   agent.onEvent('dwell-trigger', (data) => {

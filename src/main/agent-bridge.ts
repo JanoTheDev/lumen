@@ -41,7 +41,7 @@ export class AgentBridge {
         try {
           const msg = JSON.parse(line) as { id?: number; result?: unknown; error?: string; event?: string }
           if (msg.event) {
-            if (msg.event !== 'mouse-moved') console.log('[bridge] event:', msg.event)
+            if (msg.event !== 'mouse-moved' && msg.event !== 'dwell-progress') console.log('[bridge] event:', msg.event)
             const handlers = this.eventHandlers[msg.event] ?? []
             const data = msg as unknown as Record<string, unknown>
             handlers.forEach((h) => h(data))
