@@ -41,6 +41,9 @@ interface ElectronAPI {
   onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => void
   onStatus: (cb: (m: { kind: string; text: string; step?: { index: number; total: number } }) => void) => void
   onStatusHide: (cb: () => void) => void
+  settingsWindowClose: () => void
+  settingsWindowMinimize: () => void
+  settingsWindowMaximize: () => void
 }
 
 interface Window {

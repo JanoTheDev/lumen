@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { Settings as IcGeneral, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X } from 'lucide-react'
 import { THEMES, applyTheme, type ThemeName } from '../themes'
 import { HotkeyCapture } from './HotkeyCapture'
 
@@ -60,33 +61,58 @@ export function SettingsApp(): JSX.Element {
   }
 
   return (
-    <div className="sx">
-      <aside className="sx-sidebar">
-        <div className="sx-brand">
-          <div className="sx-brand-dot" />
-          <div>
-            <div className="sx-brand-title">AI Overlay</div>
-            <div className="sx-brand-sub">Settings</div>
+    <>
+      <TitleBar />
+      <div className="sx">
+        <aside className="sx-sidebar">
+          <div className="sx-brand">
+            <div className="sx-brand-dot" />
+            <div>
+              <div className="sx-brand-title">Lumen</div>
+              <div className="sx-brand-sub">Preferences</div>
+            </div>
           </div>
-        </div>
-        <nav className="sx-nav">
-          <NavItem icon="⚙" label="General" active={panel === 'general'} onClick={() => setPanel('general')} />
-          <NavItem icon="◆" label="Models" active={panel === 'models'} onClick={() => setPanel('models')} />
-          <NavItem icon="✦" label="Appearance" active={panel === 'appearance'} onClick={() => setPanel('appearance')} />
-        </nav>
-        <div className={`sx-saved ${savedFlash ? 'show' : ''}`}>✓ Saved</div>
-      </aside>
+          <nav className="sx-nav">
+            <NavItem icon={<IcGeneral size={15} />} label="General" active={panel === 'general'} onClick={() => setPanel('general')} />
+            <NavItem icon={<IcModels size={15} />} label="Models" active={panel === 'models'} onClick={() => setPanel('models')} />
+            <NavItem icon={<IcAppearance size={15} />} label="Appearance" active={panel === 'appearance'} onClick={() => setPanel('appearance')} />
+          </nav>
+          <div className={`sx-saved ${savedFlash ? 'show' : ''}`}>✓ Saved</div>
+        </aside>
 
-      <main className="sx-main">
-        {panel === 'general' && <GeneralPanel cfg={cfg} patch={patch} />}
-        {panel === 'models' && <ModelsPanel cfg={cfg} patch={patch} />}
-        {panel === 'appearance' && <AppearancePanel cfg={cfg} patch={patch} />}
-      </main>
+        <main className="sx-main">
+          {panel === 'general' && <GeneralPanel cfg={cfg} patch={patch} />}
+          {panel === 'models' && <ModelsPanel cfg={cfg} patch={patch} />}
+          {panel === 'appearance' && <AppearancePanel cfg={cfg} patch={patch} />}
+        </main>
+      </div>
+    </>
+  )
+}
+
+function TitleBar(): JSX.Element {
+  return (
+    <div className="sx-titlebar">
+      <div className="sx-titlebar-label">
+        <span className="sx-titlebar-dot" />
+        Lumen · Settings
+      </div>
+      <div className="sx-titlebar-controls">
+        <button className="sx-ctrl" type="button" onClick={() => window.api.settingsWindowMinimize?.()} title="Minimize">
+          <Minus size={14} />
+        </button>
+        <button className="sx-ctrl" type="button" onClick={() => window.api.settingsWindowMaximize?.()} title="Maximize">
+          <Square size={12} />
+        </button>
+        <button className="sx-ctrl close" type="button" onClick={() => window.api.settingsWindowClose?.()} title="Close">
+          <X size={14} />
+        </button>
+      </div>
     </div>
   )
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: string; label: string; active: boolean; onClick: () => void }): JSX.Element {
+function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }): JSX.Element {
   return (
     <button className={`sx-nav-item ${active ? 'active' : ''}`} onClick={onClick} type="button">
       <span className="sx-nav-icon">{icon}</span>

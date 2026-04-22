@@ -42,10 +42,14 @@ function createSettingsWindow(): void {
     return
   }
   settingsWindow = new BrowserWindow({
-    width: 720,
-    height: 560,
-    title: 'AI Overlay Settings',
-    frame: true,
+    width: 860,
+    height: 620,
+    minWidth: 720,
+    minHeight: 520,
+    title: 'Lumen Settings',
+    frame: false,
+    titleBarStyle: 'hidden',
+    backgroundColor: '#0a0b10',
     resizable: true,
     show: false,
     webPreferences: {
@@ -874,6 +878,13 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.on('settings-open', () => createSettingsWindow())
+  ipcMain.on('settings-window-close', () => settingsWindow?.close())
+  ipcMain.on('settings-window-minimize', () => settingsWindow?.minimize())
+  ipcMain.on('settings-window-maximize', () => {
+    if (!settingsWindow) return
+    if (settingsWindow.isMaximized()) settingsWindow.unmaximize()
+    else settingsWindow.maximize()
+  })
 
   ipcMain.handle('transcribe', async (_event, audio: ArrayBuffer) => {
     if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')

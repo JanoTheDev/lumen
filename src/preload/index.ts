@@ -57,7 +57,10 @@ const api = {
   },
   onStatusHide: (cb: () => void) => {
     ipcRenderer.on('status-hide', () => cb())
-  }
+  },
+  settingsWindowClose: () => ipcRenderer.send('settings-window-close'),
+  settingsWindowMinimize: () => ipcRenderer.send('settings-window-minimize'),
+  settingsWindowMaximize: () => ipcRenderer.send('settings-window-maximize'),
 }
 
 if (process.contextIsolated) {
