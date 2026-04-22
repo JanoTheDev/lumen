@@ -13,6 +13,7 @@ interface Config {
   answerAutoCloseMs: number
   wakeWord: { enabled: boolean; phrase: string }
   statusBubble: { enabled: boolean }
+  voiceVocab: string
   historyEnabled: boolean
 }
 
@@ -159,6 +160,18 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
       <Card title="Status bubble" description="Small indicator at the bottom-center showing what Lumen is doing.">
         <Field label="Visibility" hint="Shows listening / transcribing / thinking / acting, plus step counters during multi-step plans.">
           <Toggle checked={cfg.statusBubble.enabled} onChange={v => patch({ statusBubble: { enabled: v } })} label="Show status bubble" />
+        </Field>
+      </Card>
+
+      <Card title="Voice vocabulary" description="Give Whisper a hint for brand names, people, or jargon you often say.">
+        <Field label="Custom words" hint="Comma or newline separated. Example: Exness, Kubernetes, Janokins.">
+          <textarea
+            className="sx-input"
+            style={{ minHeight: 72, resize: 'vertical', fontFamily: 'inherit' }}
+            placeholder="Exness, Kubernetes, ..."
+            value={cfg.voiceVocab}
+            onChange={e => patch({ voiceVocab: e.target.value })}
+          />
         </Field>
       </Card>
 

@@ -890,11 +890,16 @@ app.whenReady().then(async () => {
 
     try {
       const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
+      const userVocab = loadConfig().voiceVocab.trim()
+      const vocabList = userVocab
+        ? `, ${userVocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
+        : ''
+      const whisperPrompt = `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
       const result = await client.audio.transcriptions.create({
         file: createReadStream(tmpPath),
         model: 'whisper-1',
         language: 'en',
-        prompt: 'AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate.'
+        prompt: whisperPrompt,
       })
       console.log('[transcribe] result:', result.text)
       const estSecs = audio.byteLength / 6000

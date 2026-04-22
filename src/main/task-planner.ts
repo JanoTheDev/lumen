@@ -164,11 +164,15 @@ export async function runResearchAgent(
     const screenshot = await takeScreenshot()
     iterTimer.split('screenshot')
 
+    const firstIterRule = i === 0
+      ? `\nITERATION 1 CRITICAL RULE: If the current screenshot is NOT the target of the query (wrong website, wrong app, unrelated content), you MUST respond with action mode + navigate_url to a Google search for the query. Do NOT answer from the current screen unless it is unambiguously the intended subject. Brand names / proper nouns the user mentioned ALWAYS take the navigate path on iter 1 — they are almost never already on screen.`
+      : ''
+
     const stepPrompt = `RESEARCH TASK: "${query}"
 
 You are an autonomous research agent. Look at the current screenshot and decide:
 
-1. If the requested information is CLEARLY VISIBLE on this page — respond with answer mode containing the extracted content. Format the answer as a clean markdown summary (list of items, key facts, direct answer). Do NOT say "the page shows" — just give the info.
+1. If the requested information is CLEARLY VISIBLE on this page AND the page is the intended subject — respond with answer mode containing the extracted content. Format the answer as a clean markdown summary (list of items, key facts, direct answer). Do NOT say "the page shows" — just give the info.
 
 2. If the target info is NOT yet visible but you can make PROGRESS — respond with action mode to do ONE of:
    - navigate_url to a Google search (if you haven't searched yet): "https://www.google.com/search?q=<encoded>"
@@ -180,7 +184,7 @@ You are an autonomous research agent. Look at the current screenshot and decide:
 IMPORTANT:
 - Do NOT include follow_up in your response. The agent loops automatically.
 - Prefer answer mode as soon as you have enough info — do not over-navigate.
-- Iteration ${i + 1} of ${MAX_RESEARCH_ITERATIONS}. Be decisive.`
+- Iteration ${i + 1} of ${MAX_RESEARCH_ITERATIONS}. Be decisive.${firstIterRule}`
 
     const result = await queryAI(stepPrompt, screenshot, activeWindow)
     iterTimer.split('AI decision')
