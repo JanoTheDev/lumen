@@ -8,6 +8,7 @@ sys.stderr.reconfigure(encoding='utf-8')
 from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
+import dwell
 
 _print_lock = threading.Lock()
 
@@ -158,6 +159,22 @@ def main():
                     respond(id, error=f"wake_disable failed: {e}")
             elif cmd == "wake_status":
                 respond(id, wake.status())
+            elif cmd == "dwell_enable":
+                dwell_ms = msg.get("dwell_ms", 1400)
+                try:
+                    dwell.start(dwell_ms, lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}))
+                    respond(id, {"ok": True, "dwell_ms": dwell_ms})
+                except Exception as e:
+                    respond(id, error=f"dwell_enable failed: {e}")
+            elif cmd == "dwell_disable":
+                try:
+                    dwell.stop()
+                    respond(id, {"ok": True})
+                except Exception as e:
+                    respond(id, error=f"dwell_disable failed: {e}")
+            elif cmd == "dwell_set_ms":
+                dwell.set_dwell_ms(int(msg.get("dwell_ms", 1400)))
+                respond(id, {"ok": True})
             else:
                 respond(id, error=f"Unknown command: {cmd}")
         except Exception as e:

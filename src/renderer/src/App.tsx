@@ -44,7 +44,8 @@ export default function App(): JSX.Element {
       console.log('[action] executing', r.actions.length, 'actions')
       try {
         const summary = (r as { summary?: string }).summary ?? r.actions.map(a => a.type).join(', ')
-        const { delayMs } = await window.api.announceAction(summary)
+        const confidence = (r as { confidence?: string }).confidence
+        const { delayMs } = await window.api.announceAction(summary, confidence)
         if (delayMs > 0) await new Promise(res => setTimeout(res, delayMs))
         const execResult = await window.api.executeAction(r.actions) as { done: boolean; reached_bottom?: boolean } | undefined
         if (execResult?.reached_bottom) {

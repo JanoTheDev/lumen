@@ -168,6 +168,17 @@
       }
 
       if (window.api?.onShowAnswer) window.api.onShowAnswer(showAnswer)
+
+      // TTS playback
+      let currentAudio = null
+      window.api?.onTtsAudio?.(({ mime, data }) => {
+        try {
+          if (currentAudio) { currentAudio.pause(); currentAudio = null }
+          const a = new Audio(`data:${mime};base64,${data}`)
+          currentAudio = a
+          a.play().catch(() => {})
+        } catch (e) {}
+      })
     </script>
   </body>
 </html>

@@ -107,6 +107,18 @@ export class AgentBridge {
     return this.call('wake_disable', {})
   }
 
+  async enableDwell(dwellMs: number): Promise<unknown> {
+    return this.call('dwell_enable', { dwell_ms: dwellMs })
+  }
+
+  async disableDwell(): Promise<unknown> {
+    return this.call('dwell_disable', {})
+  }
+
+  async setDwellMs(dwellMs: number): Promise<unknown> {
+    return this.call('dwell_set_ms', { dwell_ms: dwellMs })
+  }
+
   private call(cmd: string, params: Record<string, unknown>): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.proc?.stdin) {

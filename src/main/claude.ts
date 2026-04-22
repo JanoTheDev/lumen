@@ -41,12 +41,14 @@ export interface Action {
   amount?: number
 }
 
+export type Confidence = 'high' | 'medium' | 'low'
+
 export type ClaudeResponse =
-  | { mode: 'answer'; text: string }
-  | { mode: 'guide'; steps: Step[] }
-  | { mode: 'action'; actions: Action[]; summary?: string; follow_up?: { query: string; delay_ms: number } }
-  | { mode: 'text_insert'; text: string; target_hint: string }
-  | { mode: 'locate'; items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }> }
+  | { mode: 'answer'; text: string; confidence?: Confidence }
+  | { mode: 'guide'; steps: Step[]; confidence?: Confidence }
+  | { mode: 'action'; actions: Action[]; summary?: string; follow_up?: { query: string; delay_ms: number }; confidence?: Confidence }
+  | { mode: 'text_insert'; text: string; target_hint: string; confidence?: Confidence }
+  | { mode: 'locate'; items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }>; confidence?: Confidence }
 
 function detectApp(activeWindow: string): string {
   const w = activeWindow.toLowerCase()
@@ -148,6 +150,8 @@ ${nowContext()} When asked the time or date, answer directly in natural language
 You are screen-aware. You see the user's current screen and help them complete tasks.
 
 ${writingContext}
+
+Every response MAY include a top-level field "confidence": one of "high" | "medium" | "low". Set "high" when you are sure about the target element, the action, and the user's intent. Set "medium" when the target is plausibly correct but ambiguous (e.g. multiple similar buttons, low-resolution text, partially visible element). Set "low" when you are guessing — missing context, uncertain bbox, speculative navigation. Low confidence is better than silently wrong. If unsure, say "low" and proceed — the user can cancel.
 
 You MUST respond with a JSON object matching one of these modes:
 

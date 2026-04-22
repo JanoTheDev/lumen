@@ -72,6 +72,16 @@ function cancelPhraseList(cfg: AppConfig): string[] {
   return cfg.cancelVoice.phrases.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
 }
 
+function applyDwellState(cfg: AppConfig): void {
+  if (!agent) return
+  if (cfg.dwellClick.enabled) {
+    agent.enableDwell(cfg.dwellClick.dwellMs).catch(e =>
+      console.error('[dwell] enable failed:', (e as Error).message))
+  } else {
+    agent.disableDwell().catch(() => {})
+  }
+}
+
 function applyListenerState(cfg: AppConfig): void {
   if (!agent) return
   const wakeOn = cfg.wakeWord.enabled && cfg.wakeWord.phrase.trim().length > 0
@@ -95,6 +105,30 @@ function broadcastConfig(cfg: AppConfig): void {
     if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
   }
   applyUiScale(cfg.uiScale)
+}
+
+async function speakAnswer(text: string, voice: string): Promise<void> {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn('[tts] OPENAI_API_KEY missing — skipping')
+    return
+  }
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
+  // Strip markdown to avoid reading "asterisk asterisk bold asterisk asterisk"
+  const cleaned = text
+    .replace(/[*_`#>]/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\n{2,}/g, '. ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const result = await client.audio.speech.create({
+    model: 'tts-1',
+    voice: voice as 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer',
+    input: cleaned,
+    response_format: 'mp3',
+  })
+  const buf = Buffer.from(await result.arrayBuffer())
+  const b64 = buf.toString('base64')
+  answerOverlayWindow?.webContents.send('tts-audio', { mime: 'audio/mpeg', data: b64 })
 }
 
 function applyUiScale(scale: number): void {
@@ -346,6 +380,7 @@ app.whenReady().then(async () => {
     console.error('[hotkey] initial bind failed:', (e as Error).message)
   }
   applyListenerState(initialCfg)
+  applyDwellState(initialCfg)
   warmupConnection()
 
   createHUDWindow()
@@ -382,6 +417,24 @@ app.whenReady().then(async () => {
       hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
       setStatus('listening', 'Listening…')
     }
+  })
+
+  agent.onEvent('dwell-trigger', (data) => {
+    if (!loadConfig().dwellClick.enabled) return
+    const x = data?.x as number | undefined
+    const y = data?.y as number | undefined
+    if (typeof x !== 'number' || typeof y !== 'number') return
+    // Suppress dwell-click over the HUD / answer / status / settings windows
+    const isOverOwn = [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
+      if (!w || w.isDestroyed() || !w.isVisible()) return false
+      const b = w.getBounds()
+      return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
+    })
+    if (isOverOwn) return
+    console.log(`[dwell] click at (${x}, ${y})`)
+    setStatus('acting', 'Dwell click', undefined, 900)
+    agent!.execute({ type: 'click', x, y, button: 'left' } as Action).catch(e =>
+      console.error('[dwell] click failed:', (e as Error).message))
   })
 
   agent.onEvent('voice-cancel', (data) => {
@@ -470,6 +523,21 @@ app.whenReady().then(async () => {
   ipcMain.on('show-answer-overlay', (_e, text: string) => {
     answerOverlayWindow?.webContents.send('show-answer', text)
     answerOverlayWindow?.show()
+    const cfg = loadConfig()
+    if (cfg.tts.enabled && text && text.trim()) {
+      speakAnswer(text.trim(), cfg.tts.voice).catch(e =>
+        console.warn('[tts] synth failed:', (e as Error).message))
+    }
+  })
+  ipcMain.handle('tts-speak', async (_e, text: string) => {
+    const cfg = loadConfig()
+    if (!text || !text.trim()) return { ok: false, error: 'empty text' }
+    try {
+      await speakAnswer(text.trim(), cfg.tts.voice)
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
   })
   ipcMain.on('hide-answer-overlay', () => {
     answerOverlayWindow?.hide()
@@ -790,11 +858,19 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('announce-action', async (_event, summary: string) => {
-    if (!loadConfig().explainBeforeDo) return { delayMs: 0 }
+  ipcMain.handle('announce-action', async (_event, summary: string, confidence?: string) => {
+    const cfg = loadConfig()
+    if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
     if (!summary || !summary.trim()) return { delayMs: 0 }
-    setStatus('acting', `About to: ${summary.trim()}`, undefined, 2600)
-    return { delayMs: 1200 }
+    const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
+    const baseText = `About to: ${summary.trim()}`
+    const displayText = cfg.showConfidence && conf !== 'high'
+      ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
+      : baseText
+    const kind = conf === 'low' ? 'error' : 'acting'
+    const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
+    setStatus(kind, displayText, undefined, delayMs + 1200)
+    return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
   })
 
   ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
@@ -924,6 +1000,7 @@ app.whenReady().then(async () => {
     }
     const listenerAffected = patch.wakeWord || patch.cancelVoice
     if (listenerAffected) applyListenerState(next)
+    if (patch.dwellClick) applyDwellState(next)
     return next
   })
 

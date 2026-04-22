@@ -61,7 +61,11 @@ const api = {
   settingsWindowClose: () => ipcRenderer.send('settings-window-close'),
   settingsWindowMinimize: () => ipcRenderer.send('settings-window-minimize'),
   settingsWindowMaximize: () => ipcRenderer.send('settings-window-maximize'),
-  announceAction: (summary: string) => ipcRenderer.invoke('announce-action', summary),
+  announceAction: (summary: string, confidence?: string) => ipcRenderer.invoke('announce-action', summary, confidence),
+  ttsSpeak: (text: string) => ipcRenderer.invoke('tts-speak', text),
+  onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => {
+    ipcRenderer.on('tts-audio', (_e, p) => cb(p))
+  },
 }
 
 if (process.contextIsolated) {

@@ -41,6 +41,15 @@ export interface AppConfig {
     enabled: boolean
     phrases: string
   }
+  tts: {
+    enabled: boolean
+    voice: string
+  }
+  showConfidence: boolean
+  dwellClick: {
+    enabled: boolean
+    dwellMs: number
+  }
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -58,6 +67,9 @@ export const DEFAULT_CONFIG: AppConfig = {
   uiScale: 1,
   handsFreeMode: false,
   cancelVoice: { enabled: false, phrases: 'stop, cancel, abort, never mind' },
+  tts: { enabled: false, voice: 'alloy' },
+  showConfidence: false,
+  dwellClick: { enabled: false, dwellMs: 1400 },
 }
 
 const CONFIG_DIR = join(homedir(), '.ai-overlay')
@@ -119,5 +131,8 @@ function mergeWithDefaults(partial: Partial<AppConfig>): AppConfig {
     uiScale: partial.uiScale ?? DEFAULT_CONFIG.uiScale,
     handsFreeMode: partial.handsFreeMode ?? DEFAULT_CONFIG.handsFreeMode,
     cancelVoice: { ...DEFAULT_CONFIG.cancelVoice, ...(partial.cancelVoice ?? {}) },
+    tts: { ...DEFAULT_CONFIG.tts, ...(partial.tts ?? {}) },
+    showConfidence: partial.showConfidence ?? DEFAULT_CONFIG.showConfidence,
+    dwellClick: { ...DEFAULT_CONFIG.dwellClick, ...(partial.dwellClick ?? {}) },
   }
 }

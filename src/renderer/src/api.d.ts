@@ -44,7 +44,9 @@ interface ElectronAPI {
   settingsWindowClose: () => void
   settingsWindowMinimize: () => void
   settingsWindowMaximize: () => void
-  announceAction: (summary: string) => Promise<{ delayMs: number }>
+  announceAction: (summary: string, confidence?: string) => Promise<{ delayMs: number }>
+  ttsSpeak: (text: string) => Promise<{ ok: boolean; error?: string }>
+  onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => void
 }
 
 interface Window {

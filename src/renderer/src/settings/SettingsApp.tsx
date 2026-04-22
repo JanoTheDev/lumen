@@ -29,6 +29,9 @@ interface Config {
   uiScale: number
   handsFreeMode: boolean
   cancelVoice: { enabled: boolean; phrases: string }
+  tts: { enabled: boolean; voice: string }
+  showConfidence: boolean
+  dwellClick: { enabled: boolean; dwellMs: number }
 }
 
 // window.api is typed globally in src/renderer/src/api.d.ts
@@ -303,6 +306,35 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
       <Card title="Learning aids" description="Useful when learning a new app or for users who benefit from narration.">
         <Field label="Narrate actions" hint="Before running an action, show a plain-English description for ~1 second.">
           <Toggle checked={cfg.explainBeforeDo} onChange={v => patch({ explainBeforeDo: v })} label="Explain before executing" />
+        </Field>
+        <Field label="Show confidence" hint="When Lumen isn't fully sure, show 'Low confidence — say cancel to stop'. Gives you a chance to abort.">
+          <Toggle checked={cfg.showConfidence} onChange={v => patch({ showConfidence: v })} label="Announce low/medium confidence" />
+        </Field>
+      </Card>
+
+      <Card title="Read answers aloud (TTS)" description="Uses OpenAI text-to-speech. Requires OPENAI_API_KEY.">
+        <Field label="Enable">
+          <Toggle checked={cfg.tts.enabled} onChange={v => patch({ tts: { ...cfg.tts, enabled: v } })} label="Speak answer overlays" />
+        </Field>
+        <Field label="Voice" hint="Six OpenAI voices. Preview them at openai.com/research/text-to-speech-api.">
+          <select
+            className="sx-select"
+            value={cfg.tts.voice}
+            onChange={e => patch({ tts: { ...cfg.tts, voice: e.target.value } })}
+          >
+            {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map(v => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+        </Field>
+      </Card>
+
+      <Card title="Dwell click" description="Click automatically when the cursor stays still. Built for users who can move a pointer but can't click.">
+        <Field label="Enable">
+          <Toggle checked={cfg.dwellClick.enabled} onChange={v => patch({ dwellClick: { ...cfg.dwellClick, enabled: v } })} label="Auto-click on cursor dwell" />
+        </Field>
+        <Field label="Dwell time" hint="Milliseconds the cursor must be still before a click fires. Lower = faster, more accidental clicks.">
+          <NumberStepper value={cfg.dwellClick.dwellMs} step={100} min={500} max={3000} onChange={v => patch({ dwellClick: { ...cfg.dwellClick, dwellMs: v } })} suffix="ms" />
         </Field>
       </Card>
     </>
