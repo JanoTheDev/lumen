@@ -5,9 +5,18 @@ import { HotkeyCapture } from './HotkeyCapture'
 
 type Panel = 'general' | 'models' | 'appearance'
 
+interface ThemeCustom {
+  accent: string
+  background: string
+  foreground: string
+  opacity: number
+  blur: number
+}
+
 interface Config {
   version: 1
   theme: ThemeName
+  themeCustom?: ThemeCustom
   models: { planning?: string; execution?: string; verification?: string }
   hotkey: string
   hudAutoCloseMs: number
@@ -32,6 +41,24 @@ const THEME_OPTIONS: { value: ThemeName; label: string }[] = [
   { value: 'midnight',      label: 'Midnight' },
 ]
 
+const DEFAULT_CUSTOM: ThemeCustom = {
+  accent: '#5b8cff',
+  background: '#0d0f14',
+  foreground: '#e6e8ee',
+  opacity: 0.92,
+  blur: 14,
+}
+
+function mapCustomToVars(c: ThemeCustom): Record<string, string> {
+  return {
+    '--ai-accent': c.accent,
+    '--ai-background': c.background,
+    '--ai-foreground': c.foreground,
+    '--ai-opacity': String(c.opacity),
+    '--ai-blur': `${c.blur}px`,
+  }
+}
+
 const MODEL_PRESETS = {
   planning:     ['gpt-5-mini', 'gpt-5', 'gpt-4o', 'claude-sonnet-4-6', 'claude-opus-4-7'],
   execution:    ['gpt-5-mini', 'gpt-5', 'gpt-4o', 'claude-sonnet-4-6', 'claude-opus-4-7'],
@@ -44,14 +71,20 @@ export function SettingsApp(): JSX.Element {
   const [savedFlash, setSavedFlash] = useState(false)
 
   useEffect(() => {
-    window.api.getConfig().then(c => { const cfg = c as unknown as Config; setCfg(cfg); applyTheme(cfg.theme) })
+    window.api.getConfig().then(c => {
+      const cfg = c as unknown as Config
+      setCfg(cfg)
+      applyTheme(cfg.theme, cfg.themeCustom ? mapCustomToVars(cfg.themeCustom) : undefined)
+    })
   }, [])
 
   const patch = useCallback(async (update: Partial<Config>): Promise<void> => {
     if (!cfg) return
     const next = await window.api.saveConfig(update) as unknown as Config
     setCfg(next)
-    if (update.theme) applyTheme(next.theme)
+    if (update.theme || update.themeCustom) {
+      applyTheme(next.theme, next.themeCustom ? mapCustomToVars(next.themeCustom) : undefined)
+    }
     setSavedFlash(true)
     setTimeout(() => setSavedFlash(false), 1200)
   }, [cfg])
@@ -233,6 +266,13 @@ function ModelsPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) 
 }
 
 function AppearancePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) => Promise<void> }): JSX.Element {
+  const customThemeCard: ThemeVarsLike = {
+    '--ai-accent': cfg.themeCustom?.accent ?? DEFAULT_CUSTOM.accent,
+    '--ai-background': cfg.themeCustom?.background ?? DEFAULT_CUSTOM.background,
+    '--ai-foreground': cfg.themeCustom?.foreground ?? DEFAULT_CUSTOM.foreground,
+    '--ai-surface': cfg.themeCustom?.background ?? DEFAULT_CUSTOM.background,
+  }
+
   return (
     <>
       <PanelHeader title="Appearance" subtitle="Themes apply to every overlay window." />
@@ -246,6 +286,7 @@ function AppearancePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Confi
             {THEME_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
+            <option value="custom">Custom</option>
           </select>
         </Field>
         <Field label="Preview">
@@ -261,7 +302,6 @@ function AppearancePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Confi
                   style={{
                     background: theme['--ai-background'],
                     color: theme['--ai-foreground'],
-                    borderColor: selected ? theme['--ai-accent'] : 'transparent',
                   }}
                   onClick={() => patch({ theme: opt.value })}
                 >
@@ -275,10 +315,100 @@ function AppearancePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Confi
                 </button>
               )
             })}
+            <button
+              type="button"
+              className={`sx-theme-card ${cfg.theme === 'custom' ? 'selected' : ''}`}
+              style={{ background: customThemeCard['--ai-background'], color: customThemeCard['--ai-foreground'] }}
+              onClick={() => patch({ theme: 'custom' })}
+            >
+              <div className="sx-theme-swatches">
+                <span style={{ background: customThemeCard['--ai-accent'] }} />
+                <span style={{ background: customThemeCard['--ai-foreground'] }} />
+                <span style={{ background: customThemeCard['--ai-surface'] }} />
+              </div>
+              <div className="sx-theme-name">Custom</div>
+              {cfg.theme === 'custom' && <div className="sx-theme-badge">Active</div>}
+            </button>
           </div>
         </Field>
       </Card>
+
+      <Card title="Custom colors" description="Pick the three core colors. Activating a picker switches the theme to Custom.">
+        <CustomColorField
+          label="Accent"
+          hint="Buttons, highlights, focus rings."
+          value={cfg.themeCustom?.accent ?? DEFAULT_CUSTOM.accent}
+          onChange={v => patch({
+            theme: 'custom',
+            themeCustom: { ...DEFAULT_CUSTOM, ...(cfg.themeCustom ?? {}), accent: v },
+          })}
+        />
+        <CustomColorField
+          label="Background"
+          hint="Base surface behind overlays."
+          value={cfg.themeCustom?.background ?? DEFAULT_CUSTOM.background}
+          onChange={v => patch({
+            theme: 'custom',
+            themeCustom: { ...DEFAULT_CUSTOM, ...(cfg.themeCustom ?? {}), background: v },
+          })}
+        />
+        <CustomColorField
+          label="Foreground"
+          hint="Primary text / icon color."
+          value={cfg.themeCustom?.foreground ?? DEFAULT_CUSTOM.foreground}
+          onChange={v => patch({
+            theme: 'custom',
+            themeCustom: { ...DEFAULT_CUSTOM, ...(cfg.themeCustom ?? {}), foreground: v },
+          })}
+        />
+        <div style={{ marginTop: 6, display: 'flex', gap: 10 }}>
+          <button type="button" className="sx-link" onClick={() => patch({
+            theme: 'custom',
+            themeCustom: { ...DEFAULT_CUSTOM },
+          })}>
+            Reset custom colors
+          </button>
+        </div>
+      </Card>
     </>
+  )
+}
+
+type ThemeVarsLike = { '--ai-accent': string; '--ai-background': string; '--ai-foreground': string; '--ai-surface': string }
+
+function CustomColorField({ label, hint, value, onChange }: { label: string; hint: string; value: string; onChange: (v: string) => void }): JSX.Element {
+  const normalized = /^#([0-9a-f]{3}){1,2}$/i.test(value) ? value : '#000000'
+  return (
+    <Field label={label} hint={hint}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <label
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            border: '1px solid var(--ai-border-strong)',
+            background: normalized,
+            cursor: 'pointer',
+            position: 'relative',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
+          }}
+        >
+          <input
+            type="color"
+            value={normalized}
+            onChange={e => onChange(e.target.value)}
+            style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+          />
+        </label>
+        <input
+          className="sx-input"
+          style={{ width: 140, fontFamily: 'JetBrains Mono, SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums' }}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="#RRGGBB"
+        />
+      </div>
+    </Field>
   )
 }
 
