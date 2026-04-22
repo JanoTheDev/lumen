@@ -73,6 +73,9 @@ const api = {
   onRunQuery: (cb: (text: string) => void) => {
     ipcRenderer.on('run-query', (_e, t) => cb(t))
   },
+  onDwellProgress: (cb: (data: { x: number; y: number; progress: number; active: boolean }) => void) => {
+    ipcRenderer.on('dwell-progress', (_e, d) => cb(d))
+  },
 }
 
 if (process.contextIsolated) {

@@ -163,7 +163,14 @@ def main():
                 dwell_ms = msg.get("dwell_ms", 1400)
                 cooldown_ms = msg.get("cooldown_ms", 1500)
                 try:
-                    dwell.start(dwell_ms, lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}), cooldown_ms=cooldown_ms)
+                    def _on_progress(x, y, p, active):
+                        emit_event('dwell-progress', {"x": x, "y": y, "progress": p, "active": active})
+                    dwell.start(
+                        dwell_ms,
+                        lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}),
+                        cooldown_ms=cooldown_ms,
+                        on_progress=_on_progress,
+                    )
                     respond(id, {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms})
                 except Exception as e:
                     respond(id, error=f"dwell_enable failed: {e}")

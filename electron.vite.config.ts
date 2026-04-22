@@ -24,7 +24,8 @@ export default defineConfig({
           voicebar: resolve('src/renderer/voicebar.html'),
           answeroverlay: resolve('src/renderer/answeroverlay.html'),
           settings: resolve('src/renderer/settings.html'),
-          status: resolve('src/renderer/status.html')
+          status: resolve('src/renderer/status.html'),
+          dwellring: resolve('src/renderer/dwellring.html')
         }
       }
     }

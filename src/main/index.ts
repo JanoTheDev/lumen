@@ -34,6 +34,7 @@ let highlightWindow: BrowserWindow | null = null
 let answerOverlayWindow: BrowserWindow | null = null
 let settingsWindow: BrowserWindow | null = null
 let statusWindow: BrowserWindow | null = null
+let dwellRingWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let agent: AgentBridge | null = null
 
@@ -78,8 +79,12 @@ function applyDwellState(cfg: AppConfig): void {
   if (cfg.dwellClick.enabled) {
     agent.enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs).catch(e =>
       console.error('[dwell] enable failed:', (e as Error).message))
+    if (dwellRingWindow && !dwellRingWindow.isDestroyed() && !dwellRingWindow.isVisible()) {
+      dwellRingWindow.showInactive()
+    }
   } else {
     agent.disableDwell().catch(() => {})
+    if (dwellRingWindow && !dwellRingWindow.isDestroyed()) dwellRingWindow.hide()
   }
 }
 
@@ -102,7 +107,7 @@ function applyListenerState(cfg: AppConfig): void {
 }
 
 function broadcastConfig(cfg: AppConfig): void {
-  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow]) {
+  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow, dwellRingWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
   }
   applyUiScale(cfg.uiScale)
@@ -222,6 +227,38 @@ function createStatusWindow(): void {
     statusWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/status.html`)
   } else {
     statusWindow.loadFile(join(__dirname, '../renderer/status.html'))
+  }
+}
+
+function createDwellRingWindow(): void {
+  const { width, height } = screen.getPrimaryDisplay().bounds
+  dwellRingWindow = new BrowserWindow({
+    width,
+    height,
+    x: 0,
+    y: 0,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    resizable: false,
+    show: false,
+    hasShadow: false,
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      contextIsolation: true,
+    },
+  })
+  dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
+  // Always-on-top with screen-saver level so ring stays above fullscreen apps
+  try { dwellRingWindow.setAlwaysOnTop(true, 'screen-saver') } catch { /* noop */ }
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    dwellRingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/dwellring.html`)
+  } else {
+    dwellRingWindow.loadFile(join(__dirname, '../renderer/dwellring.html'))
   }
 }
 
@@ -468,6 +505,7 @@ app.whenReady().then(async () => {
   createHighlightWindow()
   createAnswerOverlayWindow()
   createStatusWindow()
+  createDwellRingWindow()
   createTray()
   // Apply saved UI scale once windows finish loading
   const scaleCfg = loadConfig().uiScale
@@ -498,6 +536,22 @@ app.whenReady().then(async () => {
       hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
       setStatus('listening', 'Listening…')
     }
+  })
+
+  agent.onEvent('dwell-progress', (data) => {
+    if (!loadConfig().dwellClick.enabled) return
+    if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
+    const x = data?.x as number | undefined
+    const y = data?.y as number | undefined
+    if (typeof x !== 'number' || typeof y !== 'number') return
+    // Suppress over Lumen's own visible windows
+    const overOwn = [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
+      if (!w || w.isDestroyed() || !w.isVisible()) return false
+      const b = w.getBounds()
+      return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
+    })
+    if (overOwn) return
+    dwellRingWindow.webContents.send('dwell-progress', data)
   })
 
   agent.onEvent('dwell-trigger', (data) => {
