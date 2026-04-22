@@ -39,7 +39,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   hotkey: 'Ctrl+Shift+Space',
   hudAutoCloseMs: 5000,
   answerAutoCloseMs: 10000,
-  wakeWord: { enabled: false, phrase: 'hey aria' },
+  wakeWord: { enabled: false, phrase: 'hey lumen' },
   historyEnabled: true,
 }
 

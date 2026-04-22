@@ -15,11 +15,17 @@ interface Config {
   historyEnabled: boolean
 }
 
+interface WakeModelStatus { installed: boolean; path: string }
+interface WakeModelProgress { phase: 'downloading' | 'extracting' | 'done' | 'error'; percent?: number; message?: string }
+
 declare global {
   interface Window {
     api: {
       getConfig: () => Promise<Config>
       saveConfig: (patch: Partial<Config>) => Promise<Config>
+      wakeModelStatus: () => Promise<WakeModelStatus>
+      wakeModelInstall: () => Promise<{ ok: boolean; error?: string }>
+      onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => void
     }
   }
 }
@@ -143,11 +149,11 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
           <input
             className="sx-input"
             style={{ marginTop: 10 }}
-            placeholder="hey aria"
+            placeholder="hey lumen"
             value={cfg.wakeWord.phrase}
             onChange={e => patch({ wakeWord: { ...cfg.wakeWord, phrase: e.target.value } })}
           />
-          <small className="sx-field-hint">Wake-word engine ships in a later phase.</small>
+          <WakeModelManager />
         </Field>
       </Card>
 
@@ -283,6 +289,66 @@ function ModelSelect({ value, presets, onChange }: { value: string; presets: str
         {presets.map(m => <option key={m} value={m}>{m}</option>)}
         <option value="__custom__">Custom…</option>
       </select>
+    </div>
+  )
+}
+
+function WakeModelManager(): JSX.Element {
+  const [status, setStatus] = useState<WakeModelStatus | null>(null)
+  const [progress, setProgress] = useState<WakeModelProgress | null>(null)
+  const [installing, setInstalling] = useState(false)
+
+  useEffect(() => {
+    window.api.wakeModelStatus().then(setStatus).catch(() => {})
+    window.api.onWakeModelProgress((p) => {
+      setProgress(p)
+      if (p.phase === 'done') {
+        setInstalling(false)
+        window.api.wakeModelStatus().then(setStatus).catch(() => {})
+      }
+      if (p.phase === 'error') setInstalling(false)
+    })
+  }, [])
+
+  const install = async (): Promise<void> => {
+    setInstalling(true)
+    setProgress({ phase: 'downloading', percent: 0 })
+    await window.api.wakeModelInstall()
+  }
+
+  if (!status) return <small className="sx-field-hint" style={{ marginTop: 10, display: 'block' }}>Checking model…</small>
+
+  if (status.installed && !installing) {
+    return <small className="sx-field-hint" style={{ marginTop: 10, display: 'block', color: 'var(--ai-success, #4ade80)' }}>✓ Offline model installed</small>
+  }
+
+  if (installing && progress) {
+    const label = progress.phase === 'downloading'
+      ? `Downloading… ${progress.percent ?? 0}%`
+      : progress.phase === 'extracting'
+        ? 'Extracting…'
+        : progress.phase === 'error'
+          ? `Failed: ${progress.message}`
+          : 'Done'
+    return (
+      <div style={{ marginTop: 10 }}>
+        <small className="sx-field-hint">{label}</small>
+        <div style={{ height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+          <div style={{
+            height: '100%',
+            width: `${progress.phase === 'extracting' ? 100 : (progress.percent ?? 0)}%`,
+            background: 'var(--ai-accent, #5b8cff)',
+            transition: 'width 0.2s',
+          }} />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <button type="button" className="sx-link" onClick={install}>Install offline model (~40MB)</button>
+      <small className="sx-field-hint" style={{ margin: 0 }}>Free, one-time download.</small>
     </div>
   )
 }

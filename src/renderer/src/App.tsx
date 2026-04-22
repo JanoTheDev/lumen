@@ -137,6 +137,9 @@ export default function App(): JSX.Element {
 
   const { start, stop, transcript, audioLevel } = useVoice(handleResult, handleError)
 
+  const audioLevelRef = useRef(0)
+  useEffect(() => { audioLevelRef.current = audioLevel }, [audioLevel])
+
   useEffect(() => {
     ;(window as Record<string, unknown>).__voiceStart = () => {
       console.log('[voice] __voiceStart called')
@@ -149,6 +152,48 @@ export default function App(): JSX.Element {
       console.log('[voice] __voiceStop called')
       setPhase('processing')
       stop()
+    }
+    // Wake-word activated recording: auto-stop after sustained silence.
+    // Heard speech then ~1.5s quiet → stop. Max 8s total if no speech detected.
+    ;(window as Record<string, unknown>).__wakeVoiceStart = () => {
+      console.log('[wake-voice] starting — will auto-stop on silence')
+      queryFiredRef.current = false
+      cancelledRef.current = false
+      setPhase('listening')
+      start()
+      const startedAt = Date.now()
+      const SPEECH_THRESHOLD = 0.04
+      const SILENCE_MS = 1500
+      const MAX_WAIT_MS = 8000
+      let heardSpeech = false
+      let silenceStart = 0
+      const tick = (): void => {
+        if (cancelledRef.current) return
+        const now = Date.now()
+        const lvl = audioLevelRef.current
+        if (lvl > SPEECH_THRESHOLD) {
+          heardSpeech = true
+          silenceStart = 0
+        } else if (heardSpeech) {
+          if (silenceStart === 0) silenceStart = now
+          else if (now - silenceStart >= SILENCE_MS) {
+            console.log('[wake-voice] silence detected — stopping')
+            setPhase('processing')
+            stop()
+            return
+          }
+        }
+        if (!heardSpeech && now - startedAt > MAX_WAIT_MS) {
+          console.log('[wake-voice] no speech — cancelling')
+          cancelledRef.current = true
+          stop()
+          window.api.closeHUD()
+          setPhase('listening')
+          return
+        }
+        setTimeout(tick, 80)
+      }
+      setTimeout(tick, 200)
     }
   }, [start, stop])
 

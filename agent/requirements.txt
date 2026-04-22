@@ -6,3 +6,5 @@ keyboard>=0.13.5
 uiautomation>=2.0.18
 pyperclip>=1.8.2
 pytesseract>=0.3.10
+vosk>=0.3.45
+sounddevice>=0.4.6

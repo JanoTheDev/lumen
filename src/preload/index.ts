@@ -46,6 +46,11 @@ const api = {
   cancelCurrent: () => ipcRenderer.send('cancel-current'),
   onConfigChanged: (cb: (cfg: Record<string, unknown>) => void) => {
     ipcRenderer.on('config-changed', (_e, cfg) => cb(cfg))
+  },
+  wakeModelStatus: () => ipcRenderer.invoke('wake-model-status'),
+  wakeModelInstall: () => ipcRenderer.invoke('wake-model-install'),
+  onWakeModelProgress: (cb: (p: { phase: string; percent?: number; bytes?: number; total?: number; message?: string }) => void) => {
+    ipcRenderer.on('wake-model-progress', (_e, p) => cb(p))
   }
 }
 
