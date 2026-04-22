@@ -133,8 +133,18 @@ export default function App(): JSX.Element {
 
   const { start, stop, audioLevel } = useVoice(handleResult, handleError)
 
+  useEffect(() => { handleResultRef.current = handleResult })
+
   const audioLevelRef = useRef(0)
   useEffect(() => { audioLevelRef.current = audioLevel }, [audioLevel])
+
+  const handleResultRef = useRef<(text: string) => Promise<void>>(async () => {})
+  useEffect(() => {
+    window.api.onRunQuery?.((text) => {
+      window.api.showHUD?.()
+      handleResultRef.current(text)
+    })
+  }, [])
 
   const vadRef = useRef<{ speechThreshold: number; silenceMs: number; maxWaitMs: number } | null>(null)
   useEffect(() => {

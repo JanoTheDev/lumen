@@ -51,6 +51,7 @@ interface ElectronAPI {
   guidesSaveLast: (name: string) => Promise<{ id?: string; name?: string; error?: string }>
   guidesReplay: (id: string) => Promise<{ id?: string; error?: string }>
   guidesDelete: (id: string) => Promise<{ ok: boolean }>
+  onRunQuery: (cb: (text: string) => void) => void
 }
 
 interface Window {

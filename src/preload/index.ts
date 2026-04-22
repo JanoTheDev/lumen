@@ -70,6 +70,9 @@ const api = {
   guidesSaveLast: (name: string) => ipcRenderer.invoke('guides-save-last', name),
   guidesReplay: (id: string) => ipcRenderer.invoke('guides-replay', id),
   guidesDelete: (id: string) => ipcRenderer.invoke('guides-delete', id),
+  onRunQuery: (cb: (text: string) => void) => {
+    ipcRenderer.on('run-query', (_e, t) => cb(t))
+  },
 }
 
 if (process.contextIsolated) {

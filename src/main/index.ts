@@ -16,7 +16,7 @@ import {
 import { writeFileSync, unlinkSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, type CallOptions, type ClaudeResponse } from './claude'
+import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
@@ -291,18 +291,24 @@ function deleteSavedGuide(id: string): boolean {
   catch { return false }
 }
 
-function replaySavedGuide(id: string): SavedGuide | null {
+function loadSavedGuide(id: string): SavedGuide | null {
   try {
-    const entry = JSON.parse(readFileSync(join(guidesDir(), `${id}.json`), 'utf8')) as SavedGuide
-    activeGuide = { steps: entry.steps, index: 0 }
-    lastGuide = { task: entry.task, steps: entry.steps, savedAt: Date.now() }
-    highlightWindow?.webContents.send('show-highlights', entry.steps)
-    highlightWindow?.show()
-    setStatus('step', entry.steps[0]?.label ?? entry.name, { index: 1, total: entry.steps.length })
-    return entry
+    return JSON.parse(readFileSync(join(guidesDir(), `${id}.json`), 'utf8')) as SavedGuide
   } catch {
     return null
   }
+}
+
+// Re-run a saved guide by sending its task back through the normal query pipeline.
+// Saved bboxes can drift as the UI changes — a fresh query re-computes them against
+// whatever the user is looking at right now.
+function replaySavedGuide(id: string): SavedGuide | null {
+  const entry = loadSavedGuide(id)
+  if (!entry) return null
+  log('step', `replaying saved guide "${entry.name}" (fresh query)`)
+  setStatus('thinking', `Replaying: ${entry.name}`, { index: 2, total: 3 })
+  hudWindow?.webContents.send('run-query', entry.task)
+  return entry
 }
 
 const SAVE_GUIDE_RE = /\b(save|remember)\s+(this\s+)?guide(\s+as\s+(?<name>.{1,40}))?\b/i
@@ -324,13 +330,16 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     const clamped = Math.max(0, Math.min(activeGuide.steps.length - 1, idx))
     activeGuide.index = clamped
     const step = activeGuide.steps[clamped]
-    setStatus('step', step.label, { index: clamped + 1, total: activeGuide.steps.length })
+    const total = activeGuide.steps.length
+    setStatus('step', step.label, { index: clamped + 1, total })
     if (step.bbox) {
       highlightWindow?.webContents.send('show-highlights', [step])
       highlightWindow?.show()
       const [bx, by, bw, bh] = step.bbox
       highlightWindow?.webContents.send('show-pointer', {
-        x: Math.round(bx + bw / 2), y: Math.round(by + bh / 2), text: step.label,
+        x: Math.round(bx + bw / 2),
+        y: Math.round(by + bh / 2),
+        text: `${clamped + 1}/${total}: ${step.label}`,
       })
     }
   }
@@ -682,6 +691,14 @@ app.whenReady().then(async () => {
     const intent = classifyQuery(prompt)
 
     let effectivePrompt = prompt
+    // App-switch detection: if the user named an app (Gmail, LinkedIn, etc.) and we're
+    // not already on it, force the first action to navigate there. Prevents AI from
+    // guiding on the current (wrong) page.
+    const requestedApp = !opts.lowDetail ? detectRequestedApp(prompt, activeWindow) : null
+    if (requestedApp) {
+      log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
+      effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: User asked about "${requestedApp.app}" but the active window is "${activeWindow}". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"${requestedApp.url}"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]`
+    }
     if (!opts.lowDetail) {
       if (ORDINAL_RE.test(prompt)) {
         effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]`
@@ -874,7 +891,8 @@ app.whenReady().then(async () => {
         const cy = Math.round(by + bh / 2)
         await agent.execute({ type: 'move', x: cx, y: cy })
         highlightWindow?.webContents.send('show-pointer', {
-          x: cx, y: cy, text: first.label || first.target_hint
+          x: cx, y: cy,
+          text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
         })
       }
     } else if (result.mode === 'action') {
