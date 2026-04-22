@@ -64,7 +64,7 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 
 **Accessibility**
 - **UI scale** — 75% – 160% slider, applied live to HUD, answer card, and status bubble.
-- **Dwell click** — hover over any UI element for N ms to auto-click. For motor-limited users.
+- **Dwell click** — hover over any UI element for N ms to auto-click. Visual progress ring around the cursor shows the countdown (accent-colored, cancellable by moving). Scroll wheel re-arms it so you can click the same spot after scrolling. For motor-limited users.
 - **Narrate actions** — status bubble shows "About to: click Compose" for ~1s before the click fires.
 - **Confidence hints** — when Lumen isn't sure, it says so and gives you a chance to cancel.
 - **TTS answers** — OpenAI TTS reads answer overlays aloud. Six voices.
@@ -343,7 +343,7 @@ Guide library files: `~/.ai-overlay/guides/*.json`
 - [x] Dwell-click
 - [x] UI scale + narrate-before-do + confidence hints
 - [x] App-switch classifier (Gmail, Outlook, LinkedIn, X, Notion, Discord, Slack, YouTube, GitHub, Reddit, Spotify, Maps, Calendar, Drive, Docs, Sheets, WhatsApp, Telegram)
-- [ ] Dwell-click visual ring overlay
+- [x] Dwell-click visual ring overlay (SVG progress arc, scroll re-arms, accent-colored)
 - [ ] First-run onboarding wizard
 - [ ] App-specific guided tours (open Photoshop → "want a tour?")
 - [ ] Bundled Python (PyInstaller) for one-click installer
