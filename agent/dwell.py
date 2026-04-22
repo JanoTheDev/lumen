@@ -93,13 +93,15 @@ def _install_scroll_rearm():
     try:
         import mouse
         def _on_event(ev):
-            # Wheel events (scroll) re-arm. Also button events since a real click probably
-            # means the user intends to interact — re-arm so the next dwell works.
-            if getattr(ev, 'event_type', None) in ('wheel', 'down', 'up', 'double'):
+            # Wheel events (scroll) re-arm. WheelEvent has a `delta` attribute; MoveEvent
+            # and ButtonEvent do not. Explicitly ignore button down/up — programmatic
+            # clicks from our own dwell trigger produce those, and re-arming on them
+            # causes instant repeat-fire.
+            if hasattr(ev, 'delta') or getattr(ev, 'event_type', None) == 'wheel':
                 _state['rearm_request'] = True
         mouse.hook(_on_event)
         _state['mouse_hook'] = _on_event
-        print('[dwell] mouse hook installed (scroll/click → re-arm)', flush=True)
+        print('[dwell] mouse hook installed (scroll-only re-arm)', flush=True)
     except Exception as e:
         print(f'[dwell] mouse hook unavailable: {e}', flush=True)
 
