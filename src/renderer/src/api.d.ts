@@ -47,6 +47,10 @@ interface ElectronAPI {
   announceAction: (summary: string, confidence?: string) => Promise<{ delayMs: number }>
   ttsSpeak: (text: string) => Promise<{ ok: boolean; error?: string }>
   onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => void
+  guidesList: () => Promise<Array<{ id: string; name: string; task: string; steps: Array<{ label: string }>; createdAt: number }>>
+  guidesSaveLast: (name: string) => Promise<{ id?: string; name?: string; error?: string }>
+  guidesReplay: (id: string) => Promise<{ id?: string; error?: string }>
+  guidesDelete: (id: string) => Promise<{ ok: boolean }>
 }
 
 interface Window {

@@ -5,6 +5,7 @@ _state = {
     'thread': None,
     'stop_event': None,
     'dwell_ms': 1400,
+    'cooldown_ms': 1500,
     'on_trigger': None,
 }
 
@@ -16,7 +17,6 @@ def _loop(stop_event: threading.Event, on_trigger, get_dwell_ms):
         return
 
     RADIUS = 6  # px of allowed jitter
-    COOLDOWN = 1.5  # seconds after a trigger before another can fire
 
     last_x, last_y = pyautogui.position()
     stable_since = time.time()
@@ -35,7 +35,8 @@ def _loop(stop_event: threading.Event, on_trigger, get_dwell_ms):
             stable_since = now
             continue
         dwell_ms = get_dwell_ms()
-        if (now - stable_since) * 1000 >= dwell_ms and (now - last_trigger) > COOLDOWN:
+        cooldown = _state['cooldown_ms'] / 1000.0
+        if (now - stable_since) * 1000 >= dwell_ms and (now - last_trigger) > cooldown:
             last_trigger = now
             stable_since = now  # require new dwell cycle after trigger
             try:
@@ -44,9 +45,10 @@ def _loop(stop_event: threading.Event, on_trigger, get_dwell_ms):
                 print(f'[dwell] on_trigger error: {e}', flush=True)
     print('[dwell] stopped', flush=True)
 
-def start(dwell_ms: int, on_trigger):
+def start(dwell_ms: int, on_trigger, cooldown_ms: int = 1500):
     stop()
     _state['dwell_ms'] = int(dwell_ms)
+    _state['cooldown_ms'] = int(cooldown_ms)
     _state['on_trigger'] = on_trigger
     ev = threading.Event()
     _state['stop_event'] = ev

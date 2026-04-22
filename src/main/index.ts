@@ -13,7 +13,8 @@ import {
   Menu,
   nativeImage
 } from 'electron'
-import { writeFileSync, unlinkSync } from 'fs'
+import { writeFileSync, unlinkSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
+import { homedir } from 'os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
@@ -75,7 +76,7 @@ function cancelPhraseList(cfg: AppConfig): string[] {
 function applyDwellState(cfg: AppConfig): void {
   if (!agent) return
   if (cfg.dwellClick.enabled) {
-    agent.enableDwell(cfg.dwellClick.dwellMs).catch(e =>
+    agent.enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs).catch(e =>
       console.error('[dwell] enable failed:', (e as Error).message))
   } else {
     agent.disableDwell().catch(() => {})
@@ -234,6 +235,77 @@ interface ActiveGuide {
 }
 let activeGuide: ActiveGuide | null = null
 let lastGuide: { task: string; steps: ActiveGuide['steps']; savedAt: number } | null = null
+
+// ─── Guide library (disk-persisted tutorials) ─────────────────────────────
+interface SavedGuide {
+  id: string
+  name: string
+  task: string
+  steps: ActiveGuide['steps']
+  createdAt: number
+}
+
+function guidesDir(): string {
+  const dir = join(homedir(), '.ai-overlay', 'guides')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function slugify(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'guide'
+}
+
+function listSavedGuides(): SavedGuide[] {
+  try {
+    return readdirSync(guidesDir())
+      .filter((f) => f.endsWith('.json'))
+      .map((f) => {
+        try { return JSON.parse(readFileSync(join(guidesDir(), f), 'utf8')) as SavedGuide }
+        catch { return null }
+      })
+      .filter((g): g is SavedGuide => g !== null)
+      .sort((a, b) => b.createdAt - a.createdAt)
+  } catch {
+    return []
+  }
+}
+
+function saveLastAsGuide(name: string): SavedGuide | null {
+  if (!lastGuide) return null
+  const base = slugify(name || lastGuide.task)
+  const id = `${base}-${Date.now().toString(36)}`
+  const entry: SavedGuide = {
+    id,
+    name: name?.trim() || lastGuide.task.slice(0, 60),
+    task: lastGuide.task,
+    steps: lastGuide.steps,
+    createdAt: Date.now(),
+  }
+  writeFileSync(join(guidesDir(), `${id}.json`), JSON.stringify(entry, null, 2), 'utf8')
+  log('done', `saved guide "${entry.name}" as ${id}`)
+  return entry
+}
+
+function deleteSavedGuide(id: string): boolean {
+  try { unlinkSync(join(guidesDir(), `${id}.json`)); return true }
+  catch { return false }
+}
+
+function replaySavedGuide(id: string): SavedGuide | null {
+  try {
+    const entry = JSON.parse(readFileSync(join(guidesDir(), `${id}.json`), 'utf8')) as SavedGuide
+    activeGuide = { steps: entry.steps, index: 0 }
+    lastGuide = { task: entry.task, steps: entry.steps, savedAt: Date.now() }
+    highlightWindow?.webContents.send('show-highlights', entry.steps)
+    highlightWindow?.show()
+    setStatus('step', entry.steps[0]?.label ?? entry.name, { index: 1, total: entry.steps.length })
+    return entry
+  } catch {
+    return null
+  }
+}
+
+const SAVE_GUIDE_RE = /\b(save|remember)\s+(this\s+)?guide(\s+as\s+(?<name>.{1,40}))?\b/i
 
 const REPLAY_RE = /\b(replay|show\s+(me\s+)?(the\s+)?guide\s+again|open\s+(the\s+)?last\s+guide|last\s+guide|guide\s+replay|do\s+the\s+guide\s+again|one\s+more\s+time)\b/i
 
@@ -515,6 +587,7 @@ app.whenReady().then(async () => {
   })
 
   agent.onEvent('mouse-moved', () => {
+    if (!loadConfig().guideAutoDismissOnMove) return
     highlightWindow?.hide()
     highlightWindow?.webContents.send('clear-highlights')
     activeGuide = null
@@ -818,6 +891,28 @@ app.whenReady().then(async () => {
     const nav = handleGuideNavCommand(prompt)
     if (nav.handled) return nav.response
 
+    // Play-saved-guide voice: "play guide <name>" / "run guide <name>"
+    const playMatch = /\b(play|run|open)\s+guide(?:\s+(?:named|called)?\s*(?<name>.{2,40}))?\b/i.exec(prompt.trim())
+    if (playMatch?.groups?.name) {
+      const needle = playMatch.groups.name.trim().toLowerCase()
+      const guides = listSavedGuides()
+      const found = guides.find(g => g.name.toLowerCase().includes(needle))
+        ?? guides.find(g => slugify(g.name).includes(slugify(needle)))
+      if (found) {
+        replaySavedGuide(found.id)
+        return { mode: 'answer', text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.` }
+      }
+      return { mode: 'answer', text: `No saved guide matches "${playMatch.groups.name.trim()}".` }
+    }
+
+    // Save-guide voice command
+    const saveMatch = SAVE_GUIDE_RE.exec(prompt.trim())
+    if (saveMatch && lastGuide) {
+      const name = saveMatch.groups?.name?.trim() ?? lastGuide.task
+      const saved = saveLastAsGuide(name)
+      if (saved) return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
+    }
+
     // Guide replay: "replay last guide", "do the guide again"
     if (lastGuide && REPLAY_RE.test(prompt.trim())) {
       activeGuide = { steps: lastGuide.steps, index: 0 }
@@ -1003,6 +1098,14 @@ app.whenReady().then(async () => {
     if (patch.dwellClick) applyDwellState(next)
     return next
   })
+
+  ipcMain.handle('guides-list', () => listSavedGuides())
+  ipcMain.handle('guides-save-last', (_e, name: string) => {
+    const g = saveLastAsGuide(name ?? '')
+    return g ?? { error: 'no guide to save — run a guide first' }
+  })
+  ipcMain.handle('guides-replay', (_e, id: string) => replaySavedGuide(id) ?? { error: 'not found' })
+  ipcMain.handle('guides-delete', (_e, id: string) => ({ ok: deleteSavedGuide(id) }))
 
   ipcMain.handle('wake-model-status', () => ({
     installed: modelInstalled(),

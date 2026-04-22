@@ -136,6 +136,18 @@ export default function App(): JSX.Element {
   const audioLevelRef = useRef(0)
   useEffect(() => { audioLevelRef.current = audioLevel }, [audioLevel])
 
+  const vadRef = useRef<{ speechThreshold: number; silenceMs: number; maxWaitMs: number } | null>(null)
+  useEffect(() => {
+    window.api.getConfig?.().then((cfg) => {
+      const v = (cfg as { vad?: { speechThreshold: number; silenceMs: number; maxWaitMs: number } }).vad
+      if (v) vadRef.current = v
+    }).catch(() => {})
+    window.api.onConfigChanged?.((cfg) => {
+      const v = (cfg as { vad?: { speechThreshold: number; silenceMs: number; maxWaitMs: number } }).vad
+      if (v) vadRef.current = v
+    })
+  }, [])
+
   useEffect(() => {
     ;(window as unknown as Record<string, unknown>).__voiceStart = () => {
       console.log('[voice] __voiceStart called')
@@ -158,9 +170,10 @@ export default function App(): JSX.Element {
       setPhase('listening')
       start()
       const startedAt = Date.now()
-      const SPEECH_THRESHOLD = 0.04
-      const SILENCE_MS = 1500
-      const MAX_WAIT_MS = 8000
+      const vad = (vadRef.current ?? { speechThreshold: 0.04, silenceMs: 1500, maxWaitMs: 8000 })
+      const SPEECH_THRESHOLD = vad.speechThreshold
+      const SILENCE_MS = vad.silenceMs
+      const MAX_WAIT_MS = vad.maxWaitMs
       let heardSpeech = false
       let silenceStart = 0
       const tick = (): void => {

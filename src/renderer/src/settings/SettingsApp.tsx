@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Settings as IcGeneral, Mic as IcVoice, Accessibility as IcA11y, LayoutDashboard as IcInterface, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X } from 'lucide-react'
+import { Settings as IcGeneral, Mic as IcVoice, Accessibility as IcA11y, LayoutDashboard as IcInterface, BookOpen as IcLibrary, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X, Play, Trash2 } from 'lucide-react'
 import { THEMES, applyTheme, type ThemeName } from '../themes'
 import { HotkeyCapture } from './HotkeyCapture'
 
-type Panel = 'general' | 'voice' | 'accessibility' | 'interface' | 'models' | 'appearance'
+type Panel = 'general' | 'voice' | 'accessibility' | 'interface' | 'library' | 'models' | 'appearance'
 
 interface ThemeCustom {
   accent: string
@@ -31,7 +31,10 @@ interface Config {
   cancelVoice: { enabled: boolean; phrases: string }
   tts: { enabled: boolean; voice: string }
   showConfidence: boolean
-  dwellClick: { enabled: boolean; dwellMs: number }
+  dwellClick: { enabled: boolean; dwellMs: number; cooldownMs: number }
+  vad: { silenceMs: number; maxWaitMs: number; speechThreshold: number }
+  guideAutoDismissOnMove: boolean
+  historyExchanges: number
 }
 
 // window.api is typed globally in src/renderer/src/api.d.ts
@@ -117,6 +120,7 @@ export function SettingsApp(): JSX.Element {
             <NavItem icon={<IcVoice size={15} />} label="Voice" active={panel === 'voice'} onClick={() => setPanel('voice')} />
             <NavItem icon={<IcA11y size={15} />} label="Accessibility" active={panel === 'accessibility'} onClick={() => setPanel('accessibility')} />
             <NavItem icon={<IcInterface size={15} />} label="Interface" active={panel === 'interface'} onClick={() => setPanel('interface')} />
+            <NavItem icon={<IcLibrary size={15} />} label="Library" active={panel === 'library'} onClick={() => setPanel('library')} />
             <NavItem icon={<IcModels size={15} />} label="Models" active={panel === 'models'} onClick={() => setPanel('models')} />
             <NavItem icon={<IcAppearance size={15} />} label="Appearance" active={panel === 'appearance'} onClick={() => setPanel('appearance')} />
           </nav>
@@ -128,6 +132,7 @@ export function SettingsApp(): JSX.Element {
           {panel === 'voice' && <VoicePanel cfg={cfg} patch={patch} />}
           {panel === 'accessibility' && <AccessibilityPanel cfg={cfg} patch={patch} />}
           {panel === 'interface' && <InterfacePanel cfg={cfg} patch={patch} />}
+          {panel === 'library' && <LibraryPanel />}
           {panel === 'models' && <ModelsPanel cfg={cfg} patch={patch} />}
           {panel === 'appearance' && <AppearancePanel cfg={cfg} patch={patch} />}
         </main>
@@ -215,7 +220,10 @@ function GeneralPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>)
 
       <Card title="Conversation" description="Short-term memory between queries.">
         <Field label="History">
-          <Toggle checked={cfg.historyEnabled} onChange={v => patch({ historyEnabled: v })} label="Remember the last 5 exchanges" />
+          <Toggle checked={cfg.historyEnabled} onChange={v => patch({ historyEnabled: v })} label="Remember recent exchanges" />
+        </Field>
+        <Field label="Exchange count" hint="How many prior Q&A pairs Lumen keeps in context.">
+          <NumberStepper value={cfg.historyExchanges} step={1} min={0} max={20} onChange={v => patch({ historyExchanges: v })} suffix=" turns" />
         </Field>
       </Card>
     </>
@@ -269,6 +277,18 @@ function VoicePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) =
           />
         </Field>
       </Card>
+
+      <Card title="Silence detection (hands-free)" description="How the tap-to-talk and wake-word flows decide you've finished speaking.">
+        <Field label="Silence before stop" hint="How long the mic must be quiet before recording ends.">
+          <NumberStepper value={cfg.vad.silenceMs} step={100} min={400} max={5000} onChange={v => patch({ vad: { ...cfg.vad, silenceMs: v } })} suffix="ms" />
+        </Field>
+        <Field label="Max wait for speech" hint="Auto-cancel if nothing is said within this long after opening the mic.">
+          <NumberStepper value={cfg.vad.maxWaitMs} step={500} min={2000} max={20000} onChange={v => patch({ vad: { ...cfg.vad, maxWaitMs: v } })} suffix="ms" />
+        </Field>
+        <Field label="Speech threshold" hint="Audio level that counts as speech (0.01 very sensitive, 0.10 very loud).">
+          <NumberStepper value={Math.round(cfg.vad.speechThreshold * 100)} step={1} min={1} max={20} onChange={v => patch({ vad: { ...cfg.vad, speechThreshold: v / 100 } })} suffix="%" />
+        </Field>
+      </Card>
     </>
   )
 }
@@ -316,16 +336,22 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
         <Field label="Enable">
           <Toggle checked={cfg.tts.enabled} onChange={v => patch({ tts: { ...cfg.tts, enabled: v } })} label="Speak answer overlays" />
         </Field>
-        <Field label="Voice" hint="Six OpenAI voices. Preview them at openai.com/research/text-to-speech-api.">
-          <select
-            className="sx-select"
-            value={cfg.tts.voice}
-            onChange={e => patch({ tts: { ...cfg.tts, voice: e.target.value } })}
-          >
-            {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map(v => (
-              <option key={v} value={v}>{v}</option>
-            ))}
-          </select>
+        <Field label="Voice" hint="Six OpenAI voices.">
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <select
+              className="sx-select"
+              value={cfg.tts.voice}
+              onChange={e => patch({ tts: { ...cfg.tts, voice: e.target.value } })}
+              style={{ maxWidth: 200 }}
+            >
+              {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map(v => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+            <button type="button" className="sx-link" onClick={() => window.api.ttsSpeak('Hi, this is Lumen.')}>
+              Preview
+            </button>
+          </div>
         </Field>
       </Card>
 
@@ -335,6 +361,9 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
         </Field>
         <Field label="Dwell time" hint="Milliseconds the cursor must be still before a click fires. Lower = faster, more accidental clicks.">
           <NumberStepper value={cfg.dwellClick.dwellMs} step={100} min={500} max={3000} onChange={v => patch({ dwellClick: { ...cfg.dwellClick, dwellMs: v } })} suffix="ms" />
+        </Field>
+        <Field label="Cooldown" hint="After a click, wait this long before another dwell click can fire.">
+          <NumberStepper value={cfg.dwellClick.cooldownMs} step={250} min={500} max={5000} onChange={v => patch({ dwellClick: { ...cfg.dwellClick, cooldownMs: v } })} suffix="ms" />
         </Field>
       </Card>
     </>
@@ -359,6 +388,103 @@ function InterfacePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config
         <Field label="Answer overlay auto-close" hint="Milliseconds before the answer card dismisses.">
           <NumberStepper value={cfg.answerAutoCloseMs} step={500} min={2000} max={60000} onChange={v => patch({ answerAutoCloseMs: v })} suffix="ms" />
         </Field>
+      </Card>
+
+      <Card title="Guide behavior">
+        <Field label="Auto-dismiss on mouse move" hint="Clear highlights as soon as you move the cursor. Turn off if you want them to stay until you say 'done'.">
+          <Toggle checked={cfg.guideAutoDismissOnMove} onChange={v => patch({ guideAutoDismissOnMove: v })} label="Clear on mouse move" />
+        </Field>
+      </Card>
+    </>
+  )
+}
+
+function LibraryPanel(): JSX.Element {
+  const [guides, setGuides] = useState<Array<{ id: string; name: string; task: string; steps: Array<{ label: string }>; createdAt: number }>>([])
+  const [saveName, setSaveName] = useState('')
+  const [msg, setMsg] = useState('')
+
+  const refresh = (): void => {
+    window.api.guidesList().then(setGuides).catch(() => {})
+  }
+  useEffect(() => { refresh() }, [])
+
+  const saveCurrent = async (): Promise<void> => {
+    const res = await window.api.guidesSaveLast(saveName.trim())
+    if ('error' in res && res.error) { setMsg(res.error); return }
+    setMsg(`Saved "${res.name}"`)
+    setSaveName('')
+    refresh()
+    setTimeout(() => setMsg(''), 2400)
+  }
+
+  const play = async (id: string): Promise<void> => {
+    await window.api.guidesReplay(id)
+    window.api.settingsWindowMinimize?.()
+  }
+
+  const remove = async (id: string): Promise<void> => {
+    await window.api.guidesDelete(id)
+    refresh()
+  }
+
+  return (
+    <>
+      <PanelHeader title="Library" subtitle="Save guide runs and replay them later. Great for onboarding, training, or muscle memory." />
+
+      <Card title="Save the last guide" description="After Lumen shows you a guide, come here to save it. Voice works too: say 'save guide as <name>'.">
+        <Field label="Name" hint="Short and memorable. Example: 'compose Gmail', 'export DaVinci'.">
+          <div style={{ display: 'flex', gap: 8, maxWidth: 420 }}>
+            <input
+              className="sx-input"
+              style={{ flex: 1 }}
+              placeholder="Name for this guide"
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveCurrent() }}
+            />
+            <button type="button" className="sx-link" onClick={saveCurrent}>Save</button>
+          </div>
+        </Field>
+        {msg && <small className="sx-field-hint" style={{ color: msg.startsWith('Saved') ? 'var(--ai-success, #4ade80)' : 'var(--ai-danger, #f87171)' }}>{msg}</small>}
+      </Card>
+
+      <Card title="Saved guides" description={`${guides.length} guide${guides.length === 1 ? '' : 's'}. Say "play guide <name>" to run one by voice.`}>
+        {guides.length === 0 ? (
+          <small className="sx-field-hint" style={{ padding: '8px 0' }}>No saved guides yet. Ask Lumen for a guide, then save it.</small>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {guides.map(g => (
+              <div
+                key={g.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  background: 'rgba(10, 12, 18, 0.55)',
+                  border: '1px solid var(--ai-border)',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {g.name}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--ai-muted)', marginTop: 2 }}>
+                    {g.steps.length} step{g.steps.length === 1 ? '' : 's'} · {new Date(g.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <button type="button" className="sx-ctrl" title="Play" onClick={() => play(g.id)}>
+                  <Play size={14} />
+                </button>
+                <button type="button" className="sx-ctrl" title="Delete" onClick={() => remove(g.id)}>
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
     </>
   )

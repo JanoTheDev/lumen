@@ -66,6 +66,10 @@ const api = {
   onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => {
     ipcRenderer.on('tts-audio', (_e, p) => cb(p))
   },
+  guidesList: () => ipcRenderer.invoke('guides-list'),
+  guidesSaveLast: (name: string) => ipcRenderer.invoke('guides-save-last', name),
+  guidesReplay: (id: string) => ipcRenderer.invoke('guides-replay', id),
+  guidesDelete: (id: string) => ipcRenderer.invoke('guides-delete', id),
 }
 
 if (process.contextIsolated) {

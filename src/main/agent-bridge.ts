@@ -107,8 +107,8 @@ export class AgentBridge {
     return this.call('wake_disable', {})
   }
 
-  async enableDwell(dwellMs: number): Promise<unknown> {
-    return this.call('dwell_enable', { dwell_ms: dwellMs })
+  async enableDwell(dwellMs: number, cooldownMs: number): Promise<unknown> {
+    return this.call('dwell_enable', { dwell_ms: dwellMs, cooldown_ms: cooldownMs })
   }
 
   async disableDwell(): Promise<unknown> {

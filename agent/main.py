@@ -161,9 +161,10 @@ def main():
                 respond(id, wake.status())
             elif cmd == "dwell_enable":
                 dwell_ms = msg.get("dwell_ms", 1400)
+                cooldown_ms = msg.get("cooldown_ms", 1500)
                 try:
-                    dwell.start(dwell_ms, lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}))
-                    respond(id, {"ok": True, "dwell_ms": dwell_ms})
+                    dwell.start(dwell_ms, lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}), cooldown_ms=cooldown_ms)
+                    respond(id, {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms})
                 except Exception as e:
                     respond(id, error=f"dwell_enable failed: {e}")
             elif cmd == "dwell_disable":

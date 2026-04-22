@@ -49,7 +49,15 @@ export interface AppConfig {
   dwellClick: {
     enabled: boolean
     dwellMs: number
+    cooldownMs: number
   }
+  vad: {
+    silenceMs: number       // how long silence must last before auto-stop
+    maxWaitMs: number       // no-speech timeout
+    speechThreshold: number // audioLevel > this = speech
+  }
+  guideAutoDismissOnMove: boolean
+  historyExchanges: number
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -69,7 +77,10 @@ export const DEFAULT_CONFIG: AppConfig = {
   cancelVoice: { enabled: false, phrases: 'stop, cancel, abort, never mind' },
   tts: { enabled: false, voice: 'alloy' },
   showConfidence: false,
-  dwellClick: { enabled: false, dwellMs: 1400 },
+  dwellClick: { enabled: false, dwellMs: 1400, cooldownMs: 1500 },
+  vad: { silenceMs: 1500, maxWaitMs: 8000, speechThreshold: 0.04 },
+  guideAutoDismissOnMove: true,
+  historyExchanges: 5,
 }
 
 const CONFIG_DIR = join(homedir(), '.ai-overlay')
@@ -134,5 +145,8 @@ function mergeWithDefaults(partial: Partial<AppConfig>): AppConfig {
     tts: { ...DEFAULT_CONFIG.tts, ...(partial.tts ?? {}) },
     showConfidence: partial.showConfidence ?? DEFAULT_CONFIG.showConfidence,
     dwellClick: { ...DEFAULT_CONFIG.dwellClick, ...(partial.dwellClick ?? {}) },
+    vad: { ...DEFAULT_CONFIG.vad, ...(partial.vad ?? {}) },
+    guideAutoDismissOnMove: partial.guideAutoDismissOnMove ?? DEFAULT_CONFIG.guideAutoDismissOnMove,
+    historyExchanges: partial.historyExchanges ?? DEFAULT_CONFIG.historyExchanges,
   }
 }
