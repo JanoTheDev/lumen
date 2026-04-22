@@ -23,6 +23,9 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
     last_trigger = 0.0
     last_progress_emit = 0.0
     was_active = False
+    # After a trigger, cursor MUST move out of RADIUS before another trigger can arm.
+    # Prevents repeat-fire when cooldown >= dwell_ms and cursor stays still.
+    armed = True
 
     while not stop_event.is_set():
         time.sleep(0.04)
@@ -39,16 +42,19 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
         if moved:
             last_x, last_y = x, y
             stable_since = now
+            armed = True
             if was_active:
                 try: on_progress(x, y, 0.0, False)
                 except Exception: pass
                 was_active = False
             continue
 
+        if not armed:
+            continue
+
         elapsed_ms = (now - stable_since) * 1000
         progress = max(0.0, min(1.0, elapsed_ms / max(1, dwell_ms)))
         if not in_cooldown and progress > 0.02:
-            # Emit progress at ~25fps max
             if now - last_progress_emit > 0.04:
                 try: on_progress(x, y, progress, True)
                 except Exception: pass
@@ -57,8 +63,9 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
 
         if elapsed_ms >= dwell_ms and not in_cooldown:
             last_trigger = now
-            stable_since = now  # require new dwell cycle after trigger
-            try: on_progress(x, y, 1.0, False)  # signal ring complete + hide
+            stable_since = now
+            armed = False  # require cursor to move before re-arming
+            try: on_progress(x, y, 1.0, False)
             except Exception: pass
             was_active = False
             try:

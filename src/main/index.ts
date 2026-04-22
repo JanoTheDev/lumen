@@ -252,7 +252,12 @@ function createDwellRingWindow(): void {
     },
   })
   dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
-  try { dwellRingWindow.setAlwaysOnTop(true, 'screen-saver') } catch { /* noop */ }
+  try {
+    // On Windows the taskbar is also HWND_TOPMOST; 'pop-up-menu' with relativeLevel 1
+    // raises our window above it.
+    dwellRingWindow.setAlwaysOnTop(true, 'pop-up-menu', 1)
+    dwellRingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  } catch { /* noop */ }
 
   // Show immediately after load — transparent content is invisible until progress arrives.
   dwellRingWindow.webContents.once('did-finish-load', () => {
@@ -561,6 +566,8 @@ app.whenReady().then(async () => {
       return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
     })
     if (overOwn) return
+    // Re-assert top-z periodically (cheap) so the ring stays above the taskbar.
+    try { dwellRingWindow.moveTop() } catch { /* noop */ }
     dwellRingWindow.webContents.send('dwell-progress', { ...data, x, y })
   })
 
