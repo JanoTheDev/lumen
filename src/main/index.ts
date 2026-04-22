@@ -252,19 +252,27 @@ function createDwellRingWindow(): void {
     },
   })
   dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
-  try {
-    // On Windows the taskbar is also HWND_TOPMOST; 'pop-up-menu' with relativeLevel 1
-    // raises our window above it.
-    dwellRingWindow.setAlwaysOnTop(true, 'pop-up-menu', 1)
-    dwellRingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  } catch { /* noop */ }
 
-  // Show immediately after load — transparent content is invisible until progress arrives.
+  const forceTop = (): void => {
+    if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
+    try {
+      // Cycle + stack on Windows: toggling off then on with a high relative level
+      // forces Windows to re-evaluate z-order above the taskbar's HWND_TOPMOST.
+      dwellRingWindow.setAlwaysOnTop(false)
+      dwellRingWindow.setAlwaysOnTop(true, 'screen-saver', 1)
+      dwellRingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      dwellRingWindow.moveTop()
+    } catch { /* noop */ }
+  }
+
   dwellRingWindow.webContents.once('did-finish-load', () => {
     if (dwellRingWindow && !dwellRingWindow.isDestroyed() && loadConfig().dwellClick.enabled) {
       dwellRingWindow.showInactive()
+      forceTop()
     }
   })
+  // Re-apply each time the app gains focus (OS sometimes resets z-order)
+  app.on('browser-window-focus', () => forceTop())
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     dwellRingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/dwellring.html`)
@@ -566,8 +574,11 @@ app.whenReady().then(async () => {
       return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
     })
     if (overOwn) return
-    // Re-assert top-z periodically (cheap) so the ring stays above the taskbar.
-    try { dwellRingWindow.moveTop() } catch { /* noop */ }
+    // Re-assert top-z every tick so the ring stays above the taskbar on Windows.
+    try {
+      dwellRingWindow.setAlwaysOnTop(true, 'screen-saver', 1)
+      dwellRingWindow.moveTop()
+    } catch { /* noop */ }
     dwellRingWindow.webContents.send('dwell-progress', { ...data, x, y })
   })
 

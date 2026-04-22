@@ -7,6 +7,8 @@ _state = {
     'dwell_ms': 1400,
     'cooldown_ms': 1500,
     'on_trigger': None,
+    'rearm_request': False,  # external signal (scroll/key) to re-arm even if cursor still
+    'mouse_hook': None,
 }
 
 def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
@@ -49,6 +51,17 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
                 was_active = False
             continue
 
+        # External re-arm signal (scroll wheel, etc.) — reset dwell timer too
+        if _state['rearm_request']:
+            _state['rearm_request'] = False
+            armed = True
+            stable_since = now
+            if was_active:
+                try: on_progress(x, y, 0.0, False)
+                except Exception: pass
+                was_active = False
+            continue
+
         if not armed:
             continue
 
@@ -74,11 +87,39 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
                 print(f'[dwell] on_trigger error: {e}', flush=True)
     print('[dwell] stopped', flush=True)
 
+def _install_scroll_rearm():
+    if _state.get('mouse_hook') is not None:
+        return
+    try:
+        import mouse
+        def _on_event(ev):
+            # Wheel events (scroll) re-arm. Also button events since a real click probably
+            # means the user intends to interact — re-arm so the next dwell works.
+            if getattr(ev, 'event_type', None) in ('wheel', 'down', 'up', 'double'):
+                _state['rearm_request'] = True
+        mouse.hook(_on_event)
+        _state['mouse_hook'] = _on_event
+        print('[dwell] mouse hook installed (scroll/click → re-arm)', flush=True)
+    except Exception as e:
+        print(f'[dwell] mouse hook unavailable: {e}', flush=True)
+
+def _uninstall_scroll_rearm():
+    handler = _state.get('mouse_hook')
+    if handler is None:
+        return
+    try:
+        import mouse
+        mouse.unhook(handler)
+    except Exception:
+        pass
+    _state['mouse_hook'] = None
+
 def start(dwell_ms: int, on_trigger, cooldown_ms: int = 1500, on_progress=None):
     stop()
     _state['dwell_ms'] = int(dwell_ms)
     _state['cooldown_ms'] = int(cooldown_ms)
     _state['on_trigger'] = on_trigger
+    _install_scroll_rearm()
     ev = threading.Event()
     _state['stop_event'] = ev
     noop = lambda *a, **k: None
@@ -97,6 +138,7 @@ def stop():
         ev.set()
     _state['thread'] = None
     _state['stop_event'] = None
+    _uninstall_scroll_rearm()
 
 def set_dwell_ms(dwell_ms: int):
     _state['dwell_ms'] = int(dwell_ms)
