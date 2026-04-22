@@ -15,7 +15,7 @@ import {
 } from 'electron'
 import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { callClaude, needsScreenshot, screenshotDimensions, isBrowser, warmupConnection, addToHistory, findClickCoordinates, type CallOptions, type ClaudeResponse } from './claude'
+import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
@@ -482,7 +482,7 @@ app.whenReady().then(async () => {
         result.mode === 'action' ? (result.summary ?? `action: ${result.actions?.map(a => a.type).join(', ')}`) :
         result.mode === 'guide' ? `guide: ${result.steps?.map(s => s.label).join(', ')}` :
         result.mode === 'text_insert' ? `inserted text` :
-        result.mode === 'locate' ? `located: ${result.items?.map(i => i.label).join(', ')}` : result.mode
+        `located: ${result.items?.map(i => i.label).join(', ')}`
       addToHistory(prompt, summary)
     }
 

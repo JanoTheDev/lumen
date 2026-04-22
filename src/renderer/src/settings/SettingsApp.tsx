@@ -15,20 +15,9 @@ interface Config {
   historyEnabled: boolean
 }
 
-interface WakeModelStatus { installed: boolean; path: string }
-interface WakeModelProgress { phase: 'downloading' | 'extracting' | 'done' | 'error'; percent?: number; message?: string }
-
-declare global {
-  interface Window {
-    api: {
-      getConfig: () => Promise<Config>
-      saveConfig: (patch: Partial<Config>) => Promise<Config>
-      wakeModelStatus: () => Promise<WakeModelStatus>
-      wakeModelInstall: () => Promise<{ ok: boolean; error?: string }>
-      onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => void
-    }
-  }
-}
+// window.api is typed globally in src/renderer/src/api.d.ts
+type WakeModelStatus = { installed: boolean; path: string }
+type WakeModelProgress = { phase: 'downloading' | 'extracting' | 'done' | 'error'; percent?: number; message?: string }
 
 const THEME_OPTIONS: { value: ThemeName; label: string }[] = [
   { value: 'dark',          label: 'Dark' },
@@ -52,12 +41,12 @@ export function SettingsApp(): JSX.Element {
   const [savedFlash, setSavedFlash] = useState(false)
 
   useEffect(() => {
-    window.api.getConfig().then(c => { setCfg(c); applyTheme(c.theme) })
+    window.api.getConfig().then(c => { const cfg = c as unknown as Config; setCfg(cfg); applyTheme(cfg.theme) })
   }, [])
 
   const patch = useCallback(async (update: Partial<Config>): Promise<void> => {
     if (!cfg) return
-    const next = await window.api.saveConfig(update)
+    const next = await window.api.saveConfig(update) as unknown as Config
     setCfg(next)
     if (update.theme) applyTheme(next.theme)
     setSavedFlash(true)

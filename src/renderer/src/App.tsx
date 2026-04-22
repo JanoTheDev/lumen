@@ -20,14 +20,6 @@ export default function App(): JSX.Element {
   const cancelledRef = useRef(false)
   const processingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const cancel = (): void => {
-    cancelledRef.current = true
-    queryFiredRef.current = false
-    if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
-    setPhase('listening')
-    window.api.closeHUD()
-  }
-
   useEffect(() => {
     window.api.onCancelRequest?.(() => {
       cancelledRef.current = true
@@ -135,27 +127,27 @@ export default function App(): JSX.Element {
     }, 1500)
   }
 
-  const { start, stop, transcript, audioLevel } = useVoice(handleResult, handleError)
+  const { start, stop, audioLevel } = useVoice(handleResult, handleError)
 
   const audioLevelRef = useRef(0)
   useEffect(() => { audioLevelRef.current = audioLevel }, [audioLevel])
 
   useEffect(() => {
-    ;(window as Record<string, unknown>).__voiceStart = () => {
+    ;(window as unknown as Record<string, unknown>).__voiceStart = () => {
       console.log('[voice] __voiceStart called')
       queryFiredRef.current = false
       cancelledRef.current = false
       setPhase('listening')
       start()
     }
-    ;(window as Record<string, unknown>).__voiceStop = () => {
+    ;(window as unknown as Record<string, unknown>).__voiceStop = () => {
       console.log('[voice] __voiceStop called')
       setPhase('processing')
       stop()
     }
     // Wake-word activated recording: auto-stop after sustained silence.
     // Heard speech then ~1.5s quiet → stop. Max 8s total if no speech detected.
-    ;(window as Record<string, unknown>).__wakeVoiceStart = () => {
+    ;(window as unknown as Record<string, unknown>).__wakeVoiceStart = () => {
       console.log('[wake-voice] starting — will auto-stop on silence')
       queryFiredRef.current = false
       cancelledRef.current = false

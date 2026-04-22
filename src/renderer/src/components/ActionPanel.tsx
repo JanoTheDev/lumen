@@ -19,8 +19,8 @@ export function ActionPanel({ actions, summary }: ActionPanelProps): JSX.Element
 
   const execute = async (): Promise<void> => {
     setStatus('running')
-    const result = await window.api.executeAction(actions)
-    setStatus(result.cancelled ? 'cancelled' : 'done')
+    const result = await window.api.executeAction(actions) as { cancelled?: boolean } | undefined
+    setStatus(result?.cancelled ? 'cancelled' : 'done')
   }
 
   return (
