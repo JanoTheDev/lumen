@@ -1,11 +1,11 @@
 # Lumen
 
 > Voice-first AI copilot that sees your screen and drives your apps.
-> Hold a hotkey. Speak. Lumen does it.
+> Built for people learning new software and people who can't use a mouse. Everyone gets a keyboard-free way to operate a computer.
 
-Lumen is a screen-aware desktop assistant for Windows. It runs silently in the tray, activates with a global hotkey, and can answer questions, navigate your browser, compose messages, research topics, and fill forms — all from one voice command.
+Lumen is a screen-aware desktop assistant for Windows. It runs silently in the tray, activates with a global hotkey or a wake word, and can answer questions, navigate your browser, compose messages, research topics, guide you through apps you're learning, and fill forms — all from one voice command.
 
-![status](https://img.shields.io/badge/status-active%20development-blue) ![platform](https://img.shields.io/badge/platform-Windows-0078D4) ![electron](https://img.shields.io/badge/Electron-4.x-47848F) ![react](https://img.shields.io/badge/React-19-61DAFB) ![license](https://img.shields.io/badge/license-AGPL--3.0-A42E2B)
+![status](https://img.shields.io/badge/status-active%20development-blue) ![platform](https://img.shields.io/badge/platform-Windows-0078D4) ![electron](https://img.shields.io/badge/Electron-39-47848F) ![react](https://img.shields.io/badge/React-19-61DAFB) ![license](https://img.shields.io/badge/license-AGPL--3.0-A42E2B)
 
 ---
 
@@ -14,11 +14,23 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 | You say… | Lumen does… |
 |---|---|
 | *"What time is it, and what's the weather in Larnaca?"* | Two parallel AI calls, one merged answer. |
-| *"Write an email to my boss that I'm quitting."* | Plans 3 steps → opens Gmail → clicks Compose → fills Subject + Body (leaves To blank for you). Stops before Send. |
-| *"Show me the internship roles at Exness."* | Autonomous research loop: searches Google → clicks the top organic result → scrolls → extracts the list → summarizes. |
-| *"Open my third email from Sarah."* | Navigates Gmail, identifies row 3 by bbox, clicks. |
-| *"Where is the Compose button?"* | Highlights the button on screen. |
-| *"How do I add a color grade in DaVinci Resolve?"* | Numbered step-by-step guide with on-screen pulses. |
+| *"Write an email to my boss that I'm quitting."* | Plans 3 steps → opens Gmail → clicks Compose → fills Subject + Body. Stops before Send. |
+| *"Show me the internship roles at Exness."* | Autonomous research loop: Google → top result → scrolls → extracts list → summarizes. |
+| *"How do I compose in Gmail?"* | If you're on the wrong page, Lumen navigates to Gmail first, then shows a step-by-step guide with numbered highlights. |
+| *"Next" / "back" / "repeat" / "done"* | Advance, rewind, re-announce, or dismiss the current guide — by voice. |
+| *"Save guide as compose Gmail"* | Saves the current guide to your library. Replay any time with *"play guide compose Gmail"*. |
+| *"Stop" / "cancel"* | Aborts in-flight actions mid-run. |
+| *"Where is the Compose button?"* | Dims the screen, highlights the exact bbox. |
+
+---
+
+## Why Lumen
+
+**For accessibility users.** Hands-free operation with tap-to-talk, wake-word, silence-detected auto-stop, voice-cancel, dwell-click, scalable UI, and voice-navigated step guides. No hold-the-hotkey required.
+
+**For people learning new software.** "Explain before do" narrates each action before it runs. Guides show labeled steps next to the cursor. Save a guide once, replay it later as a refresher. Confidence hints warn you when Lumen isn't sure.
+
+**For everyone.** Speak naturally — Lumen figures out whether you want an answer, a guide, an action, a write-in-place, or a highlight.
 
 ---
 
@@ -27,6 +39,7 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 **Agentic execution**
 - Multi-step planner for compose / navigate / fill tasks. Each step is verified; retries on failure.
 - Autonomous research agent — up to 8 iterations of search → click → scroll → summarize.
+- App-switch detection — if you mention Gmail/Outlook/YouTube/etc. while on a different page, Lumen navigates to the right site before doing anything else.
 - Request queue (FIFO) so rapid hotkey presses never collide.
 - Parallel subtask splitting for read-only questions ("A and B" fires two concurrent AI calls).
 
@@ -35,36 +48,61 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 - Active-window detection adapts writing style per app (Gmail, LinkedIn, X/Twitter, Slack, Discord, Notion, Outlook, messaging).
 - OCR for click targeting, with bbox fallback and Computer Use refinement on accurate models.
 
-**Voice-first**
+**Voice input**
 - Global hotkey — rebindable live from Settings, pushed to the Python agent without restart.
-- Hold-to-talk → release to send.
-- Whisper (OpenAI) for transcription.
-- **Offline wake word** ("hey lumen") — Vosk-based, runs locally, zero cloud cost. Toggle from Settings. One-click model download (~40MB) on first use. Auto-stops on silence via client-side VAD.
+- **Hands-free / tap-to-talk** — press once, recording auto-stops on silence.
+- **Offline wake word** ("hey lumen") — Vosk-based, fully local, zero cloud cost.
+- **Voice cancel** — say "stop" / "cancel" / "abort" / "never mind" to kill in-flight actions.
+- **Voice vocabulary** — feed Whisper your brand names and jargon so it transcribes them right.
+- Silence detection tunable per user (silence window, max-wait, speech threshold).
+
+**Guide mode**
+- Numbered highlights drawn over UI elements.
+- Floating label next to the cursor with big readable text ("2/5: Click Compose button…"), not a tiny tooltip at the bottom.
+- Voice nav: "next", "back", "repeat", "done". Zero AI cost — matched locally.
+- Guide library: save the current guide with a name, replay any saved guide later. Replays re-run the task against the current screen so bboxes always match.
+
+**Accessibility**
+- **UI scale** — 75% – 160% slider, applied live to HUD, answer card, and status bubble.
+- **Dwell click** — hover over any UI element for N ms to auto-click. For motor-limited users.
+- **Narrate actions** — status bubble shows "About to: click Compose" for ~1s before the click fires.
+- **Confidence hints** — when Lumen isn't sure, it says so and gives you a chance to cancel.
+- **TTS answers** — OpenAI TTS reads answer overlays aloud. Six voices.
+
+**Status bubble**
+- Bottom-center pill shows `listening → transcribing → thinking → acting/step` with a live step counter.
+- Non-invasive. Click-through. Toggleable.
 
 **Five response modes**
 | Mode | Use | UI |
 |---|---|---|
 | Answer | Q&A | Top-right card, auto-closes |
-| Guide | How-to | HUD with numbered steps + screen highlights |
+| Guide | How-to | Screen highlights + floating step label at cursor |
 | Action | "Open / click / type X" | Moves cursor, clicks, types |
 | Text Insert | Write/rewrite in focused field | Generates + inserts |
 | Locate | "Where is X" | Dim + reveal bbox highlight |
 
-**Settings + themes**
-- Tray icon → Settings window with panels: General / Models / Appearance.
-- Click-to-capture hotkey picker — live rebinds the Python hook, no restart.
-- Wake-word toggle + phrase input + inline offline-model installer with progress bar.
-- Model override per role (Planning / Execution / Verification) — text + dropdown.
-- 7 themes: Dark, Light, High Contrast, Ocean, Forest, Sunset, Midnight.
-- Config persisted to `~/.ai-overlay/config.json`, live-broadcast to all overlay windows.
+**Themes**
+- 7 presets: Dark, Light, High Contrast, Ocean, Forest, Sunset, Midnight.
+- **Custom theme** — 3-color picker (accent, background, foreground) live-applied to every overlay window.
+
+**Settings — 7 panels**
+- **General** — hotkey, hands-free mode, history.
+- **Voice** — wake word, cancel voice, Whisper vocab, VAD tuning.
+- **Accessibility** — UI scale, narrate actions, confidence, TTS, dwell click.
+- **Interface** — status bubble, overlay auto-close timings, guide dismissal behavior.
+- **Library** — saved guides: save the last guide with a name, play, delete.
+- **Models** — per-role model overrides (Planning / Execution / Verification).
+- **Appearance** — theme presets + custom colors.
+
+Every tunable knob has a sane default and is editable in the UI — no JSON editing required.
 
 **Multi-provider model routing**
 - Anthropic keys present → Claude Sonnet 4.6 (planning/execution) + Haiku 4.5 (verification).
 - OpenAI only → gpt-5-mini + gpt-5-nano.
-- `reasoning_effort: minimal` on all OpenAI calls so reasoning tokens don't starve the output budget.
 
 **Structured logging**
-Every query tagged and timed — copy the terminal output and paste it into an issue. Tags: `[plan]` `[step]` `[verify]` `[retry]` `[fail]` `[done]` `[time]`. Wall-clock stamp on every line.
+Every query tagged and timed. Tags: `[plan]` `[step]` `[verify]` `[retry]` `[fail]` `[done]` `[time]`. Wall-clock stamp on every line.
 
 ---
 
@@ -76,12 +114,14 @@ Every query tagged and timed — copy the terminal output and paste it into an i
 │  (src/main/)        │ ◄────►  │  (src/renderer/)             │
 │                     │         │    HUD / voicebar / answer   │
 │  • query-classifier │         │    overlay / highlight /     │
-│  • task-planner     │         │    settings window           │
+│  • task-planner     │         │    status bubble / settings  │
 │  • task-queue (L1)  │         └──────────────────────────────┘
 │  • task-splitter    │
 │  • step-verifier    │
 │  • claude.ts        │ ← Anthropic / OpenAI SDK
 │  • model-router     │
+│  • wake-model       │ ← Vosk auto-installer
+│  • guide library    │ ← ~/.ai-overlay/guides/*.json
 │  • config           │ ← ~/.ai-overlay/config.json
 │  • logger           │
 └──────────┬──────────┘
@@ -95,7 +135,8 @@ Every query tagged and timed — copy the terminal output and paste it into an i
 │  • screenshot (mss)      │
 │  • OCR (pytesseract)     │
 │  • active window         │
-│  • wake word (Vosk)      │
+│  • wake + cancel voice   │
+│  • dwell-click tracker   │
 └──────────────────────────┘
 ```
 
@@ -122,7 +163,7 @@ pip install -r agent/requirements.txt
 # 4. API key — copy .env.example → .env and fill one
 cp .env.example .env
 #   ANTHROPIC_API_KEY=sk-ant-...   (recommended)
-# or OPENAI_API_KEY=sk-proj-...
+# or OPENAI_API_KEY=sk-proj-...    (required for Whisper + TTS)
 
 # 5. Run (must be Administrator on Windows for global hotkey)
 npm run dev
@@ -144,8 +185,12 @@ Windows setup helper:
 |---|---|
 | Start speaking | Hold `Ctrl+Shift+Space` (default, rebindable) |
 | Send | Release the hotkey |
-| Hands-free | Say "hey lumen &lt;your question&gt;" — wake word must be enabled in Settings |
-| Cancel in-flight | Press `Escape` — aborts research/plan loops |
+| Hands-free (push-to-talk optional) | Enable Settings → General → Hands-free. Tap hotkey once; Lumen stops on silence. |
+| Wake word | Enable Settings → Voice. Say "hey lumen &lt;your question&gt;". |
+| Advance a guide | Say "next" / "back" / "repeat" / "done" |
+| Save the guide you just ran | Say "save guide as &lt;name&gt;" or use Settings → Library |
+| Replay a saved guide | Say "play guide &lt;name&gt;" or click Play in Library |
+| Cancel in-flight | Press `Escape`, or say a cancel phrase (default "stop", "cancel") |
 | Open Settings | Left-click tray icon or right-click → Settings |
 | Edit config file | Right-click tray → Open config folder |
 
@@ -153,11 +198,21 @@ Windows setup helper:
 
 Offline, free, local. Powered by [Vosk](https://alphacephei.com/vosk/).
 
-1. Settings → General → Wake word → click **Install offline model** (~40MB, one-time).
+1. Settings → Voice → Wake word → click **Install offline model** (~40MB, one-time download).
 2. Toggle **Enable always-on wake word** ON. Default phrase: `hey lumen`.
-3. Say the phrase followed by your query. HUD opens; recording auto-stops after ~1.5s of silence.
+3. Say the phrase followed by your query. HUD opens; recording auto-stops on silence (tunable).
 
 Model lives at `~/.ai-overlay/vosk-model/`. Delete that folder to force re-download.
+
+### Guide library
+
+Save the tutorials Lumen generates and reuse them later.
+
+1. Ask Lumen "how do I X in app Y". Guide renders.
+2. Say "save guide as X" or Settings → Library → Save.
+3. Replay from voice ("play guide X") or Library → Play.
+
+Replays re-run the task against the current screen — bboxes always track the latest UI.
 
 ---
 
@@ -169,6 +224,7 @@ Config lives at `~/.ai-overlay/config.json`. Edit via Settings UI or directly.
 {
   "version": 1,
   "theme": "ocean",
+  "themeCustom": { "accent": "#7c92ff", "background": "#0d0f14", "foreground": "#e6e8ee", "opacity": 0.92, "blur": 14 },
   "models": {
     "planning": "claude-sonnet-4-6",
     "execution": "gpt-5-mini",
@@ -177,8 +233,20 @@ Config lives at `~/.ai-overlay/config.json`. Edit via Settings UI or directly.
   "hotkey": "Ctrl+Shift+Space",
   "hudAutoCloseMs": 5000,
   "answerAutoCloseMs": 10000,
-  "wakeWord": { "enabled": false, "phrase": "hey lumen" },
-  "historyEnabled": true
+  "wakeWord":    { "enabled": false, "phrase": "hey lumen" },
+  "cancelVoice": { "enabled": false, "phrases": "stop, cancel, abort, never mind" },
+  "tts":         { "enabled": false, "voice": "alloy" },
+  "dwellClick":  { "enabled": false, "dwellMs": 1400, "cooldownMs": 1500 },
+  "vad":         { "silenceMs": 1500, "maxWaitMs": 8000, "speechThreshold": 0.04 },
+  "statusBubble": { "enabled": true },
+  "voiceVocab": "",
+  "explainBeforeDo": true,
+  "showConfidence": false,
+  "handsFreeMode": false,
+  "guideAutoDismissOnMove": false,
+  "historyEnabled": true,
+  "historyExchanges": 5,
+  "uiScale": 1
 }
 ```
 
@@ -205,7 +273,7 @@ npm test             # Vitest (excludes live-API tests)
 - **Node.js** 18+
 - **Python** 3.11+
 - **Administrator privileges** (required for `keyboard` package to register the global hotkey)
-- **API key** — Anthropic (preferred) or OpenAI
+- **API key** — Anthropic (preferred) or OpenAI (required for Whisper + TTS)
 
 ---
 
@@ -213,22 +281,24 @@ npm test             # Vitest (excludes live-API tests)
 
 ```
 src/
-  main/          Electron main — orchestration, AI calls, queue, planner
+  main/          Electron main — orchestration, AI calls, queue, planner, guide library, wake-model installer
   preload/       IPC bridge exposed to renderer as window.api
-  renderer/      Four React entry points: HUD / voicebar / answer overlay / settings
+  renderer/      React entries: HUD / voicebar / answer overlay / settings / status bubble
                  Plus inline HTML for highlight overlay
-agent/           Python subprocess — hotkey, input, screenshot, OCR
-docs/            Specs and implementation plans under superpowers/
+agent/           Python subprocess — hotkey, input, screenshot, OCR, Vosk wake/cancel, dwell tracker
 test/            Vitest unit tests
 ```
+
+Guide library files: `~/.ai-overlay/guides/*.json`
 
 ---
 
 ## Privacy
 
 - All API calls go directly from your machine to Anthropic / OpenAI. Nothing is proxied.
-- `.env` is gitignored. `.ai-overlay/config.json` lives in your home directory, never in the repo.
-- Conversation history (last 5 exchanges) is kept in memory only; wipe via Settings → General → History toggle.
+- Wake word and dwell-click run **100% offline** on your CPU (Vosk + pyautogui).
+- `.env` is gitignored. `.ai-overlay/` lives in your home directory, never in the repo.
+- Conversation history is kept in memory only; wipe via Settings → General.
 - No telemetry, no analytics.
 
 ---
@@ -241,13 +311,19 @@ test/            Vitest unit tests
 
 **Clicks land in wrong spot** → Windows display scaling above 100% offsets coordinates. Set scaling to 100% or run app as Administrator.
 
-**Empty AI responses on gpt-5-mini** → Make sure the planning/execution model override (in Settings → Models) is left blank or set to a real `gpt-5-*` model. Unknown model IDs return empty content with no error.
+**Empty AI responses on gpt-5-mini** → Make sure the planning/execution model override (Settings → Models) is blank or a real `gpt-5-*` ID. Unknown model IDs return empty content with no error.
 
-**Research agent overshoots page** → Reduce `amount` in scroll rules or hit `Escape` and rephrase.
+**Research agent overshoots page** → Say "cancel" / press Escape and rephrase.
 
-**Wake word not firing** → Check Python console for `[wake] listening for "…" (offline)`. If absent: model missing (install from Settings) or `vosk`/`sounddevice` not installed (`pip install -r agent/requirements.txt`).
+**Wake word not firing** → Check Python console for `[listener] listening (offline)`. If absent: model missing (Settings → Voice → Install) or `vosk`/`sounddevice` not installed (`pip install -r agent/requirements.txt`).
+
+**Microphone stays active when idle** → Only when wake word or cancel voice is enabled. Turn both off in Settings → Voice to release the mic.
 
 **"Vosk model not found" on toggle** → Auto-installer failed (firewall / proxy). Download `vosk-model-small-en-us-0.15.zip` from https://alphacephei.com/vosk/models and extract contents directly into `~/.ai-overlay/vosk-model/` (must contain `am/`, `conf/` folders at the top level).
+
+**Guide shows wrong steps for another app** → App-switch classifier should catch this. If it didn't, mention the app explicitly ("open Gmail and then how do I compose"). Report the prompt so we can extend the app map.
+
+**TTS delay** → First synth call has a ~1s cold-start. Subsequent answers are faster.
 
 ---
 
@@ -255,12 +331,22 @@ test/            Vitest unit tests
 
 - [x] Agentic multi-step execution with verification
 - [x] Request queue + parallel read-only subtasks
-- [x] Config file + Settings UI + 7 themes
+- [x] Config file + Settings UI + 7 themes + custom colors
 - [x] Autonomous research agent
 - [x] Offline wake-word (Vosk, CPU-only, free)
 - [x] Live hotkey rebind (no restart)
-- [ ] Guide mode voice nav ("next step", "repeat that", "go back")
+- [x] Guide voice nav ("next", "back", "repeat", "done")
+- [x] Guide library (save / replay / delete)
+- [x] Hands-free tap-to-talk with silence auto-stop
+- [x] Mid-action voice cancel
+- [x] TTS answers
+- [x] Dwell-click
+- [x] UI scale + narrate-before-do + confidence hints
+- [x] App-switch classifier (Gmail, Outlook, LinkedIn, X, Notion, Discord, Slack, YouTube, GitHub, Reddit, Spotify, Maps, Calendar, Drive, Docs, Sheets, WhatsApp, Telegram)
+- [ ] Dwell-click visual ring overlay
 - [ ] First-run onboarding wizard
+- [ ] App-specific guided tours (open Photoshop → "want a tour?")
+- [ ] Bundled Python (PyInstaller) for one-click installer
 - [ ] macOS support for the Python agent
 
 ---
