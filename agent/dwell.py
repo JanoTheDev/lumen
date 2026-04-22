@@ -7,8 +7,6 @@ _state = {
     'dwell_ms': 1400,
     'cooldown_ms': 1500,
     'on_trigger': None,
-    'rearm_request': False,  # external signal (scroll/key) to re-arm even if cursor still
-    'mouse_hook': None,
 }
 
 def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
@@ -51,15 +49,12 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
                 was_active = False
             continue
 
-        # External re-arm signal (scroll wheel, etc.) — reset dwell timer too
-        if _state['rearm_request']:
-            _state['rearm_request'] = False
+        # Auto re-arm once cooldown has fully elapsed, even if cursor hasn't moved.
+        # Resets stable_since so the user still needs a fresh dwell_ms of stillness
+        # before another click fires — total spacing = cooldown + dwell_ms.
+        if not armed and not in_cooldown:
             armed = True
             stable_since = now
-            if was_active:
-                try: on_progress(x, y, 0.0, False)
-                except Exception: pass
-                was_active = False
             continue
 
         if not armed:
@@ -87,41 +82,16 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
                 print(f'[dwell] on_trigger error: {e}', flush=True)
     print('[dwell] stopped', flush=True)
 
-def _install_scroll_rearm():
-    if _state.get('mouse_hook') is not None:
-        return
-    try:
-        import mouse
-        def _on_event(ev):
-            # Wheel events (scroll) re-arm. WheelEvent has a `delta` attribute; MoveEvent
-            # and ButtonEvent do not. Explicitly ignore button down/up — programmatic
-            # clicks from our own dwell trigger produce those, and re-arming on them
-            # causes instant repeat-fire.
-            if hasattr(ev, 'delta') or getattr(ev, 'event_type', None) == 'wheel':
-                _state['rearm_request'] = True
-        mouse.hook(_on_event)
-        _state['mouse_hook'] = _on_event
-        print('[dwell] mouse hook installed (scroll-only re-arm)', flush=True)
-    except Exception as e:
-        print(f'[dwell] mouse hook unavailable: {e}', flush=True)
-
-def _uninstall_scroll_rearm():
-    handler = _state.get('mouse_hook')
-    if handler is None:
-        return
-    try:
-        import mouse
-        mouse.unhook(handler)
-    except Exception:
-        pass
-    _state['mouse_hook'] = None
+# NOTE: we intentionally do NOT install a low-level mouse hook (WH_MOUSE_LL).
+# It was used for scroll-based re-arm but slowed Windows wheel delivery, breaking
+# Ctrl+scroll zoom in other apps. Re-arm now happens either on cursor movement
+# or automatically once the cooldown + full dwell cycle elapses.
 
 def start(dwell_ms: int, on_trigger, cooldown_ms: int = 1500, on_progress=None):
     stop()
     _state['dwell_ms'] = int(dwell_ms)
     _state['cooldown_ms'] = int(cooldown_ms)
     _state['on_trigger'] = on_trigger
-    _install_scroll_rearm()
     ev = threading.Event()
     _state['stop_event'] = ev
     noop = lambda *a, **k: None
@@ -140,7 +110,6 @@ def stop():
         ev.set()
     _state['thread'] = None
     _state['stop_event'] = None
-    _uninstall_scroll_rearm()
 
 def set_dwell_ms(dwell_ms: int):
     _state['dwell_ms'] = int(dwell_ms)
