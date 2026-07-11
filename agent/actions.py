@@ -18,7 +18,7 @@ def _page_hash() -> str:
         return hashlib.md5(bytes(shot.bgra[::stride])).hexdigest()
 
 
-def _ocr_scan() -> dict:
+def _ocr_scan(config='--psm 11') -> dict:
     """Take fresh screenshot and return pytesseract image_to_data dict."""
     from PIL import Image
     import mss as _mss
@@ -26,7 +26,7 @@ def _ocr_scan() -> dict:
         mon = sct.monitors[1]
         shot = sct.grab(mon)
         img = Image.frombytes('RGB', shot.size, shot.bgra, 'raw', 'BGRX')
-    return pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, config='--psm 11')
+    return pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, config=config)
 
 
 def _ocr_norm(s: str) -> str:
@@ -45,9 +45,10 @@ def _ocr_matches(data: dict, text: str) -> list:
     raw = []
     for i in range(len(words) - nw + 1):
         chunk = [_ocr_norm(words[j].strip()) for j in range(i, i + nw)]
-        if all(tw and cw and tw in cw for tw, cw in zip(target_words, chunk)):
+        # Short words (≤3 chars) require exact match to avoid "OK" matching "BOOK", etc.
+        if all(tw and cw and (cw == tw if len(tw) <= 3 else tw in cw) for tw, cw in zip(target_words, chunk)):
             confs = [data['conf'][j] for j in range(i, i + nw)]
-            if min(confs) < 30:
+            if min(confs) < 40:
                 continue
             x1 = min(data['left'][j] for j in range(i, i + nw))
             y1 = min(data['top'][j] for j in range(i, i + nw))
@@ -58,8 +59,8 @@ def _ocr_matches(data: dict, text: str) -> list:
 
     # Cluster by first_y anchor (immutable per cluster) — prevents snowball merging.
     # Gmail: sender and subject are side-by-side (same y, ~0-5px diff).
-    # Adjacent rows are ~35-55px apart. ROW_BAND=25 collapses same-row dupes safely.
-    ROW_BAND = 25
+    # Adjacent rows are ~35-55px apart. ROW_BAND=30 collapses same-row dupes safely.
+    ROW_BAND = 30
     clusters = []  # each: [first_y, best_match_tuple]
     for m in raw:
         if not clusters or m[2] - clusters[-1][0] > ROW_BAND:
@@ -76,6 +77,10 @@ def _find_text_ocr(text: str) -> tuple | None:
         t0 = time.time()
         data = _ocr_scan()
         matches = _ocr_matches(data, text)
+        if not matches:
+            # Retry with fully-automatic layout analysis — catches text psm 11 misses
+            data = _ocr_scan('--psm 3')
+            matches = _ocr_matches(data, text)
         if matches:
             cx, cy, _ = matches[0]
             print(f"[ocr] found '{text}' at ({cx},{cy}) total={len(matches)} in {time.time()-t0:.2f}s", flush=True)
@@ -93,6 +98,9 @@ def _find_nth_text_ocr(text: str, n: int) -> tuple | None:
         t0 = time.time()
         data = _ocr_scan()
         matches = _ocr_matches(data, text)
+        if not matches:
+            data = _ocr_scan('--psm 3')
+            matches = _ocr_matches(data, text)
         ys = [m[2] for m in matches]
         print(f"[ocr] '{text}' clusters={len(matches)} ys={ys} need={n} in {time.time()-t0:.2f}s", flush=True)
         if len(matches) >= n:

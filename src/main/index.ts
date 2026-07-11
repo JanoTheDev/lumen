@@ -16,7 +16,7 @@ import {
 import { writeFileSync, unlinkSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, type CallOptions, type ClaudeResponse } from './claude'
+import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
@@ -1139,12 +1139,29 @@ app.whenReady().then(async () => {
       } else if ((action.type === 'click' || action.type === 'move') && action.x != null && action.y != null) {
         scaled = { ...action, x: Math.round(action.x * scale), y: Math.round(action.y * scale) }
       } else if (action.type === 'click_element' && action.bbox) {
-        // Scale the bbox fallback coords from screenshot space to screen space
         const [x1, y1, x2, y2] = action.bbox
+        // Default: scale bbox and let Python handle OCR + UIA
         scaled = {
           ...action,
           bbox: [Math.round(x1 * scale), Math.round(y1 * scale), Math.round(x2 * scale), Math.round(y2 * scale)]
         } as Action
+        // In browser context: try CU for higher-accuracy click (overrides OCR path)
+        if (action.text && process.env.ANTHROPIC_API_KEY) {
+          const aw = await agent.activeWindow()
+          if (isBrowser(aw)) {
+            const freshShot = await agent.screenshot()
+            if (freshShot) {
+              const { imgW, imgH } = screenshotDimensions()
+              const refined = await findClickCoordinates(freshShot, action.text, imgW, imgH)
+              if (refined) {
+                const cx = Math.round(refined.x * scale)
+                const cy = Math.round(refined.y * scale)
+                console.log(`[execute] click_element CU refined "${action.text}" → (${cx},${cy})`)
+                scaled = { type: 'click', x: cx, y: cy, button: action.button ?? 'left' }
+              }
+            }
+          }
+        }
       } else {
         scaled = action
       }
