@@ -107,33 +107,45 @@ def _cmd_wake_disable(args, token):
     return {"ok": True}
 
 
-def _start_dwell(dwell_ms, cooldown_ms):
-    def on_progress(x, y, p, active):
-        emit_event('dwell-progress', {"x": x, "y": y, "progress": p, "active": active})
+def _dwell_busy() -> bool:
+    # Agent-injected input must never be followed by a dwell click at the same spot.
+    return dispatcher.lane_busy(INPUT, dwell.AUTO_PAUSE_GRACE_S)
 
-    dwell.start(
-        dwell_ms,
-        lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}),
-        cooldown_ms=cooldown_ms,
-        on_progress=on_progress,
-    )
+
+dwell_ctl = dwell.Dwell(
+    on_progress=lambda data: emit_event('dwell-progress', data),
+    on_trigger=lambda data: emit_event('dwell-trigger', data),
+    busy=_dwell_busy,
+)
 
 
 def _cmd_dwell_enable(args, token):
-    dwell_ms = args.get("dwell_ms", args.get("ms", 1400))
-    cooldown_ms = args.get("cooldown_ms", args.get("cooldownMs", 1500))
-    _start_dwell(dwell_ms, cooldown_ms)
-    return {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms}
+    c = dwell_ctl.configure({**args, "enabled": True})
+    return {"ok": True, "dwell_ms": c["ms"], "cooldown_ms": c["cooldownMs"]}
 
 
 def _cmd_dwell_disable(args, token):
-    dwell.stop()
+    dwell_ctl.stop()
     return {"ok": True}
 
 
 def _cmd_dwell_set_ms(args, token):
-    dwell.set_dwell_ms(int(args.get("dwell_ms", 1400)))
+    dwell_ctl.set_ms(int(args.get("dwell_ms", args.get("ms", 1400))))
     return {"ok": True}
+
+
+def _cmd_dwell_config(args, token):
+    return dwell_ctl.configure(args)
+
+
+def _cmd_dwell_pause(args, token):
+    dwell_ctl.pause()
+    return {"paused": True}
+
+
+def _cmd_dwell_resume(args, token):
+    dwell_ctl.resume()
+    return {"paused": False}
 
 
 def _cmd_cancel(args, token):
@@ -145,10 +157,6 @@ def _cmd_cancel(args, token):
 
 def _obj(v) -> dict:
     return v if isinstance(v, dict) else {}
-
-
-def _num(v, fallback):
-    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else fallback
 
 
 def _cmd_init(args, token):
@@ -172,10 +180,7 @@ def _cmd_init(args, token):
         _start_wake(wake_phrase, cancel_phrases, wake_cfg.get("energyFloor"))
     else:
         wake.stop()
-    if dwell_cfg.get("enabled") is True:
-        _start_dwell(_num(dwell_cfg.get("ms"), 1400), _num(dwell_cfg.get("cooldownMs"), 1500))
-    else:
-        dwell.stop()
+    dwell_ctl.configure({**dwell_cfg, "enabled": dwell_cfg.get("enabled") is True})
     return {}
 
 
@@ -216,6 +221,9 @@ def register_commands(debug: bool = False) -> None:
     reg("dwell_enable", _cmd_dwell_enable, INLINE)
     reg("dwell_disable", _cmd_dwell_disable, INLINE)
     reg("dwell_set_ms", _cmd_dwell_set_ms, INLINE)
+    reg("dwell_config", _cmd_dwell_config, INLINE)
+    reg("dwell_pause", _cmd_dwell_pause, INLINE)
+    reg("dwell_resume", _cmd_dwell_resume, INLINE)
     reg("execute", _cmd_execute, INPUT)
     reg("screenshot", lambda args, token: take_screenshot(), READ)
     reg("capture", _cmd_capture, READ)

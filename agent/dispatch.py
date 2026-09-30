@@ -14,6 +14,7 @@ import ctypes
 import logging
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from errors import AgentError, E_CANCELLED, E_INTERNAL, E_TIMEOUT, E_UNSUPPORTED
@@ -74,6 +75,8 @@ class Dispatcher:
         self._commands: dict = {}
         self._inflight: dict = {}
         self._lock = threading.Lock()
+        self._active = {INPUT: 0, READ: 0}
+        self._idle_at = {INPUT: 0.0, READ: 0.0}
         self._lanes = {
             INPUT: ThreadPoolExecutor(1, thread_name_prefix="input", initializer=_com_init),
             READ: ThreadPoolExecutor(read_workers, thread_name_prefix="read", initializer=_com_init),
@@ -105,7 +108,9 @@ class Dispatcher:
             call.timer = threading.Timer(timeout_ms / 1000.0, self._expire, (call,))
             call.timer.daemon = True
             call.timer.start()
-        self._lanes[lane].submit(self._run, call, fn, args)
+        with self._lock:
+            self._active[lane] += 1
+        self._lanes[lane].submit(self._run, call, fn, args, lane)
 
     def _invoke(self, cmd, fn, args, token):
         try:
@@ -116,11 +121,21 @@ class Dispatcher:
             log.exception("%s failed", cmd)
             return None, AgentError(E_INTERNAL, f"{cmd} failed: {e}" if str(e) else f"{cmd} failed")
 
-    def _run(self, call: _Call, fn, args) -> None:
-        if call.token.cancelled:
-            return
-        result, error = self._invoke(call.cmd, fn, args, call.token)
-        self._finish(call, result, error)
+    def _run(self, call: _Call, fn, args, lane) -> None:
+        try:
+            if call.token.cancelled:
+                return
+            result, error = self._invoke(call.cmd, fn, args, call.token)
+            self._finish(call, result, error)
+        finally:
+            with self._lock:
+                self._active[lane] -= 1
+                self._idle_at[lane] = time.monotonic()
+
+    def lane_busy(self, lane: str, grace_s: float = 0.0) -> bool:
+        """True while `lane` has queued/running calls, or finished one less than `grace_s` ago."""
+        with self._lock:
+            return self._active[lane] > 0 or time.monotonic() - self._idle_at[lane] < grace_s
 
     def _finish(self, call: _Call, result, error) -> bool:
         with self._lock:
