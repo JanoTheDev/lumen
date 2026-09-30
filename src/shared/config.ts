@@ -7,7 +7,7 @@ const KEY = [
   /F(?:[1-9]|1[0-9]|2[0-4])/.source,
   'Space|Tab|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown',
   /Arrow(?:Up|Down|Left|Right)|Up|Down|Left|Right|Escape|Esc|Plus|Minus/.source,
-  /[`\-=[\];',./\\]/.source,
+  /[`\-=[\];',./\\]/.source
 ].join('|')
 export const HOTKEY_RE = new RegExp(`^(?:(?:${MODIFIER})+(?:${KEY})|F(?:[1-9]|1[0-2]))$`, 'i')
 
@@ -18,7 +18,16 @@ const hex = z.string().regex(/^#[0-9a-f]{6}$/i)
 const shortText = (max: number): z.ZodString => z.string().max(max)
 const modelId = z.union([z.literal(''), z.string().regex(MODEL_ID_RE)])
 
-export const THEME_NAMES = ['dark', 'light', 'high-contrast', 'ocean', 'forest', 'sunset', 'midnight', 'custom'] as const
+export const THEME_NAMES = [
+  'dark',
+  'light',
+  'high-contrast',
+  'ocean',
+  'forest',
+  'sunset',
+  'midnight',
+  'custom'
+] as const
 
 export const configV1Schema = z.object({
   version: z.literal(1),
@@ -29,13 +38,13 @@ export const configV1Schema = z.object({
       background: hex,
       foreground: hex,
       opacity: z.number().min(0).max(1),
-      blur: z.number().min(0).max(64),
+      blur: z.number().min(0).max(64)
     })
     .optional(),
   models: z.object({
     planning: modelId.optional(),
     execution: modelId.optional(),
-    verification: modelId.optional(),
+    verification: modelId.optional()
   }),
   hotkey: z.string().regex(HOTKEY_RE),
   hudAutoCloseMs: z.number().int().min(0).max(600_000),
@@ -53,16 +62,16 @@ export const configV1Schema = z.object({
   dwellClick: z.object({
     enabled: z.boolean(),
     dwellMs: z.number().int().min(200).max(10_000),
-    cooldownMs: z.number().int().min(0).max(30_000),
+    cooldownMs: z.number().int().min(0).max(30_000)
   }),
   vad: z.object({
     silenceMs: z.number().int().min(200).max(10_000),
     maxWaitMs: z.number().int().min(1000).max(120_000),
     speechThreshold: z.number().min(0).max(1),
-    maxRecordMs: z.number().int().min(1000).max(300_000).optional(),
+    maxRecordMs: z.number().int().min(1000).max(300_000).optional()
   }),
   guideAutoDismissOnMove: z.boolean(),
-  historyExchanges: z.number().int().min(0).max(50),
+  historyExchanges: z.number().int().min(0).max(50)
 })
 
 export type ConfigV1 = z.infer<typeof configV1Schema>
@@ -89,7 +98,7 @@ export const configPatchSchema = z
     dwellClick: configV1Schema.shape.dwellClick.partial(),
     vad: configV1Schema.shape.vad.partial(),
     guideAutoDismissOnMove: configV1Schema.shape.guideAutoDismissOnMove,
-    historyExchanges: configV1Schema.shape.historyExchanges,
+    historyExchanges: configV1Schema.shape.historyExchanges
   })
   .partial()
   .strict()

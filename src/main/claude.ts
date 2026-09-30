@@ -2,7 +2,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
 import { getModel } from './model-router'
 import { UNTRUSTED_CONTENT_RULE } from './ai/prompts/untrusted'
-import { normalizeBbox, isUsableRect, currentFrame, type Rect } from './actions/coords'
+import { normalizeBbox, isUsableRect, currentFrame } from './actions/coords'
+import type { Action, ModelResponse as ClaudeResponse, Rect } from '@shared/types'
 
 // --- Conversation history (last 5 exchanges, text only — no images) ---
 const MAX_HISTORY = 5
@@ -22,35 +23,7 @@ export function clearHistory(): void {
   conversationHistory.length = 0
 }
 
-export interface Step {
-  label: string
-  target_hint: string
-  bbox?: Rect
-}
-
-export interface Action {
-  type: 'move' | 'click' | 'click_bbox' | 'type' | 'hotkey' | 'open_url' | 'click_element' | 'click_nth_element' | 'focus_browser' | 'scroll'
-  x?: number
-  y?: number
-  bbox?: Rect
-  button?: 'left' | 'right'
-  text?: string
-  keys?: string[]
-  url?: string
-  n?: number
-  description?: string  // click_bbox only: what the visual element is (e.g. "profile avatar top-right")
-  direction?: 'up' | 'down' | 'left' | 'right'
-  amount?: number
-}
-
-export type Confidence = 'high' | 'medium' | 'low'
-
-export type ClaudeResponse =
-  | { mode: 'answer'; text: string; confidence?: Confidence }
-  | { mode: 'guide'; steps: Step[]; confidence?: Confidence }
-  | { mode: 'action'; actions: Action[]; summary?: string; follow_up?: { query: string; delay_ms: number }; confidence?: Confidence }
-  | { mode: 'text_insert'; text: string; target_hint: string; confidence?: Confidence }
-  | { mode: 'locate'; items: Array<{ label: string; bbox: Rect; description?: string }>; confidence?: Confidence }
+export type { Action, Confidence, GuideStep as Step, ModelResponse as ClaudeResponse } from '@shared/types'
 
 function detectApp(activeWindow: string): string {
   const w = activeWindow.toLowerCase()

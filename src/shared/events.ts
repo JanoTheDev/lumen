@@ -1,0 +1,63 @@
+// Internal bus events (CONTRACTS C6). Features publish; window modules subscribe.
+import type { Action, ModelResponse, Point, Rect } from './types'
+
+export type AssistantPhase =
+  | 'idle'
+  | 'listening'
+  | 'transcribing'
+  | 'thinking'
+  | 'speaking'
+  | 'acting'
+  | 'waiting-user'
+  | 'confirm'
+  | 'error'
+
+export interface AssistantState {
+  phase: AssistantPhase
+  caption?: string
+  statusText?: string
+  step?: { index: number; total: number; label: string }
+  answer?: { turnId: string; markdown: string; streaming: boolean; pinned: boolean }
+  confirm?: {
+    actionId: string
+    summary: string
+    risk: 'low' | 'medium' | 'high'
+    countdownMs?: number
+  }
+  error?: { message: string; hint?: string }
+  model?: string
+}
+
+export interface ScreenScene {
+  monitorId: number
+  buddy?: { to: Point; label?: string; mode: 'idle' | 'fly' | 'point' | 'wait' }
+  highlights: {
+    id: string
+    rect: Rect
+    style: 'target' | 'ring' | 'dim-reveal' | 'success'
+    label?: string
+    n?: number
+  }[]
+  marks?: { n: number; rect: Rect }[]
+  grid?: { rect: Rect; cols: number; rows: number; level: number }
+  dwell?: { at: Point; progress: number; clickType: string }
+  annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
+}
+
+export type AppEvent =
+  | { type: 'voice.started'; handsFree: boolean }
+  | { type: 'voice.stopped' }
+  | { type: 'voice.cancelled' }
+  | { type: 'query.started'; turnId: string; prompt: string }
+  | { type: 'query.delta'; turnId: string; delta: string }
+  | { type: 'query.done'; turnId: string; response: ModelResponse }
+  | { type: 'query.failed'; turnId: string; error: string; cancelled?: boolean }
+  | { type: 'action.planned'; actionId: string; actions: Action[] }
+  | { type: 'action.confirmed'; actionId: string }
+  | { type: 'action.executed'; actionId: string }
+  | { type: 'action.failed'; actionId: string; error: string }
+  | { type: 'lesson.step-started'; lessonId: string; step: number }
+  | { type: 'lesson.step-completed'; lessonId: string; step: number }
+  | { type: 'a11y.announce'; text: string; priority: 'polite' | 'assertive' }
+
+export type AppEventType = AppEvent['type']

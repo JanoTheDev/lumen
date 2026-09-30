@@ -1,18 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 
-type ClaudeResponse =
-  | { mode: 'answer'; text: string }
-  | { mode: 'guide'; steps: { label: string; target_hint: string; bbox?: { x: number; y: number; w: number; h: number } }[] }
-  | { mode: 'action'; actions: Action[]; summary?: string; follow_up?: { query: string; delay_ms: number } }
-  | { mode: 'text_insert'; text: string; target_hint: string }
-  | { mode: 'locate'; items: Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; description?: string }> }
-
-interface Action {
-  type: 'move' | 'click' | 'click_bbox' | 'click_element' | 'click_nth_element' | 'type' | 'hotkey' | 'open_url' | 'focus_browser'
-  x?: number; y?: number; bbox?: { x: number; y: number; w: number; h: number }
-  button?: string; text?: string; keys?: string[]; url?: string; n?: number
-}
+type ClaudeResponse = ModelResponse
 
 interface VadConfig {
   speechThreshold: number

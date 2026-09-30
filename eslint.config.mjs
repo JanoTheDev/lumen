@@ -28,5 +28,15 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    // Shared contracts are imported by main, preload and renderer: keep them runtime-neutral.
+    files: ['src/shared/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        { patterns: ['electron', 'electron/*', 'node:*', 'fs', 'path', 'os', 'child_process'] }
+      ]
+    }
+  },
   eslintConfigPrettier
 )

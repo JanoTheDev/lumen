@@ -11,14 +11,20 @@ export const textSchema = z.string().max(20_000)
 export const nameSchema = z.string().max(80)
 export const guideIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
-export const overlayHeightSchema = z.number().finite().transform((h) => Math.max(60, Math.min(800, Math.round(h))))
+export const overlayHeightSchema = z
+  .number()
+  .finite()
+  .transform((h) => Math.max(60, Math.min(800, Math.round(h))))
 export const audioSchema = z
   .instanceof(ArrayBuffer)
   .refine((b) => b.byteLength <= MAX_AUDIO_BYTES, 'audio too large')
 
 const coord = z.number().finite()
 // Rect {x,y,w,h}; legacy [x1,y1,x2,y2] arrays are still accepted and normalized in main.
-const bbox = z.union([z.object({ x: coord, y: coord, w: coord, h: coord }), z.tuple([coord, coord, coord, coord])])
+const bbox = z.union([
+  z.object({ x: coord, y: coord, w: coord, h: coord }),
+  z.tuple([coord, coord, coord, coord])
+])
 
 export const actionSchema = z
   .object({
@@ -33,7 +39,7 @@ export const actionSchema = z
       'open_url',
       'navigate_url',
       'focus_browser',
-      'scroll',
+      'scroll'
     ]),
     x: coord.optional(),
     y: coord.optional(),
@@ -45,7 +51,7 @@ export const actionSchema = z
     n: z.number().int().min(1).max(100).optional(),
     description: z.string().max(500).optional(),
     direction: z.enum(['up', 'down', 'left', 'right']).optional(),
-    amount: z.number().finite().optional(),
+    amount: z.number().finite().optional()
   })
   .strip()
 
@@ -60,11 +66,18 @@ export class InvalidPayloadError extends Error {
 }
 
 /** Parses a payload or throws InvalidPayloadError with a short reason. */
-export function parsePayload<T extends z.ZodType>(channel: string, schema: T, value: unknown): z.infer<T> {
+export function parsePayload<T extends z.ZodType>(
+  channel: string,
+  schema: T,
+  value: unknown
+): z.infer<T> {
   const r = schema.safeParse(value)
   if (!r.success) {
     const issue = r.error.issues[0]
-    throw new InvalidPayloadError(channel, `${issue?.path.join('.') || 'value'}: ${issue?.message ?? 'invalid'}`)
+    throw new InvalidPayloadError(
+      channel,
+      `${issue?.path.join('.') || 'value'}: ${issue?.message ?? 'invalid'}`
+    )
   }
   return r.data
 }

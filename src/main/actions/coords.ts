@@ -3,18 +3,9 @@
 //   phys    - physical virtual-desktop pixels (what the agent clicks)
 //   logical - Electron DIP (what overlay windows draw in)
 import { screen } from 'electron'
+import type { Point, Rect } from '@shared/types'
 
-export interface Point {
-  x: number
-  y: number
-}
-
-export interface Rect {
-  x: number
-  y: number
-  w: number
-  h: number
-}
+export type { Point, Rect }
 
 // Physical-px rect of the captured monitor plus the size of the image the model saw.
 export interface FrameGeometry {

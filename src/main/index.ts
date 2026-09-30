@@ -20,6 +20,7 @@ import {
   nativeImage
 } from 'electron'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import type { Action, Rect } from '@shared/types'
 import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
@@ -43,14 +44,14 @@ import {
   overlayHeightSchema,
   audioSchema,
   actionsSchema,
-} from '../shared/ipc'
-import { configPatchSchema } from '../shared/config'
+} from '@shared/ipc'
+import { configPatchSchema } from '@shared/config'
 import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
 import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
-import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect, type Rect } from './actions/coords'
-import { toAgentAction, type AgentAction, type ModelAction } from './actions/agent-action'
+import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
+import { toAgentAction, type AgentAction } from './actions/agent-action'
 import trayIcon from '../../resources/icon.png?asset'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
@@ -717,7 +718,7 @@ app.whenReady().then(async () => {
         async (actions) => {
           const frame = currentFrame()
           let prev: AgentAction | undefined
-          for (const action of actions as ModelAction[]) {
+          for (const action of actions as Action[]) {
             if (scope.cancelled) break
             const scaled = toAgentAction(action, frame)
             if (!(await passesPolicy(scaled, prev))) break
@@ -751,7 +752,7 @@ app.whenReady().then(async () => {
         async (actions) => {
           const frame = currentFrame()
           let prev: AgentAction | undefined
-          for (const action of actions as ModelAction[]) {
+          for (const action of actions as Action[]) {
             if (scope.cancelled) break
             const scaled = toAgentAction(action, frame)
             if (!(await passesPolicy(scaled, prev))) break
@@ -1252,16 +1253,3 @@ function safeParse<T extends ZodType>(channel: string, schema: T, value: unknown
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
-
-export type Action =
-  | { type: 'move'; x: number; y: number }
-  | { type: 'click'; x: number; y: number; button?: 'left' | 'right' }
-  | { type: 'click_bbox'; bbox: Rect; button?: 'left' | 'right'; description?: string }
-  | { type: 'click_element'; text: string; button?: 'left' | 'right'; bbox?: Rect }
-  | { type: 'click_nth_element'; text: string; n: number; button?: 'left' | 'right' }
-  | { type: 'type'; text: string }
-  | { type: 'hotkey'; keys: string[] }
-  | { type: 'open_url'; url: string }
-  | { type: 'navigate_url'; url: string }
-  | { type: 'focus_browser' }
-  | { type: 'scroll'; direction: 'up' | 'down' | 'left' | 'right'; amount?: number; x?: number; y?: number }

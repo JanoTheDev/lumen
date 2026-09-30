@@ -1,13 +1,10 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve, sep } from 'path'
-import { normalizeBbox, type Rect } from '../actions/coords'
+import { normalizeBbox } from '../actions/coords'
+import type { GuideStep } from '@shared/types'
 
-export interface GuideStep {
-  label: string
-  target_hint: string
-  bbox?: Rect
-}
+export type { GuideStep }
 
 export interface SavedGuide {
   id: string
