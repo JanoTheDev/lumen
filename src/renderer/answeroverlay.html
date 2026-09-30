@@ -2,6 +2,10 @@
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'"
+    />
     <title>Answer Overlay</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -81,104 +85,6 @@
       </div>
     </div>
 
-    <script>
-      let CLOSE_MS = 10000
-
-      const THEME_MAP = {
-        dark:            { bg: '#0d0f14', fg: '#e6e8ee', acc: '#5b8cff' },
-        light:           { bg: '#ffffff', fg: '#0f172a', acc: '#2563eb' },
-        'high-contrast': { bg: '#000000', fg: '#ffffff', acc: '#ffff00' },
-        ocean:           { bg: '#031728', fg: '#e0f2fe', acc: '#06b6d4' },
-        forest:          { bg: '#0a1f14', fg: '#dcfce7', acc: '#22c55e' },
-        sunset:          { bg: '#1f1209', fg: '#fed7aa', acc: '#f97316' },
-        midnight:        { bg: '#0f0a1f', fg: '#ede9fe', acc: '#a855f7' }
-      }
-      function applyThemeVars(name, custom) {
-        const r = document.documentElement
-        if (name === 'custom' && custom) {
-          r.style.setProperty('--ai-background', custom.background)
-          r.style.setProperty('--ai-foreground', custom.foreground)
-          r.style.setProperty('--ai-accent', custom.accent)
-          return
-        }
-        const t = THEME_MAP[name] || THEME_MAP.dark
-        r.style.setProperty('--ai-background', t.bg)
-        r.style.setProperty('--ai-foreground', t.fg)
-        r.style.setProperty('--ai-accent', t.acc)
-      }
-      async function loadThemeAndConfig() {
-        try {
-          const cfg = await window.api?.getConfig?.()
-          if (cfg) {
-            applyThemeVars(cfg.theme, cfg.themeCustom)
-            if (cfg.answerAutoCloseMs) CLOSE_MS = cfg.answerAutoCloseMs
-          }
-          window.api?.onConfigChanged?.((c) => {
-            applyThemeVars(c.theme, c.themeCustom)
-            if (c.answerAutoCloseMs) CLOSE_MS = c.answerAutoCloseMs
-          })
-        } catch (e) { applyThemeVars('dark') }
-      }
-      loadThemeAndConfig()
-
-      const card = document.getElementById('card')
-      const textEl = document.getElementById('text')
-      const barEl = document.getElementById('bar')
-      let closeTimer = null, countdownInterval = null
-
-      function dismiss() {
-        clearTimeout(closeTimer)
-        clearInterval(countdownInterval)
-        card.classList.remove('visible')
-        setTimeout(() => window.api?.hideAnswerOverlay?.(), 220)
-      }
-
-      card.addEventListener('click', dismiss)
-
-      function startAutoClose() {
-        clearTimeout(closeTimer)
-        clearInterval(countdownInterval)
-        let remaining = CLOSE_MS / 1000
-        barEl.style.width = '100%'
-        countdownInterval = setInterval(() => {
-          remaining -= 1
-          barEl.style.width = ((remaining / (CLOSE_MS / 1000)) * 100) + '%'
-          if (remaining <= 0) clearInterval(countdownInterval)
-        }, 1000)
-        closeTimer = setTimeout(dismiss, CLOSE_MS)
-      }
-
-      function renderMarkdown(raw) {
-        return raw
-          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          .replace(/\*(.*?)\*/g, '<em>$1</em>')
-          .replace(/`([^`]+)`/g, '<code>$1</code>')
-          .replace(/\n/g, '<br>')
-      }
-
-      function showAnswer(text) {
-        textEl.innerHTML = renderMarkdown(text)
-        card.classList.add('visible')
-        startAutoClose()
-        requestAnimationFrame(() => {
-          const h = card.offsetHeight + 16
-          window.api?.resizeAnswerOverlay?.(h)
-        })
-      }
-
-      if (window.api?.onShowAnswer) window.api.onShowAnswer(showAnswer)
-
-      // TTS playback
-      let currentAudio = null
-      window.api?.onTtsAudio?.(({ mime, data }) => {
-        try {
-          if (currentAudio) { currentAudio.pause(); currentAudio = null }
-          const a = new Audio(`data:${mime};base64,${data}`)
-          currentAudio = a
-          a.play().catch(() => {})
-        } catch (e) {}
-      })
-    </script>
+    <script type="module" src="./src/legacy/answer.ts"></script>
   </body>
 </html>

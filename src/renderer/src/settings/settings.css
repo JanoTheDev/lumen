@@ -21,7 +21,7 @@
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   background: radial-gradient(circle at top left, #131829 0%, var(--ai-background) 55%);
   color: var(--ai-foreground);
   font-size: 14px;
