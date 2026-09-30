@@ -85,3 +85,29 @@ def test_live_region_capture():
     frame = capture.capture(region={"x": p["x"] + 10, "y": p["y"] + 20, "w": 300, "h": 200})["frames"][0]
     assert frame["region"] == {"x": p["x"] + 10, "y": p["y"] + 20, "w": 300, "h": 200}
     assert (frame["width"], frame["height"]) == (300, 200) and frame["scale"] == 1.0
+
+
+def test_downscale_integer_reduce_then_bilinear():
+    from PIL import Image
+    assert capture.downscale(Image.new("RGB", (3840, 2160)), 1280).size == (1280, 720)
+    assert capture.downscale(Image.new("RGB", (2560, 1440)), 1280).size == (1280, 720)
+    assert capture.downscale(Image.new("RGB", (1920, 1080)), 1280).size == (1280, 720)
+    assert capture.downscale(Image.new("RGB", (3000, 1000)), 1280).size == (1280, 427)
+    assert capture.downscale(Image.new("RGB", (800, 600)), 1280).size == (800, 600)
+
+
+def test_frame_cache_keeps_last_three_and_expires(monkeypatch):
+    from PIL import Image
+    mon = layout()[1]
+    ids = [capture.cache_frame(Image.new("RGB", (4, 4)), mon, mon["rect"]) for _ in range(4)]
+    assert capture.get_frame(ids[0]) is None
+    assert all(capture.get_frame(i) for i in ids[1:])
+    t = capture.time.monotonic() + capture.FRAME_TTL_S + 1
+    monkeypatch.setattr(capture.time, "monotonic", lambda: t)
+    assert capture.get_frame(ids[-1]) is None
+
+
+def test_live_capture_frame_is_cached():
+    frame = capture.capture(monitor="primary")["frames"][0]
+    cached = capture.get_frame(frame["id"])
+    assert cached["img"].width == frame["monitor"]["rect"]["w"]

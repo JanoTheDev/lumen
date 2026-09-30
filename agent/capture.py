@@ -1,6 +1,9 @@
 import base64
 import io
+import itertools
+import threading
 import time
+from collections import OrderedDict
 
 import mss
 from PIL import Image
@@ -9,20 +12,96 @@ import monitors
 from errors import AgentError, E_INVALID, E_NOT_FOUND
 
 _MAX_WIDTH = 1280
+FRAME_CACHE_SIZE = 3
+FRAME_TTL_S = 5.0
+
+_tls = threading.local()
+_cache_lock = threading.Lock()
+_frames: "OrderedDict[str, dict]" = OrderedDict()
+
+
+def _sct():
+    # mss holds GDI handles bound to the creating thread: one instance per thread, reused.
+    sct = getattr(_tls, "sct", None)
+    if sct is None:
+        sct = _tls.sct = mss.mss()
+    return sct
 
 
 def _grab(rect: dict) -> Image.Image:
-    with mss.mss() as sct:
-        shot = sct.grab({"left": rect["x"], "top": rect["y"], "width": rect["w"], "height": rect["h"]})
-        return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+    shot = _sct().grab({"left": rect["x"], "top": rect["y"], "width": rect["w"], "height": rect["h"]})
+    return Image.frombytes("RGB", shot.size, shot.bgra, "raw", "BGRX")
+
+
+def downscale(img: Image.Image, max_width: int) -> Image.Image:
+    """Integer box reduce (fast) down to >= max_width, then one bilinear resize."""
+    if not max_width or img.width <= max_width:
+        return img
+    k = img.width // max_width
+    if k >= 2:
+        img = img.reduce(k)
+    if img.width == max_width:
+        return img
+    return img.resize((max_width, max(1, round(img.height * max_width / img.width))), Image.BILINEAR)
 
 
 def _encode(img: Image.Image, max_width: int, quality: int) -> tuple:
-    if max_width and img.width > max_width:
-        img = img.resize((max_width, max(1, round(img.height * max_width / img.width))), Image.LANCZOS)
+    img = downscale(img, max_width)
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=quality)
     return base64.b64encode(buf.getvalue()).decode("ascii"), img.width, img.height
+
+
+_frame_seq = itertools.count(1)
+
+
+def _new_frame_id() -> str:
+    # monotonic_ns ticks every ~15 ms on Windows; a counter never collides.
+    return f"f{next(_frame_seq)}"
+
+
+def _prune(now: float) -> None:
+    for fid in [k for k, v in _frames.items() if now - v["t"] > FRAME_TTL_S]:
+        del _frames[fid]
+    while len(_frames) > FRAME_CACHE_SIZE:
+        _frames.popitem(last=False)
+
+
+def cache_frame(img: Image.Image, monitor: dict, rect: dict, frame_id: str | None = None) -> str:
+    """Keeps a full-res frame for later ocr/page-diff reuse. Returns its id."""
+    fid = frame_id or _new_frame_id()
+    with _cache_lock:
+        _frames[fid] = {"img": img, "monitor": monitor, "rect": rect, "t": time.monotonic()}
+        _prune(time.monotonic())
+    return fid
+
+
+def get_frame(frame_id: str) -> dict | None:
+    """Full-res cached frame {img, monitor, rect} or None once evicted/expired."""
+    with _cache_lock:
+        _prune(time.monotonic())
+        return _frames.get(frame_id)
+
+
+def _targets(monitor, region) -> list:
+    """[(monitor, rect, is_region)] to grab. A region is clipped to the monitor under its center."""
+    mons = monitors.enumerate_monitors()
+    if region is None:
+        return [(m, m["rect"], False) for m in select_monitors(mons, monitor)]
+    r = _as_rect(region)
+    mon = monitors.containing(mons, r["x"] + r["w"] / 2, r["y"] + r["h"] / 2)
+    rect = _clip(r, mon["rect"])
+    if rect is None:
+        raise AgentError(E_INVALID, "region is outside every monitor")
+    return [(mon, rect, True)]
+
+
+def grab_full(monitor="foreground", region=None) -> dict:
+    """Fresh full-res frame {id, img, monitor, rect}; also cached."""
+    mon, rect, _ = _targets(monitor, region)[0]
+    img = _grab(rect)
+    fid = cache_frame(img, mon, rect)
+    return {"id": fid, "img": img, "monitor": mon, "rect": rect}
 
 
 def _clip(region: dict, rect: dict) -> dict | None:
@@ -63,21 +142,13 @@ def capture(monitor="foreground", maxWidth=_MAX_WIDTH, quality=75, region=None, 
     """Captures JPEG frames with their monitor geometry (plans CONTRACTS C2 `capture`)."""
     max_width = int(maxWidth) if isinstance(maxWidth, (int, float)) and maxWidth > 0 else 0
     quality = int(quality) if isinstance(quality, (int, float)) and 1 <= quality <= 100 else 75
-    mons = monitors.enumerate_monitors()
     frames = []
-    if region is not None:
-        r = _as_rect(region)
-        mon = monitors.containing(mons, r["x"] + r["w"] / 2, r["y"] + r["h"] / 2)
-        rects = [(mon, _clip(r, mon["rect"]))]
-        if rects[0][1] is None:
-            raise AgentError(E_INVALID, "region is outside every monitor")
-    else:
-        rects = [(m, None) for m in select_monitors(mons, monitor)]
-    for mon, clip in rects:
-        img = _grab(clip or mon["rect"])
+    for mon, rect, is_region in _targets(monitor, region):
+        img = _grab(rect)
+        fid = cache_frame(img, mon, rect)
         data, w, h = _encode(img, max_width, quality)
         frame = {
-            "id": f"f{time.monotonic_ns()}",
+            "id": fid,
             "monitor": mon,
             "width": w,
             "height": h,
@@ -85,8 +156,8 @@ def capture(monitor="foreground", maxWidth=_MAX_WIDTH, quality=75, region=None, 
             "mime": "image/jpeg",
             "data": data,
         }
-        if clip is not None:
-            frame["region"] = clip
+        if is_region:
+            frame["region"] = rect
         frames.append(frame)
     return {"frames": frames}
 
@@ -94,7 +165,7 @@ def capture(monitor="foreground", maxWidth=_MAX_WIDTH, quality=75, region=None, 
 def take_screenshot() -> str:
     """v1 `screenshot`: base64 JPEG of the primary monitor."""
     img = _grab(monitors.primary()["rect"])
-    return _encode(img, _MAX_WIDTH, 80)[0]
+    return _encode(img, _MAX_WIDTH, 75)[0]
 
 
 def get_active_window() -> str:
