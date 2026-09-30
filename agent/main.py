@@ -1,34 +1,25 @@
+import proto  # must be first: claims stdout for the protocol
+
 import sys
 import json
+import logging
 import threading
 import time
 
-sys.stdout.reconfigure(encoding='utf-8')
-sys.stderr.reconfigure(encoding='utf-8')
+logging.basicConfig(
+    stream=sys.stderr,
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+log = logging.getLogger("agent")
+
 from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
 
-_print_lock = threading.Lock()
-
-def _write(msg: dict):
-    with _print_lock:
-        print(json.dumps(msg), flush=True)
-
-def respond(id: int, result=None, error=None):
-    msg = {"id": id}
-    if error:
-        msg["error"] = str(error)
-    else:
-        msg["result"] = result
-    _write(msg)
-
-def emit_event(name: str, data: dict = None):
-    msg = {"event": name}
-    if data:
-        msg.update(data)
-    _write(msg)
+respond = proto.respond
+emit_event = proto.emit
 
 _hotkey_state = {
     'combo_active': False,
@@ -82,7 +73,7 @@ def apply_hotkey(combo: str):
     _hotkey_state['hotkey_ref'] = kb.add_hotkey(hk_combo, on_press, suppress=True)
     _hotkey_state['hook_ref'] = kb.hook_key(release_key, on_release_event)
     _hotkey_state['release_key'] = release_key
-    print(f'[hotkey] bound {hk_combo} (release={release_key})', flush=True)
+    log.info('hotkey bound %s (release=%s)', hk_combo, release_key)
 
 def hotkey_watcher(initial_combo: str = 'ctrl+space'):
     try:
@@ -91,7 +82,7 @@ def hotkey_watcher(initial_combo: str = 'ctrl+space'):
         apply_hotkey(initial_combo)
         keyboard.wait()
     except Exception as e:
-        print(f'[hotkey] error: {e}', flush=True)
+        log.error('hotkey error: %s', e)
 
 def mouse_watcher():
     try:

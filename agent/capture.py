@@ -8,7 +8,6 @@ _MAX_WIDTH = 1280
 def take_screenshot() -> str:
     with mss.mss() as sct:
         monitor = sct.monitors[1]
-        print(f"[capture] monitor physical={monitor['width']}x{monitor['height']}", flush=True)
         raw = sct.grab(monitor)
         img = Image.frombytes("RGB", raw.size, raw.bgra, "raw", "BGRX")
 

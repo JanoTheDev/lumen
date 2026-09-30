@@ -1,7 +1,10 @@
+import logging
 import pyautogui
 import time
 import pytesseract
 import hashlib
+
+log = logging.getLogger(__name__)
 
 pyautogui.FAILSAFE = False  # user's mouse movement must not abort automation
 pyautogui.PAUSE = 0.05
@@ -83,12 +86,12 @@ def _find_text_ocr(text: str) -> tuple | None:
             matches = _ocr_matches(data, text)
         if matches:
             cx, cy, _ = matches[0]
-            print(f"[ocr] found '{text}' at ({cx},{cy}) total={len(matches)} in {time.time()-t0:.2f}s", flush=True)
+            log.info(f"found '{text}' at ({cx},{cy}) total={len(matches)} in {time.time()-t0:.2f}s")
             return (cx, cy)
-        print(f"[ocr] '{text}' not found ({len(data['text'])} words scanned) in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"'{text}' not found ({len(data['text'])} words scanned) in {time.time()-t0:.2f}s")
         return None
     except Exception as e:
-        print(f"[ocr] error finding '{text}': {e}", flush=True)
+        log.error(f"error finding '{text}': {e}")
         return None
 
 
@@ -102,15 +105,15 @@ def _find_nth_text_ocr(text: str, n: int) -> tuple | None:
             data = _ocr_scan('--psm 3')
             matches = _ocr_matches(data, text)
         ys = [m[2] for m in matches]
-        print(f"[ocr] '{text}' clusters={len(matches)} ys={ys} need={n} in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"'{text}' clusters={len(matches)} ys={ys} need={n} in {time.time()-t0:.2f}s")
         if len(matches) >= n:
             cx, cy, _ = matches[n - 1]
-            print(f"[ocr] -> occurrence {n} at ({cx},{cy})", flush=True)
+            log.info(f"-> occurrence {n} at ({cx},{cy})")
             return (cx, cy)
-        print(f"[ocr] only {len(matches)} clusters, need {n}", flush=True)
+        log.info(f"only {len(matches)} clusters, need {n}")
         return None
     except Exception as e:
-        print(f"[ocr] error finding nth '{text}': {e}", flush=True)
+        log.error(f"error finding nth '{text}': {e}")
         return None
 
 def _click_at(x, y, button='left'):
@@ -161,7 +164,7 @@ def _bring_to_front(hwnd):
 def execute_action(action: dict) -> dict:
     t = action.get("type")
     t0 = time.time()
-    print(f"[actions] -> {t}", flush=True)
+    log.info(f"-> {t}")
 
     if t == "scroll":
         direction = action.get("direction", "down")
@@ -177,7 +180,7 @@ def execute_action(action: dict) -> dict:
             time.sleep(0.15)  # let browser render before checking
             hash_after = _page_hash()
             reached = hash_before == hash_after
-            print(f"[actions] scroll {direction} {amount} done in {time.time()-t0:.2f}s reached_bottom={reached}", flush=True)
+            log.info(f"scroll {direction} {amount} done in {time.time()-t0:.2f}s reached_bottom={reached}")
             return {'reached_bottom': reached}
         else:  # left / right — no keyboard equivalent, use hscroll
             if x is None or y is None:
@@ -194,7 +197,7 @@ def execute_action(action: dict) -> dict:
             pyautogui.moveTo(x, y, duration=0.1)
             clicks = amount if direction == "right" else -amount
             pyautogui.hscroll(clicks, x=x, y=y)
-        print(f"[actions] scroll {direction} {amount} done in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"scroll {direction} {amount} done in {time.time()-t0:.2f}s")
         return {}
 
     elif t == "move":
@@ -202,7 +205,7 @@ def execute_action(action: dict) -> dict:
 
     elif t == "click":
         _click_at(action["x"], action["y"], action.get("button", "left"))
-        print(f"[actions] click done in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"click done in {time.time()-t0:.2f}s")
 
     elif t == "type":
         import pyperclip
@@ -210,13 +213,13 @@ def execute_action(action: dict) -> dict:
         pyperclip.copy(text)
         time.sleep(0.05)
         pyautogui.hotkey('ctrl', 'v')
-        print(f"[actions] type done in {time.time()-t0:.2f}s ({len(text)} chars)", flush=True)
+        log.info(f"type done in {time.time()-t0:.2f}s ({len(text)} chars)")
 
     elif t == "hotkey":
         keys = action.get("keys", [])
         if keys:
             pyautogui.hotkey(*keys)
-        print(f"[actions] hotkey {keys} done in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"hotkey {keys} done in {time.time()-t0:.2f}s")
 
     elif t == "click_element":
         import uiautomation as auto
@@ -240,9 +243,9 @@ def execute_action(action: dict) -> dict:
             if use_ocr:
                 ocr_pos = _find_text_ocr(text)
             else:
-                print(f"[actions] skipping OCR for truncated/long text '{text[:40]}...'", flush=True)
+                log.info(f"skipping OCR for truncated/long text '{text[:40]}...'")
             if ocr_pos is None and not bbox:
-                print(f"[actions] browser click_element '{text[:40]}': OCR failed, no bbox — cannot click", flush=True)
+                log.info(f"browser click_element '{text[:40]}': OCR failed, no bbox — cannot click")
         else:
             root = auto.ControlFromHandle(hwnd) if hwnd else None
             if root:
@@ -256,22 +259,22 @@ def execute_action(action: dict) -> dict:
 
             if el is None and not bbox:
                 # Only pay the slow desktop fallback cost when we have no bbox to fall back to
-                print(f"[actions] scoped search failed for '{text}', trying desktop fallback", flush=True)
+                log.info(f"scoped search failed for '{text}', trying desktop fallback")
                 c = auto.Control(searchDepth=20, Name=text)
                 if c.Exists(5):
                     el = c
 
         if ocr_pos is not None:
-            print(f"[actions] click_element OCR '{text}' -> {ocr_pos} in {time.time()-t0:.2f}s", flush=True)
+            log.info(f"click_element OCR '{text}' -> {ocr_pos} in {time.time()-t0:.2f}s")
             _click_at(ocr_pos[0], ocr_pos[1], button)
         elif el is not None:
             cx, cy = _center(el.BoundingRectangle)
-            print(f"[actions] click_element UIA hit '{text}' -> ({cx},{cy}) in {time.time()-t0:.2f}s", flush=True)
+            log.info(f"click_element UIA hit '{text}' -> ({cx},{cy}) in {time.time()-t0:.2f}s")
             _click_at(cx, cy, button)
         elif bbox:
             cx = (bbox[0] + bbox[2]) // 2
             cy = (bbox[1] + bbox[3]) // 2
-            print(f"[actions] click_element bbox raw fallback '{text}' -> ({cx},{cy}) in {time.time()-t0:.2f}s", flush=True)
+            log.info(f"click_element bbox raw fallback '{text}' -> ({cx},{cy}) in {time.time()-t0:.2f}s")
             _click_at(cx, cy, button)
         else:
             raise ValueError(f"click_element: element '{text}' not found (no bbox provided)")
@@ -282,7 +285,7 @@ def execute_action(action: dict) -> dict:
         button = action.get("button", "left")
         pos = _find_nth_text_ocr(text, n)
         if pos:
-            print(f"[actions] click_nth_element occurrence {n} of '{text}' -> {pos} in {time.time()-t0:.2f}s", flush=True)
+            log.info(f"click_nth_element occurrence {n} of '{text}' -> {pos} in {time.time()-t0:.2f}s")
             _click_at(pos[0], pos[1], button)
         else:
             raise ValueError(f"click_nth_element: occurrence {n} of '{text}' not found on screen")
@@ -294,7 +297,7 @@ def execute_action(action: dict) -> dict:
             import ctypes
             buf = ctypes.create_unicode_buffer(512)
             ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
-            print(f"[actions] navigate_url hwnd={hwnd} title='{buf.value[:60]}' url={url}", flush=True)
+            log.info(f"navigate_url hwnd={hwnd} title='{buf.value[:60]}' url={url}")
             _bring_to_front(hwnd)
             time.sleep(0.2)
             pyautogui.hotkey('ctrl', 'l')
@@ -307,10 +310,10 @@ def execute_action(action: dict) -> dict:
             pyautogui.press('enter')
             time.sleep(0.2)
         else:
-            print("[actions] navigate_url: no browser found, using os.startfile", flush=True)
+            log.info("navigate_url: no browser found, using os.startfile")
             import os
             os.startfile(url)
-        print(f"[actions] navigate_url done in {time.time()-t0:.2f}s", flush=True)
+        log.info(f"navigate_url done in {time.time()-t0:.2f}s")
 
     elif t == "focus_browser":
         hwnd = _find_browser_hwnd()
@@ -320,11 +323,11 @@ def execute_action(action: dict) -> dict:
             buf = ctypes.create_unicode_buffer(512)
             ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
             title = buf.value[:80]
-            print(f"[actions] focus_browser hwnd={hwnd} title='{title}'", flush=True)
+            log.info(f"focus_browser hwnd={hwnd} title='{title}'")
             _bring_to_front(hwnd)
         else:
-            print("[actions] focus_browser: no browser found", flush=True)
-        print(f"[actions] focus_browser done in {time.time()-t0:.2f}s", flush=True)
+            log.info("focus_browser: no browser found")
+        log.info(f"focus_browser done in {time.time()-t0:.2f}s")
         return {"done": True, "title": title}
 
     else:

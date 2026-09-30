@@ -1,5 +1,8 @@
+import logging
 import time
 import threading
+
+log = logging.getLogger(__name__)
 
 _state = {
     'thread': None,
@@ -13,7 +16,7 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
     try:
         import pyautogui
     except Exception as e:
-        print(f'[dwell] pyautogui missing: {e}', flush=True)
+        log.info(f'pyautogui missing: {e}')
         return
 
     RADIUS = 6  # px of allowed jitter
@@ -79,8 +82,8 @@ def _loop(stop_event: threading.Event, on_trigger, on_progress, get_dwell_ms):
             try:
                 on_trigger(x, y)
             except Exception as e:
-                print(f'[dwell] on_trigger error: {e}', flush=True)
-    print('[dwell] stopped', flush=True)
+                log.error(f'on_trigger error: {e}')
+    log.info('stopped')
 
 # NOTE: we intentionally do NOT install a low-level mouse hook (WH_MOUSE_LL).
 # It was used for scroll-based re-arm but slowed Windows wheel delivery, breaking
@@ -102,7 +105,7 @@ def start(dwell_ms: int, on_trigger, cooldown_ms: int = 1500, on_progress=None):
     )
     _state['thread'] = t
     t.start()
-    print(f'[dwell] started with dwell_ms={dwell_ms}', flush=True)
+    log.info(f'started with dwell_ms={dwell_ms}')
 
 def stop():
     ev = _state['stop_event']

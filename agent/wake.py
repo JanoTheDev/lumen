@@ -1,8 +1,11 @@
+import logging
 import os
 import json
 import queue
 import threading
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 # Vosk-based offline wake-word detector. Free, local, no cloud.
 # Model dir: ~/.ai-overlay/vosk-model/ (vosk-model-small-en-us-0.15 recommended)
@@ -51,7 +54,7 @@ def _listen_loop(phrase_map: dict, on_detect, stop_event: threading.Event):
         model = _load_model()
     except Exception as e:
         _state['last_error'] = str(e)
-        print(f'[wake] {e}', flush=True)
+        log.info(f'{e}')
         return
 
     sample_rate = 16000
@@ -68,14 +71,14 @@ def _listen_loop(phrase_map: dict, on_detect, stop_event: threading.Event):
                 for kind, phrases in phrase_map.items()}
     norm_map = {k: v for k, v in norm_map.items() if v}
     if not norm_map:
-        print('[listener] no phrases to match, exiting', flush=True)
+        log.info('no phrases to match, exiting')
         return
 
     try:
         with sd.RawInputStream(samplerate=sample_rate, blocksize=8000, dtype='int16',
                                channels=1, callback=_cb):
             summary = ', '.join(f'{k}={v}' for k, v in norm_map.items())
-            print(f'[listener] listening (offline) — {summary}', flush=True)
+            log.info(f'listening (offline) — {summary}')
             while not stop_event.is_set():
                 try:
                     data = q.get(timeout=0.25)
@@ -100,14 +103,14 @@ def _listen_loop(phrase_map: dict, on_detect, stop_event: threading.Event):
                     if matched_kind:
                         break
                 if matched_kind:
-                    print(f'[listener] matched {matched_kind}="{matched_phrase}" in: "{text}"', flush=True)
+                    log.info(f'matched {matched_kind}="{matched_phrase}" in: "{text}"')
                     rec = KaldiRecognizer(model, sample_rate)
                     try: on_detect(matched_kind, matched_phrase)
-                    except Exception as e: print(f'[listener] on_detect error: {e}', flush=True)
+                    except Exception as e: log.error(f'on_detect error: {e}')
     except Exception as e:
         _state['last_error'] = str(e)
-        print(f'[listener] loop error: {e}', flush=True)
-    print('[listener] stopped', flush=True)
+        log.error(f'loop error: {e}')
+    log.info('stopped')
 
 def start(wake_phrase: str = '', cancel_phrases=None, on_detect=None):
     stop()
