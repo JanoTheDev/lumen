@@ -20,7 +20,7 @@ describe('TaskQueue', () => {
     const q = new TaskQueue(1, 'test')
     const order: number[] = []
     const starts: number[] = []
-    const finish = (n: number, delay: number) =>
+    const finish = (n: number, delay: number): Promise<void> =>
       q.enqueue(`job${n}`, async () => {
         starts.push(n)
         await new Promise((r) => setTimeout(r, delay))
@@ -46,7 +46,7 @@ describe('TaskQueue', () => {
     const q = new TaskQueue(3, 'test')
     const running: number[] = []
     const maxConcurrent = { n: 0 }
-    const job = (n: number) =>
+    const job = (n: number): Promise<number> =>
       q.enqueue(`j${n}`, async () => {
         running.push(n)
         maxConcurrent.n = Math.max(maxConcurrent.n, running.length)

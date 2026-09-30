@@ -22,7 +22,7 @@ describe('correctNthElement', () => {
       'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF, Row 6: OxGF'
     )
     const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(3)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(3)
   })
 
   it('corrects n=7 to n=4 when OxGF is rows 4-7', () => {
@@ -32,7 +32,7 @@ describe('correctNthElement', () => {
       'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF, Row 6: OxGF, Row 7: OxGF'
     )
     const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(4)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(4)
   })
 
   it('does not change already-correct n=3 (occurrence) when row 6 is 3rd OxGF', () => {
@@ -43,7 +43,7 @@ describe('correctNthElement', () => {
     )
     const fixed = correctNthElement(r)
     // n=3 → look for row n=3 in OxGF rows [4,5,6] → not found → no correction
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(3)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(3)
   })
 
   it('normalizes 0/O: text=0xGF matches OxGF rows', () => {
@@ -53,7 +53,7 @@ describe('correctNthElement', () => {
       'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF'
     )
     const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(2)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(2)
   })
 
   it('no-ops when mode is not action', () => {
@@ -67,19 +67,19 @@ describe('correctNthElement', () => {
       actions: [{ type: 'click_nth_element', text: 'OxGF', n: 6 }]
     }
     const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(6)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(6)
   })
 
   it('corrects unique sender: n=2 for Jobbier at row 2 → n=1', () => {
     const r = makeResult(2, 'Jobbier', 'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt')
     const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(1)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(1)
   })
 
   it('no-ops when row number not in summary', () => {
     const r = makeResult(10, 'OxGF', 'Row 1: Stripe, Row 2: OxGF, Row 3: OxGF')
     const fixed = correctNthElement(r)
     // row 10 not in summary → findIndex = -1 → no correction
-    expect(fixed.mode === 'action' && (fixed.actions[0] as any).n).toBe(10)
+    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(10)
   })
 })

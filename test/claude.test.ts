@@ -112,23 +112,28 @@ function assert(name: string, condition: boolean, detail?: string): void {
   }
 }
 
+type LooseAction = { type?: string; mode?: string; url?: string; bbox?: unknown }
+type LooseResponse = {
+  text?: string
+  actions: LooseAction[]
+  follow_up?: { delay_ms?: number }
+}
+const loose = (r: unknown): LooseResponse => r as LooseResponse
+
 // ── parseResponse ─────────────────────────────────────────────────────────────
 
 console.log('\nparseResponse')
 
 {
   const r = parseResponse('{"mode":"answer","text":"hello"}')
-  assert('answer mode', r.mode === 'answer' && (r as any).text === 'hello')
+  assert('answer mode', r.mode === 'answer' && loose(r).text === 'hello')
 }
 
 {
   const r = parseResponse(
     '{"mode":"action","actions":[{"type":"open_url","url":"https://example.com"}]}'
   )
-  assert(
-    'valid action passthrough',
-    r.mode === 'action' && (r as any).actions[0].type === 'open_url'
-  )
+  assert('valid action passthrough', r.mode === 'action' && loose(r).actions[0].type === 'open_url')
 }
 
 {
@@ -137,7 +142,7 @@ console.log('\nparseResponse')
     '{"mode":"action","actions":[{"mode":"click_bbox","bbox":[0,181,1280,233],"button":"left"}]}'
   const r = parseResponse(raw)
   assert('action.mode→action.type normalized', r.mode === 'action')
-  const a = (r as any).actions[0]
+  const a = loose(r).actions[0]
   assert('type is click_bbox', a.type === 'click_bbox', `got type="${a.type}"`)
   assert('no leftover mode field', a.mode === undefined)
   assert('bbox preserved', JSON.stringify(a.bbox) === '[0,181,1280,233]')
@@ -149,9 +154,9 @@ console.log('\nparseResponse')
     '{"mode":"action","open_url":"https://mail.google.com","follow_up":{"query":"click","delay_ms":3000}}'
   const r = parseResponse(raw)
   assert('top-level open_url → actions array', r.mode === 'action')
-  assert('open_url action created', (r as any).actions[0].type === 'open_url')
-  assert('open_url url correct', (r as any).actions[0].url === 'https://mail.google.com')
-  assert('follow_up preserved', (r as any).follow_up?.delay_ms === 3000)
+  assert('open_url action created', loose(r).actions[0].type === 'open_url')
+  assert('open_url url correct', loose(r).actions[0].url === 'https://mail.google.com')
+  assert('follow_up preserved', loose(r).follow_up?.delay_ms === 3000)
 }
 
 {
@@ -161,7 +166,7 @@ console.log('\nparseResponse')
 
 {
   const r = parseResponse('```json\n{"mode":"answer","text":"hi"}\n```')
-  assert('strips markdown fences', r.mode === 'answer' && (r as any).text === 'hi')
+  assert('strips markdown fences', r.mode === 'answer' && loose(r).text === 'hi')
 }
 
 {
@@ -175,7 +180,7 @@ console.log('\nparseResponse')
   const raw =
     '{"mode":"action","actions":[{"type":"open_url","url":"https://mail.google.com"},{"mode":"click_bbox","bbox":[100,200,400,250]}]}'
   const r = parseResponse(raw)
-  const actions = (r as any).actions
+  const actions = loose(r).actions
   assert('first action unchanged', actions[0].type === 'open_url')
   assert('second action mode→type', actions[1].type === 'click_bbox')
 }
