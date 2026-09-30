@@ -32,16 +32,27 @@ def _sleep(seconds: float) -> None:
         token.sleep(seconds)
 
 
-def _exists(control, seconds: float) -> bool:
-    """Polls a uiautomation search so a cancel lands between attempts."""
-    deadline = time.monotonic() + seconds
+def _find_element_uia(hwnd, text: str, wait_s: float) -> dict | None:
+    """Polls UIA snapshots of the window, then of its process's other visible windows (menus, popups)."""
+    import uia
+    pid = window.pid_of(hwnd)
+    deadline = time.monotonic() + wait_s
     while True:
         _check()
-        if control.Exists(0, 0):
-            return True
+        popups = [h for h in window.top_level_windows()
+                  if h != hwnd and window._user32.IsWindowVisible(h) and window.pid_of(h) == pid]
+        for h in [hwnd] + popups:
+            try:
+                hit = uia.find_in_window(h, text, getattr(_ctx, 'token', None))
+            except AgentError as e:
+                if e.code in ("E_CANCELLED", "E_TIMEOUT"):
+                    raise
+                hit = None
+            if hit:
+                return hit
         if time.monotonic() >= deadline:
-            return False
-        _sleep(0.1)
+            return None
+        _sleep(0.25)
 
 
 def _foreground_rect() -> dict | None:
@@ -158,12 +169,6 @@ def _click_at(x, y, button='left'):
     _sleep(0.05)
     pyautogui.click(x, y, button=button)
 
-def _center(rect):
-    return (
-        rect.left + (rect.right - rect.left) // 2,
-        rect.top + (rect.bottom - rect.top) // 2
-    )
-
 def _find_browser_hwnd():
     return window.find_browser()
 
@@ -249,8 +254,6 @@ def _execute(action: dict) -> dict:
         log.info(f"hotkey {keys} done in {time.time()-t0:.2f}s")
 
     elif t == "click_element":
-        import uiautomation as auto
-        import ctypes
         text = action.get("text", "")
         button = action.get("button", "left")
         bbox = action.get("bbox")  # optional [x1,y1,x2,y2] fallback (screen coords)
@@ -270,29 +273,16 @@ def _execute(action: dict) -> dict:
                 log.info(f"skipping OCR for truncated/long text '{text[:40]}...'")
             if ocr_pos is None and not bbox:
                 log.info(f"browser click_element '{text[:40]}': OCR failed, no bbox — cannot click")
-        else:
-            root = auto.ControlFromHandle(hwnd) if hwnd else None
-            if root:
-                c = auto.Control(searchFromControl=root, searchDepth=15, Name=text)
-                if _exists(c, 3):
-                    el = c
-                else:
-                    c = auto.Control(searchFromControl=root, searchDepth=15, SubName=text)
-                    if _exists(c, 2):
-                        el = c
-
-            if el is None and not bbox:
-                # Only pay the slow desktop fallback cost when we have no bbox to fall back to
-                log.info(f"scoped search failed for '{text}', trying desktop fallback")
-                c = auto.Control(searchDepth=20, Name=text)
-                if _exists(c, 5):
-                    el = c
+        elif hwnd:
+            # Only wait long for the element when there is no bbox to fall back to.
+            el = _find_element_uia(hwnd, text, 3.0 if bbox else 5.0)
 
         if ocr_pos is not None:
             log.info(f"click_element OCR '{text}' -> {ocr_pos} in {time.time()-t0:.2f}s")
             _click_at(ocr_pos[0], ocr_pos[1], button)
         elif el is not None:
-            cx, cy = _center(el.BoundingRectangle)
+            r = el["rect"]
+            cx, cy = r["x"] + r["w"] // 2, r["y"] + r["h"] // 2
             log.info(f"click_element UIA hit '{text}' -> ({cx},{cy}) in {time.time()-t0:.2f}s")
             _click_at(cx, cy, button)
         elif bbox:

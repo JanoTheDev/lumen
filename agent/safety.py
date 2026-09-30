@@ -79,22 +79,31 @@ def is_run_dialog(cls: str, exe: str, child_classes) -> bool:
 
 def denied_target_reason(exe: str, cls: str, child_classes) -> str | None:
     if exe in TERMINALS:
-        return f"foreground is a terminal ({exe})"
+        return f"target is a terminal ({exe})"
     if is_run_dialog(cls, exe, child_classes):
-        return "foreground is the Run dialog"
+        return "target is the Run dialog"
     return None
 
 
-def foreground_target() -> tuple:
-    """(exe, class, child classes) of the foreground window."""
+def window_target(hwnd) -> tuple:
+    """(exe, class, child classes) of a top-level window."""
     import window
 
-    hwnd = window.foreground()
     if not hwnd:
         return "", "", []
     cls = window.class_name(hwnd)
     kids = [window.class_name(c) for c in window.child_windows(hwnd)] if cls == "#32770" else []
     return window.process_name(hwnd), cls, kids
+
+
+def foreground_target() -> tuple:
+    import window
+
+    return window_target(window.foreground())
+
+
+def window_target_reason(hwnd) -> str | None:
+    return denied_target_reason(*window_target(hwnd))
 
 
 def check_input_target(action: dict, what: str) -> None:

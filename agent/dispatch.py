@@ -82,9 +82,10 @@ class Dispatcher:
             READ: ThreadPoolExecutor(read_workers, thread_name_prefix="read", initializer=_com_init),
         }
 
-    def register(self, cmd: str, fn, lane: str = INLINE) -> None:
-        """`fn(args, token)` returns the result or raises AgentError."""
-        self._commands[cmd] = (fn, lane)
+    def register(self, cmd: str, fn, lane: str = INLINE, timeout_ms: float | None = None) -> None:
+        """`fn(args, token)` returns the result or raises AgentError. `timeout_ms` is the default
+        agent-side timeout when the request has no `timeoutMs`."""
+        self._commands[cmd] = (fn, lane, timeout_ms)
 
     def lane_of(self, cmd: str):
         entry = self._commands.get(cmd)
@@ -95,7 +96,7 @@ class Dispatcher:
         if entry is None:
             self._reply(id, None, AgentError(E_UNSUPPORTED, f"Unknown command: {cmd}"))
             return
-        fn, lane = entry
+        fn, lane, default_timeout = entry
         if lane == INLINE:
             self._reply(id, *self._invoke(cmd, fn, args, CancelToken()))
             return
@@ -103,7 +104,7 @@ class Dispatcher:
         call = _Call(id, cmd)
         with self._lock:
             self._inflight[id] = call
-        timeout_ms = args.get("timeoutMs") if isinstance(args, dict) else None
+        timeout_ms = args.get("timeoutMs", default_timeout) if isinstance(args, dict) else default_timeout
         if isinstance(timeout_ms, (int, float)) and not isinstance(timeout_ms, bool) and timeout_ms > 0:
             call.timer = threading.Timer(timeout_ms / 1000.0, self._expire, (call,))
             call.timer.daemon = True

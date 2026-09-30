@@ -8,7 +8,7 @@ import logging
 import threading
 import time
 
-# comtypes (via uiautomation) joins this apartment on import; the dispatch
+# comtypes joins this apartment on import; the dispatch
 # workers are MTA too, so COM objects can move between them.
 sys.coinit_flags = 0
 
@@ -23,6 +23,7 @@ log.info(dpi.describe())
 import capture
 import monitors
 import ocr
+import uia
 import window
 from capture import take_screenshot, get_active_window
 from actions import execute_action
@@ -70,7 +71,7 @@ def _cmd_subscribe(args, token):
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr"]
+CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr", "uia"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -208,6 +209,35 @@ def _cmd_capture(args, token):
     return capture.capture(**{k: v for k, v in args.items() if k in ("monitor", "maxWidth", "quality", "region")})
 
 
+def _cmd_active_window(args, token):
+    info = window.active()
+    uia.warm_up(info["hwnd"])
+    return info
+
+
+def _cmd_uia_snapshot(args, token):
+    max_nodes = args.get("maxNodes", uia.DEFAULT_MAX_NODES)
+    if not isinstance(max_nodes, int) or isinstance(max_nodes, bool) or max_nodes < 1:
+        raise AgentError(E_INVALID, "maxNodes must be a positive integer")
+    return uia.snapshot(args.get("scope", "foreground"), max_nodes, args.get("interactiveOnly", True) is not False,
+                        token)
+
+
+def _cmd_uia_act(args, token):
+    import actions
+    import sendinput
+
+    def click(x, y):
+        actions.execute_action({"type": "click", "x": x, "y": y}, token)
+
+    def type_text(text):
+        actions.execute_action({"type": "hotkey", "keys": ["ctrl", "a"], "allowTerminal": args.get("allowTerminal")},
+                               token)
+        sendinput.type_text(text, check=token.check, sleep=token.sleep)
+
+    return uia.act(args, token, click=click, type_text=type_text)
+
+
 def _debug_emit(args, token):
     n = max(0, min(int(args.get("n", 100)), 100000))
 
@@ -250,8 +280,11 @@ def register_commands(debug: bool = False) -> None:
     reg("capture", _cmd_capture, READ)
     reg("monitors", lambda args, token: {"monitors": monitors.enumerate_monitors()}, READ)
     reg("ocr", lambda args, token: ocr.run(args, token), READ)
+    reg("uia_snapshot", _cmd_uia_snapshot, READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
+    reg("uia_find", lambda args, token: uia.find_command(args, token), READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
+    reg("uia_act", _cmd_uia_act, INPUT)
     if v2:
-        reg("active_window", lambda args, token: window.active(), READ)
+        reg("active_window", _cmd_active_window, READ)
     else:
         reg("active_window", lambda args, token: get_active_window(), READ)
     if debug:
