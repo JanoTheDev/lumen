@@ -119,6 +119,17 @@ function applyListenerState(cfg: AppConfig): void {
     .catch(e => console.error('[listener] enable failed:', (e as Error).message))
 }
 
+async function applyAgentState(cfg: AppConfig): Promise<void> {
+  if (!agent) return
+  try {
+    await agent.setHotkey(cfg.hotkey)
+  } catch (e) {
+    console.error('[hotkey] bind failed:', (e as Error).message)
+  }
+  applyListenerState(cfg)
+  applyDwellState(cfg)
+}
+
 function broadcastConfig(cfg: AppConfig): void {
   for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow, dwellRingWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
@@ -496,18 +507,6 @@ app.whenReady().then(async () => {
     shell.openExternal(assertSafeUrl(url)).catch(() => {})
   })
 
-  agent = new AgentBridge()
-  await agent.start()
-  const initialCfg = loadConfig()
-  try {
-    await agent.setHotkey(initialCfg.hotkey)
-  } catch (e) {
-    console.error('[hotkey] initial bind failed:', (e as Error).message)
-  }
-  applyListenerState(initialCfg)
-  applyDwellState(initialCfg)
-  warmupConnection()
-
   createHUDWindow()
   createHighlightWindow()
   createAnswerOverlayWindow()
@@ -523,6 +522,25 @@ app.whenReady().then(async () => {
       if (!w.isDestroyed()) w.webContents.setZoomFactor(Math.max(0.75, Math.min(1.6, scaleCfg || 1)))
     })
   }
+
+  // Hotkey, listener and dwell state are re-sent after every agent (re)start.
+  let agentFailed = false
+  agent = new AgentBridge({ initState: () => applyAgentState(loadConfig()) })
+  agent.onEvent('agent-down', (data) => {
+    if (data?.gaveUp) setStatus('error', 'Agent stopped responding — see logs', undefined, 8000)
+    else setStatus('error', 'Agent restarting…', undefined, 3000)
+  })
+  agent.onEvent('agent-ready', () => {
+    if (agentFailed) setStatus('answer', 'Agent back online', undefined, 1500)
+    agentFailed = false
+  })
+  // Not awaited: IPC handlers below must be registered before the windows finish loading.
+  agent.start().catch((e) => {
+    agentFailed = true
+    log('fail', `agent failed to start: ${(e as Error).message}`)
+    setStatus('error', 'Agent failed to start — see logs', undefined, 8000)
+  })
+  warmupConnection()
   loadConfig()  // warm cache
 
   agent.onEvent('hotkey-down', () => {
