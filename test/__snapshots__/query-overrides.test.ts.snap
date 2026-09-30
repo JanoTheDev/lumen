@@ -1,0 +1,175 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`applyOverrides > check my gmail  [Inbox - Gmail - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "check my gmail",
+  "mode": "answer",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > click this button  [Settings] 1`] = `
+{
+  "effectivePrompt": "click this button
+
+[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > find the save button  [Blender] 1`] = `
+{
+  "effectivePrompt": "find the save button
+
+[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:
+1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.
+2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: find the save button. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]",
+  "mode": "locate",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > open gmail  [Untitled - Notepad] 1`] = `
+{
+  "effectivePrompt": "open gmail
+
+[SYSTEM OVERRIDE: User asked about "gmail" but the active window is "Untitled - Notepad". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"https://mail.google.com/"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": {
+    "app": "gmail",
+    "url": "https://mail.google.com/",
+  },
+}
+`;
+
+exports[`applyOverrides > open my third email  [Inbox - Gmail - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "open my third email
+
+[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > open that link  [Example Domain - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "open that link
+
+[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > open the 2nd result  [weather - Google Search - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "open the 2nd result
+
+[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > open the 3rd email  [Inbox - Gmail - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "open the 3rd email",
+  "mode": "action",
+  "nextTaskContext": null,
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > open youtube and search for lofi  [Untitled - Notepad] 1`] = `
+{
+  "effectivePrompt": "open youtube and search for lofi
+
+[SYSTEM OVERRIDE: User asked about "youtube" but the active window is "Untitled - Notepad". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"https://www.youtube.com/"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": {
+    "app": "youtube",
+    "url": "https://www.youtube.com/",
+  },
+}
+`;
+
+exports[`applyOverrides > reply to this and say thanks  [Inbox - Gmail - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "reply to this and say thanks",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > rewrite this paragraph  [Document1 - Word] 1`] = `
+{
+  "effectivePrompt": "rewrite this paragraph",
+  "mode": "answer",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > scroll down  [Reddit - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "scroll down",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > show me positions for ExNIS internships  [New Tab - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "show me positions for ExNIS internships",
+  "mode": "action",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > show me the emails from Stripe  [Inbox - Gmail - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "show me the emails from Stripe
+
+[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:
+1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.
+2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: show me the emails from Stripe. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]",
+  "mode": "locate",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > what time is it  [Untitled - Notepad] 1`] = `
+{
+  "effectivePrompt": "what time is it",
+  "mode": "answer",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;
+
+exports[`applyOverrides > where is the search box  [Google - Google Chrome] 1`] = `
+{
+  "effectivePrompt": "where is the search box
+
+[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:
+1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.
+2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: where is the search box. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]",
+  "mode": "locate",
+  "nextTaskContext": "<effective>",
+  "requestedApp": null,
+}
+`;

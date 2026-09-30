@@ -21,11 +21,11 @@ import {
 } from 'electron'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { Action, Rect } from '@shared/types'
-import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
+import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI, { toFile } from 'openai'
-import { classifyQuery, isResearchIntent } from './query-classifier'
+import { isResearchIntent } from './query-classifier'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
 import { TaskQueue } from './task-queue'
@@ -49,6 +49,7 @@ import { configPatchSchema } from '@shared/config'
 import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
 import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
+import { applyOverrides, LOCATE_RE } from './query/overrides'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
 import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
 import { toAgentAction, type AgentAction } from './actions/agent-action'
@@ -658,49 +659,15 @@ app.whenReady().then(async () => {
     timer.split('context gathered (screenshot + active window)')
     log('plan', `active window: ${activeWindow}`)
 
-    // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
-    // AI ignores rule from system prompt alone — inject a hard override into the prompt.
-    const ORDINAL_RE = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(st|nd|rd|th))\b.{0,40}(email|mail|message|result|item|tweet|post|notification)/i
-    // Direct "open/click this/that" requests — AI keeps returning guide mode despite rule. Force action.
-    const DIRECT_ACTION_RE = /\b(open|click|go to|navigate to|tap|select|press)\s+(this|that|it|the)\b/i
-    // Locate/show queries — AI ignores cluster-splitting rule, inject hard override.
-    const LOCATE_RE = /\b(show me|where is|where are|find|highlight|point to|locate|can you show)\b/i
-
-    // Classify intent on the ORIGINAL prompt — SYSTEM OVERRIDE injections add verbs that
-    // falsely inflate actionVerbCount → planRequired=true for single-shot queries.
-    const intent = classifyQuery(prompt)
-
-    let effectivePrompt = prompt
-    // App-switch detection: if the user named an app (Gmail, LinkedIn, etc.) and we're
-    // not already on it, force the first action to navigate there. Prevents AI from
-    // guiding on the current (wrong) page.
-    const requestedApp = !opts.lowDetail ? detectRequestedApp(prompt, activeWindow) : null
-    if (requestedApp) {
-      log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
-      effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: User asked about "${requestedApp.app}" but the active window is "${activeWindow}". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"${requestedApp.url}"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]`
-    }
-    if (!opts.lowDetail) {
-      if (ORDINAL_RE.test(prompt)) {
-        effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]`
-      } else if (DIRECT_ACTION_RE.test(prompt)) {
-        effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]`
-      } else if (LOCATE_RE.test(prompt) && intent.mode === 'locate') {
-        // Only apply locate override when classifier also said locate. Research intents
-        // ("show me positions for X") are action+planner — they must NOT take this path.
-        effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with bbox [0,0,0,0].]`
-      }
-    }
-
-    // Continuation: user said "do it" after AI gave answer — re-run with original task
-    if (intent.isContinuation && lastTaskContext) {
-      log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
-      effectivePrompt = `${lastTaskContext}\n\n[User confirmed: proceed with action mode. Execute the task now.]`
-    }
-
-    // Store task context for potential continuation (not for low-detail follow-up queries)
-    if (!opts.lowDetail && !intent.isContinuation) {
-      lastTaskContext = effectivePrompt
-    }
+    const { effectivePrompt, intent, requestedApp, nextTaskContext } = applyOverrides({
+      prompt,
+      activeWindow,
+      lowDetail: opts.lowDetail,
+      lastTaskContext,
+    })
+    if (requestedApp) log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
+    if (intent.isContinuation && lastTaskContext) log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
+    lastTaskContext = nextTaskContext
 
     log('plan', `query: "${effectivePrompt.slice(0, 80)}"`)
 
