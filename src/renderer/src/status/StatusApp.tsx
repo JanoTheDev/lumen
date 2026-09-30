@@ -27,16 +27,15 @@ export function StatusApp(): JSX.Element {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    const unsubStatus = (window as unknown as {
-      api: { onStatus: (cb: (m: StatusMsg) => void) => void }
-    }).api.onStatus((m) => {
-      setMsg(m)
+    const unsubStatus = window.api.onStatus((m) => {
+      setMsg(m as StatusMsg)
       setVisible(m.kind !== 'idle')
     })
-    const unsubHide = (window as unknown as {
-      api: { onStatusHide: (cb: () => void) => void }
-    }).api.onStatusHide(() => setVisible(false))
-    return () => { /* ipcRenderer listeners persist per window */ void unsubStatus; void unsubHide }
+    const unsubHide = window.api.onStatusHide(() => setVisible(false))
+    return () => {
+      unsubStatus()
+      unsubHide()
+    }
   }, [])
 
   const style = msg ? KIND_STYLE[msg.kind] : KIND_STYLE.idle

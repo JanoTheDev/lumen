@@ -10,49 +10,52 @@ interface WakeModelProgress {
   message?: string
 }
 
+type Unsubscribe = () => void
+
 interface ElectronAPI {
   query: (prompt: string, opts?: { lowDetail?: boolean }) => Promise<unknown>
   executeAction: (actions: unknown[]) => Promise<unknown>
   hideHighlights: () => Promise<void>
   closeHUD: () => void
-  onShowHighlights: (cb: (steps: unknown[]) => void) => void
-  onClearHighlights: (cb: () => void) => void
-  onShowPointer: (cb: (data: { x: number; y: number; text: string }) => void) => void
-  onShowLocate: (cb: (items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }>) => void) => void
+  onShowHighlights: (cb: (steps: unknown[]) => void) => Unsubscribe
+  onClearHighlights: (cb: () => void) => Unsubscribe
+  onShowPointer: (cb: (data: { x: number; y: number; text: string }) => void) => Unsubscribe
+  onShowLocate: (cb: (items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }>) => void) => Unsubscribe
   voiceBarShow: (transcript: string) => void
   voiceBarHide: () => void
   showHUD: () => void
-  onVoiceUpdate: (cb: (transcript: string) => void) => void
+  onVoiceUpdate: (cb: (transcript: string) => void) => Unsubscribe
   showAnswerOverlay: (text: string) => void
   hideAnswerOverlay: () => void
-  onShowAnswer: (cb: (text: string) => void) => void
-  onCancelRequest: (cb: () => void) => void
-  onStartRecording: (cb: () => void) => void
-  onStopRecording: (cb: () => void) => void
+  onShowAnswer: (cb: (text: string) => void) => Unsubscribe
+  onCancelRequest: (cb: () => void) => Unsubscribe
+  onStartRecording: (cb: () => void) => Unsubscribe
+  onStopRecording: (cb: () => void) => Unsubscribe
   transcribe: (audio: ArrayBuffer) => Promise<string>
   resizeAnswerOverlay: (h: number) => void
   getConfig: () => Promise<Record<string, unknown>>
   saveConfig: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>
   openSettings: () => void
+  openLink: (url: string) => void
   cancelCurrent: () => void
-  onConfigChanged: (cb: (cfg: Record<string, unknown>) => void) => void
+  onConfigChanged: (cb: (cfg: Record<string, unknown>) => void) => Unsubscribe
   wakeModelStatus: () => Promise<WakeModelStatus>
   wakeModelInstall: () => Promise<{ ok: boolean; error?: string }>
-  onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => void
-  onStatus: (cb: (m: { kind: string; text: string; step?: { index: number; total: number } }) => void) => void
-  onStatusHide: (cb: () => void) => void
+  onWakeModelProgress: (cb: (p: WakeModelProgress) => void) => Unsubscribe
+  onStatus: (cb: (m: { kind: string; text: string; step?: { index: number; total: number } }) => void) => Unsubscribe
+  onStatusHide: (cb: () => void) => Unsubscribe
   settingsWindowClose: () => void
   settingsWindowMinimize: () => void
   settingsWindowMaximize: () => void
   announceAction: (summary: string, confidence?: string) => Promise<{ delayMs: number }>
   ttsSpeak: (text: string) => Promise<{ ok: boolean; error?: string }>
-  onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => void
+  onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => Unsubscribe
   guidesList: () => Promise<Array<{ id: string; name: string; task: string; steps: Array<{ label: string }>; createdAt: number }>>
   guidesSaveLast: (name: string) => Promise<{ id?: string; name?: string; error?: string }>
   guidesReplay: (id: string) => Promise<{ id?: string; error?: string }>
   guidesDelete: (id: string) => Promise<{ ok: boolean }>
-  onRunQuery: (cb: (text: string) => void) => void
-  onDwellProgress: (cb: (data: { x: number; y: number; progress: number; active: boolean }) => void) => void
+  onRunQuery: (cb: (text: string) => void) => Unsubscribe
+  onDwellProgress: (cb: (data: { x: number; y: number; progress: number; active: boolean }) => void) => Unsubscribe
 }
 
 interface Window {
