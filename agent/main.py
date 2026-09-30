@@ -20,13 +20,13 @@ logging.basicConfig(
 log = logging.getLogger("agent")
 log.info(dpi.describe())
 
-from capture import take_screenshot, get_active_window
+from capture import take_screenshot, get_active_window, grab_jpeg
 from actions import execute_action
 import wake
 import dwell
 from dispatch import Dispatcher, INLINE, INPUT, READ
 from errors import AgentError, E_INVALID
-from hotkey import HotkeyManager
+from hotkey import HotkeyManager, parse_accelerator
 
 respond = proto.respond
 emit_event = proto.emit
@@ -48,14 +48,13 @@ def mouse_watcher():
         pass
 
 
-def _reply(id, result, error):
-    if error is not None:
-        respond(id, error=error.message)
-    else:
-        respond(id, result)
+AGENT_VERSION = "0.2.0"
+# Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
+CAPABILITIES = ["hotkey", "wake", "dwell"]
 
+LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
-dispatcher = Dispatcher(_reply)
+dispatcher = Dispatcher(respond)
 
 
 def _cmd_execute(args, token):
@@ -70,17 +69,17 @@ def _cmd_set_hotkey(args, token):
     return {"ok": True, "combo": combo}
 
 
+def _on_listener_match(kind, matched):
+    if kind == 'wake':
+        emit_event('wake-detected', {"phrase": matched} if proto.version == 2 else None)
+    elif kind == 'cancel':
+        emit_event('voice-cancel', {"phrase": matched})
+
+
 def _cmd_wake_enable(args, token):
     phrase = args.get("phrase", "")
-    cancel_phrases = args.get("cancel_phrases", [])
-
-    def on_match(kind, matched):
-        if kind == 'wake':
-            emit_event('wake-detected')
-        elif kind == 'cancel':
-            emit_event('voice-cancel', {"phrase": matched})
-
-    wake.start(phrase, cancel_phrases, on_match)
+    cancel_phrases = args.get("cancel_phrases", args.get("cancelPhrases", []))
+    wake.start(phrase, cancel_phrases, _on_listener_match)
     return {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases}
 
 
@@ -89,10 +88,7 @@ def _cmd_wake_disable(args, token):
     return {"ok": True}
 
 
-def _cmd_dwell_enable(args, token):
-    dwell_ms = args.get("dwell_ms", 1400)
-    cooldown_ms = args.get("cooldown_ms", 1500)
-
+def _start_dwell(dwell_ms, cooldown_ms):
     def on_progress(x, y, p, active):
         emit_event('dwell-progress', {"x": x, "y": y, "progress": p, "active": active})
 
@@ -102,6 +98,12 @@ def _cmd_dwell_enable(args, token):
         cooldown_ms=cooldown_ms,
         on_progress=on_progress,
     )
+
+
+def _cmd_dwell_enable(args, token):
+    dwell_ms = args.get("dwell_ms", args.get("ms", 1400))
+    cooldown_ms = args.get("cooldown_ms", args.get("cooldownMs", 1500))
+    _start_dwell(dwell_ms, cooldown_ms)
     return {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms}
 
 
@@ -120,6 +122,49 @@ def _cmd_cancel(args, token):
     if not isinstance(target, int) or isinstance(target, bool):
         raise AgentError(E_INVALID, "cancel needs a numeric target")
     return {"cancelled": dispatcher.cancel(target)}
+
+
+def _obj(v) -> dict:
+    return v if isinstance(v, dict) else {}
+
+
+def _num(v, fallback):
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else fallback
+
+
+def _cmd_init(args, token):
+    """Applies the full agent state. Everything is validated before anything changes."""
+    hotkey_accel = args.get("hotkey", "")
+    if not isinstance(hotkey_accel, str):
+        raise AgentError(E_INVALID, "init.hotkey must be a string")
+    if hotkey_accel.strip():
+        parse_accelerator(hotkey_accel)
+    level = args.get("logLevel", "info")
+    if level not in LOG_LEVELS:
+        raise AgentError(E_INVALID, f"init.logLevel must be one of {sorted(LOG_LEVELS)}")
+    wake_cfg, dwell_cfg = _obj(args.get("wake")), _obj(args.get("dwell"))
+    phrase = wake_cfg.get("phrase") if isinstance(wake_cfg.get("phrase"), str) else ""
+    cancel_phrases = [p for p in wake_cfg.get("cancelPhrases") or [] if isinstance(p, str) and p.strip()]
+    wake_phrase = phrase.strip() if wake_cfg.get("enabled") is True else ""
+
+    logging.getLogger().setLevel(LOG_LEVELS[level])
+    hotkeys.bind(hotkey_accel)
+    if wake_phrase or cancel_phrases:
+        wake.start(wake_phrase, cancel_phrases, _on_listener_match)
+    else:
+        wake.stop()
+    if dwell_cfg.get("enabled") is True:
+        _start_dwell(_num(dwell_cfg.get("ms"), 1400), _num(dwell_cfg.get("cooldownMs"), 1500))
+    else:
+        dwell.stop()
+    return {}
+
+
+def _cmd_capture(args, token):
+    # Primary monitor only until monitor geometry lands; frames then gain `monitor`/`scale`.
+    data, width, height = grab_jpeg()
+    return {"frames": [{"id": f"f{time.monotonic_ns()}", "width": width, "height": height,
+                        "mime": "image/jpeg", "data": data}]}
 
 
 def _debug_emit(args, token):
@@ -143,7 +188,9 @@ def _debug_sleep(args, token):
 
 def register_commands(debug: bool = False) -> None:
     reg = dispatcher.register
-    reg("ping", lambda args, token: "pong", INLINE)
+    v2 = proto.version == 2
+    reg("ping", (lambda args, token: {"t": time.time()}) if v2 else (lambda args, token: "pong"), INLINE)
+    reg("init", _cmd_init, INLINE)
     reg("cancel", _cmd_cancel, INLINE)
     reg("set_hotkey", _cmd_set_hotkey, INLINE)
     reg("wake_enable", _cmd_wake_enable, INLINE)
@@ -154,7 +201,11 @@ def register_commands(debug: bool = False) -> None:
     reg("dwell_set_ms", _cmd_dwell_set_ms, INLINE)
     reg("execute", _cmd_execute, INPUT)
     reg("screenshot", lambda args, token: take_screenshot(), READ)
-    reg("active_window", lambda args, token: get_active_window(), READ)
+    if v2:
+        reg("capture", _cmd_capture, READ)
+        reg("active_window", lambda args, token: {"title": get_active_window()}, READ)
+    else:
+        reg("active_window", lambda args, token: get_active_window(), READ)
     if debug:
         reg("debug_emit", _debug_emit, INLINE)
         reg("debug_sleep", _debug_sleep, READ)
@@ -173,20 +224,27 @@ def handle_line(line: str) -> None:
         emit_event("protocol-error", {"line": line[:200]})
         return
 
-    args = {k: v for k, v in msg.items() if k not in ("id", "cmd")}
+    if msg.get("v") == 2:
+        args = _obj(msg.get("args"))
+    else:
+        args = {k: v for k, v in msg.items() if k not in ("id", "cmd")}
     dispatcher.dispatch(msg.get("id", 0), msg.get("cmd"), args)
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Lumen OS agent")
     parser.add_argument("--hotkey", default="", help="Electron accelerator to bind at startup")
+    parser.add_argument("--protocol", type=int, choices=(1, 2), default=1, help="wire protocol version")
     parser.add_argument("--debug", action="store_true", help="enable debug_* test commands")
     return parser.parse_args(argv)
 
 
 def main():
     opts = parse_args()
+    proto.set_version(opts.protocol)
     register_commands(debug=opts.debug)
+    if proto.version == 2:
+        proto.ready({"impl": "python", "version": AGENT_VERSION, "capabilities": CAPABILITIES})
     if opts.hotkey:
         try:
             hotkeys.bind(opts.hotkey)

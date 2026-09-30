@@ -5,7 +5,8 @@ import mss
 
 _MAX_WIDTH = 1280
 
-def take_screenshot() -> str:
+def grab_jpeg() -> tuple[str, int, int]:
+    """Primary-monitor JPEG as (base64, width, height)."""
     with mss.mss() as sct:
         monitor = sct.monitors[1]
         raw = sct.grab(monitor)
@@ -17,7 +18,12 @@ def take_screenshot() -> str:
 
         buf = io.BytesIO()
         img.save(buf, format="JPEG", quality=80, optimize=True)
-        return base64.b64encode(buf.getvalue()).decode("utf-8")
+        return base64.b64encode(buf.getvalue()).decode("utf-8"), img.width, img.height
+
+
+def take_screenshot() -> str:
+    return grab_jpeg()[0]
+
 
 def get_active_window() -> str:
     try:

@@ -88,3 +88,29 @@ def test_no_hotkey_bound_by_default(agent):
     agent.wait_for(lambda m: m.get("id") == 1)
     agent.close()
     assert not any("hotkey bound" in l for l in agent.stderr)
+
+
+@pytest.mark.parametrize("protocol", ["1", "2"])
+def test_event_flood_with_pings_and_screenshots_stays_json(protocol):
+    a = AgentProc("--protocol", protocol, "--debug")
+    try:
+        frame = (lambda i, cmd, **args: {"v": 2, "id": i, "cmd": cmd, "args": args}) if protocol == "2" \
+            else (lambda i, cmd, **args: {"id": i, "cmd": cmd, **args})
+        a.send(frame(1, "debug_emit", n=5000))
+        for i in range(2, 202):
+            a.send(frame(i, "ping"))
+        for i in range(202, 212):
+            a.send(frame(i, "screenshot"))
+        ids, events = set(), 0
+        while len(ids) < 211 or events < 5000:
+            msg = a.next(timeout=30)
+            if msg.get("event") == "debug":
+                events += 1
+            elif "id" in msg:
+                ids.add(msg["id"])
+    finally:
+        a.close()
+    for line in a.raw:
+        json.loads(line)
+    assert not any("stray write" in l for l in a.raw)
+    assert any("stray write" in l for l in a.stderr)
