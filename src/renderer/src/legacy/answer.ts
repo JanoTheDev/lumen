@@ -57,12 +57,27 @@ const textEl = document.getElementById('text') as HTMLElement
 const barEl = document.getElementById('bar') as HTMLElement
 let closeTimer: ReturnType<typeof setTimeout> | undefined
 let countdownInterval: ReturnType<typeof setInterval> | undefined
+// Every showAnswer bumps this so a pending hide from an older answer never hides a newer one
+let answerId = 0
+let deadline = 0
+let remainingMs = 0
+let paused = false
+let hovering = false
 
-function dismiss(): void {
+function clearTimers(): void {
   clearTimeout(closeTimer)
   clearInterval(countdownInterval)
+  closeTimer = undefined
+  countdownInterval = undefined
+}
+
+function dismiss(): void {
+  clearTimers()
+  const id = answerId
   card.classList.remove('visible')
-  setTimeout(() => api?.hideAnswerOverlay?.(), 220)
+  setTimeout(() => {
+    if (id === answerId) api?.hideAnswerOverlay?.()
+  }, 220)
 }
 
 card.addEventListener('click', dismiss)
@@ -75,18 +90,50 @@ textEl.addEventListener('click', (e) => {
   api?.openLink?.(link.href)
 })
 
-function startAutoClose(): void {
-  clearTimeout(closeTimer)
-  clearInterval(countdownInterval)
-  let remaining = CLOSE_MS / 1000
-  barEl.style.width = '100%'
-  countdownInterval = setInterval(() => {
-    remaining -= 1
-    barEl.style.width = ((remaining / (CLOSE_MS / 1000)) * 100) + '%'
-    if (remaining <= 0) clearInterval(countdownInterval)
-  }, 1000)
-  closeTimer = setTimeout(dismiss, CLOSE_MS)
+function updateBar(): void {
+  const left = Math.max(0, deadline - Date.now())
+  barEl.style.width = ((left / CLOSE_MS) * 100) + '%'
+  if (left <= 0) clearInterval(countdownInterval)
 }
+
+function scheduleClose(ms: number): void {
+  clearTimers()
+  const id = answerId
+  deadline = Date.now() + ms
+  countdownInterval = setInterval(updateBar, 1000)
+  closeTimer = setTimeout(() => {
+    if (id === answerId) dismiss()
+  }, ms)
+}
+
+function startAutoClose(): void {
+  barEl.style.width = '100%'
+  remainingMs = CLOSE_MS
+  if (hovering) {
+    clearTimers()
+    paused = true
+    return
+  }
+  paused = false
+  scheduleClose(CLOSE_MS)
+}
+
+function pauseAutoClose(): void {
+  if (paused || !card.classList.contains('visible')) return
+  paused = true
+  remainingMs = Math.max(0, deadline - Date.now())
+  clearTimers()
+  barEl.style.width = ((remainingMs / CLOSE_MS) * 100) + '%'
+}
+
+function resumeAutoClose(): void {
+  if (!paused || !card.classList.contains('visible')) return
+  paused = false
+  scheduleClose(Math.max(remainingMs, 1500))
+}
+
+card.addEventListener('mouseenter', () => { hovering = true; pauseAutoClose() })
+card.addEventListener('mouseleave', () => { hovering = false; resumeAutoClose() })
 
 function renderMarkdown(raw: string): string {
   return raw
@@ -97,12 +144,19 @@ function renderMarkdown(raw: string): string {
     .replace(/\n/g, '<br>')
 }
 
+// Card margin (8px) on both sides
+const CARD_MARGIN = 16
+
 function showAnswer(text: string): void {
+  answerId++
+  const maxH = Math.floor(window.screen.availHeight * 0.6)
+  card.style.maxHeight = (maxH - CARD_MARGIN) + 'px'
   textEl.innerHTML = renderMarkdown(text)
+  textEl.scrollTop = 0
   card.classList.add('visible')
   startAutoClose()
   requestAnimationFrame(() => {
-    const h = card.offsetHeight + 16
+    const h = Math.min(card.offsetHeight + CARD_MARGIN, maxH)
     api?.resizeAnswerOverlay?.(h)
   })
 }

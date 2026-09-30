@@ -19,6 +19,11 @@ let domElements: HTMLElement[] = []
 function clearDom(): void { domElements.forEach(el => el.remove()); domElements = [] }
 function addEl(el: HTMLElement): void { document.body.appendChild(el); domElements.push(el) }
 
+// Pointer lives on its own layer so it never wipes the guide boxes
+let pointerElements: HTMLElement[] = []
+function clearPointer(): void { pointerElements.forEach(el => el.remove()); pointerElements = [] }
+function addPointerEl(el: HTMLElement): void { document.body.appendChild(el); pointerElements.push(el) }
+
 function drawHighlights(steps: HighlightStep[]): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   clearDom()
@@ -66,18 +71,17 @@ function drawHighlights(steps: HighlightStep[]): void {
 }
 
 function showPointer(x: number, y: number, text: string): void {
-  clearDom()
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  clearPointer()
 
   const ring = document.createElement('div')
   ring.className = 'pulse-ring'
   ring.style.cssText = `left:${x-14}px;top:${y-14}px;width:28px;height:28px`
-  addEl(ring)
+  addPointerEl(ring)
 
   const dot = document.createElement('div')
   dot.className = 'pulse-dot'
   dot.style.cssText = `left:${x-4}px;top:${y-4}px`
-  addEl(dot)
+  addPointerEl(dot)
 
   if (text) {
     const label = document.createElement('div')
@@ -94,7 +98,7 @@ function showPointer(x: number, y: number, text: string): void {
     }
     // Temporarily place off-screen to measure, then position
     label.style.cssText = 'left:-9999px;top:-9999px'
-    addEl(label)
+    addPointerEl(label)
     const lw = label.offsetWidth
     const lh = label.offsetHeight
     // Prefer right of cursor; flip left if no room. Vertically center on cursor with clamp.
@@ -109,6 +113,7 @@ function showPointer(x: number, y: number, text: string): void {
 function clearAll(): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   clearDom()
+  clearPointer()
 }
 
 function unionBbox(a: Bbox, b: Bbox): Bbox {
@@ -146,8 +151,7 @@ function mergeAdjacent(items: LocateItem[], gap: number): LocateItem[] {
 
 function showLocate(rawItems: LocateItem[]): void {
   const items = mergeAdjacent(rawItems, 4)
-  clearDom()
-  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  clearAll()
 
   // Single dim pass over entire screen
   ctx.fillStyle = 'rgba(0,0,0,0.60)'
