@@ -64,4 +64,15 @@ describe('escape', () => {
     registered.get('Escape')?.()
     expect(fn).toHaveBeenCalledOnce()
   })
+
+  it('watchdog keeps Escape while a turn is still running', async () => {
+    const { beginScope, endScope } = await import('../src/main/query/cancel')
+    const scope = beginScope()
+    armEscape()
+    vi.advanceTimersByTime(61_000)
+    expect(registered.has('Escape')).toBe(true)
+    endScope(scope)
+    vi.advanceTimersByTime(61_000)
+    expect(registered.has('Escape')).toBe(false)
+  })
 })

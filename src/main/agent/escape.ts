@@ -2,6 +2,7 @@
 // (the HUD is open or a turn is running) so Escape is not stolen from other apps.
 import { globalShortcut } from 'electron'
 import { log } from '../logger'
+import { hasActiveScope } from '../query/cancel'
 
 const WATCHDOG_MS = 60_000
 
@@ -30,6 +31,11 @@ function kickWatchdog(): void {
   watchdog = setTimeout(() => {
     watchdog = null
     if (count === 0) return
+    // A long research or plan turn is still cancellable; only stale holders are released.
+    if (hasActiveScope()) {
+      kickWatchdog()
+      return
+    }
     log('skip', 'escape watchdog: releasing Escape after 60s')
     resetEscape()
   }, WATCHDOG_MS)
