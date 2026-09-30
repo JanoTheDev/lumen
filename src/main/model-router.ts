@@ -1,22 +1,27 @@
 import { loadConfig } from './config'
 
-export type ModelFunction = 'planning' | 'execution' | 'verification'
+export type ModelFunction = 'planning' | 'main' | 'fast' | 'verify'
 export type Provider = 'anthropic' | 'openai'
 
 const MODELS: Record<Provider, Record<ModelFunction, string>> = {
   anthropic: {
     planning: 'claude-sonnet-4-6',
-    execution: 'claude-sonnet-4-6',
-    verification: 'claude-haiku-4-5-20251001',
+    main: 'claude-sonnet-4-6',
+    fast: 'claude-haiku-4-5-20251001',
+    verify: 'claude-haiku-4-5-20251001',
   },
   openai: {
     planning: 'gpt-5-mini',
-    execution: 'gpt-5-mini',
-    verification: 'gpt-5-nano',
+    main: 'gpt-5-mini',
+    fast: 'gpt-5-nano',
+    verify: 'gpt-5-nano',
   },
 }
 
 export function getProvider(): Provider {
+  const preferred = loadConfig().models.provider
+  if (preferred === 'anthropic' && process.env.ANTHROPIC_API_KEY) return 'anthropic'
+  if (preferred === 'openai' && process.env.OPENAI_API_KEY) return 'openai'
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic'
   if (process.env.OPENAI_API_KEY) return 'openai'
   throw new Error('No API key found. Set ANTHROPIC_API_KEY or OPENAI_API_KEY in .env')

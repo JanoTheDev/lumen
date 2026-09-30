@@ -30,7 +30,7 @@ import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
 import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
-import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
+import { loadConfig, saveConfig, configPath, lastConfigWarning, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
 import type { ZodType, infer as zInfer } from 'zod'
 import {
@@ -140,7 +140,7 @@ function broadcastConfig(cfg: AppConfig): void {
   for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow, dwellRingWindow]) {
     if (win && !win.isDestroyed()) win.webContents.send('settings:changed', cfg)
   }
-  applyUiScale(cfg.uiScale)
+  applyUiScale(cfg.a11y.uiScale)
 }
 
 async function speakAnswer(text: string, voice: string): Promise<void> {
@@ -459,7 +459,7 @@ app.whenReady().then(async () => {
   createDwellRingWindow()
   createTray()
   // Apply saved UI scale once windows finish loading
-  const scaleCfg = loadConfig().uiScale
+  const scaleCfg = loadConfig().a11y.uiScale
   const winsForScale = [hudWindow, answerOverlayWindow, statusWindow]
   for (const w of winsForScale) {
     if (!w) continue
@@ -467,6 +467,9 @@ app.whenReady().then(async () => {
       if (!w.isDestroyed()) w.webContents.setZoomFactor(Math.max(0.75, Math.min(1.6, scaleCfg || 1)))
     })
   }
+
+  const configWarning = lastConfigWarning()
+  if (configWarning) setStatus('error', configWarning, undefined, 8000)
 
   // Hotkey, listener and dwell state are re-sent after every agent (re)start.
   let agentFailed = false
@@ -618,7 +621,7 @@ app.whenReady().then(async () => {
     const cfg = loadConfig()
     if (!text || !text.trim()) return { ok: false, error: 'empty text' }
     try {
-      await speakAnswer(text.trim(), cfg.tts.voice)
+      await speakAnswer(text.trim(), cfg.voice.ttsVoice)
       return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }
@@ -786,8 +789,8 @@ app.whenReady().then(async () => {
     // Start TTS synth early — parallel to renderer showing the answer card
     if (result.mode === 'answer' && result.text?.trim()) {
       const cfgNow = loadConfig()
-      if (cfgNow.tts.enabled) {
-        speakAnswer(result.text.trim(), cfgNow.tts.voice).catch(e =>
+      if (cfgNow.voice.tts === 'cloud') {
+        speakAnswer(result.text.trim(), cfgNow.voice.ttsVoice).catch(e =>
           console.warn('[tts] early synth failed:', (e as Error).message))
       }
     }
@@ -1064,10 +1067,16 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('settings:get', () => loadConfig())
   ipcMain.handle('settings:patch', async (_e, raw: unknown) => {
-    const patch = safeParse('settings:patch', configPatchSchema, raw) as Partial<AppConfig> | undefined
+    const patch = safeParse('settings:patch', configPatchSchema, raw)
     if (!patch) return INVALID
     const prev = loadConfig()
-    const next = saveConfig(patch)
+    let next: AppConfig
+    try {
+      next = saveConfig(patch as Partial<AppConfig>)
+    } catch (e) {
+      log('fail', `config save rejected: ${(e as Error).message}`)
+      return INVALID
+    }
     broadcastConfig(next)
     if (patch.hotkey && patch.hotkey !== prev.hotkey) {
       try {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { HOTKEY_RE, configPatchSchema, configV1Schema } from '../src/shared/config'
+import { HOTKEY_RE, configPatchSchema, configV1Schema, configV2Schema, DEFAULT_CONFIG_V1 } from '../src/shared/config'
 import {
   actionsSchema,
   audioSchema,
@@ -22,16 +22,22 @@ describe('hotkey validation', () => {
 
 describe('config patch', () => {
   it('default config is valid', () => {
-    expect(configV1Schema.safeParse(DEFAULT_CONFIG).success).toBe(true)
+    expect(configV2Schema.safeParse(DEFAULT_CONFIG).success).toBe(true)
+    expect(configV1Schema.safeParse(DEFAULT_CONFIG_V1).success).toBe(true)
   })
   it('accepts partial nested patches', () => {
     expect(configPatchSchema.safeParse({ wakeWord: { phrase: 'hey computer' } }).success).toBe(true)
+    expect(configPatchSchema.safeParse({ a11y: { uiScale: 1.2 }, voice: { tts: 'cloud' }, models: { main: 'gpt-5' } }).success).toBe(true)
   })
   it.each([
     { hotkey: 'x; calc.exe' },
     { unknownKey: 1 },
     { models: { planning: 'rm -rf /' } },
-    { uiScale: 'big' },
+    { uiScale: 1 },
+    { tts: { enabled: true } },
+    { a11y: { uiScale: 'big' } },
+    { voice: { tts: 'loud' } },
+    { models: { execution: 'gpt-5' } },
     { dwellClick: { dwellMs: -5 } },
     { themeCustom: { accent: 'red', background: '#000000', foreground: '#ffffff', opacity: 1, blur: 0 } },
     null,

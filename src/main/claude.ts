@@ -504,7 +504,7 @@ async function callOpenAI(
   const baseTokens = opts.lowDetail ? 4096 : 8192
   const send = (maxTokens: number): Promise<OpenAI.Chat.ChatCompletion> =>
     client.chat.completions.create({
-      model: getModel('execution'),
+      model: getModel('main'),
       max_completion_tokens: maxTokens,
       reasoning_effort: 'minimal',
       response_format: { type: 'json_object' },
@@ -520,7 +520,7 @@ async function callOpenAI(
     completion = await send(baseTokens * 2)
   }
   const usage = completion.usage
-  if (usage) logUsage(getModel('execution'), usage.prompt_tokens, usage.completion_tokens, !!screenshotBase64)
+  if (usage) logUsage(getModel('main'), usage.prompt_tokens, usage.completion_tokens, !!screenshotBase64)
   const raw = completion.choices[0]?.message?.content ?? ''
   return parseResponse(raw)
 }

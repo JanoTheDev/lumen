@@ -15,10 +15,10 @@ interface ThemeCustom {
 }
 
 interface Config {
-  version: 1
+  version: 2
   theme: ThemeName
   themeCustom?: ThemeCustom
-  models: { planning?: string; execution?: string; verification?: string }
+  models: { planning?: string; main?: string; fast?: string; verify?: string; provider: 'auto' | 'anthropic' | 'openai' | 'local' }
   hotkey: string
   hudAutoCloseMs: number
   answerAutoCloseMs: number
@@ -27,10 +27,10 @@ interface Config {
   voiceVocab: string
   historyEnabled: boolean
   explainBeforeDo: boolean
-  uiScale: number
   handsFreeMode: boolean
   cancelVoice: { enabled: boolean; phrases: string }
-  tts: { enabled: boolean; voice: string }
+  voice: { stt: string; tts: 'cloud' | 'windows' | 'off'; ttsVoice: string; ttsRate: number; bargeIn: boolean }
+  a11y: { uiScale: number } & Record<string, unknown>
   showConfidence: boolean
   dwellClick: { enabled: boolean; dwellMs: number; cooldownMs: number }
   vad: { silenceMs: number; maxWaitMs: number; speechThreshold: number }
@@ -72,8 +72,8 @@ function mapCustomToVars(c: ThemeCustom): Record<string, string> {
 
 const MODEL_PRESETS = {
   planning:     ['gpt-5-mini', 'gpt-5', 'gpt-4o', 'claude-sonnet-4-6', 'claude-opus-4-7'],
-  execution:    ['gpt-5-mini', 'gpt-5', 'gpt-4o', 'claude-sonnet-4-6', 'claude-opus-4-7'],
-  verification: ['gpt-5-nano', 'gpt-5-mini', 'claude-haiku-4-5-20251001', 'gpt-4o-mini'],
+  main:         ['gpt-5-mini', 'gpt-5', 'gpt-4o', 'claude-sonnet-4-6', 'claude-opus-4-7'],
+  verify:       ['gpt-5-nano', 'gpt-5-mini', 'claude-haiku-4-5-20251001', 'gpt-4o-mini'],
 }
 
 export function SettingsApp(): JSX.Element {
@@ -305,8 +305,8 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
               min={0.75}
               max={1.6}
               step={0.05}
-              value={cfg.uiScale}
-              onChange={e => patch({ uiScale: Number(e.target.value) })}
+              value={cfg.a11y.uiScale}
+              onChange={e => patch({ a11y: { ...cfg.a11y, uiScale: Number(e.target.value) } })}
               style={{ flex: 1 }}
             />
             <span style={{
@@ -316,7 +316,7 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
               color: 'var(--ai-muted-strong)',
               fontSize: 12,
             }}>
-              {Math.round(cfg.uiScale * 100)}%
+              {Math.round(cfg.a11y.uiScale * 100)}%
             </span>
           </div>
         </Field>
@@ -333,14 +333,14 @@ function AccessibilityPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Co
 
       <Card title="Read answers aloud (TTS)" description="Uses OpenAI text-to-speech. Requires OPENAI_API_KEY.">
         <Field label="Enable">
-          <Toggle checked={cfg.tts.enabled} onChange={v => patch({ tts: { ...cfg.tts, enabled: v } })} label="Speak answer overlays" />
+          <Toggle checked={cfg.voice.tts === 'cloud'} onChange={v => patch({ voice: { ...cfg.voice, tts: v ? 'cloud' : 'off' } })} label="Speak answer overlays" />
         </Field>
         <Field label="Voice" hint="Six OpenAI voices.">
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <select
               className="sx-select"
-              value={cfg.tts.voice}
-              onChange={e => patch({ tts: { ...cfg.tts, voice: e.target.value } })}
+              value={cfg.voice.ttsVoice}
+              onChange={e => patch({ voice: { ...cfg.voice, ttsVoice: e.target.value } })}
               style={{ maxWidth: 200 }}
             >
               {['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'].map(v => (
@@ -500,11 +500,11 @@ function ModelsPanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) 
         <Field label="Planning" hint="Breaks complex tasks into steps.">
           <ModelSelect value={cfg.models.planning ?? ''} presets={MODEL_PRESETS.planning} onChange={v => patch({ models: { ...cfg.models, planning: v } })} />
         </Field>
-        <Field label="Execution" hint="Decides UI actions from screenshots.">
-          <ModelSelect value={cfg.models.execution ?? ''} presets={MODEL_PRESETS.execution} onChange={v => patch({ models: { ...cfg.models, execution: v } })} />
+        <Field label="Main" hint="Answers questions and decides UI actions from screenshots.">
+          <ModelSelect value={cfg.models.main ?? ''} presets={MODEL_PRESETS.main} onChange={v => patch({ models: { ...cfg.models, main: v } })} />
         </Field>
         <Field label="Verification" hint="Checks if a step succeeded. Use the cheapest capable model.">
-          <ModelSelect value={cfg.models.verification ?? ''} presets={MODEL_PRESETS.verification} onChange={v => patch({ models: { ...cfg.models, verification: v } })} />
+          <ModelSelect value={cfg.models.verify ?? ''} presets={MODEL_PRESETS.verify} onChange={v => patch({ models: { ...cfg.models, verify: v } })} />
         </Field>
       </Card>
     </>
