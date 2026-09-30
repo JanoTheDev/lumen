@@ -12,113 +12,106 @@ npm run lint         # ESLint
 npm run format       # Prettier
 npm run test         # Vitest (excludes claude.test.ts)
 npm run typecheck    # node + web tsconfigs
+agent/.venv/Scripts/python -m pytest agent/tests   # Python agent tests
 ```
 
-Live-API tests are excluded from `npm test`; run directly: `npx vitest run test/claude.test.ts`.
+`test/claude.test.ts` is excluded from `npm test`; run it directly with `npx vitest run test/claude.test.ts`.
 
 ## Setup
 
 ```bash
 npm install
 python -m venv agent/.venv
-agent/.venv/Scripts/pip install -r agent/requirements.txt   # Windows
+agent/.venv/Scripts/pip install -r agent/requirements.txt -r agent/requirements-dev.txt   # Windows
 cp .env.example .env    # set ANTHROPIC_API_KEY and/or OPENAI_API_KEY
-npm run dev             # run as Administrator so global hotkey registers
+npm run dev
 ```
 
-The Python `keyboard` lib needs Admin on Windows to suppress the global hotkey. Without Admin the app still runs but the hotkey won't fire.
+API keys are read at runtime from `.env` in the working directory, then `<userData>/.env`. They are never bundled at build time and never stored in config.json.
+
+The Python `keyboard` lib may need Admin on Windows to suppress the global hotkey. Without it the app still runs but the hotkey may not fire.
 
 ## Architecture
 
 **Three processes:**
 
-1. **Electron main** (`src/main/`) — planning, queueing, AI calls, config, hotkey/wake state.
-2. **React renderer** (`src/renderer/`) — 4 HTML entry points: `index` (HUD), `voicebar`, `highlight`, `answeroverlay`, plus the `settings` window.
-3. **Python agent** (`agent/`) — spawned subprocess; JSON IPC over stdio.
+1. **Electron main** (`src/main/`) — query pipeline, AI calls, action execution, config, windows.
+2. **Renderers** (`src/renderer/`) — entries `index` (HUD), `highlight`, `answeroverlay`, `status`, `dwellring`, `settings`. All windows are sandboxed with CSP; `highlight`/`answeroverlay`/`dwellring` scripts live in `src/renderer/src/legacy/*.ts`.
+3. **Python agent** (`agent/`) — spawned subprocess, NDJSON over stdio.
 
-### Python agent responsibilities
+### Shared contracts (`src/shared/`, alias `@shared`)
 
-- Global hotkey (`keyboard` lib, dynamically rebindable via `apply_hotkey()` in `agent/main.py`)
-- Mouse + keyboard automation (`actions.py`, `pyautogui`)
-- Screenshots (`capture.py`, `mss`)
-- Active window title (`capture.py`, `pywinctl`)
-- OCR (`pytesseract`)
-- **Wake word** (`wake.py`, offline Vosk) — enabled on-demand; emits `wake-detected` event
+Pure TS imported by main, preload and renderer (ESLint forbids electron/node imports here).
 
-Agent cmds (stdin JSON): `ping`, `screenshot`, `active_window`, `execute`, `set_hotkey`, `wake_enable`, `wake_disable`, `wake_status`.
+- `types.ts` — `Rect {x,y,w,h}`, `Point`, `Action` (the single action union), `ModelResponse`, `GuideStep`, `ElementNode`, `Target`, `InputStep`.
+- `channels.ts` — IPC channel names (`area:verb`) and payload types, `LumenApi`. Zod-free so the sandboxed preload can import it.
+- `ipc.ts` — zod validators for renderer → main payloads.
+- `config.ts` — config v1/v2 zod schemas, defaults, `migrateV1toV2`, `configPatchSchema`.
+- `events.ts` — internal bus events, `AssistantState`, `ScreenScene`.
+- `legacy-api.ts` — builds the deprecated `window.api` on top of `window.lumen`.
+
+### Preload
+
+`window.lumen = { invoke(channel, ...args), send(channel, ...args), on(channel, cb) → unsubscribe }`, typed from `channels.ts`. Channels not in the table are rejected. `window.api` is a deprecated compatibility layer built on it.
+
+### Main process (`src/main/`)
+
+- `index.ts` — lifecycle and wiring only.
+- `bus.ts` — typed event bus. Features emit; `windows/*` subscribe. Only `windows/*` call `webContents.send`.
+- `windows/` — `factory` (secure prefs, `loadRenderer`, navigation guards), one module per window (`hud`, `status`, `answer`, `highlight`, `dwell-ring`, `settings`, `tray`), `registry`.
+- `ipc/` — one `registerXxxIpc()` per area; every payload validated (`validate.ts`). Invalid payload → `{ error: 'E_INVALID' }`.
+- `query/` — `pipeline` (runQuery), `context` (speculative capture as a promise cache), `overrides` (pure prompt steering, composes flags), `present` (guide/locate output), `research`, `cancel` (`CancelScope` per turn; Escape / voice cancel / `assistant:cancel` cancel all), planner (`task-planner`, `step-verifier`, `task-queue`, `task-splitter`, `query-classifier`, `nth`).
+- `actions/` — `executor` (single `executeActions` for renderer, plan and research paths), `coords` (the only image ↔ physical ↔ logical conversions), `agent-action` (model action → agent wire format), `safety` (URL scheme allowlist, hotkey/typing policy), `policy`.
+- `ai/` — `index` (`callModel`, `callClaude` alias), `providers/{anthropic,openai}` (singleton clients), `prompts/system`, `prompts/untrusted` (screen text is data, never instructions), `schema` (response parsing), `history`, `router` (provider + model per role), `computer-use`, `pricing`, `app-context`.
+- `agent/` — `bridge` (protocol v1/v2 client, restart backoff, per-command timeouts, init replay), `commands` (typed v2 wrappers), `state` (`buildAgentInitState`), `events` (hotkey/wake/dwell/cancel wiring), `escape` (ref-counted global Escape).
+- `guides/` — `store` (saved guides, id validation), `voice-nav` (whole-utterance next/back/repeat/done), `session`.
+- `speech/` — `stt` (Whisper, in-memory upload), `tts`.
+- `config.ts` — load/migrate/save `~/.ai-overlay/config.json`; `logger.ts`; `wake-model.ts` (Vosk model download).
+
+### Python agent (`agent/`)
+
+- `proto.py` owns stdout (protocol only, single writer thread); logs go to stderr.
+- `dispatch.py` — inline, input and read lanes; cancel tokens; per-call `timeoutMs`.
+- Protocol v1 by default; v2 (`{v:2,id,cmd,args}`, `ready` handshake, `init`) with `--protocol 2`. The bridge switches to v2 when the first stdout line is the v2 `ready` event.
+- Modules: `hotkey` (Electron accelerator parser, `--hotkey`), `dpi` (per-monitor-v2 awareness, set before other imports), `monitors`, `capture` (mss, frame cache), `window` (process-based active window / browser detection), `actions`, `safety`, `pagediff`, `wake` (Vosk), `dwell`.
+
+### Coordinates
+
+Model bboxes are `Rect` in screenshot image px. `actions/coords.ts` converts image → physical (agent clicks) → logical (overlay windows draw). Legacy `[x1,y1,x2,y2]` arrays are normalized on parse and when saved guides load.
 
 ### Query flow
 
-**Push-to-talk:** Hold configured hotkey → Python emits `hotkey-down` → `AgentBridge` (`src/main/agent-bridge.ts`) forwards event → main shows HUD + fires `__voiceStart` in renderer → `useVoice` starts MediaRecorder → release → `hotkey-up` → `__voiceStop` → Whisper → `query` IPC → `src/main/claude.ts` → response mode routed to renderer / Python agent.
+Hold hotkey → agent `hotkey-down` → HUD starts recording → release → `hotkey-up` starts a speculative capture while Whisper transcribes → `assistant:query` → overrides → model call (cancellable) → response routed: `answer` card, `guide` highlights, `action` via `executeActions` (safety policy per action), `text_insert`, `locate` dim-and-reveal.
 
-**Wake word:** Python Vosk loop matches phrase in audio stream → emits `wake-detected` → main fires `__wakeVoiceStart` → same MediaRecorder flow but auto-stops via client-side VAD (1.5s silence after speech, 8s max-wait with no speech).
-
-### Key modules (src/main/)
-
-- `index.ts` — window creation, IPC handlers, event wiring, global hotkey (Escape for cancel), tray.
-- `claude.ts` — Anthropic/OpenAI calls, conversation history (last 5 exchanges), app detection for writing style.
-- `agent-bridge.ts` — stdio JSON bridge. Auto-restarts agent on non-zero exit. Methods: `screenshot`, `activeWindow`, `execute`, `setHotkey`, `enableWakeWord`, `disableWakeWord`.
-- `config.ts` — JSON config at `~/.ai-overlay/config.json`. Shape in `AppConfig`. `DEFAULT_CONFIG.wakeWord.phrase = "hey lumen"`, hotkey `Ctrl+Shift+Space`.
-- `wake-model.ts` — auto-downloads `vosk-model-small-en-us-0.15` (~40MB) from alphacephei, extracts via system `tar`, installs to `~/.ai-overlay/vosk-model/`. Broadcasts progress events to Settings window.
-- `task-planner.ts` + `task-queue.ts` + `task-splitter.ts` + `step-verifier.ts` — agentic multi-step execution, FIFO queue, parallel read-only splits, per-step verification with retry.
-- `model-router.ts` — picks Anthropic vs OpenAI per role based on available keys + per-role overrides.
-- `query-classifier.ts` — decides whether to plan/split/short-circuit.
-- `nth-utils.ts` — intercepts ordinal phrases ("third button") and corrects AI coordinate selection.
-- `logger.ts` — structured logs (`[plan]`, `[step]`, `[verify]`, `[retry]`, `[fail]`, `[done]`, `[time]`).
-
-### Response modes
-
-- `answer` — top-right overlay card, auto-closes (`answerAutoCloseMs`, default 10s).
-- `guide` — numbered steps + highlight bboxes in HUD / highlight window.
-- `action` — Python agent executes a list of `{move,click,click_bbox,click_element,click_nth_element,type,hotkey,open_url,focus_browser,scroll}`. Chains via optional `follow_up` (max depth 6).
-- `text_insert` — AI generates text, main tells Python to `type` it into the focused field.
-- `locate` — Computer Use returns bboxes; shown as dim-and-reveal highlights.
-
-### IPC surface (`src/preload/index.ts`)
-
-Exposed as `window.api`. Renderer → main: `query`, `execute-action`, `transcribe`, `close-hud`, `hud-show`, `hide-highlights`, `show-answer-overlay`, `hide-answer-overlay`, `resize-answer-overlay`, `config-get`, `config-save`, `settings-open`, `cancel-current`, `voice-bar-show`, `voice-bar-hide`, `wake-model-status`, `wake-model-install`. Main → renderer: `show-highlights`, `clear-highlights`, `show-pointer`, `show-locate`, `show-answer`, `cancel-request`, `update` (voice transcript), `config-changed`, `wake-model-progress`.
-
-### Speculative screenshots
-
-On `hotkey-up`, main process kicks off `focus_browser` + `screenshot` in parallel with Whisper transcription. Cached for ~4s so the `query` handler skips the 0.8s sequential wait.
+Wake word: agent emits `wake-detected` → same recording flow with client-side VAD auto-stop.
 
 ## Settings
 
-Tray icon → Settings window (`src/renderer/src/settings/`). Panels: General (hotkey, wake word, timings, history), Models (per-role overrides), Appearance (7 themes).
+Tray icon → Settings window (`src/renderer/src/settings/`). Panels: General, Voice, Accessibility, Interface, Library, Models, Appearance (8 themes incl. custom). Text and number fields save on blur / after a short pause.
 
-`HotkeyCapture.tsx` captures key combos live. Saving via `config-save` triggers `agent.setHotkey()` — no restart.
+## Config
 
-Wake-word toggle handles three states: (1) installs Vosk model if missing (`WakeModelManager` shows progress), (2) enables via `agent.enableWakeWord()` once installed, (3) disables via `agent.disableWakeWord()`.
-
-## TypeScript config
-
-Three tsconfigs. `tsconfig.node.json` builds main + preload (CJS). `tsconfig.web.json` builds renderer (ESNext). Root `tsconfig.json` is a project reference. `electron.vite.config.ts` wires them to Vite.
-
-Two pre-existing typecheck errors in `src/main/index.ts` (unused `isBrowser` import, `never` narrowing on line ~480). Not from recent work.
-
-## Testing
-
-Vitest in `test/`. `claude.test.ts` is excluded from `npm test` (needs live API keys).
-
-## Commit convention
-
-Conventional Commits. Short one-line subjects. **No Co-Authored-By trailers** — user prefers clean git log.
-
-## Config file reference
-
-`~/.ai-overlay/config.json`:
+`~/.ai-overlay/config.json`, schema version 2 (`src/shared/config.ts`). A v1 file is migrated in memory; `config.v1.bak.json` is written before the first v2 save. An invalid file is backed up as `config.invalid.<ts>.json` and defaults are used for the bad sections.
 
 ```jsonc
 {
-  "version": 1,
+  "version": 2,
+  "agentImpl": "auto",
   "theme": "dark",
-  "models": { "planning": "...", "execution": "...", "verification": "..." },
   "hotkey": "Ctrl+Shift+Space",
-  "hudAutoCloseMs": 5000,
-  "answerAutoCloseMs": 10000,
+  "models": { "provider": "auto" },
+  "voice": { "stt": "cloud-batch", "tts": "off", "ttsVoice": "alloy" },
+  "a11y": { "uiScale": 1 },
   "wakeWord": { "enabled": false, "phrase": "hey lumen" },
-  "historyEnabled": true
+  "privacy": { "saveScreenshots": false, "telemetry": false }
+  // ...see configV2Schema for every field
 }
 ```
 
-API keys stay in `.env`, never config.json.
+## Testing
+
+Vitest in `test/` (`vitest.config.ts` sets the `@shared` alias). Pytest in `agent/tests/`.
+
+## Commit convention
+
+Conventional Commits. Short one-line subjects. **No Co-Authored-By trailers.**
