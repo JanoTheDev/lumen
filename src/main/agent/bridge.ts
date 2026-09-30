@@ -284,10 +284,6 @@ export class AgentBridge {
     return this.call('dwell_disable', {})
   }
 
-  async setDwellMs(dwellMs: number): Promise<unknown> {
-    return this.call('dwell_set_ms', { dwell_ms: dwellMs })
-  }
-
   private async launch(): Promise<void> {
     const agentDir = is.dev ? join(app.getAppPath(), 'agent') : join(process.resourcesPath, 'agent')
     const venvPython =
