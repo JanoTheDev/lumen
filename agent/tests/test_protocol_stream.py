@@ -64,3 +64,27 @@ def test_unknown_command_is_an_error(agent):
     msg = agent.wait_for(lambda m: m.get("id") == 3)
     assert "result" not in msg
     assert "nope" in msg["error"]
+
+
+def test_set_hotkey_rejects_invalid_and_accepts_valid(agent):
+    agent.send({"id": 1, "cmd": "set_hotkey", "combo": "Ctrl+Nope"})
+    bad = agent.wait_for(lambda m: m.get("id") == 1)
+    assert "Nope" in bad["error"]
+    agent.send({"id": 2, "cmd": "set_hotkey", "combo": "Ctrl+Alt+F23"})
+    ok = agent.wait_for(lambda m: m.get("id") == 2)
+    assert ok["result"]["ok"] is True
+
+
+def test_hotkey_argv_binds_at_startup():
+    a = AgentProc("--hotkey", "Ctrl+Alt+F23")
+    a.send({"id": 1, "cmd": "ping"})
+    a.wait_for(lambda m: m.get("id") == 1)
+    a.close()
+    assert any("hotkey bound Ctrl+Alt+F23" in l for l in a.stderr)
+
+
+def test_no_hotkey_bound_by_default(agent):
+    agent.send({"id": 1, "cmd": "ping"})
+    agent.wait_for(lambda m: m.get("id") == 1)
+    agent.close()
+    assert not any("hotkey bound" in l for l in agent.stderr)

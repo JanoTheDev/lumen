@@ -1,6 +1,7 @@
 import proto  # must be first: claims stdout for the protocol
 import dpi  # before pyautogui/mss, which would lock in system DPI awareness
 
+import argparse
 import sys
 import json
 import logging
@@ -19,73 +20,14 @@ from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
-from errors import AgentError, E_UNSUPPORTED
+from errors import AgentError, E_INVALID, E_UNSUPPORTED
+from hotkey import HotkeyManager
 
 respond = proto.respond
 emit_event = proto.emit
 
-_hotkey_state = {
-    'combo_active': False,
-    'hotkey_ref': None,
-    'hook_ref': None,
-    'release_key': 'space',
-    'keyboard': None,
-}
+hotkeys = HotkeyManager(emit_event)
 
-def _normalize_combo(combo: str) -> tuple[str, str]:
-    # Input like "Ctrl+Shift+Space" or "F4" -> ("ctrl+shift+space", "space")
-    parts = [p.strip() for p in combo.split('+') if p.strip()]
-    if not parts:
-        return ('ctrl+space', 'space')
-    norm = []
-    for p in parts:
-        low = p.lower()
-        mapping = {'control': 'ctrl', 'super': 'windows', 'meta': 'windows', 'cmd': 'windows', 'command': 'windows', 'escape': 'esc'}
-        norm.append(mapping.get(low, low))
-    release_key = norm[-1]
-    return ('+'.join(norm), release_key)
-
-def apply_hotkey(combo: str):
-    kb = _hotkey_state['keyboard']
-    if kb is None:
-        import keyboard as kb
-        _hotkey_state['keyboard'] = kb
-
-    hk_combo, release_key = _normalize_combo(combo)
-
-    if _hotkey_state['hotkey_ref'] is not None:
-        try: kb.remove_hotkey(_hotkey_state['hotkey_ref'])
-        except Exception: pass
-        _hotkey_state['hotkey_ref'] = None
-    if _hotkey_state['hook_ref'] is not None:
-        try: kb.unhook(_hotkey_state['hook_ref'])
-        except Exception: pass
-        _hotkey_state['hook_ref'] = None
-    _hotkey_state['combo_active'] = False
-
-    def on_press():
-        if not _hotkey_state['combo_active']:
-            _hotkey_state['combo_active'] = True
-            emit_event('hotkey-down')
-
-    def on_release_event(event):
-        if event.event_type == 'up' and _hotkey_state['combo_active']:
-            _hotkey_state['combo_active'] = False
-            emit_event('hotkey-up')
-
-    _hotkey_state['hotkey_ref'] = kb.add_hotkey(hk_combo, on_press, suppress=True)
-    _hotkey_state['hook_ref'] = kb.hook_key(release_key, on_release_event)
-    _hotkey_state['release_key'] = release_key
-    log.info('hotkey bound %s (release=%s)', hk_combo, release_key)
-
-def hotkey_watcher(initial_combo: str = 'ctrl+space'):
-    try:
-        import keyboard
-        _hotkey_state['keyboard'] = keyboard
-        apply_hotkey(initial_combo)
-        keyboard.wait()
-    except Exception as e:
-        log.error('hotkey error: %s', e)
 
 def mouse_watcher():
     try:
@@ -105,8 +47,10 @@ def _cmd_execute(args):
 
 
 def _cmd_set_hotkey(args):
-    combo = args.get("combo", "ctrl+space")
-    apply_hotkey(combo)
+    combo = args.get("combo")
+    if not isinstance(combo, str):
+        raise AgentError(E_INVALID, "set_hotkey needs a combo string")
+    hotkeys.bind(combo)
     return {"ok": True, "combo": combo}
 
 
@@ -200,8 +144,19 @@ def handle_line(line: str) -> None:
     respond(id, result)
 
 
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Lumen OS agent")
+    parser.add_argument("--hotkey", default="", help="Electron accelerator to bind at startup")
+    return parser.parse_args(argv)
+
+
 def main():
-    threading.Thread(target=hotkey_watcher, daemon=True).start()
+    opts = parse_args()
+    if opts.hotkey:
+        try:
+            hotkeys.bind(opts.hotkey)
+        except AgentError as e:
+            log.error("--hotkey %r rejected: %s", opts.hotkey, e.message)
     threading.Thread(target=mouse_watcher, daemon=True).start()
 
     for line in sys.stdin:
