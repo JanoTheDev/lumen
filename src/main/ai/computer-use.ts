@@ -15,8 +15,7 @@ export async function findClickCoordinates(
 ): Promise<{ x: number; y: number } | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = await (anthropicClient().beta as any).messages.create(
+    const response = await anthropicClient().beta.messages.create(
       {
         model: computerUseModel(),
         max_tokens: 256,
@@ -44,10 +43,9 @@ export async function findClickCoordinates(
       },
       { signal }
     )
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    for (const block of (response as any).content) {
+    for (const block of response.content) {
       if (block.type === 'tool_use' && block.name === 'computer') {
-        const { action, coordinate } = block.input
+        const { action, coordinate } = block.input as { action?: string; coordinate?: unknown }
         if (action === 'left_click' && Array.isArray(coordinate) && coordinate.length === 2) {
           const [x, y] = coordinate as number[]
           console.log(`[computer-use] click at screenshot (${x},${y}) for: ${description}`)

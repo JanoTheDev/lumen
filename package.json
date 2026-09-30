@@ -23,11 +23,11 @@
     "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.36.3",
+    "@anthropic-ai/sdk": "^0.131.0",
     "@electron-toolkit/utils": "^4.0.0",
     "dotenv": "^17.4.2",
     "lucide-react": "^0.474.0",
-    "openai": "^6.34.0",
+    "openai": "^7.25.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
