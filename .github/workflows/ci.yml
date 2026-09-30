@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test -- --reporter=default --reporter=junit --outputFile=reports/vitest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vitest-report
+          path: reports/vitest.xml
+
+  python:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: agent/requirements*.txt
+      - run: pip install -r agent/requirements.txt -r agent/requirements-dev.txt
+      - run: python -m pytest agent/tests -m "not hardware"
+
+  native:
+    runs-on: windows-latest
+    # hashFiles is only available in step conditions, so each step checks for the crate.
+    steps:
+      - uses: actions/checkout@v4
+      - id: crate
+        shell: bash
+        run: if [ -f native/Cargo.toml ]; then echo "present=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.crate.outputs.present == 'true'
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        if: steps.crate.outputs.present == 'true'
+        with:
+          workspaces: native
+      - if: steps.crate.outputs.present == 'true'
+        run: cargo test --manifest-path native/Cargo.toml
+      - if: steps.crate.outputs.present == 'true'
+        run: cargo clippy --manifest-path native/Cargo.toml -- -D warnings
+
+  build:
+    runs-on: windows-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [node]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx electron-vite build
