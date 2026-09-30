@@ -1,0 +1,102 @@
+import { ipcMain } from 'electron'
+import { actionsSchema, confidenceSchema, promptSchema, queryOptsSchema, textSchema } from '@shared/ipc'
+import type { Action, ModelResponse } from '@shared/types'
+import { INVALID, safeParse } from './validate'
+import { beginScope, cancelAll, endScope, isAbortError, type CancelScope } from '../query/cancel'
+import { TaskQueue } from '../task-queue'
+import { canParallelize, mergeAnswers, splitSubtasks } from '../task-splitter'
+import type { CallOptions } from '../claude'
+import { loadConfig } from '../config'
+import { log, startTimer } from '../logger'
+import { normalizeBbox } from '../actions/coords'
+import { setStatus } from '../windows/status'
+
+const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
+
+export interface QueryIpcDeps {
+  /** Handles guide voice commands before a model call; returns a response when it did. */
+  intercept: (prompt: string) => unknown | undefined
+  runQuery: (prompt: string, opts: CallOptions, scope: CancelScope) => Promise<ModelResponse>
+  execute: (actions: Action[]) => Promise<unknown>
+}
+
+export function registerQueryIpc(deps: QueryIpcDeps): void {
+  const userQueue = new TaskQueue(1, 'request-queue')
+
+  ipcMain.on('assistant:cancel', () => {
+    if (cancelAll()) log('skip', 'cancel-current received — aborting in-flight work')
+  })
+
+  ipcMain.handle('assistant:query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
+    const prompt = safeParse('assistant:query', promptSchema, rawPrompt)
+    const opts: CallOptions = safeParse('assistant:query', queryOptsSchema, rawOpts) ?? {}
+    if (prompt === undefined) return INVALID
+
+    const intercepted = deps.intercept(prompt)
+    if (intercepted !== undefined) return intercepted
+
+    setStatus('thinking', 'Thinking', { index: 2, total: 3 })
+    const scope = beginScope()
+    try {
+      // Level 2: split read-only prompts into parallel subtasks.
+      if (!opts.lowDetail) {
+        const subtasks = splitSubtasks(prompt)
+        if (canParallelize(subtasks)) {
+          const result = await userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
+            log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
+            const timer = startTimer(`parallel subtasks (${subtasks.length})`)
+            const answers = await Promise.all(subtasks.map(st => deps.runQuery(st, opts, scope.child())))
+            timer.total()
+            const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
+            return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
+          })
+          setStatus('answer', 'Done', undefined, 1400)
+          return result
+        }
+      }
+
+      // Level 1: serialize user requests through the queue.
+      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => deps.runQuery(prompt, opts, scope))
+      const modeLabel = (result as { mode?: string }).mode
+      if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
+      else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
+      else setStatus('answer', 'Done', { index: 3, total: 3 }, 1400)
+      return result
+    } catch (e) {
+      if (isAbortError(e) || scope.cancelled) {
+        log('skip', 'query cancelled')
+        setStatus('error', 'Cancelled', undefined, 1200)
+        return CANCELLED
+      }
+      setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
+      throw e
+    } finally {
+      endScope(scope)
+    }
+  })
+
+  ipcMain.handle('assistant:announce', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
+    const summary = safeParse('assistant:announce', textSchema, rawSummary)
+    const confidence = safeParse('assistant:announce', confidenceSchema, rawConfidence)
+    if (summary === undefined) return { delayMs: 0 }
+    const cfg = loadConfig()
+    if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
+    if (!summary || !summary.trim()) return { delayMs: 0 }
+    const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
+    const baseText = `About to: ${summary.trim()}`
+    const displayText = cfg.showConfidence && conf !== 'high'
+      ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
+      : baseText
+    const kind = conf === 'low' ? 'error' : 'acting'
+    const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
+    setStatus(kind, displayText, undefined, delayMs + 1200)
+    return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
+  })
+
+  ipcMain.handle('assistant:execute', async (_event, rawActions: unknown) => {
+    const parsed = safeParse('assistant:execute', actionsSchema, rawActions)
+    if (!parsed) return INVALID
+    const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
+    return deps.execute(actions)
+  })
+}

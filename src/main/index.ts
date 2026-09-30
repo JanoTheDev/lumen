@@ -8,7 +8,7 @@ try {
   /* userData unavailable this early on some setups; repo .env still applies */
 }
 
-import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
+import { app, shell, BrowserWindow, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import type { Action, Rect } from '@shared/types'
 import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
@@ -18,43 +18,35 @@ import OpenAI, { toFile } from 'openai'
 import { isResearchIntent } from './query-classifier'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
-import { TaskQueue } from './task-queue'
-import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
-import { loadConfig, saveConfig, lastConfigWarning, type AppConfig } from './config'
-import { modelInstalled, installModel, modelRoot } from './wake-model'
-import type { ZodType, infer as zInfer } from 'zod'
-import {
-  parsePayload,
-  promptSchema,
-  queryOptsSchema,
-  textSchema,
-  nameSchema,
-  guideIdSchema,
-  confidenceSchema,
-  overlayHeightSchema,
-  audioSchema,
-  actionsSchema,
-} from '@shared/ipc'
-import { configPatchSchema } from '@shared/config'
-import { saveGuide, deleteSavedGuide, listSavedGuides, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
+import { loadConfig, lastConfigWarning, type AppConfig } from './config'
+import { modelInstalled, installModel } from './wake-model'
+import { saveGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
-import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
+import { beginScope, endScope, cancelAll, type CancelScope } from './query/cancel'
 import { applyOverrides, LOCATE_RE } from './query/overrides'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
-import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
+import { currentFrame, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
 import { toAgentAction, type AgentAction } from './actions/agent-action'
 import { isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 import { bus } from './bus'
-import { applyUiScale, applyUiScaleOnLoad, broadcast, isOverOwnWindow } from './windows/registry'
-import { setStatus, hideStatus, type StatusKind } from './windows/status'
+import { applyUiScaleOnLoad, isOverOwnWindow } from './windows/registry'
+import { setStatus, type StatusKind } from './windows/status'
 import * as hud from './windows/hud'
 import * as statusWin from './windows/status'
 import * as answer from './windows/answer'
 import * as highlight from './windows/highlight'
 import * as dwellRing from './windows/dwell-ring'
-import * as settingsWin from './windows/settings'
 import * as tray from './windows/tray'
+import { sleep } from './util'
+import { registerAnswerIpc } from './ipc/answer'
+import { registerGuidesIpc } from './ipc/guides'
+import { registerHighlightIpc } from './ipc/highlight'
+import { registerHudIpc } from './ipc/hud'
+import { registerQueryIpc } from './ipc/query'
+import { registerSettingsIpc } from './ipc/settings'
+import { registerVoiceIpc } from './ipc/voice'
+import { registerWakeIpc } from './ipc/wake'
 
 let agent: AgentBridge | null = null
 
@@ -101,11 +93,6 @@ async function applyAgentState(cfg: AppConfig): Promise<void> {
   }
   applyListenerState(cfg)
   applyDwellState(cfg)
-}
-
-function broadcastConfig(cfg: AppConfig): void {
-  broadcast('settings:changed', cfg as unknown as Record<string, unknown>)
-  applyUiScale(cfg.a11y.uiScale)
 }
 
 async function speakAnswer(text: string, voice: string): Promise<void> {
@@ -209,6 +196,71 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
   return { handled: false }
 }
 
+// Guide voice commands handled before any model call; returns a response when handled.
+function interceptGuideCommand(prompt: string): unknown | undefined {
+  // Guide voice nav: "next step", "back", "repeat", "done"
+  const nav = handleGuideNavCommand(prompt)
+  if (nav.handled) return nav.response
+
+  // Play-saved-guide voice: "play guide <name>" / "run guide <name>"
+  const playName = matchPlayGuide(prompt)
+  if (playName) {
+    const found = findGuideByName(playName)
+    if (found) {
+      replaySavedGuide(found.id)
+      return { mode: 'answer', text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.` }
+    }
+    return { mode: 'answer', text: `No saved guide matches "${playName}".` }
+  }
+
+  // Save-guide voice command
+  const saveMatch = matchSaveGuide(prompt)
+  if (saveMatch && lastGuide) {
+    const name = saveMatch.name ?? lastGuide.task
+    const saved = saveLastAsGuide(name)
+    if (saved) return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
+  }
+
+  // Guide replay: "replay last guide", "do the guide again"
+  if (lastGuide && isReplayRequest(prompt)) {
+    activeGuide = { steps: lastGuide.steps, index: 0 }
+    setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
+    highlight.send('screen:highlights', lastGuide.steps)
+    highlight.show()
+    return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
+  }
+  return undefined
+}
+
+async function transcribeAudio(audio: ArrayBuffer): Promise<string> {
+  if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
+
+  // Skip Whisper on tiny recordings — model hallucinates on < ~0.5s of audio
+  if (audio.byteLength < 6000) {
+    console.log('[transcribe] audio too short (', audio.byteLength, 'bytes), skipping')
+    return ''
+  }
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
+  const userVocab = loadConfig().voiceVocab.trim()
+  const vocabList = userVocab
+    ? `, ${userVocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
+    : ''
+  const whisperPrompt = `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
+  const result = await client.audio.transcriptions.create({
+    // Sent from memory; recordings never touch disk.
+    file: await toFile(Buffer.from(audio), 'recording.webm', { type: 'audio/webm' }),
+    model: 'whisper-1',
+    language: 'en',
+    prompt: whisperPrompt,
+  })
+  console.log('[transcribe] result:', result.text)
+  const estSecs = audio.byteLength / 6000
+  const whisperCost = (estSecs / 60) * 0.006
+  console.log(`[tokens] whisper | ~${estSecs.toFixed(1)}s audio | $${whisperCost.toFixed(5)}`)
+  return result.text
+}
+
 app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.aioverlay')
   app.on('browser-window-created', (_, window) => {
@@ -226,13 +278,6 @@ app.whenReady().then(async () => {
         log('fail', `blocked navigation to ${url}`)
       }
     })
-  })
-  ipcMain.on('assistant:open-link', (_e, url: unknown) => {
-    if (!isSafeUrl(url)) {
-      log('fail', `blocked link: ${String(url).slice(0, 200)}`)
-      return
-    }
-    shell.openExternal(assertSafeUrl(url)).catch(() => {})
   })
 
   hud.create()
@@ -270,9 +315,7 @@ app.whenReady().then(async () => {
   agent.onEvent('hotkey-down', () => {
     const handsFree = loadConfig().handsFreeMode
     console.log(`[hotkey] down — handsFree=${handsFree}`)
-    if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', onEscape)
-    }
+    armEscape()
     // Tap-to-talk (hands-free) uses the same auto-stop-on-silence path as wake-word activation
     bus.emit({ type: 'voice.started', handsFree })
     setStatus('listening', handsFree ? 'Listening (hands-free)…' : 'Listening…')
@@ -311,9 +354,7 @@ app.whenReady().then(async () => {
 
   agent.onEvent('wake-detected', () => {
     console.log('[wake] detected — showing HUD, starting recording with VAD auto-stop')
-    if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', onEscape)
-    }
+    armEscape()
     bus.emit({ type: 'voice.started', handsFree: true })
     setStatus('listening', 'Wake word detected — listening…')
   })
@@ -330,18 +371,7 @@ app.whenReady().then(async () => {
     startSpeculativeCapture(() => captureContext(true))
   })
 
-  ipcMain.on('assistant:close', () => {
-    globalShortcut.unregister('Escape')
-    hud.hide()
-    hideStatus()
-  })
 
-  ipcMain.on('assistant:show', () => {
-    if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', onEscape)
-    }
-    hud.show()
-  })
 
   agent.onEvent('mouse-moved', () => {
     if (!loadConfig().guideAutoDismissOnMove) return
@@ -349,40 +379,10 @@ app.whenReady().then(async () => {
     activeGuide = null
   })
 
-  ipcMain.on('answer:show', (_e, raw: unknown) => {
-    const text = safeParse('answer:show', textSchema, raw)
-    if (text === undefined) return
-    answer.showText(text)
-    // NOTE: TTS is kicked off inside runQuery (earlier) to minimize perceived delay.
-  })
-  ipcMain.handle('voice:speak', async (_e, raw: unknown) => {
-    const text = safeParse('voice:speak', textSchema, raw)
-    if (text === undefined) return INVALID
-    const cfg = loadConfig()
-    if (!text || !text.trim()) return { ok: false, error: 'empty text' }
-    try {
-      await speakAnswer(text.trim(), cfg.voice.ttsVoice)
-      return { ok: true }
-    } catch (e) {
-      return { ok: false, error: (e as Error).message }
-    }
-  })
-  ipcMain.on('answer:hide', () => {
-    answer.hide()
-  })
 
-  ipcMain.on('answer:resize', (_e, raw: unknown) => {
-    const h = safeParse('answer:resize', overlayHeightSchema, raw)
-    if (h === undefined) return
-    answer.resize(h)
-  })
 
   let lastTaskContext: string | null = null
-  const userQueue = new TaskQueue(1, 'request-queue')
 
-  ipcMain.on('assistant:cancel', () => {
-    if (cancelAll()) log('skip', 'cancel-current received — aborting in-flight work')
-  })
 
   async function runQuery(prompt: string, baseOpts: CallOptions, scope: CancelScope): Promise<ClaudeResponse> {
     if (!agent) throw new Error('Agent not ready')
@@ -594,103 +594,12 @@ app.whenReady().then(async () => {
     return result
   }  // end runQuery
 
-  ipcMain.handle('assistant:query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
-    const prompt = safeParse('assistant:query', promptSchema, rawPrompt)
-    const opts: CallOptions | undefined = safeParse('assistant:query', queryOptsSchema, rawOpts) ?? {}
-    if (prompt === undefined) return INVALID
-    // Guide voice nav: "next step", "back", "repeat", "done"
-    const nav = handleGuideNavCommand(prompt)
-    if (nav.handled) return nav.response
 
-    // Play-saved-guide voice: "play guide <name>" / "run guide <name>"
-    const playName = matchPlayGuide(prompt)
-    if (playName) {
-      const found = findGuideByName(playName)
-      if (found) {
-        replaySavedGuide(found.id)
-        return { mode: 'answer', text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.` }
-      }
-      return { mode: 'answer', text: `No saved guide matches "${playName}".` }
-    }
 
-    // Save-guide voice command
-    const saveMatch = matchSaveGuide(prompt)
-    if (saveMatch && lastGuide) {
-      const name = saveMatch.name ?? lastGuide.task
-      const saved = saveLastAsGuide(name)
-      if (saved) return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
-    }
 
-    // Guide replay: "replay last guide", "do the guide again"
-    if (lastGuide && isReplayRequest(prompt)) {
-      activeGuide = { steps: lastGuide.steps, index: 0 }
-      setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
-      highlight.send('screen:highlights', lastGuide.steps)
-      highlight.show()
-      return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
-    }
-    setStatus('thinking', 'Thinking', { index: 2, total: 3 })
-    const scope = beginScope()
-    try {
-      // Level 2: split read-only prompts into parallel subtasks.
-      if (!opts.lowDetail) {
-        const subtasks = splitSubtasks(prompt)
-        if (canParallelize(subtasks)) {
-          const result = await userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
-            log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
-            const timer = startTimer(`parallel subtasks (${subtasks.length})`)
-            const answers = await Promise.all(subtasks.map(st => runQuery(st, opts, scope.child())))
-            timer.total()
-            const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
-            return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
-          })
-          setStatus('answer', 'Done', undefined, 1400)
-          return result
-        }
-      }
 
-      // Level 1: serialize user requests through the queue.
-      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts, scope))
-      const modeLabel = (result as { mode?: string }).mode
-      if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
-      else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
-      else setStatus('answer', 'Done', { index: 3, total: 3 }, 1400)
-      return result
-    } catch (e) {
-      if (isAbortError(e) || scope.cancelled) {
-        log('skip', 'query cancelled')
-        setStatus('error', 'Cancelled', undefined, 1200)
-        return CANCELLED
-      }
-      setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
-      throw e
-    } finally {
-      endScope(scope)
-    }
-  })
-
-  ipcMain.handle('assistant:announce', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
-    const summary = safeParse('assistant:announce', textSchema, rawSummary)
-    const confidence = safeParse('assistant:announce', confidenceSchema, rawConfidence)
-    if (summary === undefined) return { delayMs: 0 }
-    const cfg = loadConfig()
-    if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
-    if (!summary || !summary.trim()) return { delayMs: 0 }
-    const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
-    const baseText = `About to: ${summary.trim()}`
-    const displayText = cfg.showConfidence && conf !== 'high'
-      ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
-      : baseText
-    const kind = conf === 'low' ? 'error' : 'acting'
-    const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
-    setStatus(kind, displayText, undefined, delayMs + 1200)
-    return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
-  })
-
-  ipcMain.handle('assistant:execute', async (_event, rawActions: unknown) => {
-    const parsed = safeParse('assistant:execute', actionsSchema, rawActions)
-    if (!parsed) return INVALID
-    const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
+  // Runs actions the renderer confirmed (action mode and follow_up chains).
+  async function executeRendererActions(actions: Action[]): Promise<unknown> {
     if (!agent) throw new Error('Agent not ready')
     const scope = beginScope()
     const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
@@ -794,105 +703,20 @@ app.whenReady().then(async () => {
     log('done', aborted ? 'execute cancelled' : 'execute complete')
     execTimer.total()
     return { done: !aborted, cancelled: aborted, reached_bottom: reachedBottom }
-  })
+  }
 
-  ipcMain.handle('screen:hide', () => {
-    highlight.clear()
+  registerHudIpc({ armEscape, disarmEscape })
+  registerAnswerIpc()
+  registerHighlightIpc()
+  registerWakeIpc()
+  registerVoiceIpc({ speak: speakAnswer, transcribe: transcribeAudio })
+  registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
+  registerSettingsIpc({
+    setHotkey: (combo) => agent?.setHotkey(combo) ?? Promise.resolve(),
+    applyListenerState,
+    applyDwellState,
   })
-
-  ipcMain.handle('settings:get', () => loadConfig())
-  ipcMain.handle('settings:patch', async (_e, raw: unknown) => {
-    const patch = safeParse('settings:patch', configPatchSchema, raw)
-    if (!patch) return INVALID
-    const prev = loadConfig()
-    let next: AppConfig
-    try {
-      next = saveConfig(patch as Partial<AppConfig>)
-    } catch (e) {
-      log('fail', `config save rejected: ${(e as Error).message}`)
-      return INVALID
-    }
-    broadcastConfig(next)
-    if (patch.hotkey && patch.hotkey !== prev.hotkey) {
-      try {
-        await agent?.setHotkey(next.hotkey)
-      } catch (e) {
-        console.error('[hotkey] rebind failed:', (e as Error).message)
-      }
-    }
-    if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
-      hideStatus()
-    }
-    // Only touch the agent when the relevant settings actually changed.
-    const listenerChanged =
-      JSON.stringify([prev.wakeWord, prev.cancelVoice]) !== JSON.stringify([next.wakeWord, next.cancelVoice])
-    if (listenerChanged) applyListenerState(next)
-    if (JSON.stringify(prev.dwellClick) !== JSON.stringify(next.dwellClick)) applyDwellState(next)
-    return next
-  })
-
-  ipcMain.handle('guides:list', () => listSavedGuides())
-  ipcMain.handle('guides:save-last', (_e, raw: unknown) => {
-    const name = safeParse('guides:save-last', nameSchema.optional(), raw)
-    const g = saveLastAsGuide(name ?? '')
-    return g ?? { error: 'no guide to save — run a guide first' }
-  })
-  ipcMain.handle('guides:replay', (_e, raw: unknown) => {
-    const id = safeParse('guides:replay', guideIdSchema, raw)
-    return (id && replaySavedGuide(id)) || { error: 'not found' }
-  })
-  ipcMain.handle('guides:delete', (_e, raw: unknown) => {
-    const id = safeParse('guides:delete', guideIdSchema, raw)
-    return { ok: !!id && deleteSavedGuide(id) }
-  })
-
-  ipcMain.handle('wake:model-status', () => ({
-    installed: modelInstalled(),
-    path: modelRoot(),
-  }))
-  ipcMain.handle('wake:model-install', async () => {
-    try {
-      await installModel()
-      return { ok: true }
-    } catch (e) {
-      return { ok: false, error: (e as Error).message }
-    }
-  })
-  ipcMain.on('settings:open', () => settingsWin.create())
-  ipcMain.on('settings:window-close', () => settingsWin.close())
-  ipcMain.on('settings:window-minimize', () => settingsWin.minimize())
-  ipcMain.on('settings:window-maximize', () => settingsWin.toggleMaximize())
-
-  ipcMain.handle('voice:transcribe', async (_event, raw: unknown) => {
-    const audio = safeParse('voice:transcribe', audioSchema, raw)
-    if (!audio) return ''
-    if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
-
-    // Skip Whisper on tiny recordings — model hallucinates on < ~0.5s of audio
-    if (audio.byteLength < 6000) {
-      console.log('[transcribe] audio too short (', audio.byteLength, 'bytes), skipping')
-      return ''
-    }
-
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
-    const userVocab = loadConfig().voiceVocab.trim()
-    const vocabList = userVocab
-      ? `, ${userVocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
-      : ''
-    const whisperPrompt = `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
-    const result = await client.audio.transcriptions.create({
-      // Sent from memory; recordings never touch disk.
-      file: await toFile(Buffer.from(audio), 'recording.webm', { type: 'audio/webm' }),
-      model: 'whisper-1',
-      language: 'en',
-      prompt: whisperPrompt,
-    })
-    console.log('[transcribe] result:', result.text)
-    const estSecs = audio.byteLength / 6000
-    const whisperCost = (estSecs / 60) * 0.006
-    console.log(`[tokens] whisper | ~${estSecs.toFixed(1)}s audio | $${whisperCost.toFixed(5)}`)
-    return result.text
-  })
+  registerQueryIpc({ intercept: interceptGuideCommand, runQuery, execute: executeRendererActions })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) hud.create()
@@ -938,8 +762,13 @@ async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
   return { activeWindow, screenshot }
 }
 
-const INVALID = { error: 'E_INVALID' } as const
-const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
+function armEscape(): void {
+  if (!globalShortcut.isRegistered('Escape')) globalShortcut.register('Escape', onEscape)
+}
+
+function disarmEscape(): void {
+  globalShortcut.unregister('Escape')
+}
 
 // Escape cancels in-flight work in main directly and tells the HUD to stop recording.
 function onEscape(): void {
@@ -947,16 +776,3 @@ function onEscape(): void {
   bus.emit({ type: 'voice.cancelled' })
 }
 
-// Validates a renderer payload; logs and returns undefined when it does not match.
-function safeParse<T extends ZodType>(channel: string, schema: T, value: unknown): zInfer<T> | undefined {
-  try {
-    return parsePayload(channel, schema, value)
-  } catch (e) {
-    log('fail', (e as Error).message)
-    return undefined
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
