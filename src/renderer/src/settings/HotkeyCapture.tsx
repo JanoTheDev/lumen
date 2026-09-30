@@ -5,8 +5,26 @@ interface Props {
   onChange: (value: string) => void
 }
 
-const MOD_LABEL: Record<string, string> = { Control: 'Ctrl', Meta: 'Super', Alt: 'Alt', Shift: 'Shift' }
-const ALLOWED_SINGLE = new Set(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12'])
+const MOD_LABEL: Record<string, string> = {
+  Control: 'Ctrl',
+  Meta: 'Super',
+  Alt: 'Alt',
+  Shift: 'Shift'
+}
+const ALLOWED_SINGLE = new Set([
+  'F1',
+  'F2',
+  'F3',
+  'F4',
+  'F5',
+  'F6',
+  'F7',
+  'F8',
+  'F9',
+  'F10',
+  'F11',
+  'F12'
+])
 
 export function HotkeyCapture({ value, onChange }: Props): JSX.Element {
   const [capturing, setCapturing] = useState(false)
@@ -62,15 +80,18 @@ export function HotkeyCapture({ value, onChange }: Props): JSX.Element {
       <button
         ref={btnRef}
         className={`hotkey-btn ${capturing ? 'capturing' : ''}`}
-        onClick={() => { setCapturing(v => !v); setPreview('') }}
+        onClick={() => {
+          setCapturing((v) => !v)
+          setPreview('')
+        }}
         type="button"
       >
-        {capturing
-          ? (preview || 'Press keys…  (Esc to cancel)')
-          : (value || 'Click to set')}
+        {capturing ? preview || 'Press keys…  (Esc to cancel)' : value || 'Click to set'}
       </button>
       <small className="hotkey-hint">
-        {capturing ? 'Capturing — press any combination' : 'Global hotkey. Must include Ctrl/Alt/Shift or be F1–F12.'}
+        {capturing
+          ? 'Capturing — press any combination'
+          : 'Global hotkey. Must include Ctrl/Alt/Shift or be F1–F12.'}
       </small>
     </div>
   )

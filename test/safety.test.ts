@@ -6,7 +6,7 @@ import {
   classifyType,
   checkAction,
   normalizeCombo,
-  isShellWindow,
+  isShellWindow
 } from '../src/main/actions/safety'
 
 describe('assertSafeUrl', () => {
@@ -22,18 +22,19 @@ describe('assertSafeUrl', () => {
     'C:\\Windows\\notepad.exe',
     'vbscript:msgbox',
     '',
-    42,
+    42
   ])('rejects %s', (u) => {
     expect(() => assertSafeUrl(u)).toThrow()
     expect(isSafeUrl(u)).toBe(false)
   })
 
-  it.each(['https://mail.google.com', 'http://example.com/a?b=c', 'https://www.google.com/search?q=weather+in+Larnaca'])(
-    'allows %s',
-    (u) => {
-      expect(isSafeUrl(u)).toBe(true)
-    }
-  )
+  it.each([
+    'https://mail.google.com',
+    'http://example.com/a?b=c',
+    'https://www.google.com/search?q=weather+in+Larnaca'
+  ])('allows %s', (u) => {
+    expect(isSafeUrl(u)).toBe(true)
+  })
 
   it('returns a normalized URL', () => {
     expect(assertSafeUrl('  https://mail.google.com  ')).toBe('https://mail.google.com/')
@@ -61,7 +62,7 @@ describe('classifyHotkey', () => {
     [['ctrl', 'shift', 'esc'], 'confirm'],
     [['ctrl', 'c'], 'allow'],
     [['enter'], 'allow'],
-    [['pagedown'], 'allow'],
+    [['pagedown'], 'allow']
   ])('%j → %s', (keys, verdict) => {
     expect(classifyHotkey(keys as string[])).toBe(verdict)
   })
@@ -71,9 +72,13 @@ describe('classifyHotkey', () => {
   })
 
   it('enter after typing into a shell needs confirmation', () => {
-    expect(classifyHotkey(['enter'], { windowTitle: 'Windows PowerShell', afterType: true })).toBe('confirm')
+    expect(classifyHotkey(['enter'], { windowTitle: 'Windows PowerShell', afterType: true })).toBe(
+      'confirm'
+    )
     expect(classifyHotkey(['enter'], { windowTitle: 'Run', afterType: true })).toBe('confirm')
-    expect(classifyHotkey(['enter'], { windowTitle: 'Untitled - Notepad', afterType: true })).toBe('allow')
+    expect(classifyHotkey(['enter'], { windowTitle: 'Untitled - Notepad', afterType: true })).toBe(
+      'allow'
+    )
   })
 })
 
@@ -85,7 +90,7 @@ describe('isShellWindow', () => {
     ['C:\\WINDOWS\\system32\\cmd.exe', true],
     ['How to run a marathon - Google Chrome', false],
     ['PowerShell docs - Microsoft\u200b Edge', false],
-    ['Inbox - Gmail - Google Chrome', false],
+    ['Inbox - Gmail - Google Chrome', false]
   ])('%s → %s', (title, expected) => {
     expect(isShellWindow(title)).toBe(expected)
   })
@@ -100,7 +105,9 @@ describe('checkAction', () => {
 
   it('checks typing against the target window', () => {
     expect(classifyType({ windowTitle: 'Command Prompt' })).toBe('confirm')
-    expect(checkAction({ type: 'type', text: 'hi' }, { windowTitle: 'Untitled - Notepad' }).verdict).toBe('allow')
+    expect(
+      checkAction({ type: 'type', text: 'hi' }, { windowTitle: 'Untitled - Notepad' }).verdict
+    ).toBe('allow')
   })
 
   it('allows unrelated actions', () => {

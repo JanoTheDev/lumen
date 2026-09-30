@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { HOTKEY_RE, configPatchSchema, configV1Schema, configV2Schema, DEFAULT_CONFIG_V1 } from '../src/shared/config'
+import {
+  HOTKEY_RE,
+  configPatchSchema,
+  configV1Schema,
+  configV2Schema,
+  DEFAULT_CONFIG_V1
+} from '../src/shared/config'
 import {
   actionsSchema,
   audioSchema,
@@ -7,17 +13,23 @@ import {
   overlayHeightSchema,
   parsePayload,
   promptSchema,
-  MAX_AUDIO_BYTES,
+  MAX_AUDIO_BYTES
 } from '../src/shared/ipc'
 import { DEFAULT_CONFIG } from '../src/main/config'
 
 describe('hotkey validation', () => {
-  it.each(['Ctrl+Shift+Space', 'Alt+B', 'F9', 'Ctrl+Alt+F12', 'Super+/', 'Shift+ArrowUp'])('accepts %s', (k) => {
-    expect(HOTKEY_RE.test(k)).toBe(true)
-  })
-  it.each(['', 'B', 'Ctrl+', 'ctrl+a; rm -rf', 'Ctrl+Shift+Space\n', 'Alt+B+"', 'F13'])('rejects %j', (k) => {
-    expect(HOTKEY_RE.test(k)).toBe(false)
-  })
+  it.each(['Ctrl+Shift+Space', 'Alt+B', 'F9', 'Ctrl+Alt+F12', 'Super+/', 'Shift+ArrowUp'])(
+    'accepts %s',
+    (k) => {
+      expect(HOTKEY_RE.test(k)).toBe(true)
+    }
+  )
+  it.each(['', 'B', 'Ctrl+', 'ctrl+a; rm -rf', 'Ctrl+Shift+Space\n', 'Alt+B+"', 'F13'])(
+    'rejects %j',
+    (k) => {
+      expect(HOTKEY_RE.test(k)).toBe(false)
+    }
+  )
 })
 
 describe('config patch', () => {
@@ -27,7 +39,13 @@ describe('config patch', () => {
   })
   it('accepts partial nested patches', () => {
     expect(configPatchSchema.safeParse({ wakeWord: { phrase: 'hey computer' } }).success).toBe(true)
-    expect(configPatchSchema.safeParse({ a11y: { uiScale: 1.2 }, voice: { tts: 'cloud' }, models: { main: 'gpt-5' } }).success).toBe(true)
+    expect(
+      configPatchSchema.safeParse({
+        a11y: { uiScale: 1.2 },
+        voice: { tts: 'cloud' },
+        models: { main: 'gpt-5' }
+      }).success
+    ).toBe(true)
   })
   it.each([
     { hotkey: 'x; calc.exe' },
@@ -39,9 +57,17 @@ describe('config patch', () => {
     { voice: { tts: 'loud' } },
     { models: { execution: 'gpt-5' } },
     { dwellClick: { dwellMs: -5 } },
-    { themeCustom: { accent: 'red', background: '#000000', foreground: '#ffffff', opacity: 1, blur: 0 } },
+    {
+      themeCustom: {
+        accent: 'red',
+        background: '#000000',
+        foreground: '#ffffff',
+        opacity: 1,
+        blur: 0
+      }
+    },
     null,
-    'string',
+    'string'
   ])('rejects %j', (patch) => {
     expect(configPatchSchema.safeParse(patch).success).toBe(false)
   })

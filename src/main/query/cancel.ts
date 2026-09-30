@@ -65,5 +65,10 @@ export function cancelAll(): boolean {
 export function isAbortError(e: unknown): boolean {
   if (!e || typeof e !== 'object') return false
   const name = (e as { name?: string }).name ?? ''
-  return e instanceof CancelledError || name === 'AbortError' || name === 'APIUserAbortError' || name === 'CancelledError'
+  return (
+    e instanceof CancelledError ||
+    name === 'AbortError' ||
+    name === 'APIUserAbortError' ||
+    name === 'CancelledError'
+  )
 }

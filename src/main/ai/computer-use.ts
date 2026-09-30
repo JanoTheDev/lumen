@@ -16,19 +16,34 @@ export async function findClickCoordinates(
   if (!process.env.ANTHROPIC_API_KEY) return null
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = await (anthropicClient().beta as any).messages.create({
-      model: computerUseModel(),
-      max_tokens: 256,
-      betas: ['computer-use-2025-11-24'],
-      tools: [{ type: 'computer_20251124', name: 'computer', display_width_px: imgW, display_height_px: imgH }],
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 } },
-          { type: 'text', text: `Find and click: ${description}` }
+    const response = await (anthropicClient().beta as any).messages.create(
+      {
+        model: computerUseModel(),
+        max_tokens: 256,
+        betas: ['computer-use-2025-11-24'],
+        tools: [
+          {
+            type: 'computer_20251124',
+            name: 'computer',
+            display_width_px: imgW,
+            display_height_px: imgH
+          }
+        ],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 }
+              },
+              { type: 'text', text: `Find and click: ${description}` }
+            ]
+          }
         ]
-      }]
-    }, { signal })
+      },
+      { signal }
+    )
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const block of (response as any).content) {
       if (block.type === 'tool_use' && block.name === 'computer') {

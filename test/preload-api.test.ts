@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { EventEmitter } from 'events'
 
-const ipc = vi.hoisted(() => ({ emitter: null as EventEmitter | null, send: vi.fn(), exposed: {} as Record<string, unknown> }))
+const ipc = vi.hoisted(() => ({
+  emitter: null as EventEmitter | null,
+  send: vi.fn(),
+  exposed: {} as Record<string, unknown>
+}))
 
 vi.mock('electron', async () => {
   const { EventEmitter } = await import('events')
@@ -12,11 +16,13 @@ vi.mock('electron', async () => {
       on: (ch: string, h: (...a: unknown[]) => void) => emitter.on(ch, h),
       removeListener: (ch: string, h: (...a: unknown[]) => void) => emitter.removeListener(ch, h),
       send: ipc.send,
-      invoke: vi.fn(),
+      invoke: vi.fn()
     },
     contextBridge: {
-      exposeInMainWorld: (key: string, value: unknown) => { ipc.exposed[key] = value },
-    },
+      exposeInMainWorld: (key: string, value: unknown) => {
+        ipc.exposed[key] = value
+      }
+    }
   }
 })
 

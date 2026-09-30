@@ -1,6 +1,19 @@
-interface Bbox { x: number; y: number; w: number; h: number }
-interface HighlightStep { bbox?: Bbox; label?: string; target_hint?: string }
-interface LocateItem { label: string; bbox: Bbox; description?: string }
+interface Bbox {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+interface HighlightStep {
+  bbox?: Bbox
+  label?: string
+  target_hint?: string
+}
+interface LocateItem {
+  label: string
+  bbox: Bbox
+  description?: string
+}
 interface HighlightApi {
   onShowHighlights?: (cb: (steps: unknown[]) => void) => void
   onClearHighlights?: (cb: () => void) => void
@@ -16,13 +29,25 @@ canvas.width = window.screen.width
 canvas.height = window.screen.height
 
 let domElements: HTMLElement[] = []
-function clearDom(): void { domElements.forEach(el => el.remove()); domElements = [] }
-function addEl(el: HTMLElement): void { document.body.appendChild(el); domElements.push(el) }
+function clearDom(): void {
+  domElements.forEach((el) => el.remove())
+  domElements = []
+}
+function addEl(el: HTMLElement): void {
+  document.body.appendChild(el)
+  domElements.push(el)
+}
 
 // Pointer lives on its own layer so it never wipes the guide boxes
 let pointerElements: HTMLElement[] = []
-function clearPointer(): void { pointerElements.forEach(el => el.remove()); pointerElements = [] }
-function addPointerEl(el: HTMLElement): void { document.body.appendChild(el); pointerElements.push(el) }
+function clearPointer(): void {
+  pointerElements.forEach((el) => el.remove())
+  pointerElements = []
+}
+function addPointerEl(el: HTMLElement): void {
+  document.body.appendChild(el)
+  pointerElements.push(el)
+}
 
 function drawHighlights(steps: HighlightStep[]): void {
   ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -46,12 +71,12 @@ function drawHighlights(steps: HighlightStep[]): void {
     // pulse ring + dot
     const ring = document.createElement('div')
     ring.className = 'pulse-ring'
-    ring.style.cssText = `left:${cx-13}px;top:${cy-13}px;width:26px;height:26px;animation-delay:${i * 0.15}s`
+    ring.style.cssText = `left:${cx - 13}px;top:${cy - 13}px;width:26px;height:26px;animation-delay:${i * 0.15}s`
     addEl(ring)
 
     const dot = document.createElement('div')
     dot.className = 'pulse-dot'
-    dot.style.cssText = `left:${cx-4}px;top:${cy-4}px`
+    dot.style.cssText = `left:${cx - 4}px;top:${cy - 4}px`
     addEl(dot)
 
     // label
@@ -63,7 +88,7 @@ function drawHighlights(steps: HighlightStep[]): void {
     label.appendChild(num)
     label.appendChild(document.createTextNode(step.label || step.target_hint || ''))
 
-    const labelY = (y + h + 10 < window.screen.height - 40) ? (y + h + 10) : (y - 52)
+    const labelY = y + h + 10 < window.screen.height - 40 ? y + h + 10 : y - 52
     const labelX = Math.min(x, window.screen.width - 260)
     label.style.cssText = `left:${labelX}px;top:${labelY}px`
     addEl(label)
@@ -75,12 +100,12 @@ function showPointer(x: number, y: number, text: string): void {
 
   const ring = document.createElement('div')
   ring.className = 'pulse-ring'
-  ring.style.cssText = `left:${x-14}px;top:${y-14}px;width:28px;height:28px`
+  ring.style.cssText = `left:${x - 14}px;top:${y - 14}px;width:28px;height:28px`
   addPointerEl(ring)
 
   const dot = document.createElement('div')
   dot.className = 'pulse-dot'
-  dot.style.cssText = `left:${x-4}px;top:${y-4}px`
+  dot.style.cssText = `left:${x - 4}px;top:${y - 4}px`
   addPointerEl(dot)
 
   if (text) {
@@ -127,7 +152,7 @@ function unionBbox(a: Bbox, b: Bbox): Bbox {
 // Merge items whose bboxes overlap or are within `gap` pixels of each other
 function mergeAdjacent(items: LocateItem[], gap: number): LocateItem[] {
   if (items.length <= 1) return items
-  const result = items.map(i => ({ ...i, bbox: { ...i.bbox } }))
+  const result = items.map((i) => ({ ...i, bbox: { ...i.bbox } }))
   let changed = true
   while (changed) {
     changed = false
@@ -166,8 +191,10 @@ function showLocate(rawItems: LocateItem[]): void {
     ctx.clearRect(x - pad, y - pad, w + pad * 2, h + pad * 2)
 
     // Border
-    const bx = x - pad + 0.5, by = y - pad + 0.5
-    const bw = w + pad * 2 - 1, bh = h + pad * 2 - 1
+    const bx = x - pad + 0.5,
+      by = y - pad + 0.5
+    const bw = w + pad * 2 - 1,
+      bh = h + pad * 2 - 1
     ctx.strokeStyle = 'rgba(66,153,225,0.85)'
     ctx.lineWidth = 2.5
     ctx.setLineDash([])
@@ -178,10 +205,26 @@ function showLocate(rawItems: LocateItem[]): void {
       const cLen = Math.min(20, w * 0.14, h * 0.14)
       ctx.strokeStyle = 'rgba(66,153,225,0.9)'
       ctx.lineWidth = 3
-      ctx.beginPath(); ctx.moveTo(bx, by + cLen); ctx.lineTo(bx, by); ctx.lineTo(bx + cLen, by); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(bx + bw - cLen, by); ctx.lineTo(bx + bw, by); ctx.lineTo(bx + bw, by + cLen); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(bx, by + bh - cLen); ctx.lineTo(bx, by + bh); ctx.lineTo(bx + cLen, by + bh); ctx.stroke()
-      ctx.beginPath(); ctx.moveTo(bx + bw - cLen, by + bh); ctx.lineTo(bx + bw, by + bh); ctx.lineTo(bx + bw, by + bh - cLen); ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(bx, by + cLen)
+      ctx.lineTo(bx, by)
+      ctx.lineTo(bx + cLen, by)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(bx + bw - cLen, by)
+      ctx.lineTo(bx + bw, by)
+      ctx.lineTo(bx + bw, by + cLen)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(bx, by + bh - cLen)
+      ctx.lineTo(bx, by + bh)
+      ctx.lineTo(bx + cLen, by + bh)
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.moveTo(bx + bw - cLen, by + bh)
+      ctx.lineTo(bx + bw, by + bh)
+      ctx.lineTo(bx + bw, by + bh - cLen)
+      ctx.stroke()
     }
 
     // Label — outside, anchored to top edge of box (above if room, below if near screen top)
@@ -193,7 +236,7 @@ function showLocate(rawItems: LocateItem[]): void {
     labelEl.appendChild(document.createTextNode(description || label))
     const labelX = Math.max(8, Math.min(x - pad, canvas.width - 296))
     const aboveRoom = y - pad > 60
-    const labelY = aboveRoom ? (y - pad - 6) : (y + h + pad + 10)
+    const labelY = aboveRoom ? y - pad - 6 : y + h + pad + 10
     labelEl.style.cssText = `left:${labelX}px;top:${labelY}px${aboveRoom ? ';transform:translateY(-100%)' : ''}`
     addEl(labelEl)
   })

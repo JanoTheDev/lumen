@@ -9,7 +9,14 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { armEscape, disarmEscape, holdEscape, releaseEscape, resetEscape, setEscapeHandler } from '../src/main/agent/escape'
+import {
+  armEscape,
+  disarmEscape,
+  holdEscape,
+  releaseEscape,
+  resetEscape,
+  setEscapeHandler
+} from '../src/main/agent/escape'
 
 describe('escape', () => {
   beforeEach(() => {

@@ -1,6 +1,6 @@
 export type LogTag = 'plan' | 'step' | 'verify' | 'retry' | 'fail' | 'skip' | 'done' | 'time'
 
-const TAG_PAD = 9  // [verify] = 8 chars + 1 space; all tags fit within 9
+const TAG_PAD = 9 // [verify] = 8 chars + 1 space; all tags fit within 9
 
 export interface LogMeta {
   model?: string

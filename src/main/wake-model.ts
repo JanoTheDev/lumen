@@ -1,4 +1,12 @@
-import { createWriteStream, existsSync, mkdirSync, rmSync, statSync, readdirSync, renameSync } from 'fs'
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  statSync,
+  readdirSync,
+  renameSync
+} from 'fs'
 import { join } from 'path'
 import { homedir, tmpdir } from 'os'
 import { spawn } from 'child_process'
@@ -19,7 +27,11 @@ export function modelInstalled(): boolean {
   try {
     const entries = readdirSync(root)
     // expect subdirs like 'am', 'conf', 'graph'
-    return entries.includes('am') || entries.includes('conf') || entries.some(e => existsSync(join(root, e, 'am')))
+    return (
+      entries.includes('am') ||
+      entries.includes('conf') ||
+      entries.some((e) => existsSync(join(root, e, 'am')))
+    )
   } catch {
     return false
   }
@@ -39,7 +51,11 @@ function broadcast(evt: ProgressEvent): void {
   broadcastToWindows('wake:model-progress', evt)
 }
 
-async function download(url: string, dest: string, onProgress: (p: { bytes: number; total: number }) => void): Promise<void> {
+async function download(
+  url: string,
+  dest: string,
+  onProgress: (p: { bytes: number; total: number }) => void
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = request(url, { method: 'GET' }, (res) => {
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -53,9 +69,14 @@ async function download(url: string, dest: string, onProgress: (p: { bytes: numb
       const total = Number(res.headers['content-length'] || 0)
       let bytes = 0
       const out = createWriteStream(dest)
-      res.on('data', (chunk: Buffer) => { bytes += chunk.length; onProgress({ bytes, total }) })
+      res.on('data', (chunk: Buffer) => {
+        bytes += chunk.length
+        onProgress({ bytes, total })
+      })
       res.pipe(out)
-      out.on('finish', () => { out.close(() => resolve()) })
+      out.on('finish', () => {
+        out.close(() => resolve())
+      })
       out.on('error', reject)
       res.on('error', reject)
     })
@@ -68,14 +89,17 @@ function extract(zipPath: string, destDir: string): Promise<void> {
   return new Promise((resolve, reject) => {
     // Windows 10+ tar.exe handles zip natively. macOS/Linux also ship tar.
     const proc = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'inherit' })
-    proc.on('exit', (code) => code === 0 ? resolve() : reject(new Error(`tar exit ${code}`)))
+    proc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`tar exit ${code}`))))
     proc.on('error', reject)
   })
 }
 
 export async function installModel(): Promise<void> {
   if (inProgress) return
-  if (modelInstalled()) { broadcast({ phase: 'done' }); return }
+  if (modelInstalled()) {
+    broadcast({ phase: 'done' })
+    return
+  }
   inProgress = true
   const root = modelRoot()
   const parent = join(homedir(), '.ai-overlay')
@@ -87,7 +111,7 @@ export async function installModel(): Promise<void> {
     if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
     mkdirSync(stagingDir, { recursive: true })
 
-    log('step',`downloading Vosk model to ${tmpZip}`)
+    log('step', `downloading Vosk model to ${tmpZip}`)
     broadcast({ phase: 'downloading', percent: 0 })
     await download(MODEL_URL, tmpZip, ({ bytes, total }) => {
       const percent = total ? Math.round((bytes / total) * 100) : 0
@@ -95,7 +119,7 @@ export async function installModel(): Promise<void> {
     })
 
     const size = statSync(tmpZip).size
-    log('step',`downloaded ${size} bytes, extracting`)
+    log('step', `downloaded ${size} bytes, extracting`)
     broadcast({ phase: 'extracting' })
     await extract(tmpZip, stagingDir)
 
@@ -104,8 +128,16 @@ export async function installModel(): Promise<void> {
 
     if (existsSync(root)) rmSync(root, { recursive: true, force: true })
     renameSync(extracted, root)
-    try { rmSync(tmpZip, { force: true }) } catch { /* noop */ }
-    try { rmSync(stagingDir, { recursive: true, force: true }) } catch { /* noop */ }
+    try {
+      rmSync(tmpZip, { force: true })
+    } catch {
+      /* noop */
+    }
+    try {
+      rmSync(stagingDir, { recursive: true, force: true })
+    } catch {
+      /* noop */
+    }
 
     log('done', `Vosk model installed at ${root}`)
     broadcast({ phase: 'done' })

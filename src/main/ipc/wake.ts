@@ -4,7 +4,7 @@ import { installModel, modelInstalled, modelRoot } from '../wake-model'
 export function registerWakeIpc(): void {
   ipcMain.handle('wake:model-status', () => ({
     installed: modelInstalled(),
-    path: modelRoot(),
+    path: modelRoot()
   }))
   ipcMain.handle('wake:model-install', async () => {
     try {

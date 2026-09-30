@@ -4,11 +4,13 @@ import { classifyQuery, type QueryIntent } from './query-classifier'
 import { detectRequestedApp } from '../ai/app-context'
 
 // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
-const ORDINAL_RE = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(st|nd|rd|th))\b.{0,40}(email|mail|message|result|item|tweet|post|notification)/i
+const ORDINAL_RE =
+  /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(st|nd|rd|th))\b.{0,40}(email|mail|message|result|item|tweet|post|notification)/i
 // Direct "open/click this/that" requests: the model tends to answer with guide mode. Force action.
 const DIRECT_ACTION_RE = /\b(open|click|go to|navigate to|tap|select|press)\s+(this|that|it|the)\b/i
 // Locate/show queries: the model ignores the cluster-splitting rule without a hard reminder.
-export const LOCATE_RE = /\b(show me|where is|where are|find|highlight|point to|locate|can you show)\b/i
+export const LOCATE_RE =
+  /\b(show me|where is|where are|find|highlight|point to|locate|can you show)\b/i
 
 export interface OverrideInput {
   prompt: string
@@ -42,7 +44,12 @@ function locateBlock(prompt: string): string {
   return `[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]`
 }
 
-export function applyOverrides({ prompt, activeWindow, lowDetail, lastTaskContext }: OverrideInput): OverrideResult {
+export function applyOverrides({
+  prompt,
+  activeWindow,
+  lowDetail,
+  lastTaskContext
+}: OverrideInput): OverrideResult {
   // Classify intent on the ORIGINAL prompt: override text adds verbs that would inflate
   // the action-verb count and force the planner for single-shot queries.
   const intent = classifyQuery(prompt)

@@ -1,15 +1,19 @@
 // USD per million tokens.
 const PRICING: Record<string, { input: number; output: number }> = {
-  'claude-sonnet-4-6':         { input: 3.00,  output: 15.00 },
-  'claude-haiku-4-5-20251001': { input: 1.00,  output: 5.00  },
-  'gpt-5-mini':                { input: 0.25,  output: 2.00  },
-  'gpt-5-nano':                { input: 0.05,  output: 0.40  },
-  'gpt-4o':                    { input: 2.50,  output: 10.00 },
+  'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
+  'claude-haiku-4-5-20251001': { input: 1.0, output: 5.0 },
+  'gpt-5-mini': { input: 0.25, output: 2.0 },
+  'gpt-5-nano': { input: 0.05, output: 0.4 },
+  'gpt-4o': { input: 2.5, output: 10.0 }
 }
 
-const FALLBACK = { input: 3.00, output: 15.00 }
+const FALLBACK = { input: 3.0, output: 15.0 }
 
-export function usageCost(model: string, inputTokens: number, outputTokens: number): { input: number; output: number; total: number } {
+export function usageCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number
+): { input: number; output: number; total: number } {
   const p = PRICING[model] ?? FALLBACK
   const input = (inputTokens / 1_000_000) * p.input
   const output = (outputTokens / 1_000_000) * p.output

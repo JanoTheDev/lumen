@@ -33,7 +33,11 @@ export default function App(): JSX.Element {
   const vadRef = useRef<VadConfig | null>(null)
   const barsRef = useRef<Array<HTMLDivElement | null>>([])
 
-  const applyResponse = async (r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } }, depth = 0, _pendingFollowUp?: { query: string; delay_ms: number }): Promise<void> => {
+  const applyResponse = async (
+    r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } },
+    depth = 0,
+    _pendingFollowUp?: { query: string; delay_ms: number }
+  ): Promise<void> => {
     if (r.mode === 'answer' && depth > 0) {
       // AI returned answer in a follow_up chain — means it's done (or confused). Stop chain.
       // System prompt forbids answer mode in follow_up; if it slips through, don't auto-scroll.
@@ -44,11 +48,14 @@ export default function App(): JSX.Element {
     } else if (r.mode === 'action' && r.actions?.length) {
       console.log('[action] executing', r.actions.length, 'actions')
       try {
-        const summary = (r as { summary?: string }).summary ?? r.actions.map(a => a.type).join(', ')
+        const summary =
+          (r as { summary?: string }).summary ?? r.actions.map((a) => a.type).join(', ')
         const confidence = (r as { confidence?: string }).confidence
         const { delayMs } = await window.api.announceAction(summary, confidence)
-        if (delayMs > 0) await new Promise(res => setTimeout(res, delayMs))
-        const execResult = await window.api.executeAction(r.actions) as { done: boolean; reached_bottom?: boolean } | undefined
+        if (delayMs > 0) await new Promise((res) => setTimeout(res, delayMs))
+        const execResult = (await window.api.executeAction(r.actions)) as
+          | { done: boolean; reached_bottom?: boolean }
+          | undefined
         if (execResult?.reached_bottom) {
           console.log('[follow_up] reached_bottom — stopping chain')
           return
@@ -57,7 +64,9 @@ export default function App(): JSX.Element {
           const { query, delay_ms } = r.follow_up
           console.log('[follow_up] depth', depth, 'auto-querying in', delay_ms, 'ms:', query)
           await new Promise((res) => setTimeout(res, delay_ms))
-          const fuQuery = query.startsWith('The page is loaded') ? query : `The page is loaded. ${query}`
+          const fuQuery = query.startsWith('The page is loaded')
+            ? query
+            : `The page is loaded. ${query}`
           const fu = await window.api.query(fuQuery, { lowDetail: true })
           if ((fu as { cancelled?: boolean } | null)?.cancelled) return
           await applyResponse(fu as ClaudeResponse & { url?: string }, depth + 1, r.follow_up)
@@ -69,13 +78,16 @@ export default function App(): JSX.Element {
       }
     } else if (r.mode === 'guide' && depth > 0) {
       // AI returned guide during follow_up — auto-click the first bbox instead of showing steps
-      const firstWithBbox = r.steps?.find(s => s.bbox)
+      const firstWithBbox = r.steps?.find((s) => s.bbox)
       if (firstWithBbox?.bbox) {
-        console.log('[follow_up] guide mode in follow_up — auto-clicking first bbox:', firstWithBbox.bbox)
+        console.log(
+          '[follow_up] guide mode in follow_up — auto-clicking first bbox:',
+          firstWithBbox.bbox
+        )
         await window.api.executeAction([{ type: 'click_bbox', bbox: firstWithBbox.bbox }])
       }
     } else if (r.mode === 'locate') {
-      const desc = r.items?.map(i => i.description || i.label).join(' · ')
+      const desc = r.items?.map((i) => i.description || i.label).join(' · ')
       if (desc) window.api.showAnswerOverlay?.(`**Found:** ${desc}`)
     } else if (r.mode === 'text_insert' && r.text) {
       await window.api.executeAction([{ type: 'type', text: r.text }])
@@ -92,7 +104,8 @@ export default function App(): JSX.Element {
   const handleResult = async (text: string, info?: VoiceResultInfo): Promise<void> => {
     console.log('[voice] result:', text)
     if (shouldDropTranscript(text, info?.speechMs)) {
-      if (text.trim()) console.warn('[voice] dropping likely silence hallucination:', JSON.stringify(text))
+      if (text.trim())
+        console.warn('[voice] dropping likely silence hallucination:', JSON.stringify(text))
       resetHud()
       return
     }
@@ -116,14 +129,20 @@ export default function App(): JSX.Element {
     } catch (err) {
       console.error('[query] error:', err)
     } finally {
-      if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
+      if (processingTimerRef.current) {
+        clearTimeout(processingTimerRef.current)
+        processingTimerRef.current = null
+      }
       resetHud()
     }
   }
 
   const handleError = (message: string): void => {
     console.error('[voice] error:', message)
-    if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
+    if (wakeTimerRef.current) {
+      clearTimeout(wakeTimerRef.current)
+      wakeTimerRef.current = null
+    }
     setPhase('error')
     window.api.showAnswerOverlay?.(message)
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
@@ -136,11 +155,19 @@ export default function App(): JSX.Element {
   const { start, stop, abort, levelRef, listening } = useVoice(handleResult, handleError)
 
   const handleResultRef = useRef(handleResult)
-  useEffect(() => { handleResultRef.current = handleResult })
+  useEffect(() => {
+    handleResultRef.current = handleResult
+  })
 
   const clearSessionTimers = (): void => {
-    if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
-    if (errorTimerRef.current) { clearTimeout(errorTimerRef.current); errorTimerRef.current = null }
+    if (wakeTimerRef.current) {
+      clearTimeout(wakeTimerRef.current)
+      wakeTimerRef.current = null
+    }
+    if (errorTimerRef.current) {
+      clearTimeout(errorTimerRef.current)
+      errorTimerRef.current = null
+    }
   }
 
   // Push the input level straight to the waveform bars instead of re-rendering per frame.
@@ -160,7 +187,9 @@ export default function App(): JSX.Element {
     draw()
     return () => {
       cancelAnimationFrame(raf)
-      bars.forEach((bar) => { if (bar) bar.style.height = `${WAVE_BASE}px` })
+      bars.forEach((bar) => {
+        if (bar) bar.style.height = `${WAVE_BASE}px`
+      })
     }
   }, [listening, phase, levelRef])
 
@@ -169,10 +198,19 @@ export default function App(): JSX.Element {
       cancelledRef.current = true
       queryFiredRef.current = false
       voiceSessionRef.current++
-      if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
-      if (errorTimerRef.current) { clearTimeout(errorTimerRef.current); errorTimerRef.current = null }
+      if (wakeTimerRef.current) {
+        clearTimeout(wakeTimerRef.current)
+        wakeTimerRef.current = null
+      }
+      if (errorTimerRef.current) {
+        clearTimeout(errorTimerRef.current)
+        errorTimerRef.current = null
+      }
       abort()
-      if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
+      if (processingTimerRef.current) {
+        clearTimeout(processingTimerRef.current)
+        processingTimerRef.current = null
+      }
       // Signal main process to abort any in-flight research/plan/callClaude loop
       window.api.cancelCurrent()
       setPhase('listening')
@@ -189,10 +227,13 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     let alive = true
-    window.api.getConfig().then((cfg) => {
-      const v = readVad(cfg)
-      if (alive && v) vadRef.current = v
-    }).catch(() => {})
+    window.api
+      .getConfig()
+      .then((cfg) => {
+        const v = readVad(cfg)
+        if (alive && v) vadRef.current = v
+      })
+      .catch(() => {})
     const unsub = window.api.onConfigChanged((cfg) => {
       const v = readVad(cfg)
       if (v) vadRef.current = v
@@ -293,36 +334,42 @@ export default function App(): JSX.Element {
         }
       `}</style>
 
-      <div style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 999,
-        background: 'color-mix(in srgb, var(--ai-background, #0d0f14) 88%, transparent)',
-        backdropFilter: 'blur(40px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid color-mix(in srgb, var(--ai-accent, #5b8cff) 40%, transparent)',
-        boxShadow: [
-          '0 8px 32px rgba(0,0,0,0.38)',
-          '0 2px 6px rgba(0,0,0,0.22)',
-          'inset 0 1px 0 color-mix(in srgb, var(--ai-foreground, #fff) 14%, transparent)',
-          '0 0 20px color-mix(in srgb, var(--ai-accent, #5b8cff) 18%, transparent)',
-        ].join(', '),
-        animation: 'pill-in 0.2s cubic-bezier(0.34,1.56,0.64,1) both',
-      }}>
-
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 999,
+          background: 'color-mix(in srgb, var(--ai-background, #0d0f14) 88%, transparent)',
+          backdropFilter: 'blur(40px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+          border: '1px solid color-mix(in srgb, var(--ai-accent, #5b8cff) 40%, transparent)',
+          boxShadow: [
+            '0 8px 32px rgba(0,0,0,0.38)',
+            '0 2px 6px rgba(0,0,0,0.22)',
+            'inset 0 1px 0 color-mix(in srgb, var(--ai-foreground, #fff) 14%, transparent)',
+            '0 0 20px color-mix(in srgb, var(--ai-accent, #5b8cff) 18%, transparent)'
+          ].join(', '),
+          animation: 'pill-in 0.2s cubic-bezier(0.34,1.56,0.64,1) both'
+        }}
+      >
         {hasError ? (
           <span style={{ fontSize: 13, color: 'var(--ai-error, #f87171)' }}>⚠</span>
         ) : analyzing ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {[0, 1, 2].map((i) => (
-              <div key={i} style={{
-                width: 5, height: 5, borderRadius: '50%',
-                background: 'var(--ai-accent, #5b8cff)',
-                animation: `dot-bounce 1.2s ease-in-out ${i * 0.18}s infinite`,
-              }} />
+              <div
+                key={i}
+                style={{
+                  width: 5,
+                  height: 5,
+                  borderRadius: '50%',
+                  background: 'var(--ai-accent, #5b8cff)',
+                  animation: `dot-bounce 1.2s ease-in-out ${i * 0.18}s infinite`
+                }}
+              />
             ))}
           </div>
         ) : (
@@ -330,13 +377,15 @@ export default function App(): JSX.Element {
             {WAVE_SHAPE.map((_shape, i) => (
               <div
                 key={i}
-                ref={(el) => { barsRef.current[i] = el }}
+                ref={(el) => {
+                  barsRef.current[i] = el
+                }}
                 style={{
                   width: 2.5,
                   height: WAVE_BASE,
                   borderRadius: 99,
                   background: 'var(--ai-accent, #5b8cff)',
-                  transition: 'height 0.06s ease-out',
+                  transition: 'height 0.06s ease-out'
                 }}
               />
             ))}

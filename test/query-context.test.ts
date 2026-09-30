@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { startSpeculativeCapture, takeSpeculative, clearSpeculative } from '../src/main/query/context'
+import {
+  startSpeculativeCapture,
+  takeSpeculative,
+  clearSpeculative
+} from '../src/main/query/context'
 
 describe('speculative context', () => {
   it('reuses the in-flight capture once', async () => {

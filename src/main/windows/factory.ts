@@ -3,7 +3,13 @@ import { join, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { is } from '@electron-toolkit/utils'
 
-export type RendererEntry = 'index' | 'highlight' | 'answeroverlay' | 'settings' | 'status' | 'dwellring'
+export type RendererEntry =
+  | 'index'
+  | 'highlight'
+  | 'answeroverlay'
+  | 'settings'
+  | 'status'
+  | 'dwellring'
 
 /** Locked-down webPreferences shared by every Lumen window. */
 export function securePrefs(): WebPreferences {
@@ -12,7 +18,7 @@ export function securePrefs(): WebPreferences {
     sandbox: true,
     contextIsolation: true,
     nodeIntegration: false,
-    webSecurity: true,
+    webSecurity: true
   }
 }
 
@@ -37,7 +43,9 @@ export function isOwnRendererUrl(raw: string): boolean {
     if (devUrl && is.dev && url.origin === new URL(devUrl).origin) return true
     if (url.protocol === 'file:') {
       const rendererDir = resolve(__dirname, '../renderer').toLowerCase()
-      return resolve(fileURLToPath(url)).toLowerCase().startsWith(rendererDir + sep)
+      return resolve(fileURLToPath(url))
+        .toLowerCase()
+        .startsWith(rendererDir + sep)
     }
   } catch {
     /* not a URL */

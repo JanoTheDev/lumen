@@ -66,7 +66,7 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
       highlight.send('screen:pointer', {
         x: Math.round(c.x),
         y: Math.round(c.y),
-        text: `${clamped + 1}/${total}: ${step.label}`,
+        text: `${clamped + 1}/${total}: ${step.label}`
       })
     }
   }
@@ -83,16 +83,31 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
       return { handled: true, response: { mode: 'answer', text: 'You are on the last step.' } }
     }
     showStep(activeGuide.index + 1)
-    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
+    return {
+      handled: true,
+      response: {
+        mode: 'answer',
+        text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}`
+      }
+    }
   }
   if (cmd === 'prev') {
     showStep(Math.max(0, activeGuide.index - 1))
-    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
+    return {
+      handled: true,
+      response: {
+        mode: 'answer',
+        text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}`
+      }
+    }
   }
   if (cmd === 'repeat') {
     const step = activeGuide.steps[activeGuide.index]
     setStatus('step', step.label, { index: activeGuide.index + 1, total: activeGuide.steps.length })
-    return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` } }
+    return {
+      handled: true,
+      response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` }
+    }
   }
   return { handled: false }
 }
@@ -109,7 +124,10 @@ export function interceptGuideCommand(prompt: string): unknown | undefined {
     const found = findGuideByName(playName)
     if (found) {
       replaySavedGuide(found.id)
-      return { mode: 'answer', text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.` }
+      return {
+        mode: 'answer',
+        text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.`
+      }
     }
     return { mode: 'answer', text: `No saved guide matches "${playName}".` }
   }
@@ -119,16 +137,26 @@ export function interceptGuideCommand(prompt: string): unknown | undefined {
   if (saveMatch && lastGuide) {
     const name = saveMatch.name ?? lastGuide.task
     const saved = saveLastAsGuide(name)
-    if (saved) return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
+    if (saved)
+      return {
+        mode: 'answer',
+        text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.`
+      }
   }
 
   // Guide replay: "replay last guide", "do the guide again"
   if (lastGuide && isReplayRequest(prompt)) {
     activeGuide = { steps: lastGuide.steps, index: 0 }
-    setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
+    setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', {
+      index: 1,
+      total: lastGuide.steps.length
+    })
     highlight.send('screen:highlights', lastGuide.steps)
     highlight.show()
-    return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
+    return {
+      mode: 'answer',
+      text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.`
+    }
   }
   return undefined
 }

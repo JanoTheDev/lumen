@@ -1,5 +1,13 @@
-interface DwellConfig { theme?: string; themeCustom?: { accent?: string } }
-interface DwellData { x: number; y: number; progress: number; active: boolean }
+interface DwellConfig {
+  theme?: string
+  themeCustom?: { accent?: string }
+}
+interface DwellData {
+  x: number
+  y: number
+  progress: number
+  active: boolean
+}
 interface DwellApi {
   getConfig?: () => Promise<unknown>
   onConfigChanged?: (cb: (cfg: unknown) => void) => void
@@ -10,21 +18,29 @@ const api = (window as unknown as { api?: DwellApi }).api
 
 const ring = document.getElementById('ring') as HTMLElement
 const progEl = ring.querySelector('circle.progress') as SVGCircleElement
-const CIRCUM = 2 * Math.PI * 18  // ~113.1
+const CIRCUM = 2 * Math.PI * 18 // ~113.1
 
 // Theme vars: inherit from config
-api?.getConfig?.().then((raw) => {
-  const cfg = raw as DwellConfig | undefined
-  applyTheme(cfg?.theme, cfg?.themeCustom)
-}).catch(() => {})
+api
+  ?.getConfig?.()
+  .then((raw) => {
+    const cfg = raw as DwellConfig | undefined
+    applyTheme(cfg?.theme, cfg?.themeCustom)
+  })
+  .catch(() => {})
 api?.onConfigChanged?.((raw) => {
   const cfg = raw as DwellConfig | undefined
   applyTheme(cfg?.theme, cfg?.themeCustom)
 })
 
 const THEME_ACCENTS: Record<string, string> = {
-  dark: '#5b8cff', light: '#2563eb', 'high-contrast': '#ffff00',
-  ocean: '#06b6d4', forest: '#22c55e', sunset: '#f97316', midnight: '#a855f7',
+  dark: '#5b8cff',
+  light: '#2563eb',
+  'high-contrast': '#ffff00',
+  ocean: '#06b6d4',
+  forest: '#22c55e',
+  sunset: '#f97316',
+  midnight: '#a855f7'
 }
 function applyTheme(name?: string, custom?: { accent?: string }): void {
   const r = document.documentElement

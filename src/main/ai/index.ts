@@ -5,10 +5,15 @@ import { callOpenAI } from './providers/openai'
 import { getProvider } from './router'
 import { sanitizeResponse } from './schema'
 
-export type { Action, Confidence, GuideStep as Step, ModelResponse as ClaudeResponse } from '@shared/types'
+export type {
+  Action,
+  Confidence,
+  GuideStep as Step,
+  ModelResponse as ClaudeResponse
+} from '@shared/types'
 
 export interface CallOptions {
-  lowDetail?: boolean  // use low-res image + fewer tokens (for follow_up row enumeration)
+  lowDetail?: boolean // use low-res image + fewer tokens (for follow_up row enumeration)
   signal?: AbortSignal
 }
 

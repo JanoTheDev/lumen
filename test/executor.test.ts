@@ -86,7 +86,9 @@ describe('executeActions', () => {
 
   it('turns click_bbox into a click at the bbox centre', async () => {
     const m = mockAgent()
-    await executeActions([{ type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }])
+    await executeActions([
+      { type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }
+    ])
     expect(executed(m)).toEqual([{ type: 'click', x: 60, y: 40, button: 'left' }])
     expect(findClickCoordinates).not.toHaveBeenCalled()
   })
@@ -95,14 +97,19 @@ describe('executeActions', () => {
     process.env.ANTHROPIC_API_KEY = 'test'
     findClickCoordinates.mockResolvedValueOnce({ x: 5, y: 6 })
     const m = mockAgent()
-    await executeActions([{ type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }])
+    await executeActions([
+      { type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }
+    ])
     expect(executed(m)).toEqual([{ type: 'click', x: 5, y: 6, button: 'left' }])
   })
 
   it('skips refinement when refine is false', async () => {
     process.env.ANTHROPIC_API_KEY = 'test'
     mockAgent()
-    await executeActions([{ type: 'click_bbox', bbox: { x: 0, y: 0, w: 10, h: 10 }, description: 'x' }], { refine: false })
+    await executeActions(
+      [{ type: 'click_bbox', bbox: { x: 0, y: 0, w: 10, h: 10 }, description: 'x' }],
+      { refine: false }
+    )
     expect(findClickCoordinates).not.toHaveBeenCalled()
   })
 
@@ -148,7 +155,9 @@ describe('executeActions', () => {
   })
 
   it('stops after a scroll reaches the bottom', async () => {
-    const m = mockAgent({ onExecute: (a) => (a.type === 'scroll' ? { reached_bottom: true } : null) })
+    const m = mockAgent({
+      onExecute: (a) => (a.type === 'scroll' ? { reached_bottom: true } : null)
+    })
     const r = await executeActions([
       { type: 'scroll', direction: 'down', amount: 1 },
       { type: 'click', x: 1, y: 1 }

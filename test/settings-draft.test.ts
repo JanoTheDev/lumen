@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { createDraftCommitter, isHexColor, parseClamped, DRAFT_DEBOUNCE_MS } from '../src/renderer/src/settings/draft'
+import {
+  createDraftCommitter,
+  isHexColor,
+  parseClamped,
+  DRAFT_DEBOUNCE_MS
+} from '../src/renderer/src/settings/draft'
 
 describe('createDraftCommitter', () => {
-  beforeEach(() => { vi.useFakeTimers() })
-  afterEach(() => { vi.useRealTimers() })
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
 
   it('typing a phrase commits exactly once after the pause', () => {
     const commit = vi.fn()
@@ -62,7 +71,9 @@ describe('createDraftCommitter', () => {
 
 describe('isHexColor', () => {
   it.each(['#5b8cff', '#FFFFFF', '#000000'])('accepts %s', (v) => expect(isHexColor(v)).toBe(true))
-  it.each(['#fff', '5b8cff', '#5b8cf', '#5b8cffa', '#ggg000', ''])('rejects %s', (v) => expect(isHexColor(v)).toBe(false))
+  it.each(['#fff', '5b8cff', '#5b8cf', '#5b8cffa', '#ggg000', ''])('rejects %s', (v) =>
+    expect(isHexColor(v)).toBe(false)
+  )
 })
 
 describe('parseClamped', () => {

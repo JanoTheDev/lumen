@@ -44,7 +44,9 @@ describe('classifyQuery', () => {
   })
 
   it('classifies "write an email" as action with planRequired', () => {
-    const r = classifyQuery('could you open my Gmail and write an email to my boss that I\'m quitting')
+    const r = classifyQuery(
+      "could you open my Gmail and write an email to my boss that I'm quitting"
+    )
     expect(r.mode).toBe('action')
     expect(r.planRequired).toBe(true)
   })
@@ -60,7 +62,7 @@ describe('classifyQuery', () => {
   })
 
   it('forces planRequired for compose-email intent (single-verb phrasings)', () => {
-    const r = classifyQuery('can you write an email to my boss that I\'m quitting')
+    const r = classifyQuery("can you write an email to my boss that I'm quitting")
     expect(r.mode).toBe('action')
     expect(r.planRequired).toBe(true)
   })
@@ -101,7 +103,7 @@ describe('classifyQuery', () => {
   })
 
   it('routes "which is the best restaurant" as research', () => {
-    const r = classifyQuery("which is the best restaurant nearby")
+    const r = classifyQuery('which is the best restaurant nearby')
     expect(r.mode).toBe('action')
     expect(r.planRequired).toBe(true)
   })

@@ -20,7 +20,12 @@ import { startAgent, wireAgentEvents } from './agent/events'
 import { holdEscape, releaseEscape, resetEscape, setEscapeHandler } from './agent/escape'
 import { applyAgentState, applyDwellState, applyListenerState, setHotkey } from './agent/sync'
 import { assertSafeUrl, isSafeUrl } from './actions/safety'
-import { interceptGuideCommand, replaySavedGuide, saveLastAsGuide, startGuide } from './guides/session'
+import {
+  interceptGuideCommand,
+  replaySavedGuide,
+  saveLastAsGuide,
+  startGuide
+} from './guides/session'
 import { cancelAll } from './query/cancel'
 import { runQuery } from './query/pipeline'
 import { speakAnswer } from './speech/tts'
@@ -79,7 +84,8 @@ function registerIpc(): void {
   registerSettingsIpc({ setHotkey, applyListenerState, applyDwellState })
   registerQueryIpc({
     intercept: interceptGuideCommand,
-    runQuery: (prompt, opts, scope) => runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide }),
+    runQuery: (prompt, opts, scope) =>
+      runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide })
   })
 }
 

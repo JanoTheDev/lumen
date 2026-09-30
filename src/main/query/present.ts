@@ -1,6 +1,12 @@
 // Draws a model result on screen: locate boxes, guide highlights + pointer, or clears the layer.
 import type { GuideStep, ModelResponse, Rect } from '@shared/types'
-import { currentFrame, imageRectToPhys, isUsableRect, physRectToLogical, rectCenter } from '../actions/coords'
+import {
+  currentFrame,
+  imageRectToPhys,
+  isUsableRect,
+  physRectToLogical,
+  rectCenter
+} from '../actions/coords'
 import * as answer from '../windows/answer'
 import * as highlight from '../windows/highlight'
 import { setStatus } from '../windows/status'
@@ -37,14 +43,16 @@ export function present(result: ModelResponse, prompt: string, onGuide: GuideSta
     if (first?.bbox) {
       const c = rectCenter(first.bbox)
       highlight.send('screen:pointer', {
-        x: Math.round(c.x), y: Math.round(c.y),
-        text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
+        x: Math.round(c.x),
+        y: Math.round(c.y),
+        text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`
       })
     }
   } else if (result.mode === 'action') {
-    const hasRealClick = result.actions?.some((a) =>
-      (a.type === 'click' || a.type === 'move') && a.x != null && a.y != null ||
-      a.type === 'click_bbox' && a.bbox != null
+    const hasRealClick = result.actions?.some(
+      (a) =>
+        ((a.type === 'click' || a.type === 'move') && a.x != null && a.y != null) ||
+        (a.type === 'click_bbox' && a.bbox != null)
     )
     if (!hasRealClick) highlight.clear()
   } else {

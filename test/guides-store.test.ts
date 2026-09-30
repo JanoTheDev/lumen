@@ -127,10 +127,24 @@ describe('legacy guide files', () => {
     const dir = mkdtempSync(join(tmpdir(), 'lumen-guides-'))
     store.setGuidesDir(dir)
     const file = join(dir, 'old-guide.json')
-    writeFileSync(file, JSON.stringify({ id: 'old-guide', name: 'old', task: 't', createdAt: 1, steps: [{ label: 'a', target_hint: '', bbox: [10, 20, 110, 60] }] }))
+    writeFileSync(
+      file,
+      JSON.stringify({
+        id: 'old-guide',
+        name: 'old',
+        task: 't',
+        createdAt: 1,
+        steps: [{ label: 'a', target_hint: '', bbox: [10, 20, 110, 60] }]
+      })
+    )
     const g = store.loadSavedGuide('old-guide')
     expect(g?.steps[0].bbox).toEqual({ x: 10, y: 20, w: 100, h: 40 })
-    expect(JSON.parse(readFileSync(file, 'utf8')).steps[0].bbox).toEqual({ x: 10, y: 20, w: 100, h: 40 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).steps[0].bbox).toEqual({
+      x: 10,
+      y: 20,
+      w: 100,
+      h: 40
+    })
     store.setGuidesDir(null)
   })
 })

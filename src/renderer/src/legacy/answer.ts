@@ -1,5 +1,13 @@
-interface ThemeCustom { background: string; foreground: string; accent: string }
-interface AnswerConfig { theme?: string; themeCustom?: ThemeCustom; answerAutoCloseMs?: number }
+interface ThemeCustom {
+  background: string
+  foreground: string
+  accent: string
+}
+interface AnswerConfig {
+  theme?: string
+  themeCustom?: ThemeCustom
+  answerAutoCloseMs?: number
+}
 interface AnswerApi {
   getConfig?: () => Promise<unknown>
   onConfigChanged?: (cb: (cfg: unknown) => void) => void
@@ -15,13 +23,13 @@ const api = (window as unknown as { api?: AnswerApi }).api
 let CLOSE_MS = 10000
 
 const THEME_MAP: Record<string, { bg: string; fg: string; acc: string }> = {
-  dark:            { bg: '#0d0f14', fg: '#e6e8ee', acc: '#5b8cff' },
-  light:           { bg: '#ffffff', fg: '#0f172a', acc: '#2563eb' },
+  dark: { bg: '#0d0f14', fg: '#e6e8ee', acc: '#5b8cff' },
+  light: { bg: '#ffffff', fg: '#0f172a', acc: '#2563eb' },
   'high-contrast': { bg: '#000000', fg: '#ffffff', acc: '#ffff00' },
-  ocean:           { bg: '#031728', fg: '#e0f2fe', acc: '#06b6d4' },
-  forest:          { bg: '#0a1f14', fg: '#dcfce7', acc: '#22c55e' },
-  sunset:          { bg: '#1f1209', fg: '#fed7aa', acc: '#f97316' },
-  midnight:        { bg: '#0f0a1f', fg: '#ede9fe', acc: '#a855f7' }
+  ocean: { bg: '#031728', fg: '#e0f2fe', acc: '#06b6d4' },
+  forest: { bg: '#0a1f14', fg: '#dcfce7', acc: '#22c55e' },
+  sunset: { bg: '#1f1209', fg: '#fed7aa', acc: '#f97316' },
+  midnight: { bg: '#0f0a1f', fg: '#ede9fe', acc: '#a855f7' }
 }
 function applyThemeVars(name?: string, custom?: ThemeCustom): void {
   const r = document.documentElement
@@ -48,7 +56,9 @@ async function loadThemeAndConfig(): Promise<void> {
       applyThemeVars(c.theme, c.themeCustom)
       if (c.answerAutoCloseMs) CLOSE_MS = c.answerAutoCloseMs
     })
-  } catch (e) { applyThemeVars('dark') }
+  } catch (e) {
+    applyThemeVars('dark')
+  }
 }
 loadThemeAndConfig()
 
@@ -92,7 +102,7 @@ textEl.addEventListener('click', (e) => {
 
 function updateBar(): void {
   const left = Math.max(0, deadline - Date.now())
-  barEl.style.width = ((left / CLOSE_MS) * 100) + '%'
+  barEl.style.width = (left / CLOSE_MS) * 100 + '%'
   if (left <= 0) clearInterval(countdownInterval)
 }
 
@@ -123,7 +133,7 @@ function pauseAutoClose(): void {
   paused = true
   remainingMs = Math.max(0, deadline - Date.now())
   clearTimers()
-  barEl.style.width = ((remainingMs / CLOSE_MS) * 100) + '%'
+  barEl.style.width = (remainingMs / CLOSE_MS) * 100 + '%'
 }
 
 function resumeAutoClose(): void {
@@ -132,12 +142,20 @@ function resumeAutoClose(): void {
   scheduleClose(Math.max(remainingMs, 1500))
 }
 
-card.addEventListener('mouseenter', () => { hovering = true; pauseAutoClose() })
-card.addEventListener('mouseleave', () => { hovering = false; resumeAutoClose() })
+card.addEventListener('mouseenter', () => {
+  hovering = true
+  pauseAutoClose()
+})
+card.addEventListener('mouseleave', () => {
+  hovering = false
+  resumeAutoClose()
+})
 
 function renderMarkdown(raw: string): string {
   return raw
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -150,7 +168,7 @@ const CARD_MARGIN = 16
 function showAnswer(text: string): void {
   answerId++
   const maxH = Math.floor(window.screen.availHeight * 0.6)
-  card.style.maxHeight = (maxH - CARD_MARGIN) + 'px'
+  card.style.maxHeight = maxH - CARD_MARGIN + 'px'
   textEl.innerHTML = renderMarkdown(text)
   textEl.scrollTop = 0
   card.classList.add('visible')
@@ -167,7 +185,10 @@ if (api?.onShowAnswer) api.onShowAnswer(showAnswer)
 let currentAudio: HTMLAudioElement | null = null
 api?.onTtsAudio?.(({ mime, data }) => {
   try {
-    if (currentAudio) { currentAudio.pause(); currentAudio = null }
+    if (currentAudio) {
+      currentAudio.pause()
+      currentAudio = null
+    }
     const a = new Audio(`data:${mime};base64,${data}`)
     currentAudio = a
     a.play().catch(() => {})

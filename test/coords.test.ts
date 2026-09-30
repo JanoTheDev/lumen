@@ -36,7 +36,10 @@ function fakeAdapter(displays: FakeDisplay[]): ScreenAdapter {
   const byDip = (x: number, y: number): FakeDisplay =>
     displays.find(
       (d) =>
-        x >= d.dipX && x < d.dipX + d.physW / d.scale && y >= d.dipY && y < d.dipY + d.physH / d.scale
+        x >= d.dipX &&
+        x < d.dipX + d.physW / d.scale &&
+        y >= d.dipY &&
+        y < d.dipY + d.physH / d.scale
     ) ?? displays[0]
   const toDip = (p: { x: number; y: number }): { x: number; y: number } => {
     const d = byPhys(p.x, p.y)

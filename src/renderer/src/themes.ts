@@ -1,4 +1,12 @@
-export type ThemeName = 'dark' | 'light' | 'high-contrast' | 'ocean' | 'forest' | 'sunset' | 'midnight' | 'custom'
+export type ThemeName =
+  | 'dark'
+  | 'light'
+  | 'high-contrast'
+  | 'ocean'
+  | 'forest'
+  | 'sunset'
+  | 'midnight'
+  | 'custom'
 
 export interface ThemeVars {
   '--ai-accent': string
@@ -24,7 +32,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#4ade80',
     '--ai-error': '#f87171',
     '--ai-opacity': '0.92',
-    '--ai-blur': '14px',
+    '--ai-blur': '14px'
   },
   light: {
     '--ai-accent': '#2563eb',
@@ -36,7 +44,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#16a34a',
     '--ai-error': '#dc2626',
     '--ai-opacity': '0.95',
-    '--ai-blur': '8px',
+    '--ai-blur': '8px'
   },
   'high-contrast': {
     '--ai-accent': '#ffff00',
@@ -48,7 +56,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#00ff00',
     '--ai-error': '#ff0000',
     '--ai-opacity': '1',
-    '--ai-blur': '0px',
+    '--ai-blur': '0px'
   },
   ocean: {
     '--ai-accent': '#06b6d4',
@@ -60,7 +68,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#22d3ee',
     '--ai-error': '#fb7185',
     '--ai-opacity': '0.92',
-    '--ai-blur': '14px',
+    '--ai-blur': '14px'
   },
   forest: {
     '--ai-accent': '#22c55e',
@@ -72,7 +80,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#4ade80',
     '--ai-error': '#f87171',
     '--ai-opacity': '0.92',
-    '--ai-blur': '14px',
+    '--ai-blur': '14px'
   },
   sunset: {
     '--ai-accent': '#f97316',
@@ -84,7 +92,7 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#fbbf24',
     '--ai-error': '#ef4444',
     '--ai-opacity': '0.92',
-    '--ai-blur': '14px',
+    '--ai-blur': '14px'
   },
   midnight: {
     '--ai-accent': '#a855f7',
@@ -96,12 +104,15 @@ export const THEMES: Record<Exclude<ThemeName, 'custom'>, ThemeVars> = {
     '--ai-success': '#4ade80',
     '--ai-error': '#f87171',
     '--ai-opacity': '0.92',
-    '--ai-blur': '14px',
-  },
+    '--ai-blur': '14px'
+  }
 }
 
 export function applyTheme(name: ThemeName, custom?: Partial<ThemeVars>): void {
-  const vars = name === 'custom' && custom ? { ...THEMES.dark, ...custom } : THEMES[name as Exclude<ThemeName, 'custom'>] ?? THEMES.dark
+  const vars =
+    name === 'custom' && custom
+      ? { ...THEMES.dark, ...custom }
+      : (THEMES[name as Exclude<ThemeName, 'custom'>] ?? THEMES.dark)
   const root = document.documentElement
   for (const [k, v] of Object.entries(vars)) {
     root.style.setProperty(k, v)

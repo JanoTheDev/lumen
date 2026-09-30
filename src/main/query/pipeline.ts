@@ -65,11 +65,12 @@ export async function runQuery(
     prompt,
     activeWindow,
     lowDetail: opts.lowDetail,
-    lastTaskContext,
+    lastTaskContext
   })
   if (flags.length) log('plan', `overrides: ${flags.join(', ')}`)
   if (requestedApp) log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
-  if (intent.isContinuation && lastTaskContext) log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
+  if (intent.isContinuation && lastTaskContext)
+    log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
   lastTaskContext = nextTaskContext
 
   log('plan', `query: "${effectivePrompt.slice(0, 80)}"`)
@@ -95,19 +96,37 @@ export async function runQuery(
 
   // Locate request → action+navigate+follow_up: AI generates action follow_up, but we need locate.
   // Replace the AI's follow_up with a proper locate query so highlights appear after navigation.
-  if (!opts.lowDetail && intent.mode === 'locate' && LOCATE_RE.test(prompt) && result.mode === 'action' && result.follow_up) {
+  if (
+    !opts.lowDetail &&
+    intent.mode === 'locate' &&
+    LOCATE_RE.test(prompt) &&
+    result.mode === 'action' &&
+    result.follow_up
+  ) {
     result.follow_up.query = `The page is loaded. Highlight where the user can find: "${prompt}". Respond ONLY with {"mode":"locate","items":[...]} — each item bbox tightly wraps only the matching visible rows/elements. Do NOT click, navigate, or open anything.`
     console.log('[locate-chain] replaced follow_up with locate query')
   }
 
   // Fallback: if AI still returns guide for an imperative request, auto-convert to click_bbox
   const IMPERATIVE_RE = /\b(open|click|go to|navigate|select|tap|press)\b/i
-  if (result.mode === 'guide' && IMPERATIVE_RE.test(prompt) && !isHowToQuestion(prompt) && result.steps?.some(s => s.bbox)) {
-    const best = result.steps.find(s => s.bbox)!
+  if (
+    result.mode === 'guide' &&
+    IMPERATIVE_RE.test(prompt) &&
+    !isHowToQuestion(prompt) &&
+    result.steps?.some((s) => s.bbox)
+  ) {
+    const best = result.steps.find((s) => s.bbox)!
     console.log('[auto-action] guide→action fallback, clicking:', best.label)
     return {
       mode: 'action' as const,
-      actions: [{ type: 'click_bbox' as const, bbox: best.bbox!, description: best.target_hint, button: 'left' as const }],
+      actions: [
+        {
+          type: 'click_bbox' as const,
+          bbox: best.bbox!,
+          description: best.target_hint,
+          button: 'left' as const
+        }
+      ],
       summary: best.label
     }
   }
@@ -116,19 +135,24 @@ export async function runQuery(
   if (result.mode === 'answer' && result.text?.trim()) {
     const cfgNow = loadConfig()
     if (cfgNow.voice.tts === 'cloud') {
-      deps.speak(result.text.trim(), cfgNow.voice.ttsVoice).catch(e =>
-        console.warn('[tts] early synth failed:', (e as Error).message))
+      deps
+        .speak(result.text.trim(), cfgNow.voice.ttsVoice)
+        .catch((e) => console.warn('[tts] early synth failed:', (e as Error).message))
     }
   }
 
   // Save exchange to history (text only — images not stored)
   if (!opts.lowDetail) {
     const summary =
-      result.mode === 'answer' ? result.text :
-      result.mode === 'action' ? (result.summary ?? `action: ${result.actions?.map(a => a.type).join(', ')}`) :
-      result.mode === 'guide' ? `guide: ${result.steps?.map(s => s.label).join(', ')}` :
-      result.mode === 'text_insert' ? `inserted text` :
-      `located: ${result.items?.map(i => i.label).join(', ')}`
+      result.mode === 'answer'
+        ? result.text
+        : result.mode === 'action'
+          ? (result.summary ?? `action: ${result.actions?.map((a) => a.type).join(', ')}`)
+          : result.mode === 'guide'
+            ? `guide: ${result.steps?.map((s) => s.label).join(', ')}`
+            : result.mode === 'text_insert'
+              ? `inserted text`
+              : `located: ${result.items?.map((i) => i.label).join(', ')}`
     addToHistory(prompt, summary)
   }
 

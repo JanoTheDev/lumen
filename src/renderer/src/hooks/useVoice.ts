@@ -92,7 +92,10 @@ interface Session {
 
 let sessionSeq = 0
 
-export function useVoice(onResult: VoiceResultHandler, onError?: VoiceErrorHandler): UseVoiceReturn {
+export function useVoice(
+  onResult: VoiceResultHandler,
+  onError?: VoiceErrorHandler
+): UseVoiceReturn {
   const [listening, setListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const levelRef = useRef(0)
@@ -119,170 +122,197 @@ export function useVoice(onResult: VoiceResultHandler, onError?: VoiceErrorHandl
     cancelAnimationFrame(s.raf)
     if (s.audioCtx && s.audioCtx.state !== 'closed') s.audioCtx.close().catch(() => {})
     s.audioCtx = null
-    if (s.maxTimer) { clearTimeout(s.maxTimer); s.maxTimer = null }
+    if (s.maxTimer) {
+      clearTimeout(s.maxTimer)
+      s.maxTimer = null
+    }
     if (sessionRef.current === s) levelRef.current = 0
   }, [])
 
-  const finish = useCallback((s: Session) => {
-    if (s.finished) return
-    s.finished = true
-    teardownAudio(s)
-    if (s.watchdog) { clearTimeout(s.watchdog); s.watchdog = null }
-    if (sessionRef.current === s) {
-      setListening(false)
-      scheduleIdleRelease()
-    }
-  }, [scheduleIdleRelease, teardownAudio])
-
-  const abortSession = useCallback((s: Session | null) => {
-    if (!s || s.finished) return
-    s.discarded = true
-    const rec = s.recorder
-    if (rec) {
-      rec.ondataavailable = null
-      rec.onstop = null
-      if (rec.state !== 'inactive') {
-        try { rec.stop() } catch { /* already stopped */ }
-      }
-    }
-    finish(s)
-  }, [finish])
-
-  const start = useCallback(async (opts: VoiceStartOptions = {}): Promise<void> => {
-    const prev = sessionRef.current
-    if (prev && !prev.finished && prev.recorder?.state !== 'inactive') abortSession(prev)
-    if (idleTimerRef.current) { clearTimeout(idleTimerRef.current); idleTimerRef.current = null }
-
-    const s: Session = {
-      id: ++sessionSeq,
-      stopRequested: false,
-      discarded: false,
-      finished: false,
-      recorder: null,
-      audioCtx: null,
-      raf: 0,
-      watchdog: null,
-      maxTimer: null,
-      speechMs: 0,
-    }
-    sessionRef.current = s
-    levelRef.current = 0
-    setListening(true)
-
-    let stream: MediaStream
-    try {
-      stream = await getStream()
-    } catch (err) {
-      console.error('[voice] getUserMedia failed:', err)
-      if (s.discarded) return
-      finish(s)
-      onErrorRef.current?.(`Microphone unavailable: ${errorReason(err)}`)
-      return
-    }
-
-    if (s.discarded) return
-    if (s.stopRequested) {
-      // Hotkey released before the mic opened: nothing was recorded.
-      console.log('[voice] stop requested before recording started')
-      finish(s)
-      onResultRef.current('', { speechMs: 0 })
-      return
-    }
-
-    let recorder: MediaRecorder
-    try {
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : 'audio/webm'
-      recorder = new MediaRecorder(stream, { mimeType })
-      const chunks: Blob[] = []
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data)
-      }
-
-      recorder.onstop = async () => {
-        teardownAudio(s)
-        if (s.discarded) return
-        const blob = new Blob(chunks, { type: mimeType })
-        const arrayBuffer = await blob.arrayBuffer()
-        console.log('[voice] audio captured, size:', arrayBuffer.byteLength, 'bytes, speech ms:', Math.round(s.speechMs))
-        let text: string
-        try {
-          text = (await window.api.transcribe(arrayBuffer)) ?? ''
-        } catch (err) {
-          console.error('[voice] transcription failed:', err)
-          if (s.discarded) return
-          finish(s)
-          onErrorRef.current?.(`Transcription failed: ${errorReason(err)}`)
-          return
-        }
-        if (s.discarded) return
-        console.log('[voice] transcript:', text)
-        finish(s)
-        setTranscript(text)
-        onResultRef.current(text.trim(), { speechMs: s.speechMs })
-      }
-
-      s.recorder = recorder
-      recorder.start(250)
-    } catch (err) {
-      console.error('[voice] recorder start failed:', err)
-      finish(s)
-      onErrorRef.current?.(`Microphone unavailable: ${errorReason(err)}`)
-      return
-    }
-    console.log('[voice] MediaRecorder started')
-
-    s.watchdog = setTimeout(function watchdog() {
+  const finish = useCallback(
+    (s: Session) => {
       if (s.finished) return
-      if (s.recorder?.state === 'recording') {
-        console.warn('[voice] watchdog: recording too long, stopping')
-        s.recorder.stop()
-        s.watchdog = setTimeout(watchdog, WATCHDOG_MS)
+      s.finished = true
+      teardownAudio(s)
+      if (s.watchdog) {
+        clearTimeout(s.watchdog)
+        s.watchdog = null
+      }
+      if (sessionRef.current === s) {
+        setListening(false)
+        scheduleIdleRelease()
+      }
+    },
+    [scheduleIdleRelease, teardownAudio]
+  )
+
+  const abortSession = useCallback(
+    (s: Session | null) => {
+      if (!s || s.finished) return
+      s.discarded = true
+      const rec = s.recorder
+      if (rec) {
+        rec.ondataavailable = null
+        rec.onstop = null
+        if (rec.state !== 'inactive') {
+          try {
+            rec.stop()
+          } catch {
+            /* already stopped */
+          }
+        }
+      }
+      finish(s)
+    },
+    [finish]
+  )
+
+  const start = useCallback(
+    async (opts: VoiceStartOptions = {}): Promise<void> => {
+      const prev = sessionRef.current
+      if (prev && !prev.finished && prev.recorder?.state !== 'inactive') abortSession(prev)
+      if (idleTimerRef.current) {
+        clearTimeout(idleTimerRef.current)
+        idleTimerRef.current = null
+      }
+
+      const s: Session = {
+        id: ++sessionSeq,
+        stopRequested: false,
+        discarded: false,
+        finished: false,
+        recorder: null,
+        audioCtx: null,
+        raf: 0,
+        watchdog: null,
+        maxTimer: null,
+        speechMs: 0
+      }
+      sessionRef.current = s
+      levelRef.current = 0
+      setListening(true)
+
+      let stream: MediaStream
+      try {
+        stream = await getStream()
+      } catch (err) {
+        console.error('[voice] getUserMedia failed:', err)
+        if (s.discarded) return
+        finish(s)
+        onErrorRef.current?.(`Microphone unavailable: ${errorReason(err)}`)
         return
       }
-      console.warn('[voice] watchdog: transcription stalled, discarding')
-      abortSession(s)
-      onErrorRef.current?.('Voice request timed out')
-    }, WATCHDOG_MS)
 
-    if (opts.maxRecordMs && opts.maxRecordMs > 0) {
-      s.maxTimer = setTimeout(() => {
-        if (s.recorder?.state === 'recording' && !s.discarded) {
-          console.log('[voice] max record duration reached, stopping')
-          s.recorder.stop()
-        }
-      }, opts.maxRecordMs)
-    }
-
-    // Analyser set up after the recorder starts so recording is not delayed.
-    try {
-      const audioCtx = new AudioContext()
-      s.audioCtx = audioCtx
-      audioCtx.resume().catch(() => {})
-      const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 1024
-      audioCtx.createMediaStreamSource(stream).connect(analyser)
-      const data = new Float32Array(analyser.fftSize)
-      const threshold = opts.speechThreshold ?? DEFAULT_SPEECH_THRESHOLD
-      let last = performance.now()
-
-      const tick = (): void => {
-        if (s.finished || s.recorder?.state !== 'recording') return
-        analyser.getFloatTimeDomainData(data)
-        const level = computeRms(data)
-        const now = performance.now()
-        if (level > threshold) s.speechMs += now - last
-        last = now
-        if (sessionRef.current === s) levelRef.current = level
-        s.raf = requestAnimationFrame(tick)
+      if (s.discarded) return
+      if (s.stopRequested) {
+        // Hotkey released before the mic opened: nothing was recorded.
+        console.log('[voice] stop requested before recording started')
+        finish(s)
+        onResultRef.current('', { speechMs: 0 })
+        return
       }
-      tick()
-    } catch (err) {
-      console.warn('[voice] level analyser unavailable:', err)
-    }
-  }, [abortSession, finish, teardownAudio])
+
+      let recorder: MediaRecorder
+      try {
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm'
+        recorder = new MediaRecorder(stream, { mimeType })
+        const chunks: Blob[] = []
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data)
+        }
+
+        recorder.onstop = async () => {
+          teardownAudio(s)
+          if (s.discarded) return
+          const blob = new Blob(chunks, { type: mimeType })
+          const arrayBuffer = await blob.arrayBuffer()
+          console.log(
+            '[voice] audio captured, size:',
+            arrayBuffer.byteLength,
+            'bytes, speech ms:',
+            Math.round(s.speechMs)
+          )
+          let text: string
+          try {
+            text = (await window.api.transcribe(arrayBuffer)) ?? ''
+          } catch (err) {
+            console.error('[voice] transcription failed:', err)
+            if (s.discarded) return
+            finish(s)
+            onErrorRef.current?.(`Transcription failed: ${errorReason(err)}`)
+            return
+          }
+          if (s.discarded) return
+          console.log('[voice] transcript:', text)
+          finish(s)
+          setTranscript(text)
+          onResultRef.current(text.trim(), { speechMs: s.speechMs })
+        }
+
+        s.recorder = recorder
+        recorder.start(250)
+      } catch (err) {
+        console.error('[voice] recorder start failed:', err)
+        finish(s)
+        onErrorRef.current?.(`Microphone unavailable: ${errorReason(err)}`)
+        return
+      }
+      console.log('[voice] MediaRecorder started')
+
+      s.watchdog = setTimeout(function watchdog() {
+        if (s.finished) return
+        if (s.recorder?.state === 'recording') {
+          console.warn('[voice] watchdog: recording too long, stopping')
+          s.recorder.stop()
+          s.watchdog = setTimeout(watchdog, WATCHDOG_MS)
+          return
+        }
+        console.warn('[voice] watchdog: transcription stalled, discarding')
+        abortSession(s)
+        onErrorRef.current?.('Voice request timed out')
+      }, WATCHDOG_MS)
+
+      if (opts.maxRecordMs && opts.maxRecordMs > 0) {
+        s.maxTimer = setTimeout(() => {
+          if (s.recorder?.state === 'recording' && !s.discarded) {
+            console.log('[voice] max record duration reached, stopping')
+            s.recorder.stop()
+          }
+        }, opts.maxRecordMs)
+      }
+
+      // Analyser set up after the recorder starts so recording is not delayed.
+      try {
+        const audioCtx = new AudioContext()
+        s.audioCtx = audioCtx
+        audioCtx.resume().catch(() => {})
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 1024
+        audioCtx.createMediaStreamSource(stream).connect(analyser)
+        const data = new Float32Array(analyser.fftSize)
+        const threshold = opts.speechThreshold ?? DEFAULT_SPEECH_THRESHOLD
+        let last = performance.now()
+
+        const tick = (): void => {
+          if (s.finished || s.recorder?.state !== 'recording') return
+          analyser.getFloatTimeDomainData(data)
+          const level = computeRms(data)
+          const now = performance.now()
+          if (level > threshold) s.speechMs += now - last
+          last = now
+          if (sessionRef.current === s) levelRef.current = level
+          s.raf = requestAnimationFrame(tick)
+        }
+        tick()
+      } catch (err) {
+        console.warn('[voice] level analyser unavailable:', err)
+      }
+    },
+    [abortSession, finish, teardownAudio]
+  )
 
   const stop = useCallback((): boolean => {
     const s = sessionRef.current
@@ -302,11 +332,14 @@ export function useVoice(onResult: VoiceResultHandler, onError?: VoiceErrorHandl
     abortSession(s)
   }, [abortSession])
 
-  useEffect(() => () => {
-    abortSession(sessionRef.current)
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-    releaseStream()
-  }, [abortSession])
+  useEffect(
+    () => () => {
+      abortSession(sessionRef.current)
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
+      releaseStream()
+    },
+    [abortSession]
+  )
 
   return { listening, transcript, levelRef, start, stop, abort, supported: true }
 }

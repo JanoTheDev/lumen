@@ -36,7 +36,11 @@ export interface DraftOptions<T> {
 
 // Holds a local draft and commits it after `delay` ms of inactivity or on flush().
 // Only accepted values that differ from the last committed value are committed.
-export function createDraftCommitter<T>(initial: T, commit: (v: T) => void, opts: DraftOptions<T> = {}): DraftCommitter<T> {
+export function createDraftCommitter<T>(
+  initial: T,
+  commit: (v: T) => void,
+  opts: DraftOptions<T> = {}
+): DraftCommitter<T> {
   const delay = opts.delay ?? DRAFT_DEBOUNCE_MS
   let accept = opts.accept ?? ((): boolean => true)
   let draft = initial
@@ -44,7 +48,10 @@ export function createDraftCommitter<T>(initial: T, commit: (v: T) => void, opts
   let timer: ReturnType<typeof setTimeout> | null = null
 
   const cancel = (): void => {
-    if (timer) { clearTimeout(timer); timer = null }
+    if (timer) {
+      clearTimeout(timer)
+      timer = null
+    }
   }
   const flush = (): void => {
     cancel()
@@ -68,7 +75,7 @@ export function createDraftCommitter<T>(initial: T, commit: (v: T) => void, opts
     bind: (nextCommit, nextAccept) => {
       commit = nextCommit
       accept = nextAccept ?? ((): boolean => true)
-    },
+    }
   }
 }
 
@@ -81,7 +88,11 @@ export interface Draft<T> {
 
 // React wrapper: local state for a text field that saves on blur or after a pause,
 // and ignores incoming config echoes while the user is typing.
-export function useDraft<T>(value: T, commit: (v: T) => void, opts: DraftOptions<T> = {}): Draft<T> {
+export function useDraft<T>(
+  value: T,
+  commit: (v: T) => void,
+  opts: DraftOptions<T> = {}
+): Draft<T> {
   const [draft, setDraft] = useState(value)
   const editingRef = useRef(false)
   const [committer] = useState(() => createDraftCommitter(value, commit, opts))
@@ -114,6 +125,6 @@ export function useDraft<T>(value: T, commit: (v: T) => void, opts: DraftOptions
         setDraft(value)
       }
     },
-    flush: () => committer.flush(),
+    flush: () => committer.flush()
   }
 }

@@ -19,14 +19,16 @@ export function assertSafeUrl(raw: unknown): string {
   const trimmed = raw.trim()
   if (!trimmed || trimmed.length > 4096) throw new SafetyError('URL empty or too long')
   // UNC paths and backslash tricks never make sense for a web URL.
-  if (trimmed.startsWith('\\\\') || trimmed.includes('\\')) throw new SafetyError(`blocked path-like URL: ${trimmed}`)
+  if (trimmed.startsWith('\\\\') || trimmed.includes('\\'))
+    throw new SafetyError(`blocked path-like URL: ${trimmed}`)
   let url: URL
   try {
     url = new URL(trimmed)
   } catch {
     throw new SafetyError(`invalid URL: ${trimmed}`)
   }
-  if (!ALLOWED_SCHEMES.has(url.protocol)) throw new SafetyError(`blocked URL scheme: ${url.protocol}`)
+  if (!ALLOWED_SCHEMES.has(url.protocol))
+    throw new SafetyError(`blocked URL scheme: ${url.protocol}`)
   if (url.username || url.password) throw new SafetyError('blocked URL with credentials')
   if (!url.hostname) throw new SafetyError('URL has no host')
   return url.toString()
@@ -56,7 +58,7 @@ const KEY_ALIASES: Record<string, string> = {
   option: 'alt',
   escape: 'esc',
   delete: 'del',
-  return: 'enter',
+  return: 'enter'
 }
 
 const MODIFIER_ORDER = ['ctrl', 'alt', 'shift', 'win']
@@ -74,7 +76,8 @@ export function normalizeCombo(keys: string[] | string): string {
 }
 
 // Windows where typed text can execute commands. Browser tabs about these topics are excluded.
-const SHELL_TITLE_RE = /^run$|\bcmd(\.exe)?\b|command prompt|powershell|windows terminal|^(administrator: )?(terminal|bash|wsl|ubuntu)\b/i
+const SHELL_TITLE_RE =
+  /^run$|\bcmd(\.exe)?\b|command prompt|powershell|windows terminal|^(administrator: )?(terminal|bash|wsl|ubuntu)\b/i
 const BROWSER_TITLE_RE = /(google chrome|mozilla firefox|microsoft​? edge|brave|opera|vivaldi)$/i
 
 export interface KeyContext {
@@ -137,11 +140,17 @@ export function checkAction(action: PolicyAction, ctx: KeyContext = {}): PolicyR
       }
     case 'hotkey': {
       const verdict = classifyHotkey(action.keys ?? [], ctx)
-      return { verdict, reason: verdict === 'allow' ? undefined : `hotkey ${normalizeCombo(action.keys ?? [])}` }
+      return {
+        verdict,
+        reason: verdict === 'allow' ? undefined : `hotkey ${normalizeCombo(action.keys ?? [])}`
+      }
     }
     case 'type': {
       const verdict = classifyType(ctx)
-      return { verdict, reason: verdict === 'allow' ? undefined : `typing into "${ctx.windowTitle}"` }
+      return {
+        verdict,
+        reason: verdict === 'allow' ? undefined : `typing into "${ctx.windowTitle}"`
+      }
     }
     default:
       return { verdict: 'allow' }

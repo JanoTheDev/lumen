@@ -24,7 +24,13 @@ const readDisk = (): Record<string, unknown> => JSON.parse(readFileSync(configPa
 const FULL_V1 = {
   version: 1,
   theme: 'custom',
-  themeCustom: { accent: '#112233', background: '#000000', foreground: '#ffffff', opacity: 0.8, blur: 10 },
+  themeCustom: {
+    accent: '#112233',
+    background: '#000000',
+    foreground: '#ffffff',
+    opacity: 0.8,
+    blur: 10
+  },
   models: { planning: 'gpt-5', execution: 'claude-sonnet-4-6', verification: 'gpt-5-nano' },
   hotkey: 'Alt+B',
   hudAutoCloseMs: 3000,
@@ -87,7 +93,12 @@ describe('config', () => {
     expect(cfg.version).toBe(2)
     expect(cfg.theme).toBe('custom')
     expect(cfg.themeCustom).toEqual(FULL_V1.themeCustom)
-    expect(cfg.models).toEqual({ provider: 'auto', planning: 'gpt-5', main: 'claude-sonnet-4-6', verify: 'gpt-5-nano' })
+    expect(cfg.models).toEqual({
+      provider: 'auto',
+      planning: 'gpt-5',
+      main: 'claude-sonnet-4-6',
+      verify: 'gpt-5-nano'
+    })
     expect(cfg.hotkey).toBe('Alt+B')
     expect(cfg.hudAutoCloseMs).toBe(3000)
     expect(cfg.answerAutoCloseMs).toBe(0)
@@ -112,7 +123,13 @@ describe('config', () => {
   })
 
   it('migrates a partial v1 config, filling defaults', () => {
-    writeRaw({ version: 1, theme: 'forest', models: { execution: 'gpt-5' }, tts: { enabled: false }, dwellClick: { enabled: true } })
+    writeRaw({
+      version: 1,
+      theme: 'forest',
+      models: { execution: 'gpt-5' },
+      tts: { enabled: false },
+      dwellClick: { enabled: true }
+    })
     const cfg = loadConfig()
     expect(cfg.theme).toBe('forest')
     expect(cfg.models).toEqual({ provider: 'auto', main: 'gpt-5' })
@@ -134,7 +151,11 @@ describe('config', () => {
 
   it('migrateV1toV2 is pure and maps tts enabled to cloud', () => {
     const src = { version: 1, tts: { enabled: true, voice: 'echo' } }
-    expect(migrateV1toV2(src)).toEqual({ version: 2, models: { provider: 'auto' }, voice: { tts: 'cloud', ttsVoice: 'echo' } })
+    expect(migrateV1toV2(src)).toEqual({
+      version: 2,
+      models: { provider: 'auto' },
+      voice: { tts: 'cloud', ttsVoice: 'echo' }
+    })
     expect(src).toEqual({ version: 1, tts: { enabled: true, voice: 'echo' } })
   })
 
@@ -173,7 +194,11 @@ describe('config', () => {
   })
 
   it('resets only invalid sections and keeps a copy of the bad file', () => {
-    writeRaw({ ...FULL_V1, hotkey: 'x; calc.exe', dwellClick: { enabled: true, dwellMs: -5, cooldownMs: 1 } })
+    writeRaw({
+      ...FULL_V1,
+      hotkey: 'x; calc.exe',
+      dwellClick: { enabled: true, dwellMs: -5, cooldownMs: 1 }
+    })
     const cfg = loadConfig()
     expect(cfg.hotkey).toBe(DEFAULT_CONFIG.hotkey)
     expect(cfg.dwellClick).toEqual(DEFAULT_CONFIG.dwellClick)
@@ -190,7 +215,12 @@ describe('config', () => {
   })
 
   it('round-trips a save through disk', () => {
-    const saved = saveConfig({ theme: 'ocean', hotkey: 'F9', a11y: { uiScale: 1.25 }, voice: { tts: 'cloud' } })
+    const saved = saveConfig({
+      theme: 'ocean',
+      hotkey: 'F9',
+      a11y: { uiScale: 1.25 },
+      voice: { tts: 'cloud' }
+    })
     invalidateConfig()
     const cfg = loadConfig()
     expect(cfg).toEqual(saved)

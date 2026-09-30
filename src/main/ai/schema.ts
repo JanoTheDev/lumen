@@ -52,14 +52,18 @@ function parseFallback(cleaned: string): ClaudeResponse {
 }
 
 export function parseResponse(raw: string): ClaudeResponse {
-  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+  const cleaned = raw
+    .replace(/```json\n?/g, '')
+    .replace(/```\n?/g, '')
+    .trim()
   try {
     // Extract first complete JSON object BEFORE parsing: drops leading prose and handles
     // the model returning double JSON ("{...}{...}" would make JSON.parse throw)
     const target = extractFirstJson(cleaned)
     if (target === null) return parseFallback(cleaned)
     const parsed = JSON.parse(target) as Record<string, unknown>
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parseFallback(cleaned)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      return parseFallback(cleaned)
 
     // Model sometimes wraps real JSON inside {"mode":"answer","text":"{...}"}
     if (parsed.mode === 'answer' && typeof parsed.text === 'string') {
@@ -70,7 +74,13 @@ export function parseResponse(raw: string): ClaudeResponse {
       }
     }
 
-    if (parsed.mode !== 'answer' && parsed.mode !== 'guide' && parsed.mode !== 'action' && parsed.mode !== 'text_insert' && parsed.mode !== 'locate') {
+    if (
+      parsed.mode !== 'answer' &&
+      parsed.mode !== 'guide' &&
+      parsed.mode !== 'action' &&
+      parsed.mode !== 'text_insert' &&
+      parsed.mode !== 'locate'
+    ) {
       if (parsed.text || parsed.button) {
         return { mode: 'action', actions: [parsed as unknown as Action], summary: '' }
       }
@@ -81,15 +91,22 @@ export function parseResponse(raw: string): ClaudeResponse {
 
     // Locate items without a usable bbox cannot be highlighted
     if (parsed.mode === 'locate') {
-      const items = Array.isArray(parsed.items) ? parsed.items as Array<Record<string, unknown>> : []
-      parsed.items = items.filter((it) => it && typeof it === 'object' && isUsableRect(it.bbox as Rect | undefined))
+      const items = Array.isArray(parsed.items)
+        ? (parsed.items as Array<Record<string, unknown>>)
+        : []
+      parsed.items = items.filter(
+        (it) => it && typeof it === 'object' && isUsableRect(it.bbox as Rect | undefined)
+      )
       if ((parsed.items as unknown[]).length === 0) {
         return { mode: 'answer', text: "I couldn't find that on screen." }
       }
     }
 
     // Normalize mode=action where AI put open_url at top level
-    if (parsed.mode === 'action' && (!parsed.actions || (parsed.actions as unknown[]).length === 0)) {
+    if (
+      parsed.mode === 'action' &&
+      (!parsed.actions || (parsed.actions as unknown[]).length === 0)
+    ) {
       const url = (parsed.open_url || parsed.url) as string | undefined
       if (url) {
         return {
@@ -119,7 +136,8 @@ export function parseResponse(raw: string): ClaudeResponse {
 }
 
 // Matches follow_up queries that are actually clarification questions — these loop forever.
-const QUESTION_FOLLOWUP_RE = /\b(would you like|do you want|shall i|should i|want me to|do you need|can i|may i)\b|\?$/i
+const QUESTION_FOLLOWUP_RE =
+  /\b(would you like|do you want|shall i|should i|want me to|do you need|can i|may i)\b|\?$/i
 
 export function sanitizeResponse(r: ClaudeResponse): ClaudeResponse {
   if (r.mode === 'action' && r.follow_up && QUESTION_FOLLOWUP_RE.test(r.follow_up.query)) {

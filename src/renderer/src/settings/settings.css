@@ -16,9 +16,16 @@
   --ai-radius-sm: 8px;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body, #root { height: 100%; margin: 0; }
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
 
 body {
   font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
@@ -30,13 +37,18 @@ body {
   overflow: hidden;
 }
 
-button, input, select, textarea {
+button,
+input,
+select,
+textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
 }
 
-button { cursor: pointer; }
+button {
+  cursor: pointer;
+}
 
 /* ─── Title bar (custom, frameless) ─── */
 
@@ -87,7 +99,9 @@ button { cursor: pointer; }
   border: none;
   color: var(--ai-muted-strong);
   border-radius: 6px;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
 .sx-ctrl:hover {
@@ -137,8 +151,7 @@ button { cursor: pointer; }
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background:
-    radial-gradient(circle at 30% 30%, #c7d6ff 0%, var(--ai-accent) 40%, #6044d6 100%);
+  background: radial-gradient(circle at 30% 30%, #c7d6ff 0%, var(--ai-accent) 40%, #6044d6 100%);
   box-shadow:
     0 0 16px color-mix(in srgb, var(--ai-accent) 50%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
@@ -177,7 +190,10 @@ button { cursor: pointer; }
   font-size: 13px;
   font-weight: 500;
   text-align: left;
-  transition: background 0.15s, color 0.15s, transform 0.1s;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.1s;
   position: relative;
 }
 
@@ -187,9 +203,11 @@ button { cursor: pointer; }
 }
 
 .sx-nav-item.active {
-  background: linear-gradient(90deg,
+  background: linear-gradient(
+    90deg,
     color-mix(in srgb, var(--ai-accent) 22%, transparent) 0%,
-    color-mix(in srgb, var(--ai-accent) 8%, transparent) 100%);
+    color-mix(in srgb, var(--ai-accent) 8%, transparent) 100%
+  );
   color: var(--ai-foreground);
 }
 
@@ -223,7 +241,9 @@ button { cursor: pointer; }
   letter-spacing: 0.02em;
   opacity: 0;
   transform: translateY(6px);
-  transition: opacity 0.2s, transform 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
   pointer-events: none;
   text-align: center;
 }
@@ -270,7 +290,9 @@ button { cursor: pointer; }
   border-radius: var(--ai-radius-lg);
   margin-bottom: 18px;
   overflow: hidden;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 18px 40px -24px rgba(0, 0, 0, 0.6);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.03) inset,
+    0 18px 40px -24px rgba(0, 0, 0, 0.6);
 }
 
 .sx-card-header {
@@ -306,7 +328,9 @@ button { cursor: pointer; }
   align-items: start;
 }
 
-.sx-field:first-child { border-top: none; }
+.sx-field:first-child {
+  border-top: none;
+}
 
 .sx-field-label {
   font-size: 12.5px;
@@ -342,7 +366,10 @@ button { cursor: pointer; }
   font-size: 13px;
   width: 100%;
   max-width: 380px;
-  transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  transition:
+    border-color 0.12s,
+    box-shadow 0.12s,
+    background 0.12s;
 }
 
 .sx-input:hover,
@@ -358,7 +385,10 @@ button { cursor: pointer; }
   background: rgba(10, 12, 18, 0.9);
 }
 
-textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
+textarea.sx-input {
+  font-size: 12.5px;
+  line-height: 1.55;
+}
 
 .sx-select {
   appearance: none;
@@ -380,7 +410,9 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
   color: var(--ai-muted-strong);
 }
 
-.sx-toggle input { display: none; }
+.sx-toggle input {
+  display: none;
+}
 
 .sx-toggle-track {
   width: 40px;
@@ -431,7 +463,9 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
   font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
   font-weight: 500;
   text-align: left;
-  transition: border-color 0.12s, background 0.12s;
+  transition:
+    border-color 0.12s,
+    background 0.12s;
 }
 
 .hotkey-btn:hover {
@@ -447,8 +481,12 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
 }
 
 @keyframes sx-pulse {
-  from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ai-accent) 15%, transparent); }
-  to   { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ai-accent) 28%, transparent); }
+  from {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ai-accent) 15%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--ai-accent) 28%, transparent);
+  }
 }
 
 .hotkey-hint {
@@ -477,10 +515,15 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
   height: 36px;
   font-size: 15px;
   font-weight: 500;
-  transition: background 0.12s, color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
 
-.sx-stepper-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--ai-foreground); }
+.sx-stepper-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ai-foreground);
+}
 
 .sx-stepper-input {
   background: transparent;
@@ -527,7 +570,9 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
   padding: 4px 0;
 }
 
-.sx-link:hover { text-decoration: underline; }
+.sx-link:hover {
+  text-decoration: underline;
+}
 
 /* ─── Theme grid ─── */
 
@@ -547,7 +592,10 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
   border: 1px solid var(--ai-border);
   border-radius: var(--ai-radius-sm);
   text-align: left;
-  transition: transform 0.14s, border-color 0.14s, box-shadow 0.14s;
+  transition:
+    transform 0.14s,
+    border-color 0.14s,
+    box-shadow 0.14s;
   min-height: 36px;
   cursor: pointer;
   flex: 0 1 auto;
@@ -561,7 +609,9 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
 
 .sx-theme-card.selected {
   border-color: var(--ai-accent);
-  box-shadow: 0 0 0 1px var(--ai-accent), 0 8px 20px -14px color-mix(in srgb, var(--ai-accent) 55%, transparent);
+  box-shadow:
+    0 0 0 1px var(--ai-accent),
+    0 8px 20px -14px color-mix(in srgb, var(--ai-accent) 55%, transparent);
 }
 
 .sx-theme-swatches {
@@ -597,12 +647,19 @@ textarea.sx-input { font-size: 12.5px; line-height: 1.55; }
 
 /* ─── Scrollbar ─── */
 
-.sx-main::-webkit-scrollbar { width: 10px; }
-.sx-main::-webkit-scrollbar-track { background: transparent; }
+.sx-main::-webkit-scrollbar {
+  width: 10px;
+}
+.sx-main::-webkit-scrollbar-track {
+  background: transparent;
+}
 .sx-main::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
-.sx-main::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.12); background-clip: padding-box; }
+.sx-main::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  background-clip: padding-box;
+}

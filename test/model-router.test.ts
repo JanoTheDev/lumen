@@ -3,7 +3,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { computerUseModel, getModel, getProvider, isReasoningModel, reasoningParams } from '../src/main/ai/router'
+import {
+  computerUseModel,
+  getModel,
+  getProvider,
+  isReasoningModel,
+  reasoningParams
+} from '../src/main/ai/router'
 import { usageCost } from '../src/main/ai/pricing'
 import { addToHistory, clearHistory, historyMessages } from '../src/main/ai/history'
 import { setConfigDir, saveConfig } from '../src/main/config'

@@ -1,5 +1,11 @@
 import { ipcMain } from 'electron'
-import { actionsSchema, confidenceSchema, promptSchema, queryOptsSchema, textSchema } from '@shared/ipc'
+import {
+  actionsSchema,
+  confidenceSchema,
+  promptSchema,
+  queryOptsSchema,
+  textSchema
+} from '@shared/ipc'
 import type { Action, ModelResponse } from '@shared/types'
 import { INVALID, safeParse } from './validate'
 import { beginScope, cancelAll, endScope, isAbortError, type CancelScope } from '../query/cancel'
@@ -44,21 +50,31 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       if (!opts.lowDetail) {
         const subtasks = splitSubtasks(prompt)
         if (canParallelize(subtasks)) {
-          const result = await userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
-            log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
-            const timer = startTimer(`parallel subtasks (${subtasks.length})`)
-            const answers = await Promise.all(subtasks.map(st => deps.runQuery(st, opts, scope.child())))
-            timer.total()
-            const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
-            return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
-          })
+          const result = await userQueue.enqueue(
+            `parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`,
+            async () => {
+              log(
+                'plan',
+                `parallel subtasks: ${subtasks.length} — ${subtasks.map((s) => `"${s.slice(0, 30)}"`).join(', ')}`
+              )
+              const timer = startTimer(`parallel subtasks (${subtasks.length})`)
+              const answers = await Promise.all(
+                subtasks.map((st) => deps.runQuery(st, opts, scope.child()))
+              )
+              timer.total()
+              const texts = answers.map((a) => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
+              return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
+            }
+          )
           setStatus('answer', 'Done', undefined, 1400)
           return result
         }
       }
 
       // Level 1: serialize user requests through the queue.
-      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => deps.runQuery(prompt, opts, scope))
+      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () =>
+        deps.runQuery(prompt, opts, scope)
+      )
       const modeLabel = (result as { mode?: string }).mode
       if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
       else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
@@ -78,31 +94,38 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     }
   })
 
-  ipcMain.handle('assistant:announce', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
-    const summary = safeParse('assistant:announce', textSchema, rawSummary)
-    const confidence = safeParse('assistant:announce', confidenceSchema, rawConfidence)
-    if (summary === undefined) return { delayMs: 0 }
-    const cfg = loadConfig()
-    if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
-    if (!summary || !summary.trim()) return { delayMs: 0 }
-    const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
-    const baseText = `About to: ${summary.trim()}`
-    const displayText = cfg.showConfidence && conf !== 'high'
-      ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
-      : baseText
-    const kind = conf === 'low' ? 'error' : 'acting'
-    const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
-    setStatus(kind, displayText, undefined, delayMs + 1200)
-    return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
-  })
+  ipcMain.handle(
+    'assistant:announce',
+    async (_event, rawSummary: unknown, rawConfidence: unknown) => {
+      const summary = safeParse('assistant:announce', textSchema, rawSummary)
+      const confidence = safeParse('assistant:announce', confidenceSchema, rawConfidence)
+      if (summary === undefined) return { delayMs: 0 }
+      const cfg = loadConfig()
+      if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
+      if (!summary || !summary.trim()) return { delayMs: 0 }
+      const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
+      const baseText = `About to: ${summary.trim()}`
+      const displayText =
+        cfg.showConfidence && conf !== 'high'
+          ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
+          : baseText
+      const kind = conf === 'low' ? 'error' : 'acting'
+      const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
+      setStatus(kind, displayText, undefined, delayMs + 1200)
+      return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
+    }
+  )
 
   ipcMain.handle('assistant:execute', async (_event, rawActions: unknown) => {
     const parsed = safeParse('assistant:execute', actionsSchema, rawActions)
     if (!parsed) return INVALID
-    const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
+    const actions = parsed.map((a) => ({
+      ...a,
+      bbox: a.bbox ? (normalizeBbox(a.bbox) ?? undefined) : undefined
+    })) as Action[]
     const scope = beginScope()
     armEscape()
-    const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
+    const execTimer = startTimer(`execute-action [${actions.map((a) => a.type).join(', ')}]`)
     try {
       const r = await executeActions(actions, { signal: scope.signal })
       log('done', r.cancelled ? 'execute cancelled' : 'execute complete')

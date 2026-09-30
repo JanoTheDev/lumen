@@ -12,23 +12,19 @@ describe('logger', () => {
 
   it('formats [plan] tag with message', () => {
     log('plan', 'task: open gmail')
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('[plan]')
-    )
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('task: open gmail')
-    )
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[plan]'))
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('task: open gmail'))
   })
 
   it('pads tag to 9 characters', () => {
     log('plan', 'msg')
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/\[plan\]\s{3}/)  // [plan] = 6 chars, padded to 9 = 3 spaces
+      expect.stringMatching(/\[plan\]\s{3}/) // [plan] = 6 chars, padded to 9 = 3 spaces
     )
     vi.clearAllMocks()
     log('verify', 'msg')
     expect(console.log).toHaveBeenCalledWith(
-      expect.stringMatching(/\[verify\]\s{1}/)  // [verify] = 8 chars, padded to 9 = 1 space
+      expect.stringMatching(/\[verify\]\s{1}/) // [verify] = 8 chars, padded to 9 = 1 space
     )
   })
 
@@ -41,23 +37,17 @@ describe('logger', () => {
 
   it('includes model with pipe separator', () => {
     log('verify', 'page changed', { model: 'gpt-5-nano' })
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('| gpt-5-nano')
-    )
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('| gpt-5-nano'))
   })
 
   it('formats cost to 5 decimal places (trailing zeros)', () => {
     log('done', 'complete', { cost: 0.001 })
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('$0.00100')
-    )
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('$0.00100'))
   })
 
   it('formats timeMs as seconds with pipe separator', () => {
     log('step', 'navigate', { timeMs: 2500 })
-    expect(console.log).toHaveBeenCalledWith(
-      expect.stringContaining('| 2.50s')
-    )
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('| 2.50s'))
   })
 
   it('assembles full format with all meta fields', () => {

@@ -35,8 +35,13 @@ export function needsScreenshot(prompt: string): boolean {
 
   // Pure launch with no disambiguation → no screenshot needed
   const isLaunch = /^(open|launch|go to|navigate to)\s+\w/i.test(prompt)
-  const hasDisambiguator = /\b(from|first|second|third|fourth|fifth|last|latest|recent|top|#\d+|\d+(st|nd|rd|th))\b/i.test(p)
+  const hasDisambiguator =
+    /\b(from|first|second|third|fourth|fifth|last|latest|recent|top|#\d+|\d+(st|nd|rd|th))\b/i.test(
+      p
+    )
   if (isLaunch && !hasDisambiguator) return false
 
-  return /\b(this|screen|here|that|visible|what.*see|how.*do|button|click|navigate|window|app|page|ui|cursor|tab|menu|field|input|form|element|icon|image|show me|where is|find|select|highlight|email|compose|reply|draft|message|write|rewrite|linkedin|gmail|twitter|slack|notion|edit|insert|paste|recent|latest|first|second|third|last|from|sender|inbox|open|refund|payment|filter|effect|caption)\b/i.test(prompt)
+  return /\b(this|screen|here|that|visible|what.*see|how.*do|button|click|navigate|window|app|page|ui|cursor|tab|menu|field|input|form|element|icon|image|show me|where is|find|select|highlight|email|compose|reply|draft|message|write|rewrite|linkedin|gmail|twitter|slack|notion|edit|insert|paste|recent|latest|first|second|third|last|from|sender|inbox|open|refund|payment|filter|effect|caption)\b/i.test(
+    prompt
+  )
 }

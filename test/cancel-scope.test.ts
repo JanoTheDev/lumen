@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { beginScope, endScope, cancelAll, isAbortError, CancelledError } from '../src/main/query/cancel'
+import {
+  beginScope,
+  endScope,
+  cancelAll,
+  isAbortError,
+  CancelledError
+} from '../src/main/query/cancel'
 
 describe('CancelScope', () => {
   it('cancelAll aborts every active scope and its children', () => {

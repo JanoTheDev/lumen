@@ -57,7 +57,9 @@ export function hide(): void {
 }
 
 function run(js: string): void {
-  get()?.webContents.executeJavaScript(js, true).catch(() => {})
+  get()
+    ?.webContents.executeJavaScript(js, true)
+    .catch(() => {})
 }
 
 /** Hands-free uses the same auto-stop-on-silence path as wake-word activation. */

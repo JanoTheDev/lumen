@@ -50,7 +50,12 @@ export async function runPlanned(
     () => agent.screenshot(),
     (actions) => runBatch(actions as Action[], scope),
     (progress) => {
-      const p = progress as { stepIndex?: number; totalSteps?: number; description?: string; status?: string }
+      const p = progress as {
+        stepIndex?: number
+        totalSteps?: number
+        description?: string
+        status?: string
+      }
       if (p.stepIndex && p.totalSteps && p.description) {
         const statusKind: StatusKind = p.status === 'failed' ? 'error' : 'step'
         setStatus(statusKind, p.description, { index: p.stepIndex, total: p.totalSteps })

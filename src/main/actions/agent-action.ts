@@ -52,7 +52,12 @@ export function toAgentAction(action: ModelAction, frame: FrameGeometry): AgentA
     case 'click_bbox': {
       if (!bbox) return base
       const c = rectCenter(imageRectToPhys(frame, bbox))
-      return { type: 'click', x: Math.round(c.x), y: Math.round(c.y), button: action.button ?? 'left' }
+      return {
+        type: 'click',
+        x: Math.round(c.x),
+        y: Math.round(c.y),
+        button: action.button ?? 'left'
+      }
     }
     case 'click_element': {
       if (bbox) {

@@ -13,8 +13,9 @@ export function applyDwellState(cfg: AppConfig): void {
   const agent = getAgent()
   if (!agent) return
   if (cfg.dwellClick.enabled) {
-    agent.enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs).catch(e =>
-      console.error('[dwell] enable failed:', (e as Error).message))
+    agent
+      .enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs)
+      .catch((e) => console.error('[dwell] enable failed:', (e as Error).message))
   } else {
     agent.disableDwell().catch(() => {})
   }
@@ -32,12 +33,15 @@ export function applyListenerState(cfg: AppConfig): void {
   }
   if (!modelInstalled()) {
     installModel()
-      .then(() => getAgent()?.enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg)))
-      .catch(e => console.error('[listener] model install failed:', (e as Error).message))
+      .then(() =>
+        getAgent()?.enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg))
+      )
+      .catch((e) => console.error('[listener] model install failed:', (e as Error).message))
     return
   }
-  agent.enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg))
-    .catch(e => console.error('[listener] enable failed:', (e as Error).message))
+  agent
+    .enableListener(wakeOn ? cfg.wakeWord.phrase : '', cancelPhraseList(cfg))
+    .catch((e) => console.error('[listener] enable failed:', (e as Error).message))
 }
 
 /** Full state, re-sent after every agent (re)start. */

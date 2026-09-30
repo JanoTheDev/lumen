@@ -4,7 +4,12 @@ import { writingRulesFor } from '../app-context'
 function nowContext(): string {
   const now = new Date()
   const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-  const date = now.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+  const date = now.toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
   const iso = now.toISOString()
   return `Current local time: ${time} on ${date} (ISO ${iso}).`
 }

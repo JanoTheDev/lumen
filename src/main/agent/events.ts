@@ -88,8 +88,9 @@ export function wireAgentEvents(agent: AgentBridge): void {
     if (isOverOwnWindow(physToLogical({ x, y }))) return
     console.log(`[dwell] click at (${x}, ${y})`)
     setStatus('acting', 'Dwell click', undefined, 900)
-    agent.execute({ type: 'click', x, y, button: 'left' }).catch(e =>
-      console.error('[dwell] click failed:', (e as Error).message))
+    agent
+      .execute({ type: 'click', x, y, button: 'left' })
+      .catch((e) => console.error('[dwell] click failed:', (e as Error).message))
   })
 
   agent.onEvent('mouse-moved', () => {

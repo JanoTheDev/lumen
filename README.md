@@ -11,16 +11,16 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 
 ## What it does
 
-| You say… | Lumen does… |
-|---|---|
-| *"What time is it, and what's the weather in Larnaca?"* | Two parallel AI calls, one merged answer. |
-| *"Write an email to my boss that I'm quitting."* | Plans 3 steps → opens Gmail → clicks Compose → fills Subject + Body. Stops before Send. |
-| *"Show me the internship roles at Exness."* | Autonomous research loop: Google → top result → scrolls → extracts list → summarizes. |
-| *"How do I compose in Gmail?"* | If you're on the wrong page, Lumen navigates to Gmail first, then shows a step-by-step guide with numbered highlights. |
-| *"Next" / "back" / "repeat" / "done"* | Advance, rewind, re-announce, or dismiss the current guide — by voice. |
-| *"Save guide as compose Gmail"* | Saves the current guide to your library. Replay any time with *"play guide compose Gmail"*. |
-| *"Stop" / "cancel"* | Aborts in-flight actions mid-run. |
-| *"Where is the Compose button?"* | Dims the screen, highlights the exact bbox. |
+| You say…                                                | Lumen does…                                                                                                            |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| _"What time is it, and what's the weather in Larnaca?"_ | Two parallel AI calls, one merged answer.                                                                              |
+| _"Write an email to my boss that I'm quitting."_        | Plans 3 steps → opens Gmail → clicks Compose → fills Subject + Body. Stops before Send.                                |
+| _"Show me the internship roles at Exness."_             | Autonomous research loop: Google → top result → scrolls → extracts list → summarizes.                                  |
+| _"How do I compose in Gmail?"_                          | If you're on the wrong page, Lumen navigates to Gmail first, then shows a step-by-step guide with numbered highlights. |
+| _"Next" / "back" / "repeat" / "done"_                   | Advance, rewind, re-announce, or dismiss the current guide — by voice.                                                 |
+| _"Save guide as compose Gmail"_                         | Saves the current guide to your library. Replay any time with _"play guide compose Gmail"_.                            |
+| _"Stop" / "cancel"_                                     | Aborts in-flight actions mid-run.                                                                                      |
+| _"Where is the Compose button?"_                        | Dims the screen, highlights the exact bbox.                                                                            |
 
 ---
 
@@ -37,6 +37,7 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 ## Features
 
 **Agentic execution**
+
 - Multi-step planner for compose / navigate / fill tasks. Each step is verified; retries on failure.
 - Autonomous research agent — up to 8 iterations of search → click → scroll → summarize.
 - App-switch detection — if you mention Gmail/Outlook/YouTube/etc. while on a different page, Lumen navigates to the right site before doing anything else.
@@ -44,11 +45,13 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 - Parallel subtask splitting for read-only questions ("A and B" fires two concurrent AI calls).
 
 **Screen awareness**
+
 - Speculative screenshot on hotkey-down for low latency.
 - Active-window detection adapts writing style per app (Gmail, LinkedIn, X/Twitter, Slack, Discord, Notion, Outlook, messaging).
 - OCR for click targeting, with bbox fallback and Computer Use refinement on accurate models.
 
 **Voice input**
+
 - Global hotkey — rebindable live from Settings, pushed to the Python agent without restart.
 - **Hands-free / tap-to-talk** — press once, recording auto-stops on silence.
 - **Offline wake word** ("hey lumen") — Vosk-based, fully local, zero cloud cost.
@@ -57,12 +60,14 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 - Silence detection tunable per user (silence window, max-wait, speech threshold).
 
 **Guide mode**
+
 - Numbered highlights drawn over UI elements.
 - Floating label next to the cursor with big readable text ("2/5: Click Compose button…"), not a tiny tooltip at the bottom.
 - Voice nav: "next", "back", "repeat", "done". Zero AI cost — matched locally.
 - Guide library: save the current guide with a name, replay any saved guide later. Replays re-run the task against the current screen so bboxes always match.
 
 **Accessibility**
+
 - **UI scale** — 75% – 160% slider, applied live to HUD, answer card, and status bubble.
 - **Dwell click** — hover over any UI element for N ms to auto-click. Visual progress ring around the cursor shows the countdown (accent-colored, cancellable by moving). Auto-rearms after cooldown so repeat-clicks work on the same spot without moving. For motor-limited users.
 - **Narrate actions** — status bubble shows "About to: click Compose" for ~1s before the click fires.
@@ -70,6 +75,7 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 - **TTS answers** — OpenAI TTS reads answer overlays aloud. Six voices.
 
 **Status bubble**
+
 - Bottom-center pill shows `listening → transcribing → thinking → acting/step` with a live step counter.
 - Non-invasive. Click-through. Toggleable.
 
@@ -83,10 +89,12 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 | Locate | "Where is X" | Dim + reveal bbox highlight |
 
 **Themes**
+
 - 7 presets: Dark, Light, High Contrast, Ocean, Forest, Sunset, Midnight.
 - **Custom theme** — 3-color picker (accent, background, foreground) live-applied to every overlay window.
 
 **Settings — 7 panels**
+
 - **General** — hotkey, hands-free mode, history.
 - **Voice** — wake word, cancel voice, Whisper vocab, VAD tuning.
 - **Accessibility** — UI scale, narrate actions, confidence, TTS, dwell click.
@@ -98,6 +106,7 @@ Lumen is a screen-aware desktop assistant for Windows. It runs silently in the t
 Every tunable knob has a sane default and is editable in the UI — no JSON editing required.
 
 **Multi-provider model routing**
+
 - Anthropic keys present → Claude Sonnet 4.6 (planning/execution) + Haiku 4.5 (verification).
 - OpenAI only → gpt-5-mini + gpt-5-nano.
 
@@ -181,18 +190,18 @@ Windows setup helper:
 
 ## Usage
 
-| Action | How |
-|---|---|
-| Start speaking | Hold `Ctrl+Shift+Space` (default, rebindable) |
-| Send | Release the hotkey |
+| Action                             | How                                                                              |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| Start speaking                     | Hold `Ctrl+Shift+Space` (default, rebindable)                                    |
+| Send                               | Release the hotkey                                                               |
 | Hands-free (push-to-talk optional) | Enable Settings → General → Hands-free. Tap hotkey once; Lumen stops on silence. |
-| Wake word | Enable Settings → Voice. Say "hey lumen &lt;your question&gt;". |
-| Advance a guide | Say "next" / "back" / "repeat" / "done" |
-| Save the guide you just ran | Say "save guide as &lt;name&gt;" or use Settings → Library |
-| Replay a saved guide | Say "play guide &lt;name&gt;" or click Play in Library |
-| Cancel in-flight | Press `Escape`, or say a cancel phrase (default "stop", "cancel") |
-| Open Settings | Left-click tray icon or right-click → Settings |
-| Edit config file | Right-click tray → Open config folder |
+| Wake word                          | Enable Settings → Voice. Say "hey lumen &lt;your question&gt;".                  |
+| Advance a guide                    | Say "next" / "back" / "repeat" / "done"                                          |
+| Save the guide you just ran        | Say "save guide as &lt;name&gt;" or use Settings → Library                       |
+| Replay a saved guide               | Say "play guide &lt;name&gt;" or click Play in Library                           |
+| Cancel in-flight                   | Press `Escape`, or say a cancel phrase (default "stop", "cancel")                |
+| Open Settings                      | Left-click tray icon or right-click → Settings                                   |
+| Edit config file                   | Right-click tray → Open config folder                                            |
 
 ### Wake word
 
@@ -224,7 +233,13 @@ Config lives at `~/.ai-overlay/config.json`. Edit via Settings UI or directly.
 {
   "version": 1,
   "theme": "ocean",
-  "themeCustom": { "accent": "#7c92ff", "background": "#0d0f14", "foreground": "#e6e8ee", "opacity": 0.92, "blur": 14 },
+  "themeCustom": {
+    "accent": "#7c92ff",
+    "background": "#0d0f14",
+    "foreground": "#e6e8ee",
+    "opacity": 0.92,
+    "blur": 14
+  },
   "models": {
     "planning": "claude-sonnet-4-6",
     "execution": "gpt-5-mini",
@@ -233,11 +248,11 @@ Config lives at `~/.ai-overlay/config.json`. Edit via Settings UI or directly.
   "hotkey": "Ctrl+Shift+Space",
   "hudAutoCloseMs": 5000,
   "answerAutoCloseMs": 10000,
-  "wakeWord":    { "enabled": false, "phrase": "hey lumen" },
+  "wakeWord": { "enabled": false, "phrase": "hey lumen" },
   "cancelVoice": { "enabled": false, "phrases": "stop, cancel, abort, never mind" },
-  "tts":         { "enabled": false, "voice": "alloy" },
-  "dwellClick":  { "enabled": false, "dwellMs": 1400, "cooldownMs": 1500 },
-  "vad":         { "silenceMs": 1500, "maxWaitMs": 8000, "speechThreshold": 0.04 },
+  "tts": { "enabled": false, "voice": "alloy" },
+  "dwellClick": { "enabled": false, "dwellMs": 1400, "cooldownMs": 1500 },
+  "vad": { "silenceMs": 1500, "maxWaitMs": 8000, "speechThreshold": 0.04 },
   "statusBubble": { "enabled": true },
   "voiceVocab": "",
   "explainBeforeDo": true,

@@ -7,7 +7,10 @@ export class TaskQueue {
   private running = 0
   private nextId = 1
 
-  constructor(private readonly concurrency: number = 1, private readonly name: string = 'queue') {}
+  constructor(
+    private readonly concurrency: number = 1,
+    private readonly name: string = 'queue'
+  ) {}
 
   async enqueue<T>(label: string, fn: () => Promise<T>): Promise<T> {
     const id = this.nextId++
@@ -16,7 +19,10 @@ export class TaskQueue {
       this.queue.push(async () => {
         const t0 = Date.now()
         const waitMs = t0 - queuedAt
-        log('plan', `${this.name} #${id} start: ${label}${waitMs > 20 ? ` (waited ${(waitMs / 1000).toFixed(2)}s)` : ''}`)
+        log(
+          'plan',
+          `${this.name} #${id} start: ${label}${waitMs > 20 ? ` (waited ${(waitMs / 1000).toFixed(2)}s)` : ''}`
+        )
         try {
           const v = await fn()
           log('done', `${this.name} #${id} done`, { timeMs: Date.now() - t0 })
@@ -27,7 +33,10 @@ export class TaskQueue {
         }
       })
       if (this.queue.length > 1 || this.running >= this.concurrency) {
-        log('plan', `${this.name} #${id} queued (${this.queue.length} waiting, ${this.running} active): ${label}`)
+        log(
+          'plan',
+          `${this.name} #${id} queued (${this.queue.length} waiting, ${this.running} active): ${label}`
+        )
       }
       this.tick()
     })
@@ -44,6 +53,10 @@ export class TaskQueue {
     })
   }
 
-  get pending(): number { return this.queue.length }
-  get active(): number { return this.running }
+  get pending(): number {
+    return this.queue.length
+  }
+  get active(): number {
+    return this.running
+  }
 }

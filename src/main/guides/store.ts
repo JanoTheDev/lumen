@@ -6,7 +6,6 @@ import type { GuideStep, SavedGuide } from '@shared/types'
 
 export type { GuideStep, SavedGuide }
 
-
 // Older guide files stored bboxes as arrays. Converts them to Rects and rewrites the file.
 function readGuideFile(file: string): SavedGuide | null {
   try {

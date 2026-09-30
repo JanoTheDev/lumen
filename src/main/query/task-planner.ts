@@ -29,7 +29,11 @@ export interface PlanProgress {
 type ProgressCallback = (p: PlanProgress) => void
 type ScreenshotFn = () => Promise<string>
 type ExecuteActionFn = (actions: Action[]) => Promise<void>
-type QueryAIFn = (prompt: string, screenshot: string | null, activeWindow: string) => Promise<ClaudeResponse>
+type QueryAIFn = (
+  prompt: string,
+  screenshot: string | null,
+  activeWindow: string
+) => Promise<ClaudeResponse>
 
 const MAX_RETRIES = 3
 
@@ -84,36 +88,53 @@ Return ONLY JSON, no markdown, no prose:
   if (provider === 'anthropic') {
     const content: Anthropic.MessageParam['content'] = []
     if (screenshot) {
-      content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshot } })
+      content.push({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: screenshot }
+      })
     }
     content.push({ type: 'text', text: planPrompt })
-    const msg = await anthropicClient().messages.create({
-      model,
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content }]
-    }, { signal })
+    const msg = await anthropicClient().messages.create(
+      {
+        model,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content }]
+      },
+      { signal }
+    )
     raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
   } else {
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] = []
     if (screenshot) {
-      userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshot}`, detail: 'low' } })
+      userContent.push({
+        type: 'image_url',
+        image_url: { url: `data:image/jpeg;base64,${screenshot}`, detail: 'low' }
+      })
     }
     userContent.push({ type: 'text', text: planPrompt })
-    const resp = await openaiClient().chat.completions.create({
-      model,
-      max_completion_tokens: 4096,
-      ...reasoningParams(model),
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent }
-      ]
-    } as ChatParams, { signal })
+    const resp = await openaiClient().chat.completions.create(
+      {
+        model,
+        max_completion_tokens: 4096,
+        ...reasoningParams(model),
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userContent }
+        ]
+      } as ChatParams,
+      { signal }
+    )
     raw = resp.choices[0]?.message?.content ?? ''
-    const usage = resp.usage as (typeof resp.usage & { completion_tokens_details?: { reasoning_tokens?: number } }) | undefined
+    const usage = resp.usage as
+      | (typeof resp.usage & { completion_tokens_details?: { reasoning_tokens?: number } })
+      | undefined
     if (usage) {
       const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? 0
-      log('plan', `usage: in:${usage.prompt_tokens} out:${usage.completion_tokens} (reasoning:${reasoning})`)
+      log(
+        'plan',
+        `usage: in:${usage.prompt_tokens} out:${usage.completion_tokens} (reasoning:${reasoning})`
+      )
     }
   }
 
@@ -126,7 +147,12 @@ Return ONLY JSON, no markdown, no prose:
   }
 
   try {
-    const plan = JSON.parse(raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()) as ExecutionPlan
+    const plan = JSON.parse(
+      raw
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim()
+    ) as ExecutionPlan
     log('plan', `task: "${plan.task}"`)
     log('plan', `steps: ${plan.steps.length} | model: ${model}`, { timeMs: Date.now() - start })
     planTimer.total()
@@ -168,9 +194,10 @@ export async function runResearchAgent(
     const screenshot = await takeScreenshot()
     iterTimer.split('screenshot')
 
-    const firstIterRule = i === 0
-      ? `\nITERATION 1 CRITICAL RULE: If the current screenshot is NOT the target of the query (wrong website, wrong app, unrelated content), you MUST respond with action mode + navigate_url to a Google search for the query. Do NOT answer from the current screen unless it is unambiguously the intended subject. Brand names / proper nouns the user mentioned ALWAYS take the navigate path on iter 1 — they are almost never already on screen.`
-      : ''
+    const firstIterRule =
+      i === 0
+        ? `\nITERATION 1 CRITICAL RULE: If the current screenshot is NOT the target of the query (wrong website, wrong app, unrelated content), you MUST respond with action mode + navigate_url to a Google search for the query. Do NOT answer from the current screen unless it is unambiguously the intended subject. Brand names / proper nouns the user mentioned ALWAYS take the navigate path on iter 1 — they are almost never already on screen.`
+        : ''
 
     const stepPrompt = `RESEARCH TASK: "${query}"
 
@@ -197,16 +224,21 @@ IMPORTANT:
     if (result.mode === 'answer' && result.text?.trim()) {
       log('done', `research resolved on iter ${i + 1}`)
       iterTimer.total()
-      onProgress({ stepIndex: i + 1, totalSteps: MAX_RESEARCH_ITERATIONS, description: 'Done', status: 'done' })
+      onProgress({
+        stepIndex: i + 1,
+        totalSteps: MAX_RESEARCH_ITERATIONS,
+        description: 'Done',
+        status: 'done'
+      })
       timer.total()
       return result
     }
 
     if (result.mode === 'action' && result.actions?.length) {
       await executeActions(result.actions)
-      iterTimer.split(`execute ${result.actions.map(a => a.type).join(',')}`)
+      iterTimer.split(`execute ${result.actions.map((a) => a.type).join(',')}`)
       // Wait for page load / UI settle before next iteration
-      await new Promise(r => setTimeout(r, 1500))
+      await new Promise((r) => setTimeout(r, 1500))
     } else {
       log('fail', `research iter ${i + 1} returned unusable mode: ${result.mode}`)
       break
@@ -218,8 +250,16 @@ IMPORTANT:
   timer.total()
   if (signal?.aborted) return { mode: 'answer', text: 'Cancelled.' } as ClaudeResponse
   log('fail', `research exhausted ${MAX_RESEARCH_ITERATIONS} iterations`)
-  onProgress({ stepIndex: MAX_RESEARCH_ITERATIONS, totalSteps: MAX_RESEARCH_ITERATIONS, description: 'Gave up', status: 'failed' })
-  return { mode: 'answer', text: `I couldn't find a clear answer for "${query}" within ${MAX_RESEARCH_ITERATIONS} steps.` } as ClaudeResponse
+  onProgress({
+    stepIndex: MAX_RESEARCH_ITERATIONS,
+    totalSteps: MAX_RESEARCH_ITERATIONS,
+    description: 'Gave up',
+    status: 'failed'
+  })
+  return {
+    mode: 'answer',
+    text: `I couldn't find a clear answer for "${query}" within ${MAX_RESEARCH_ITERATIONS} steps.`
+  } as ClaudeResponse
 }
 
 export async function executePlan(
@@ -237,9 +277,16 @@ export async function executePlan(
 
   for (const step of plan.steps) {
     if (signal?.aborted) break
-    const stepTimer = startTimer(`step ${step.index}/${totalSteps}: ${step.description.slice(0, 60)}`)
+    const stepTimer = startTimer(
+      `step ${step.index}/${totalSteps}: ${step.description.slice(0, 60)}`
+    )
     log('step', `${step.index}/${totalSteps} ${step.description}`)
-    onProgress({ stepIndex: step.index, totalSteps, description: step.description, status: 'running' })
+    onProgress({
+      stepIndex: step.index,
+      totalSteps,
+      description: step.description,
+      status: 'running'
+    })
 
     let retries = 0
     let succeeded = false
@@ -268,7 +315,11 @@ export async function executePlan(
         if (shouldVerifyStep(firstActionType)) {
           const afterScreenshot = await takeScreenshot()
           stepTimer.split('screenshot after')
-          const { success, detail } = await verifyStep(step.description, afterScreenshot, beforeHash)
+          const { success, detail } = await verifyStep(
+            step.description,
+            afterScreenshot,
+            beforeHash
+          )
           stepTimer.split('verify done')
 
           if (!success) {
@@ -287,7 +338,12 @@ export async function executePlan(
     }
 
     stepTimer.total()
-    onProgress({ stepIndex: step.index, totalSteps, description: step.description, status: succeeded ? 'done' : 'failed' })
+    onProgress({
+      stepIndex: step.index,
+      totalSteps,
+      description: step.description,
+      status: succeeded ? 'done' : 'failed'
+    })
     if (succeeded) completedSteps++
     if (!succeeded) break
   }

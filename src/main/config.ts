@@ -88,7 +88,9 @@ export function loadConfig(): AppConfig {
     parsed = JSON.parse(raw)
   } catch (e) {
     const bad = raw ? backupInvalid(raw) : ''
-    return useDefaults(`config unreadable (${(e as Error).message}), using defaults${bad ? `; saved copy at ${bad}` : ''}`)
+    return useDefaults(
+      `config unreadable (${(e as Error).message}), using defaults${bad ? `; saved copy at ${bad}` : ''}`
+    )
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     const bad = backupInvalid(raw)
@@ -102,9 +104,12 @@ export function loadConfig(): AppConfig {
   let result = configV2Schema.safeParse(candidate)
   if (!result.success) {
     const bad = backupInvalid(raw)
-    const keys = [...new Set(result.error.issues.map((i) => String(i.path[0] ?? '')))].filter(Boolean)
+    const keys = [...new Set(result.error.issues.map((i) => String(i.path[0] ?? '')))].filter(
+      Boolean
+    )
     candidate = { ...candidate }
-    for (const k of keys) candidate[k] = structuredClone((DEFAULT_CONFIG as Record<string, unknown>)[k])
+    for (const k of keys)
+      candidate[k] = structuredClone((DEFAULT_CONFIG as Record<string, unknown>)[k])
     result = configV2Schema.safeParse(candidate)
     if (!result.success) return useDefaults(`config invalid, using defaults; saved copy at ${bad}`)
     warning = `config had invalid values for ${keys.join(', ')}; reset to defaults (saved copy at ${bad})`
@@ -122,7 +127,11 @@ export function saveConfig(update: ConfigPatch | Partial<AppConfig>): AppConfig 
     if (value === undefined) continue
     const prev = next[key]
     next[key] =
-      value && typeof value === 'object' && !Array.isArray(value) && prev && typeof prev === 'object'
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      prev &&
+      typeof prev === 'object'
         ? { ...prev, ...value }
         : value
   }

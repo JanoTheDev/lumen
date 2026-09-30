@@ -5,7 +5,11 @@ import { log } from '../logger'
 export const INVALID = { error: 'E_INVALID' } as const
 
 // Validates a renderer payload; logs and returns undefined when it does not match.
-export function safeParse<T extends ZodType>(channel: string, schema: T, value: unknown): zInfer<T> | undefined {
+export function safeParse<T extends ZodType>(
+  channel: string,
+  schema: T,
+  value: unknown
+): zInfer<T> | undefined {
   try {
     return parsePayload(channel, schema, value)
   } catch (e) {

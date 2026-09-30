@@ -46,12 +46,15 @@ export async function callAnthropic(
   const history: Anthropic.MessageParam[] = historyMessages()
 
   const send = (maxTokens: number): Promise<Anthropic.Message> =>
-    anthropicClient().messages.create({
-      model,
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [...history, { role: 'user', content: userContent }]
-    }, { signal: opts.signal })
+    anthropicClient().messages.create(
+      {
+        model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [...history, { role: 'user', content: userContent }]
+      },
+      { signal: opts.signal }
+    )
   const baseTokens = opts.lowDetail ? 2048 : 4096
   let message = await send(baseTokens)
   if (message.stop_reason === 'max_tokens') {

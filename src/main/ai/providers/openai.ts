@@ -38,7 +38,10 @@ export async function callOpenAI(
   if (screenshotBase64) {
     userContent.push({
       type: 'image_url',
-      image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: opts.lowDetail ? 'low' : 'high' }
+      image_url: {
+        url: `data:image/jpeg;base64,${screenshotBase64}`,
+        detail: opts.lowDetail ? 'low' : 'high'
+      }
     })
   }
   const { imgW, imgH } = currentFrame()
@@ -51,17 +54,20 @@ export async function callOpenAI(
 
   const baseTokens = opts.lowDetail ? 4096 : 8192
   const send = (maxTokens: number): Promise<OpenAI.Chat.ChatCompletion> =>
-    openaiClient().chat.completions.create({
-      model,
-      max_completion_tokens: maxTokens,
-      ...reasoningParams(model),
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...history,
-        { role: 'user', content: userContent }
-      ]
-    } as ChatParams, { signal: opts.signal })
+    openaiClient().chat.completions.create(
+      {
+        model,
+        max_completion_tokens: maxTokens,
+        ...reasoningParams(model),
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...history,
+          { role: 'user', content: userContent }
+        ]
+      } as ChatParams,
+      { signal: opts.signal }
+    )
   let completion = await send(baseTokens)
   if (completion.choices[0]?.finish_reason === 'length') {
     console.log('[fail] truncated response, retrying with a larger max_completion_tokens')

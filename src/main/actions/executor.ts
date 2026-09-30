@@ -2,7 +2,14 @@
 // Computer Use refinement, on-screen preview, safety policy and cancellation.
 import { shell } from 'electron'
 import type { Action } from '@shared/types'
-import { currentFrame, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter } from './coords'
+import {
+  currentFrame,
+  imageRectToPhys,
+  imageToPhys,
+  physRectToLogical,
+  physToLogical,
+  rectCenter
+} from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
 import { assertSafeUrl } from './safety'
 import { passesPolicy } from './policy'
@@ -74,12 +81,19 @@ async function resolve(
       }
     }
     if (opts.preview) {
-      highlight.send('screen:highlights', [{ label: 'Clicking here', target_hint: '', bbox: physRectToLogical(physRect) }])
+      highlight.send('screen:highlights', [
+        { label: 'Clicking here', target_hint: '', bbox: physRectToLogical(physRect) }
+      ])
       highlight.show()
       await sleep(600)
       highlight.hide()
     }
-    return { type: 'click', x: Math.round(target.x), y: Math.round(target.y), button: action.button ?? 'left' }
+    return {
+      type: 'click',
+      x: Math.round(target.x),
+      y: Math.round(target.y),
+      button: action.button ?? 'left'
+    }
   }
 
   if (action.type === 'click_element' && action.bbox && action.text && canRefine) {
@@ -95,14 +109,25 @@ async function resolve(
   return scaled
 }
 
-export async function executeActions(actions: Action[], opts: ExecuteOptions = {}): Promise<ExecuteResult> {
+export async function executeActions(
+  actions: Action[],
+  opts: ExecuteOptions = {}
+): Promise<ExecuteResult> {
   const agent = requireAgent()
   const refine = opts.refine ?? true
   const preview = opts.preview ?? true
   const { signal } = opts
-  const result: ExecuteResult = { executed: 0, cancelled: false, blocked: false, reachedBottom: false }
+  const result: ExecuteResult = {
+    executed: 0,
+    cancelled: false,
+    blocked: false,
+    reachedBottom: false
+  }
   const frame = currentFrame()
-  log('step', `execute: ${actions.map(a => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`)
+  log(
+    'step',
+    `execute: ${actions.map((a) => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`
+  )
 
   const pauseDwell = canPauseDwell(agent)
   if (pauseDwell) await agent.request('dwell_pause').catch(() => {})
@@ -145,9 +170,18 @@ export async function executeActions(actions: Action[], opts: ExecuteOptions = {
         await sleep(1500) // wait for page to finish loading before next action
       } else {
         // Show pointer preview before first click
-        if (preview && firstClick && scaled.type === 'click' && scaled.x != null && scaled.y != null) {
+        if (
+          preview &&
+          firstClick &&
+          scaled.type === 'click' &&
+          scaled.x != null &&
+          scaled.y != null
+        ) {
           firstClick = false
-          highlight.send('screen:pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
+          highlight.send('screen:pointer', {
+            ...physToLogical({ x: scaled.x, y: scaled.y }),
+            text: 'Clicking here…'
+          })
           highlight.show()
           await sleep(300)
         }

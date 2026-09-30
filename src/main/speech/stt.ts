@@ -8,7 +8,11 @@ const MIN_AUDIO_BYTES = 6000
 export function whisperPrompt(userVocab: string): string {
   const vocab = userVocab.trim()
   const vocabList = vocab
-    ? `, ${vocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
+    ? `, ${vocab
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(', ')}`
     : ''
   return `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
 }
@@ -27,7 +31,7 @@ export async function transcribe(audio: ArrayBuffer): Promise<string> {
       file: await toFile(Buffer.from(audio), 'recording.webm', { type: 'audio/webm' }),
       model: 'whisper-1',
       language: 'en',
-      prompt: whisperPrompt(loadConfig().voiceVocab),
+      prompt: whisperPrompt(loadConfig().voiceVocab)
     },
     { timeout: 60000 }
   )

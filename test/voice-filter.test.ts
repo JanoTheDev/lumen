@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { computeRms, isSilenceHallucination, shouldDropTranscript } from '../src/renderer/src/hooks/useVoice'
+import {
+  computeRms,
+  isSilenceHallucination,
+  shouldDropTranscript
+} from '../src/renderer/src/hooks/useVoice'
 
 describe('computeRms', () => {
   it('is 0 for silence and empty input', () => {
@@ -29,10 +33,13 @@ describe('shouldDropTranscript', () => {
     expect(shouldDropTranscript(t, 900)).toBe(false)
   })
 
-  it.each(['Thank you.', 'thank you for watching', 'Thanks for watching.', 'you', 'Bye.'])('drops hallucination "%s" with little speech', (t) => {
-    expect(isSilenceHallucination(t)).toBe(true)
-    expect(shouldDropTranscript(t, 100)).toBe(true)
-  })
+  it.each(['Thank you.', 'thank you for watching', 'Thanks for watching.', 'you', 'Bye.'])(
+    'drops hallucination "%s" with little speech',
+    (t) => {
+      expect(isSilenceHallucination(t)).toBe(true)
+      expect(shouldDropTranscript(t, 100)).toBe(true)
+    }
+  )
 
   it('keeps hallucination-like text when real speech was heard', () => {
     expect(shouldDropTranscript('Thank you.', 800)).toBe(false)

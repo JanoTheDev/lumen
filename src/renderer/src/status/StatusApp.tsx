@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 
-type StatusKind = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'acting' | 'answer' | 'error' | 'step'
+type StatusKind =
+  | 'idle'
+  | 'listening'
+  | 'transcribing'
+  | 'thinking'
+  | 'acting'
+  | 'answer'
+  | 'error'
+  | 'step'
 
 interface StatusMsg {
   kind: StatusKind
@@ -12,14 +20,14 @@ const ACCENT = 'var(--ai-accent, #5b8cff)'
 const ACCENT_MIX = 'color-mix(in srgb, var(--ai-accent, #5b8cff) 22%, transparent)'
 
 const KIND_STYLE: Record<StatusKind, { dot: string; accent: string }> = {
-  idle:          { dot: 'rgba(255,255,255,0.25)', accent: 'rgba(255,255,255,0.08)' },
-  listening:     { dot: ACCENT,                   accent: ACCENT_MIX },
-  transcribing:  { dot: ACCENT,                   accent: ACCENT_MIX },
-  thinking:      { dot: ACCENT,                   accent: ACCENT_MIX },
-  acting:        { dot: '#facc15',                accent: 'rgba(250,204,21,0.22)' },
-  step:          { dot: ACCENT,                   accent: ACCENT_MIX },
-  answer:        { dot: 'var(--ai-success, #4ade80)', accent: 'rgba(74,222,128,0.22)' },
-  error:         { dot: 'var(--ai-error, #f87171)',   accent: 'rgba(248,113,113,0.22)' },
+  idle: { dot: 'rgba(255,255,255,0.25)', accent: 'rgba(255,255,255,0.08)' },
+  listening: { dot: ACCENT, accent: ACCENT_MIX },
+  transcribing: { dot: ACCENT, accent: ACCENT_MIX },
+  thinking: { dot: ACCENT, accent: ACCENT_MIX },
+  acting: { dot: '#facc15', accent: 'rgba(250,204,21,0.22)' },
+  step: { dot: ACCENT, accent: ACCENT_MIX },
+  answer: { dot: 'var(--ai-success, #4ade80)', accent: 'rgba(74,222,128,0.22)' },
+  error: { dot: 'var(--ai-error, #f87171)', accent: 'rgba(248,113,113,0.22)' }
 }
 
 export function StatusApp(): JSX.Element {
@@ -39,7 +47,12 @@ export function StatusApp(): JSX.Element {
   }, [])
 
   const style = msg ? KIND_STYLE[msg.kind] : KIND_STYLE.idle
-  const pulsing = msg && (msg.kind === 'listening' || msg.kind === 'thinking' || msg.kind === 'transcribing' || msg.kind === 'acting')
+  const pulsing =
+    msg &&
+    (msg.kind === 'listening' ||
+      msg.kind === 'thinking' ||
+      msg.kind === 'transcribing' ||
+      msg.kind === 'acting')
 
   return (
     <>
@@ -58,7 +71,7 @@ export function StatusApp(): JSX.Element {
           alignItems: 'center',
           justifyContent: 'center',
           padding: 6,
-          pointerEvents: 'none',
+          pointerEvents: 'none'
         }}
       >
         <div
@@ -81,15 +94,17 @@ export function StatusApp(): JSX.Element {
             whiteSpace: 'nowrap',
             maxWidth: '94vw',
             animation: visible ? 'bubble-in 160ms ease-out both' : 'bubble-out 180ms ease-in both',
-            opacity: visible ? 1 : 0,
+            opacity: visible ? 1 : 0
           }}
         >
           <span
             style={{
-              width: 7, height: 7, borderRadius: '50%',
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
               background: style.dot,
               boxShadow: `0 0 8px ${style.dot}`,
-              animation: pulsing ? 'pulse-dot 1.1s ease-in-out infinite' : 'none',
+              animation: pulsing ? 'pulse-dot 1.1s ease-in-out infinite' : 'none'
             }}
           />
           {msg?.step && (
@@ -97,9 +112,7 @@ export function StatusApp(): JSX.Element {
               {msg.step.index}/{msg.step.total}
             </span>
           )}
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {msg?.text ?? ''}
-          </span>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg?.text ?? ''}</span>
         </div>
       </div>
     </>

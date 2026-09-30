@@ -44,9 +44,11 @@ export function registerSettingsIpc(deps: SettingsIpcDeps): void {
     }
     // Only touch the agent when the relevant settings actually changed.
     const listenerChanged =
-      JSON.stringify([prev.wakeWord, prev.cancelVoice]) !== JSON.stringify([next.wakeWord, next.cancelVoice])
+      JSON.stringify([prev.wakeWord, prev.cancelVoice]) !==
+      JSON.stringify([next.wakeWord, next.cancelVoice])
     if (listenerChanged) deps.applyListenerState(next)
-    if (JSON.stringify(prev.dwellClick) !== JSON.stringify(next.dwellClick)) deps.applyDwellState(next)
+    if (JSON.stringify(prev.dwellClick) !== JSON.stringify(next.dwellClick))
+      deps.applyDwellState(next)
     return next
   })
 

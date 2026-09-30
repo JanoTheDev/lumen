@@ -8,14 +8,14 @@ const MODELS: Record<Provider, Record<ModelFunction, string>> = {
     planning: 'claude-sonnet-4-6',
     main: 'claude-sonnet-4-6',
     fast: 'claude-haiku-4-5-20251001',
-    verify: 'claude-haiku-4-5-20251001',
+    verify: 'claude-haiku-4-5-20251001'
   },
   openai: {
     planning: 'gpt-5-mini',
     main: 'gpt-5-mini',
     fast: 'gpt-5-nano',
-    verify: 'gpt-5-nano',
-  },
+    verify: 'gpt-5-nano'
+  }
 }
 
 export function getProvider(): Provider {

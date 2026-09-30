@@ -24,7 +24,7 @@ export async function speakAnswer(text: string, voice: string): Promise<void> {
       model: 'tts-1',
       voice: voice as TtsVoice,
       input: toSpeakable(text),
-      response_format: 'mp3',
+      response_format: 'mp3'
     },
     { timeout: 60000 }
   )

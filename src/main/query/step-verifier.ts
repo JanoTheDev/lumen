@@ -8,10 +8,7 @@ import { log } from '../logger'
 // Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
 // as failures (e.g. "Gmail loading screen" → retry → opens Gmail 4x).
 // Hash-diff in executePlan already confirms the navigation changed the screen.
-const VERIFY_ACTION_TYPES = new Set([
-  'type', 'hotkey',
-  'click_element', 'click_bbox', 'click'
-])
+const VERIFY_ACTION_TYPES = new Set(['type', 'hotkey', 'click_element', 'click_bbox', 'click'])
 
 export function shouldVerifyStep(actionType: string): boolean {
   return VERIFY_ACTION_TYPES.has(actionType)
@@ -65,13 +62,18 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
       const msg = await anthropicClient().messages.create({
         model,
         max_tokens: 64,
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: afterScreenshot } },
-            { type: 'text', text: prompt }
-          ]
-        }]
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/jpeg', data: afterScreenshot }
+              },
+              { type: 'text', text: prompt }
+            ]
+          }
+        ]
       })
       const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
       const parsed = JSON.parse(raw) as { success?: boolean; detail?: string }
@@ -83,20 +85,34 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
         model,
         max_completion_tokens: 512,
         ...reasoningParams(model),
-        messages: [{
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${afterScreenshot}`, detail: 'low' } },
-            { type: 'text', text: prompt }
-          ]
-        }]
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${afterScreenshot}`, detail: 'low' }
+              },
+              { type: 'text', text: prompt }
+            ]
+          }
+        ]
       } as ChatParams)
       const rawVerify = resp.choices[0]?.message?.content
       if (!rawVerify) {
-        log('verify', 'no response from model, assuming success', { model, cost: 0, timeMs: Date.now() - start })
+        log('verify', 'no response from model, assuming success', {
+          model,
+          cost: 0,
+          timeMs: Date.now() - start
+        })
         return { success: true, detail: 'no response, assuming success', cost: 0 }
       }
-      const parsed = JSON.parse(rawVerify.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()) as { success?: boolean; detail?: string }
+      const parsed = JSON.parse(
+        rawVerify
+          .replace(/```json\n?/g, '')
+          .replace(/```\n?/g, '')
+          .trim()
+      ) as { success?: boolean; detail?: string }
       success = parsed.success ?? true
       detail = parsed.detail ?? 'ok'
       const usage = resp.usage
@@ -110,8 +126,15 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
 
   // Safety net: verifier sometimes returns refusal/uncertainty phrased as success=false.
   // Those are not real failures — coerce to success to prevent wasted retries.
-  if (!success && /\b(cannot|can't|unable to|unsure|not sure|don't know|dont know)\b/i.test(detail)) {
-    log('verify', `coercing uncertain verdict to success: "${detail}"`, { model, cost, timeMs: Date.now() - start })
+  if (
+    !success &&
+    /\b(cannot|can't|unable to|unsure|not sure|don't know|dont know)\b/i.test(detail)
+  ) {
+    log('verify', `coercing uncertain verdict to success: "${detail}"`, {
+      model,
+      cost,
+      timeMs: Date.now() - start
+    })
     return { success: true, detail: `uncertain (coerced): ${detail}`, cost }
   }
 

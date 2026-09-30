@@ -17,7 +17,8 @@ export function addToHistory(userPrompt: string, assistantSummary: string): void
     { role: 'user', content: userPrompt },
     { role: 'assistant', content: assistantSummary }
   )
-  if (entries.length > MAX_STORED_EXCHANGES * 2) entries.splice(0, entries.length - MAX_STORED_EXCHANGES * 2)
+  if (entries.length > MAX_STORED_EXCHANGES * 2)
+    entries.splice(0, entries.length - MAX_STORED_EXCHANGES * 2)
 }
 
 export function clearHistory(): void {
