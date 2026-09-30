@@ -1,4 +1,5 @@
 import proto  # must be first: claims stdout for the protocol
+import dpi  # before pyautogui/mss, which would lock in system DPI awareness
 
 import sys
 import json
@@ -12,6 +13,7 @@ logging.basicConfig(
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 log = logging.getLogger("agent")
+log.info(dpi.describe())
 
 from capture import take_screenshot, get_active_window
 from actions import execute_action
