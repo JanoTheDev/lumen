@@ -5,7 +5,8 @@ import pytesseract
 import threading
 
 import pagediff
-from errors import AgentError
+import safety
+from errors import AgentError, E_NOT_FOUND
 
 log = logging.getLogger(__name__)
 
@@ -270,6 +271,7 @@ def _execute(action: dict) -> dict:
         log.info(f"click done in {time.time()-t0:.2f}s")
 
     elif t == "type":
+        safety.check_input_target(action, "type")
         import pyperclip
         text = action.get("text", "")
         pyperclip.copy(text)
@@ -278,8 +280,10 @@ def _execute(action: dict) -> dict:
         log.info(f"type done in {time.time()-t0:.2f}s ({len(text)} chars)")
 
     elif t == "hotkey":
-        keys = action.get("keys", [])
+        keys = safety.normalize_keys(action.get("keys", []))
         if keys:
+            safety.check_combo(keys)
+            safety.check_input_target(action, "hotkey")
             pyautogui.hotkey(*keys)
         log.info(f"hotkey {keys} done in {time.time()-t0:.2f}s")
 
@@ -353,7 +357,7 @@ def _execute(action: dict) -> dict:
             raise ValueError(f"click_nth_element: occurrence {n} of '{text}' not found on screen")
 
     elif t == "navigate_url":
-        url = action.get("url", "")
+        url = safety.check_url(action.get("url", ""))
         hwnd = _find_browser_hwnd()
         if hwnd:
             import ctypes
@@ -372,9 +376,8 @@ def _execute(action: dict) -> dict:
             pyautogui.press('enter')
             _sleep(0.2)
         else:
-            log.info("navigate_url: no browser found, using os.startfile")
-            import os
-            os.startfile(url)
+            # Main opens it with the default browser under its own scheme policy.
+            raise AgentError(E_NOT_FOUND, "navigate_url: no browser window")
         log.info(f"navigate_url done in {time.time()-t0:.2f}s")
 
     elif t == "focus_browser":
