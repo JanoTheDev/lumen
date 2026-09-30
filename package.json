@@ -6,7 +6,8 @@
   "author": "ai-overlay",
   "homepage": "https://github.com/ai-overlay",
   "scripts": {
-    "test": "vitest run --exclude test/claude.test.ts",
+    "test": "vitest run",
+    "test:live": "vitest run test/live",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

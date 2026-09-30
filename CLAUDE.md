@@ -10,12 +10,13 @@ npm run build        # typecheck + production bundle
 npm run build:win    # Windows NSIS installer
 npm run lint         # ESLint
 npm run format       # Prettier
-npm run test         # Vitest (excludes claude.test.ts)
+npm run test         # Vitest (skips test/live/**)
+npm run test:live    # Vitest on test/live/** only
 npm run typecheck    # node + web tsconfigs
 agent/.venv/Scripts/python -m pytest agent/tests   # Python agent tests
 ```
 
-`test/claude.test.ts` is excluded from `npm test`; run it directly with `npx vitest run test/claude.test.ts`.
+Tests under `test/live/` are skipped by `npm test`; run them with `npm run test:live`. Shared fakes (agent child, electron, displays) are in `test/helpers/`.
 
 ## Setup
 

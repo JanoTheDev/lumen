@@ -1,7 +1,8 @@
 /**
- * Run: npx tsx test/claude.test.ts
- * Tests pure functions from claude.ts without requiring Electron or the API.
+ * Run: npm run test:live
+ * Script-style checks of inlined copies of old claude.ts helpers (see 10-quality T06).
  */
+import { it, expect } from 'vitest'
 
 // ── inline the pure functions under test (avoids electron import) ─────────────
 
@@ -252,4 +253,7 @@ console.log('\ncoordinate scaling')
 // ── summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`)
-process.exit(failed > 0 ? 1 : 0)
+
+it('all script checks pass', () => {
+  expect(failed).toBe(0)
+})
