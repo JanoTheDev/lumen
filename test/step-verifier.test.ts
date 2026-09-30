@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hashScreenshot, shouldVerifyStep } from '../src/main/step-verifier'
+import { hashScreenshot, shouldVerifyStep } from '../src/main/query/step-verifier'
 
 describe('step-verifier', () => {
   it('hashes the same base64 string consistently', () => {

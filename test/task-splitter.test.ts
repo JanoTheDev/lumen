@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { splitSubtasks, canParallelize, mergeAnswers } from '../src/main/task-splitter'
+import { splitSubtasks, canParallelize, mergeAnswers } from '../src/main/query/task-splitter'
 
 describe('task-splitter', () => {
   it('returns single-item array when prompt has no connectors', () => {

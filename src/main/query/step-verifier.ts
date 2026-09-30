@@ -1,8 +1,8 @@
 import crypto from 'crypto'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
-import { getProvider, type Provider } from './model-router'
-import { log } from './logger'
+import { getProvider, type Provider } from '../model-router'
+import { log } from '../logger'
 
 // Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
 // as failures (e.g. "Gmail loading screen" → retry → opens Gmail 4x).

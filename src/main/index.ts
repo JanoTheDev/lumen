@@ -10,34 +10,33 @@ try {
 
 import { app, shell, BrowserWindow, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import type { Action, Rect } from '@shared/types'
-import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
-import { correctNthElement } from './nth-utils'
+import type { Action } from '@shared/types'
+import { warmupConnection, findClickCoordinates, isBrowser } from './claude'
 import { AgentBridge } from './agent/bridge'
 import OpenAI, { toFile } from 'openai'
-import { isResearchIntent } from './query-classifier'
-import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
 import { loadConfig, lastConfigWarning, type AppConfig } from './config'
 import { modelInstalled, installModel } from './wake-model'
 import { saveGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
-import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
-import { beginScope, endScope, cancelAll, type CancelScope } from './query/cancel'
-import { applyOverrides, LOCATE_RE } from './query/overrides'
-import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
-import { currentFrame, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
+import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide } from './guides/voice-nav'
+import { beginScope, endScope, cancelAll } from './query/cancel'
+import { startSpeculativeCapture } from './query/context'
+import { currentFrame, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter } from './actions/coords'
 import { toAgentAction, type AgentAction } from './actions/agent-action'
 import { isOwnRendererUrl } from './windows/factory'
-import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
+import { assertSafeUrl, isSafeUrl } from './actions/safety'
 import { bus } from './bus'
 import { applyUiScaleOnLoad, isOverOwnWindow } from './windows/registry'
-import { setStatus, type StatusKind } from './windows/status'
+import { setStatus } from './windows/status'
 import * as hud from './windows/hud'
 import * as statusWin from './windows/status'
 import * as answer from './windows/answer'
 import * as highlight from './windows/highlight'
 import * as dwellRing from './windows/dwell-ring'
 import * as tray from './windows/tray'
+import { setAgent } from './agent/instance'
+import { passesPolicy } from './actions/policy'
+import { captureContext, runQuery } from './query/pipeline'
 import { sleep } from './util'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
@@ -125,6 +124,11 @@ interface ActiveGuide {
 }
 let activeGuide: ActiveGuide | null = null
 let lastGuide: { task: string; steps: ActiveGuide['steps']; savedAt: number } | null = null
+
+function startGuide(task: string, steps: GuideStep[]): void {
+  activeGuide = { steps, index: 0 }
+  lastGuide = { task, steps, savedAt: Date.now() }
+}
 
 function saveLastAsGuide(name: string): SavedGuide | null {
   if (!lastGuide) return null
@@ -295,6 +299,7 @@ app.whenReady().then(async () => {
   // Hotkey, listener and dwell state are re-sent after every agent (re)start.
   let agentFailed = false
   agent = new AgentBridge({ initState: () => applyAgentState(loadConfig()) })
+  setAgent(agent)
   agent.onEvent('agent-down', (data) => {
     if (data?.gaveUp) setStatus('error', 'Agent stopped responding — see logs', undefined, 8000)
     else setStatus('error', 'Agent restarting…', undefined, 3000)
@@ -381,218 +386,6 @@ app.whenReady().then(async () => {
 
 
 
-  let lastTaskContext: string | null = null
-
-
-  async function runQuery(prompt: string, baseOpts: CallOptions, scope: CancelScope): Promise<ClaudeResponse> {
-    if (!agent) throw new Error('Agent not ready')
-    const opts: CallOptions = { ...baseOpts, signal: scope.signal }
-    const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
-    log('plan', `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}`)
-
-    const needsShot = needsScreenshot(prompt)
-    log('plan', `needs screenshot: ${needsShot}`)
-
-    const speculative = needsShot ? takeSpeculative() : null
-    let ctx = speculative ? await speculative.catch(() => null) : null
-    if (ctx) log('plan', 'using speculative screenshot')
-    else ctx = await captureContext(needsShot)
-    const { activeWindow, screenshot } = ctx
-    scope.throwIfCancelled()
-    timer.split('context gathered (screenshot + active window)')
-    log('plan', `active window: ${activeWindow}`)
-
-    const { effectivePrompt, intent, requestedApp, nextTaskContext } = applyOverrides({
-      prompt,
-      activeWindow,
-      lowDetail: opts.lowDetail,
-      lastTaskContext,
-    })
-    if (requestedApp) log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
-    if (intent.isContinuation && lastTaskContext) log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
-    lastTaskContext = nextTaskContext
-
-    log('plan', `query: "${effectivePrompt.slice(0, 80)}"`)
-
-    let result: ClaudeResponse
-
-    const researchMode = !opts.lowDetail && isResearchIntent(prompt)
-
-    if (researchMode) {
-      // Autonomous loop: keep navigating/clicking/scrolling until the info is found or stuck.
-      result = await runResearchAgent(
-        prompt,
-        activeWindow,
-        (p, s, w) => callClaude(p, s, w, opts),
-        () => agent!.screenshot(),
-        async (actions) => {
-          const frame = currentFrame()
-          let prev: AgentAction | undefined
-          for (const action of actions as Action[]) {
-            if (scope.cancelled) break
-            const scaled = toAgentAction(action, frame)
-            if (!(await passesPolicy(scaled, prev))) break
-            prev = scaled
-            if (scaled.type === 'open_url' && scaled.url) {
-              await shell.openExternal(assertSafeUrl(scaled.url))
-              await sleep(400)
-              await agent!.execute({ type: 'focus_browser' })
-            } else if (scaled.type === 'navigate_url' && scaled.url) {
-              await agent!.execute(scaled)
-              await sleep(1500)
-            } else {
-              await agent!.execute(scaled)
-            }
-            await sleep(scaled.type === 'hotkey' ? 300 : 150)
-          }
-        },
-        () => {},
-        scope.signal
-      )
-      timer.split('research agent done')
-    } else if (!opts.lowDetail && intent.planRequired) {
-      // Multi-step: build plan, execute with verification
-      const plan = await buildPlan(effectivePrompt, null, activeWindow, scope.signal)
-      timer.split('buildPlan done')
-      result = await executePlan(
-        plan,
-        activeWindow,
-        (p, s, w) => callClaude(p, s, w, opts),
-        () => agent!.screenshot(),
-        async (actions) => {
-          const frame = currentFrame()
-          let prev: AgentAction | undefined
-          for (const action of actions as Action[]) {
-            if (scope.cancelled) break
-            const scaled = toAgentAction(action, frame)
-            if (!(await passesPolicy(scaled, prev))) break
-            prev = scaled
-            if (scaled.type === 'open_url' && scaled.url) {
-              await shell.openExternal(assertSafeUrl(scaled.url))
-              await sleep(400)
-              await agent!.execute({ type: 'focus_browser' })
-            } else if (scaled.type === 'navigate_url' && scaled.url) {
-              await agent!.execute(scaled)
-              await sleep(1500)
-            } else {
-              await agent!.execute(scaled)
-            }
-            await sleep(scaled.type === 'hotkey' ? 300 : 150)
-          }
-        },
-        (progress) => {
-          const p = progress as { stepIndex?: number; totalSteps?: number; description?: string; status?: string }
-          if (p.stepIndex && p.totalSteps && p.description) {
-            const statusKind: StatusKind = p.status === 'failed' ? 'error' : 'step'
-            setStatus(statusKind, p.description, { index: p.stepIndex, total: p.totalSteps })
-          }
-        },
-        scope.signal
-      )
-      timer.split('executePlan done')
-      // Plan already executed every step. Strip any trailing follow_up so the renderer
-      // doesn't fire an extra query that would re-trigger actions outside the plan.
-      if (result.mode === 'action' && result.follow_up) {
-        log('plan', 'stripping trailing follow_up from planned result')
-        delete result.follow_up
-      }
-    } else {
-      result = correctNthElement(await callClaude(effectivePrompt, screenshot, activeWindow, opts))
-      timer.split('callClaude done')
-    }
-
-    log('done', `mode: ${result.mode}`)
-    timer.total()
-    // Nothing from a cancelled turn may reach the screen, TTS or history.
-    scope.throwIfCancelled()
-
-    // Locate request → action+navigate+follow_up: AI generates action follow_up, but we need locate.
-    // Replace the AI's follow_up with a proper locate query so highlights appear after navigation.
-    if (!opts.lowDetail && intent.mode === 'locate' && LOCATE_RE.test(prompt) && result.mode === 'action' && result.follow_up) {
-      result.follow_up.query = `The page is loaded. Highlight where the user can find: "${prompt}". Respond ONLY with {"mode":"locate","items":[...]} — each item bbox tightly wraps only the matching visible rows/elements. Do NOT click, navigate, or open anything.`
-      console.log('[locate-chain] replaced follow_up with locate query')
-    }
-
-    // Fallback: if AI still returns guide for an imperative request, auto-convert to click_bbox
-    const IMPERATIVE_RE = /\b(open|click|go to|navigate|select|tap|press)\b/i
-    if (result.mode === 'guide' && IMPERATIVE_RE.test(prompt) && !isHowToQuestion(prompt) && result.steps?.some(s => s.bbox)) {
-      const best = result.steps.find(s => s.bbox)!
-      console.log('[auto-action] guide→action fallback, clicking:', best.label)
-      return {
-        mode: 'action' as const,
-        actions: [{ type: 'click_bbox' as const, bbox: best.bbox!, description: best.target_hint, button: 'left' as const }],
-        summary: best.label
-      }
-    }
-
-    // Start TTS synth early — parallel to renderer showing the answer card
-    if (result.mode === 'answer' && result.text?.trim()) {
-      const cfgNow = loadConfig()
-      if (cfgNow.voice.tts === 'cloud') {
-        speakAnswer(result.text.trim(), cfgNow.voice.ttsVoice).catch(e =>
-          console.warn('[tts] early synth failed:', (e as Error).message))
-      }
-    }
-
-    // Save exchange to history (text only — images not stored)
-    if (!opts.lowDetail) {
-      const summary =
-        result.mode === 'answer' ? result.text :
-        result.mode === 'action' ? (result.summary ?? `action: ${result.actions?.map(a => a.type).join(', ')}`) :
-        result.mode === 'guide' ? `guide: ${result.steps?.map(s => s.label).join(', ')}` :
-        result.mode === 'text_insert' ? `inserted text` :
-        `located: ${result.items?.map(i => i.label).join(', ')}`
-      addToHistory(prompt, summary)
-    }
-
-    // Model bboxes are image px; overlays draw in logical px.
-    const frame = currentFrame()
-    const toScreen = (r: Rect): Rect => physRectToLogical(imageRectToPhys(frame, r))
-
-    if (result.mode === 'locate' && result.items?.length) {
-      const validItems = result.items.filter((item) => isUsableRect(item.bbox))
-      if (validItems.length === 0) {
-        // Nothing found on screen — show the description as an answer
-        const desc = result.items[0]?.description || 'Not visible on this page'
-        answer.showText(desc)
-      } else {
-        const screenItems = validItems.map((item) => ({ ...item, bbox: toScreen(item.bbox) }))
-        highlight.send('screen:locate', screenItems)
-        highlight.show()
-      }
-    } else if (result.mode === 'guide' && result.steps?.some((s) => s.bbox)) {
-      const bboxSteps = result.steps
-        .filter((s) => s.bbox)
-        .map((s) => ({ ...s, bbox: s.bbox ? toScreen(s.bbox) : undefined }))
-      activeGuide = { steps: bboxSteps, index: 0 }
-      lastGuide = { task: prompt, steps: bboxSteps, savedAt: Date.now() }
-      setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
-      highlight.send('screen:highlights', bboxSteps)
-      highlight.show()
-
-      // Draw the pointer only; moving the real cursor could dismiss the guide.
-      const first = bboxSteps[0]
-      if (first?.bbox) {
-        const c = rectCenter(first.bbox)
-        highlight.send('screen:pointer', {
-          x: Math.round(c.x), y: Math.round(c.y),
-          text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
-        })
-      }
-    } else if (result.mode === 'action') {
-      const hasRealClick = result.actions?.some((a) =>
-        (a.type === 'click' || a.type === 'move') && a.x != null && a.y != null ||
-        a.type === 'click_bbox' && a.bbox != null
-      )
-      if (!hasRealClick) {
-        highlight.clear()
-      }
-    } else {
-      highlight.clear()
-    }
-
-    return result
-  }  // end runQuery
 
 
 
@@ -716,7 +509,11 @@ app.whenReady().then(async () => {
     applyListenerState,
     applyDwellState,
   })
-  registerQueryIpc({ intercept: interceptGuideCommand, runQuery, execute: executeRendererActions })
+  registerQueryIpc({
+    intercept: interceptGuideCommand,
+    runQuery: (prompt, opts, scope) => runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide }),
+    execute: executeRendererActions,
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) hud.create()
@@ -730,37 +527,6 @@ app.on('will-quit', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
-
-// Runs the central safety policy on one action. Actions that need confirmation are
-// blocked for now (there is no confirm flow yet) and the user is told why.
-async function passesPolicy(action: AgentAction, prev?: AgentAction): Promise<boolean> {
-  let windowTitle: string | undefined
-  if (needsWindowContext(action)) {
-    try {
-      windowTitle = await agent?.activeWindow()
-    } catch {
-      /* unknown window, policy treats it as non-shell */
-    }
-  }
-  const { verdict, reason } = checkAction(action, { windowTitle, afterType: prev?.type === 'type' })
-  if (verdict === 'allow') return true
-  log('fail', `blocked by policy (${verdict}): ${reason ?? action.type}`)
-  setStatus('error', `Blocked for safety: ${reason ?? action.type}`, undefined, 3000)
-  return false
-}
-
-// Active window + optional screenshot. Lumen's own highlight layer is hidden first so it
-// is not in the image; the foreground app is never changed.
-async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
-  if (!agent) throw new Error('Agent not ready')
-  if (!withScreenshot) return { activeWindow: await agent.activeWindow(), screenshot: null }
-  if (highlight.isVisible()) {
-    highlight.hide()
-    await sleep(32)
-  }
-  const [activeWindow, screenshot] = await Promise.all([agent.activeWindow(), agent.screenshot()])
-  return { activeWindow, screenshot }
-}
 
 function armEscape(): void {
   if (!globalShortcut.isRegistered('Escape')) globalShortcut.register('Escape', onEscape)

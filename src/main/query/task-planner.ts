@@ -1,11 +1,11 @@
 // src/main/task-planner.ts
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
-import { getModel, getProvider } from './model-router'
-import { log, startTimer } from './logger'
+import { getModel, getProvider } from '../model-router'
+import { log, startTimer } from '../logger'
 import { hashScreenshot, shouldVerifyStep, verifyStep } from './step-verifier'
-import { type ClaudeResponse, type Action } from './claude'
-import { UNTRUSTED_CONTENT_RULE } from './ai/prompts/untrusted'
+import { type ClaudeResponse, type Action } from '../claude'
+import { UNTRUSTED_CONTENT_RULE } from '../ai/prompts/untrusted'
 
 export interface PlanStep {
   index: number

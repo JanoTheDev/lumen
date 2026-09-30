@@ -1,4 +1,4 @@
-import type { ClaudeResponse } from './claude'
+import type { ClaudeResponse } from '../claude'
 
 /** Normalize OCR-confusable characters (mirrors Python _ocr_norm). */
 export function ocrNorm(s: string): string {
