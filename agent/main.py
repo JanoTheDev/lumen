@@ -20,7 +20,9 @@ logging.basicConfig(
 log = logging.getLogger("agent")
 log.info(dpi.describe())
 
-from capture import take_screenshot, get_active_window, grab_jpeg
+import capture
+import monitors
+from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
@@ -50,7 +52,7 @@ def mouse_watcher():
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "wake", "dwell"]
+CAPABILITIES = ["hotkey", "wake", "dwell", "capture"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -161,10 +163,7 @@ def _cmd_init(args, token):
 
 
 def _cmd_capture(args, token):
-    # Primary monitor only until monitor geometry lands; frames then gain `monitor`/`scale`.
-    data, width, height = grab_jpeg()
-    return {"frames": [{"id": f"f{time.monotonic_ns()}", "width": width, "height": height,
-                        "mime": "image/jpeg", "data": data}]}
+    return capture.capture(**{k: v for k, v in args.items() if k in ("monitor", "maxWidth", "quality", "region")})
 
 
 def _debug_emit(args, token):
@@ -201,8 +200,9 @@ def register_commands(debug: bool = False) -> None:
     reg("dwell_set_ms", _cmd_dwell_set_ms, INLINE)
     reg("execute", _cmd_execute, INPUT)
     reg("screenshot", lambda args, token: take_screenshot(), READ)
+    reg("capture", _cmd_capture, READ)
+    reg("monitors", lambda args, token: {"monitors": monitors.enumerate_monitors()}, READ)
     if v2:
-        reg("capture", _cmd_capture, READ)
         reg("active_window", lambda args, token: {"title": get_active_window()}, READ)
     else:
         reg("active_window", lambda args, token: get_active_window(), READ)

@@ -21,7 +21,7 @@ def test_first_line_is_ready(v2):
     data = first["data"]
     assert data["impl"] == "python"
     assert isinstance(data["version"], str)
-    assert "hotkey" in data["capabilities"]
+    assert {"hotkey", "capture"} <= set(data["capabilities"])
 
 
 def test_ping_framing(v2):
@@ -80,6 +80,7 @@ def test_capture_and_active_window_shapes(v2):
     frame = cap["result"]["frames"][0]
     assert frame["mime"] == "image/jpeg" and frame["width"] > 0 and frame["height"] > 0
     assert isinstance(frame["data"], str)
+    assert frame["monitor"]["primary"] is True and frame["scale"] >= 1
     win = req(v2, 9, "active_window")
     assert isinstance(win["result"]["title"], str)
 
