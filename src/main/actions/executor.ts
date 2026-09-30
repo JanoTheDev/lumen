@@ -134,7 +134,13 @@ export async function executeActions(actions: Action[], opts: ExecuteOptions = {
         await agent.execute({ type: 'focus_browser' })
       } else if (scaled.type === 'navigate_url' && scaled.url) {
         console.log('[execute] navigate_url:', scaled.url)
-        await agent.execute(scaled)
+        try {
+          await agent.execute(scaled)
+        } catch (e) {
+          // No browser window to navigate: open the (already policy-checked) URL instead.
+          log('step', `navigate_url failed (${(e as Error).message}), opening in default browser`)
+          await shell.openExternal(assertSafeUrl(scaled.url))
+        }
         result.executed++
         await sleep(1500) // wait for page to finish loading before next action
       } else {
