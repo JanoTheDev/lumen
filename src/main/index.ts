@@ -1150,9 +1150,11 @@ app.whenReady().then(async () => {
     if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
       hideStatus()
     }
-    const listenerAffected = patch.wakeWord || patch.cancelVoice
-    if (listenerAffected) applyListenerState(next)
-    if (patch.dwellClick) applyDwellState(next)
+    // Only touch the agent when the relevant settings actually changed.
+    const listenerChanged =
+      JSON.stringify([prev.wakeWord, prev.cancelVoice]) !== JSON.stringify([next.wakeWord, next.cancelVoice])
+    if (listenerChanged) applyListenerState(next)
+    if (JSON.stringify(prev.dwellClick) !== JSON.stringify(next.dwellClick)) applyDwellState(next)
     return next
   })
 
