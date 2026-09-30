@@ -8,6 +8,10 @@ import logging
 import threading
 import time
 
+# comtypes (via uiautomation) joins this apartment on import; the dispatch
+# workers are MTA too, so COM objects can move between them.
+sys.coinit_flags = 0
+
 logging.basicConfig(
     stream=sys.stderr,
     level=logging.INFO,
@@ -20,7 +24,8 @@ from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
-from errors import AgentError, E_INVALID, E_UNSUPPORTED
+from dispatch import Dispatcher, INLINE, INPUT, READ
+from errors import AgentError, E_INVALID
 from hotkey import HotkeyManager
 
 respond = proto.respond
@@ -42,11 +47,22 @@ def mouse_watcher():
     except Exception:
         pass
 
-def _cmd_execute(args):
-    return execute_action(args.get("action", {})) or {}
+
+def _reply(id, result, error):
+    if error is not None:
+        respond(id, error=error.message)
+    else:
+        respond(id, result)
 
 
-def _cmd_set_hotkey(args):
+dispatcher = Dispatcher(_reply)
+
+
+def _cmd_execute(args, token):
+    return execute_action(args.get("action", {}), token) or {}
+
+
+def _cmd_set_hotkey(args, token):
     combo = args.get("combo")
     if not isinstance(combo, str):
         raise AgentError(E_INVALID, "set_hotkey needs a combo string")
@@ -54,7 +70,7 @@ def _cmd_set_hotkey(args):
     return {"ok": True, "combo": combo}
 
 
-def _cmd_wake_enable(args):
+def _cmd_wake_enable(args, token):
     phrase = args.get("phrase", "")
     cancel_phrases = args.get("cancel_phrases", [])
 
@@ -68,12 +84,12 @@ def _cmd_wake_enable(args):
     return {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases}
 
 
-def _cmd_wake_disable(args):
+def _cmd_wake_disable(args, token):
     wake.stop()
     return {"ok": True}
 
 
-def _cmd_dwell_enable(args):
+def _cmd_dwell_enable(args, token):
     dwell_ms = args.get("dwell_ms", 1400)
     cooldown_ms = args.get("cooldown_ms", 1500)
 
@@ -89,29 +105,60 @@ def _cmd_dwell_enable(args):
     return {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms}
 
 
-def _cmd_dwell_disable(args):
+def _cmd_dwell_disable(args, token):
     dwell.stop()
     return {"ok": True}
 
 
-def _cmd_dwell_set_ms(args):
+def _cmd_dwell_set_ms(args, token):
     dwell.set_dwell_ms(int(args.get("dwell_ms", 1400)))
     return {"ok": True}
 
 
-COMMANDS = {
-    "ping": lambda args: "pong",
-    "screenshot": lambda args: take_screenshot(),
-    "active_window": lambda args: get_active_window(),
-    "execute": _cmd_execute,
-    "set_hotkey": _cmd_set_hotkey,
-    "wake_enable": _cmd_wake_enable,
-    "wake_disable": _cmd_wake_disable,
-    "wake_status": lambda args: wake.status(),
-    "dwell_enable": _cmd_dwell_enable,
-    "dwell_disable": _cmd_dwell_disable,
-    "dwell_set_ms": _cmd_dwell_set_ms,
-}
+def _cmd_cancel(args, token):
+    target = args.get("target")
+    if not isinstance(target, int) or isinstance(target, bool):
+        raise AgentError(E_INVALID, "cancel needs a numeric target")
+    return {"cancelled": dispatcher.cancel(target)}
+
+
+def _debug_emit(args, token):
+    n = max(0, min(int(args.get("n", 100)), 100000))
+
+    def flood():
+        for i in range(n):
+            emit_event("debug", {"seq": i})
+            if i % 10 == 0:
+                sys.stdout.write(f"stray write {i}\n")
+                log.info("debug log %d", i)
+
+    threading.Thread(target=flood, name="debug-emit", daemon=True).start()
+    return {"n": n}
+
+
+def _debug_sleep(args, token):
+    token.sleep(float(args.get("ms", 1000)) / 1000.0)
+    return {"slept": True}
+
+
+def register_commands(debug: bool = False) -> None:
+    reg = dispatcher.register
+    reg("ping", lambda args, token: "pong", INLINE)
+    reg("cancel", _cmd_cancel, INLINE)
+    reg("set_hotkey", _cmd_set_hotkey, INLINE)
+    reg("wake_enable", _cmd_wake_enable, INLINE)
+    reg("wake_disable", _cmd_wake_disable, INLINE)
+    reg("wake_status", lambda args, token: wake.status(), INLINE)
+    reg("dwell_enable", _cmd_dwell_enable, INLINE)
+    reg("dwell_disable", _cmd_dwell_disable, INLINE)
+    reg("dwell_set_ms", _cmd_dwell_set_ms, INLINE)
+    reg("execute", _cmd_execute, INPUT)
+    reg("screenshot", lambda args, token: take_screenshot(), READ)
+    reg("active_window", lambda args, token: get_active_window(), READ)
+    if debug:
+        reg("debug_emit", _debug_emit, INLINE)
+        reg("debug_sleep", _debug_sleep, READ)
+        reg("debug_sleep_input", _debug_sleep, INPUT)
 
 
 def handle_line(line: str) -> None:
@@ -126,32 +173,20 @@ def handle_line(line: str) -> None:
         emit_event("protocol-error", {"line": line[:200]})
         return
 
-    id = msg.get("id", 0)
-    cmd = msg.get("cmd")
     args = {k: v for k, v in msg.items() if k not in ("id", "cmd")}
-    handler = COMMANDS.get(cmd)
-    try:
-        if handler is None:
-            raise AgentError(E_UNSUPPORTED, f"Unknown command: {cmd}")
-        result = handler(args)
-    except AgentError as e:
-        respond(id, error=e.message)
-        return
-    except Exception as e:
-        log.exception("%s failed", cmd)
-        respond(id, error=f"{cmd} failed: {e}" if str(e) else f"{cmd} failed")
-        return
-    respond(id, result)
+    dispatcher.dispatch(msg.get("id", 0), msg.get("cmd"), args)
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Lumen OS agent")
     parser.add_argument("--hotkey", default="", help="Electron accelerator to bind at startup")
+    parser.add_argument("--debug", action="store_true", help="enable debug_* test commands")
     return parser.parse_args(argv)
 
 
 def main():
     opts = parse_args()
+    register_commands(debug=opts.debug)
     if opts.hotkey:
         try:
             hotkeys.bind(opts.hotkey)
@@ -159,8 +194,10 @@ def main():
             log.error("--hotkey %r rejected: %s", opts.hotkey, e.message)
     threading.Thread(target=mouse_watcher, daemon=True).start()
 
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     for line in sys.stdin:
         handle_line(line)
+    dispatcher.shutdown(wait=True)
     proto.close()
 
 

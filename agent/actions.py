@@ -3,12 +3,44 @@ import pyautogui
 import time
 import pytesseract
 import hashlib
+import threading
+
+from errors import AgentError
 
 log = logging.getLogger(__name__)
 
 pyautogui.FAILSAFE = False  # user's mouse movement must not abort automation
 pyautogui.PAUSE = 0.05
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+# Cancel token of the action running on this thread (set by execute_action).
+_ctx = threading.local()
+
+
+def _check() -> None:
+    token = getattr(_ctx, 'token', None)
+    if token is not None:
+        token.check()
+
+
+def _sleep(seconds: float) -> None:
+    token = getattr(_ctx, 'token', None)
+    if token is None:
+        time.sleep(seconds)
+    else:
+        token.sleep(seconds)
+
+
+def _exists(control, seconds: float) -> bool:
+    """Polls a uiautomation search so a cancel lands between attempts."""
+    deadline = time.monotonic() + seconds
+    while True:
+        _check()
+        if control.Exists(0, 0):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        _sleep(0.1)
 
 
 def _page_hash() -> str:
@@ -81,6 +113,7 @@ def _find_text_ocr(text: str) -> tuple | None:
         data = _ocr_scan()
         matches = _ocr_matches(data, text)
         if not matches:
+            _check()
             # Retry with fully-automatic layout analysis — catches text psm 11 misses
             data = _ocr_scan('--psm 3')
             matches = _ocr_matches(data, text)
@@ -90,6 +123,8 @@ def _find_text_ocr(text: str) -> tuple | None:
             return (cx, cy)
         log.info(f"'{text}' not found ({len(data['text'])} words scanned) in {time.time()-t0:.2f}s")
         return None
+    except AgentError:
+        raise
     except Exception as e:
         log.error(f"error finding '{text}': {e}")
         return None
@@ -102,6 +137,7 @@ def _find_nth_text_ocr(text: str, n: int) -> tuple | None:
         data = _ocr_scan()
         matches = _ocr_matches(data, text)
         if not matches:
+            _check()
             data = _ocr_scan('--psm 3')
             matches = _ocr_matches(data, text)
         ys = [m[2] for m in matches]
@@ -112,13 +148,16 @@ def _find_nth_text_ocr(text: str, n: int) -> tuple | None:
             return (cx, cy)
         log.info(f"only {len(matches)} clusters, need {n}")
         return None
+    except AgentError:
+        raise
     except Exception as e:
         log.error(f"error finding nth '{text}': {e}")
         return None
 
 def _click_at(x, y, button='left'):
+    _check()
     pyautogui.moveTo(x, y, duration=0.2)
-    time.sleep(0.05)
+    _sleep(0.05)
     pyautogui.click(x, y, button=button)
 
 def _center(rect):
@@ -159,9 +198,18 @@ def _bring_to_front(hwnd):
     user32.SetForegroundWindow(hwnd)
     user32.AttachThreadInput(fg_thread, my_thread, False)
     user32.SwitchToThisWindow(hwnd, True)  # undocumented but reliable, no side effects
-    time.sleep(0.30)
+    _sleep(0.30)
 
-def execute_action(action: dict) -> dict:
+def execute_action(action: dict, token=None) -> dict:
+    _ctx.token = token
+    try:
+        return _execute(action)
+    finally:
+        _ctx.token = None
+
+
+def _execute(action: dict) -> dict:
+    _check()
     t = action.get("type")
     t0 = time.time()
     log.info(f"-> {t}")
@@ -175,9 +223,10 @@ def execute_action(action: dict) -> dict:
             hash_before = _page_hash()
             key = 'pagedown' if direction == 'down' else 'pageup'
             for _ in range(amount):
+                _check()
                 pyautogui.press(key)
-                time.sleep(0.02)
-            time.sleep(0.15)  # let browser render before checking
+                _sleep(0.02)
+            _sleep(0.15)  # let browser render before checking
             hash_after = _page_hash()
             reached = hash_before == hash_after
             log.info(f"scroll {direction} {amount} done in {time.time()-t0:.2f}s reached_bottom={reached}")
@@ -212,7 +261,7 @@ def execute_action(action: dict) -> dict:
         import pyperclip
         text = action.get("text", "")
         pyperclip.copy(text)
-        time.sleep(0.05)
+        _sleep(0.05)
         pyautogui.hotkey('ctrl', 'v')
         log.info(f"type done in {time.time()-t0:.2f}s ({len(text)} chars)")
 
@@ -251,18 +300,18 @@ def execute_action(action: dict) -> dict:
             root = auto.ControlFromHandle(hwnd) if hwnd else None
             if root:
                 c = auto.Control(searchFromControl=root, searchDepth=15, Name=text)
-                if c.Exists(3):
+                if _exists(c, 3):
                     el = c
                 else:
                     c = auto.Control(searchFromControl=root, searchDepth=15, SubName=text)
-                    if c.Exists(2):
+                    if _exists(c, 2):
                         el = c
 
             if el is None and not bbox:
                 # Only pay the slow desktop fallback cost when we have no bbox to fall back to
                 log.info(f"scoped search failed for '{text}', trying desktop fallback")
                 c = auto.Control(searchDepth=20, Name=text)
-                if c.Exists(5):
+                if _exists(c, 5):
                     el = c
 
         if ocr_pos is not None:
@@ -300,16 +349,16 @@ def execute_action(action: dict) -> dict:
             ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
             log.info(f"navigate_url hwnd={hwnd} title='{buf.value[:60]}' url={url}")
             _bring_to_front(hwnd)
-            time.sleep(0.2)
+            _sleep(0.2)
             pyautogui.hotkey('ctrl', 'l')
-            time.sleep(0.15)
+            _sleep(0.15)
             import pyperclip
             pyperclip.copy(url)
             pyautogui.hotkey('ctrl', 'a')
             pyautogui.hotkey('ctrl', 'v')
-            time.sleep(0.1)
+            _sleep(0.1)
             pyautogui.press('enter')
-            time.sleep(0.2)
+            _sleep(0.2)
         else:
             log.info("navigate_url: no browser found, using os.startfile")
             import os
