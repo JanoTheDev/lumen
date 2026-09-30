@@ -34,6 +34,20 @@ import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
 import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
+import type { ZodType, infer as zInfer } from 'zod'
+import {
+  parsePayload,
+  promptSchema,
+  queryOptsSchema,
+  textSchema,
+  nameSchema,
+  guideIdSchema,
+  confidenceSchema,
+  overlayHeightSchema,
+  audioSchema,
+  actionsSchema,
+} from '../shared/ipc'
+import { configPatchSchema } from '../shared/config'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
@@ -660,12 +674,16 @@ app.whenReady().then(async () => {
     activeGuide = null
   })
 
-  ipcMain.on('show-answer-overlay', (_e, text: string) => {
+  ipcMain.on('show-answer-overlay', (_e, raw: unknown) => {
+    const text = safeParse('show-answer-overlay', textSchema, raw)
+    if (text === undefined) return
     answerOverlayWindow?.webContents.send('show-answer', text)
     answerOverlayWindow?.show()
     // NOTE: TTS is kicked off inside runQuery (earlier) to minimize perceived delay.
   })
-  ipcMain.handle('tts-speak', async (_e, text: string) => {
+  ipcMain.handle('tts-speak', async (_e, raw: unknown) => {
+    const text = safeParse('tts-speak', textSchema, raw)
+    if (text === undefined) return INVALID
     const cfg = loadConfig()
     if (!text || !text.trim()) return { ok: false, error: 'empty text' }
     try {
@@ -679,9 +697,10 @@ app.whenReady().then(async () => {
     answerOverlayWindow?.hide()
   })
 
-  ipcMain.on('resize-answer-overlay', (_e, h: number) => {
-    const clamped = Math.max(80, Math.min(Math.round(h), 320))
-    answerOverlayWindow?.setSize(360, clamped)
+  ipcMain.on('resize-answer-overlay', (_e, raw: unknown) => {
+    const h = safeParse('resize-answer-overlay', overlayHeightSchema, raw)
+    if (h === undefined) return
+    answerOverlayWindow?.setSize(360, h)
   })
 
   let lastTaskContext: string | null = null
@@ -975,7 +994,10 @@ app.whenReady().then(async () => {
     return result
   }  // end runQuery
 
-  ipcMain.handle('query', async (_event, prompt: string, opts: CallOptions = {}) => {
+  ipcMain.handle('query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
+    const prompt = safeParse('query', promptSchema, rawPrompt)
+    const opts: CallOptions | undefined = safeParse('query', queryOptsSchema, rawOpts) ?? {}
+    if (prompt === undefined) return INVALID
     // Guide voice nav: "next step", "back", "repeat", "done"
     const nav = handleGuideNavCommand(prompt)
     if (nav.handled) return nav.response
@@ -1042,7 +1064,10 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('announce-action', async (_event, summary: string, confidence?: string) => {
+  ipcMain.handle('announce-action', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
+    const summary = safeParse('announce-action', textSchema, rawSummary)
+    const confidence = safeParse('announce-action', confidenceSchema, rawConfidence)
+    if (summary === undefined) return { delayMs: 0 }
     const cfg = loadConfig()
     if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
     if (!summary || !summary.trim()) return { delayMs: 0 }
@@ -1057,7 +1082,9 @@ app.whenReady().then(async () => {
     return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
   })
 
-  ipcMain.handle('execute-action', async (_event, actions: Action[]) => {
+  ipcMain.handle('execute-action', async (_event, rawActions: unknown) => {
+    const actions = safeParse('execute-action', actionsSchema, rawActions) as Action[] | undefined
+    if (!actions) return INVALID
     if (!agent) throw new Error('Agent not ready')
     executionAborted = false
     currentExecuteAbort = new AbortController()
@@ -1197,7 +1224,9 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('config-get', () => loadConfig())
-  ipcMain.handle('config-save', async (_e, patch: Partial<AppConfig>) => {
+  ipcMain.handle('config-save', async (_e, raw: unknown) => {
+    const patch = safeParse('config-save', configPatchSchema, raw) as Partial<AppConfig> | undefined
+    if (!patch) return INVALID
     const prev = loadConfig()
     const next = saveConfig(patch)
     broadcastConfig(next)
@@ -1218,12 +1247,19 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('guides-list', () => listSavedGuides())
-  ipcMain.handle('guides-save-last', (_e, name: string) => {
+  ipcMain.handle('guides-save-last', (_e, raw: unknown) => {
+    const name = safeParse('guides-save-last', nameSchema.optional(), raw)
     const g = saveLastAsGuide(name ?? '')
     return g ?? { error: 'no guide to save — run a guide first' }
   })
-  ipcMain.handle('guides-replay', (_e, id: string) => replaySavedGuide(id) ?? { error: 'not found' })
-  ipcMain.handle('guides-delete', (_e, id: string) => ({ ok: deleteSavedGuide(id) }))
+  ipcMain.handle('guides-replay', (_e, raw: unknown) => {
+    const id = safeParse('guides-replay', guideIdSchema, raw)
+    return (id && replaySavedGuide(id)) || { error: 'not found' }
+  })
+  ipcMain.handle('guides-delete', (_e, raw: unknown) => {
+    const id = safeParse('guides-delete', guideIdSchema, raw)
+    return { ok: !!id && deleteSavedGuide(id) }
+  })
 
   ipcMain.handle('wake-model-status', () => ({
     installed: modelInstalled(),
@@ -1246,7 +1282,9 @@ app.whenReady().then(async () => {
     else settingsWindow.maximize()
   })
 
-  ipcMain.handle('transcribe', async (_event, audio: ArrayBuffer) => {
+  ipcMain.handle('transcribe', async (_event, raw: unknown) => {
+    const audio = safeParse('transcribe', audioSchema, raw)
+    if (!audio) return ''
     if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
 
     // Skip Whisper on tiny recordings — model hallucinates on < ~0.5s of audio
@@ -1311,6 +1349,18 @@ async function passesPolicy(action: Action, prev?: Action): Promise<boolean> {
   log('fail', `blocked by policy (${verdict}): ${reason ?? action.type}`)
   setStatus('error', `Blocked for safety: ${reason ?? action.type}`, undefined, 3000)
   return false
+}
+
+const INVALID = { error: 'E_INVALID' } as const
+
+// Validates a renderer payload; logs and returns undefined when it does not match.
+function safeParse<T extends ZodType>(channel: string, schema: T, value: unknown): zInfer<T> | undefined {
+  try {
+    return parsePayload(channel, schema, value)
+  } catch (e) {
+    log('fail', (e as Error).message)
+    return undefined
+  }
 }
 
 function sleep(ms: number): Promise<void> {

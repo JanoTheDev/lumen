@@ -112,7 +112,16 @@ export function loadConfig(): AppConfig {
 
 export function saveConfig(update: Partial<AppConfig>): AppConfig {
   const current = loadConfig()
-  const merged = mergeWithDefaults({ ...current, ...update })
+  // Nested sections merge one level deep so a partial patch keeps sibling fields.
+  const next: Record<string, unknown> = { ...current }
+  for (const [key, value] of Object.entries(update)) {
+    const prev = next[key]
+    next[key] =
+      value && typeof value === 'object' && !Array.isArray(value) && prev && typeof prev === 'object'
+        ? { ...prev, ...value }
+        : value
+  }
+  const merged = mergeWithDefaults(next as Partial<AppConfig>)
   if (!existsSync(dirname(CONFIG_PATH))) mkdirSync(dirname(CONFIG_PATH), { recursive: true })
   writeFileSync(CONFIG_PATH, JSON.stringify(merged, null, 2), 'utf8')
   cached = merged
