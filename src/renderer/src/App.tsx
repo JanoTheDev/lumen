@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useVoice } from './hooks/useVoice'
+import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 
 type ClaudeResponse =
   | { mode: 'answer'; text: string }
@@ -14,23 +14,34 @@ interface Action {
   button?: string; text?: string; keys?: string[]; url?: string; n?: number
 }
 
+interface VadConfig {
+  speechThreshold: number
+  silenceMs: number
+  maxWaitMs: number
+  maxRecordMs?: number
+}
+
+const DEFAULT_VAD: VadConfig = { speechThreshold: 0.04, silenceMs: 1500, maxWaitMs: 8000 }
+const DEFAULT_MAX_RECORD_MS = 30000
+const WAVE_SHAPE = [0.4, 0.7, 1, 0.85, 0.6, 0.45, 0.3]
+const WAVE_BASE = 3
+const WAVE_PEAK = 16
+const WAVE_GAIN = 8
+
+function readVad(cfg: unknown): VadConfig | null {
+  return (cfg as { vad?: VadConfig } | null)?.vad ?? null
+}
+
 export default function App(): JSX.Element {
   const [phase, setPhase] = useState<'listening' | 'processing' | 'error'>('listening')
   const queryFiredRef = useRef(false)
   const cancelledRef = useRef(false)
   const processingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    window.api.onCancelRequest?.(() => {
-      cancelledRef.current = true
-      queryFiredRef.current = false
-      if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
-      // Signal main process to abort any in-flight research/plan/callClaude loop
-      ;(window.api as { cancelCurrent?: () => void }).cancelCurrent?.()
-      setPhase('listening')
-      window.api.closeHUD()
-    })
-  }, [])
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const voiceSessionRef = useRef(0)
+  const vadRef = useRef<VadConfig | null>(null)
+  const barsRef = useRef<Array<HTMLDivElement | null>>([])
 
   const applyResponse = async (r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } }, depth = 0, _pendingFollowUp?: { query: string; delay_ms: number }): Promise<void> => {
     if (r.mode === 'answer' && depth > 0) {
@@ -58,6 +69,7 @@ export default function App(): JSX.Element {
           await new Promise((res) => setTimeout(res, delay_ms))
           const fuQuery = query.startsWith('The page is loaded') ? query : `The page is loaded. ${query}`
           const fu = await window.api.query(fuQuery, { lowDetail: true })
+          if ((fu as { cancelled?: boolean } | null)?.cancelled) return
           await applyResponse(fu as ClaudeResponse & { url?: string }, depth + 1, r.follow_up)
         } else if (r.follow_up) {
           console.warn('[follow_up] depth limit (6) reached, stopping')
@@ -82,20 +94,19 @@ export default function App(): JSX.Element {
     }
   }
 
-  const handleResult = async (text: string): Promise<void> => {
+  const resetHud = (): void => {
+    window.api.closeHUD()
+    setPhase('listening')
+  }
+
+  const handleResult = async (text: string, info?: VoiceResultInfo): Promise<void> => {
     console.log('[voice] result:', text)
-    if (!text.trim()) {
-      window.api.closeHUD()
-      setPhase('listening')
+    if (shouldDropTranscript(text, info?.speechMs)) {
+      if (text.trim()) console.warn('[voice] dropping likely silence hallucination:', JSON.stringify(text))
+      resetHud()
       return
     }
-    if (text.trim().split(/\s+/).length < 3) {
-      console.warn('[voice] transcript too short, skipping API call:', JSON.stringify(text))
-      window.api.closeHUD()
-      return
-    }
-    // queryFiredRef blocked queued requests — main-process TaskQueue handles serialization.
-    // Fire every valid transcript; queue waits if another query is in flight.
+    // Main-process TaskQueue handles serialization; fire every valid transcript.
     queryFiredRef.current = true
     setPhase('processing')
     // Safety net: if processing stalls >60s, auto-reset
@@ -103,13 +114,12 @@ export default function App(): JSX.Element {
     processingTimerRef.current = setTimeout(() => {
       console.warn('[safety] processing timeout — resetting HUD')
       queryFiredRef.current = false
-      setPhase('listening')
-      window.api.closeHUD()
+      resetHud()
     }, 60000)
     try {
       console.log('[query] sending:', text)
       const result = await window.api.query(text.trim())
-      if (cancelledRef.current) return
+      if (cancelledRef.current || (result as { cancelled?: boolean } | null)?.cancelled) return
       const r = result as ClaudeResponse & { url?: string }
       console.log('[query] response:', JSON.stringify(r))
       await applyResponse(r)
@@ -117,104 +127,162 @@ export default function App(): JSX.Element {
       console.error('[query] error:', err)
     } finally {
       if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
-      window.api.closeHUD()
-      setPhase('listening')
+      resetHud()
     }
   }
 
-  const handleError = (err: unknown): void => {
-    console.error('[voice] error, closing HUD:', err)
+  const handleError = (message: string): void => {
+    console.error('[voice] error:', message)
+    if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
     setPhase('error')
-    setTimeout(() => {
-      window.api.closeHUD()
-      setPhase('listening')
+    window.api.showAnswerOverlay?.(message)
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    errorTimerRef.current = setTimeout(() => {
+      errorTimerRef.current = null
+      resetHud()
     }, 1500)
   }
 
-  const { start, stop, audioLevel } = useVoice(handleResult, handleError)
+  const { start, stop, abort, levelRef, listening } = useVoice(handleResult, handleError)
 
+  const handleResultRef = useRef(handleResult)
   useEffect(() => { handleResultRef.current = handleResult })
 
-  const audioLevelRef = useRef(0)
-  useEffect(() => { audioLevelRef.current = audioLevel }, [audioLevel])
+  const clearSessionTimers = (): void => {
+    if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
+    if (errorTimerRef.current) { clearTimeout(errorTimerRef.current); errorTimerRef.current = null }
+  }
 
-  const handleResultRef = useRef<(text: string) => Promise<void>>(async () => {})
+  // Push the input level straight to the waveform bars instead of re-rendering per frame.
   useEffect(() => {
-    window.api.onRunQuery?.((text) => {
-      window.api.showHUD?.()
+    if (!listening || phase !== 'listening') return
+    const bars = barsRef.current
+    let raf = 0
+    const draw = (): void => {
+      const lvl = Math.min(levelRef.current * WAVE_GAIN, 1)
+      bars.forEach((bar, i) => {
+        if (!bar) return
+        const h = WAVE_BASE + (WAVE_PEAK - WAVE_BASE) * WAVE_SHAPE[i] * lvl
+        bar.style.height = `${Math.max(WAVE_BASE, h)}px`
+      })
+      raf = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => {
+      cancelAnimationFrame(raf)
+      bars.forEach((bar) => { if (bar) bar.style.height = `${WAVE_BASE}px` })
+    }
+  }, [listening, phase, levelRef])
+
+  useEffect(() => {
+    return window.api.onCancelRequest(() => {
+      cancelledRef.current = true
+      queryFiredRef.current = false
+      voiceSessionRef.current++
+      if (wakeTimerRef.current) { clearTimeout(wakeTimerRef.current); wakeTimerRef.current = null }
+      if (errorTimerRef.current) { clearTimeout(errorTimerRef.current); errorTimerRef.current = null }
+      abort()
+      if (processingTimerRef.current) { clearTimeout(processingTimerRef.current); processingTimerRef.current = null }
+      // Signal main process to abort any in-flight research/plan/callClaude loop
+      window.api.cancelCurrent()
+      setPhase('listening')
+      window.api.closeHUD()
+    })
+  }, [abort])
+
+  useEffect(() => {
+    return window.api.onRunQuery((text) => {
+      window.api.showHUD()
       handleResultRef.current(text)
     })
   }, [])
 
-  const vadRef = useRef<{ speechThreshold: number; silenceMs: number; maxWaitMs: number } | null>(null)
   useEffect(() => {
-    window.api.getConfig?.().then((cfg) => {
-      const v = (cfg as { vad?: { speechThreshold: number; silenceMs: number; maxWaitMs: number } }).vad
-      if (v) vadRef.current = v
+    let alive = true
+    window.api.getConfig().then((cfg) => {
+      const v = readVad(cfg)
+      if (alive && v) vadRef.current = v
     }).catch(() => {})
-    window.api.onConfigChanged?.((cfg) => {
-      const v = (cfg as { vad?: { speechThreshold: number; silenceMs: number; maxWaitMs: number } }).vad
+    const unsub = window.api.onConfigChanged((cfg) => {
+      const v = readVad(cfg)
       if (v) vadRef.current = v
     })
+    return () => {
+      alive = false
+      unsub()
+    }
   }, [])
 
+  const beginSessionRef = useRef<() => number>(() => 0)
+  const resetHudRef = useRef(resetHud)
   useEffect(() => {
-    ;(window as unknown as Record<string, unknown>).__voiceStart = () => {
+    beginSessionRef.current = (): number => {
+      clearSessionTimers()
+      queryFiredRef.current = false
+      cancelledRef.current = false
+      setPhase('listening')
+      return ++voiceSessionRef.current
+    }
+    resetHudRef.current = resetHud
+  })
+
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>
+    w.__voiceStart = () => {
       console.log('[voice] __voiceStart called')
-      queryFiredRef.current = false
-      cancelledRef.current = false
-      setPhase('listening')
-      start()
+      beginSessionRef.current()
+      const vad = vadRef.current ?? DEFAULT_VAD
+      start({ speechThreshold: vad.speechThreshold })
     }
-    ;(window as unknown as Record<string, unknown>).__voiceStop = () => {
+    w.__voiceStop = () => {
       console.log('[voice] __voiceStop called')
-      setPhase('processing')
-      stop()
+      if (stop()) setPhase('processing')
     }
-    // Wake-word activated recording: auto-stop after sustained silence.
-    // Heard speech then ~1.5s quiet → stop. Max 8s total if no speech detected.
-    ;(window as unknown as Record<string, unknown>).__wakeVoiceStart = () => {
+    // Wake-word / hands-free recording: auto-stop after sustained silence,
+    // abort if nothing is said, hard stop at maxRecordMs (enforced in useVoice).
+    w.__wakeVoiceStart = () => {
       console.log('[wake-voice] starting — will auto-stop on silence')
-      queryFiredRef.current = false
-      cancelledRef.current = false
-      setPhase('listening')
-      start()
+      const session = beginSessionRef.current()
+      const vad = vadRef.current ?? DEFAULT_VAD
+      const maxRecordMs = vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS
+      start({ speechThreshold: vad.speechThreshold, maxRecordMs })
       const startedAt = Date.now()
-      const vad = (vadRef.current ?? { speechThreshold: 0.04, silenceMs: 1500, maxWaitMs: 8000 })
-      const SPEECH_THRESHOLD = vad.speechThreshold
-      const SILENCE_MS = vad.silenceMs
-      const MAX_WAIT_MS = vad.maxWaitMs
       let heardSpeech = false
       let silenceStart = 0
       const tick = (): void => {
-        if (cancelledRef.current) return
+        wakeTimerRef.current = null
+        if (session !== voiceSessionRef.current || cancelledRef.current) return
         const now = Date.now()
-        const lvl = audioLevelRef.current
-        if (lvl > SPEECH_THRESHOLD) {
+        if (now - startedAt >= maxRecordMs) {
+          console.log('[wake-voice] max duration reached — stopping')
+          setPhase('processing')
+          stop()
+          return
+        }
+        if (levelRef.current > vad.speechThreshold) {
           heardSpeech = true
           silenceStart = 0
         } else if (heardSpeech) {
           if (silenceStart === 0) silenceStart = now
-          else if (now - silenceStart >= SILENCE_MS) {
+          else if (now - silenceStart >= vad.silenceMs) {
             console.log('[wake-voice] silence detected — stopping')
             setPhase('processing')
             stop()
             return
           }
         }
-        if (!heardSpeech && now - startedAt > MAX_WAIT_MS) {
-          console.log('[wake-voice] no speech — cancelling')
+        if (!heardSpeech && now - startedAt > vad.maxWaitMs) {
+          console.log('[wake-voice] no speech — aborting')
           cancelledRef.current = true
-          stop()
-          window.api.closeHUD()
-          setPhase('listening')
+          abort()
+          resetHudRef.current()
           return
         }
-        setTimeout(tick, 80)
+        wakeTimerRef.current = setTimeout(tick, 80)
       }
-      setTimeout(tick, 200)
+      wakeTimerRef.current = setTimeout(tick, 200)
     }
-  }, [start, stop])
+  }, [start, stop, abort, levelRef])
 
   const analyzing = phase === 'processing'
   const hasError = phase === 'error'
@@ -269,20 +337,19 @@ export default function App(): JSX.Element {
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 16 }}>
-            {[0.4, 0.7, 1, 0.85, 0.6, 0.45, 0.3].map((shape, i) => {
-              const base = 3
-              const peak = 16
-              const barH = base + (peak - base) * shape * Math.min(audioLevel * 3, 1)
-              return (
-                <div key={i} style={{
+            {WAVE_SHAPE.map((_shape, i) => (
+              <div
+                key={i}
+                ref={(el) => { barsRef.current[i] = el }}
+                style={{
                   width: 2.5,
-                  height: Math.max(base, barH),
+                  height: WAVE_BASE,
                   borderRadius: 99,
                   background: 'var(--ai-accent, #5b8cff)',
                   transition: 'height 0.06s ease-out',
-                }} />
-              )
-            })}
+                }}
+              />
+            ))}
           </div>
         )}
       </div>
