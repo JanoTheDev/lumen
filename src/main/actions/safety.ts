@@ -78,7 +78,8 @@ export function normalizeCombo(keys: string[] | string): string {
 // Windows where typed text can execute commands. Browser tabs about these topics are excluded.
 const SHELL_TITLE_RE =
   /^run$|\bcmd(\.exe)?\b|command prompt|powershell|windows terminal|^(administrator: )?(terminal|bash|wsl|ubuntu)\b/i
-const BROWSER_TITLE_RE = /(google chrome|mozilla firefox|microsoft​? edge|brave|opera|vivaldi)$/i
+const BROWSER_TITLE_RE =
+  /(google chrome|mozilla firefox|microsoft\u200b? edge|brave|opera|vivaldi)$/i
 
 export interface KeyContext {
   /** Title of the window that will receive the keys. */

@@ -35,7 +35,8 @@ export interface ModelAction {
 const MAX_SCROLL = 2
 
 export function toAgentAction(action: ModelAction, frame: FrameGeometry): AgentAction {
-  const { bbox, description: _description, ...rest } = action
+  const { bbox, ...rest } = action
+  delete rest.description
   const base: AgentAction = { ...rest }
   const hasPoint = action.x != null && action.y != null
 

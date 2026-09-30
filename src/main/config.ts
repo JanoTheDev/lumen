@@ -65,7 +65,7 @@ function backupInvalid(raw: string): string {
   return file
 }
 
-function useDefaults(msg: string): AppConfig {
+function fallbackToDefaults(msg: string): AppConfig {
   warning = msg
   log('fail', msg)
   cached = clone(DEFAULT_CONFIG)
@@ -88,13 +88,13 @@ export function loadConfig(): AppConfig {
     parsed = JSON.parse(raw)
   } catch (e) {
     const bad = raw ? backupInvalid(raw) : ''
-    return useDefaults(
+    return fallbackToDefaults(
       `config unreadable (${(e as Error).message}), using defaults${bad ? `; saved copy at ${bad}` : ''}`
     )
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     const bad = backupInvalid(raw)
-    return useDefaults(`config is not an object, using defaults; saved copy at ${bad}`)
+    return fallbackToDefaults(`config is not an object, using defaults; saved copy at ${bad}`)
   }
 
   const obj = parsed as Record<string, unknown>
@@ -111,7 +111,8 @@ export function loadConfig(): AppConfig {
     for (const k of keys)
       candidate[k] = structuredClone((DEFAULT_CONFIG as Record<string, unknown>)[k])
     result = configV2Schema.safeParse(candidate)
-    if (!result.success) return useDefaults(`config invalid, using defaults; saved copy at ${bad}`)
+    if (!result.success)
+      return fallbackToDefaults(`config invalid, using defaults; saved copy at ${bad}`)
     warning = `config had invalid values for ${keys.join(', ')}; reset to defaults (saved copy at ${bad})`
     log('fail', warning)
   }

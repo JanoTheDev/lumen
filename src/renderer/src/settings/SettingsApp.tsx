@@ -1123,10 +1123,14 @@ function ModelSelect({
   presets: string[]
   onChange: (v: string) => void
 }): JSX.Element {
-  const [custom, setCustom] = useState(value && !presets.includes(value))
-  useEffect(() => {
-    setCustom(!!value && !presets.includes(value))
-  }, [value, presets])
+  const isCustomValue = !!value && !presets.includes(value)
+  const [custom, setCustom] = useState(isCustomValue)
+  // Re-sync when the value or presets change from outside (adjusting state during render).
+  const [synced, setSynced] = useState({ value, presets })
+  if (synced.value !== value || synced.presets !== presets) {
+    setSynced({ value, presets })
+    setCustom(isCustomValue)
+  }
 
   if (custom) {
     return (

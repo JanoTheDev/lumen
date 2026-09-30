@@ -35,8 +35,7 @@ export default function App(): JSX.Element {
 
   const applyResponse = async (
     r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } },
-    depth = 0,
-    _pendingFollowUp?: { query: string; delay_ms: number }
+    depth = 0
   ): Promise<void> => {
     if (r.mode === 'answer' && depth > 0) {
       // AI returned answer in a follow_up chain — means it's done (or confused). Stop chain.
@@ -69,7 +68,7 @@ export default function App(): JSX.Element {
             : `The page is loaded. ${query}`
           const fu = await window.api.query(fuQuery, { lowDetail: true })
           if ((fu as { cancelled?: boolean } | null)?.cancelled) return
-          await applyResponse(fu as ClaudeResponse & { url?: string }, depth + 1, r.follow_up)
+          await applyResponse(fu as ClaudeResponse & { url?: string }, depth + 1)
         } else if (r.follow_up) {
           console.warn('[follow_up] depth limit (6) reached, stopping')
         }

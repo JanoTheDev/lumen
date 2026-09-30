@@ -56,7 +56,7 @@ async function loadThemeAndConfig(): Promise<void> {
       applyThemeVars(c.theme, c.themeCustom)
       if (c.answerAutoCloseMs) CLOSE_MS = c.answerAutoCloseMs
     })
-  } catch (e) {
+  } catch {
     applyThemeVars('dark')
   }
 }
@@ -192,7 +192,9 @@ api?.onTtsAudio?.(({ mime, data }) => {
     const a = new Audio(`data:${mime};base64,${data}`)
     currentAudio = a
     a.play().catch(() => {})
-  } catch (e) {}
+  } catch {
+    // audio playback is best-effort
+  }
 })
 
 export {}
