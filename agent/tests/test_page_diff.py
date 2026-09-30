@@ -54,3 +54,14 @@ def test_edge_chrome_changes_ignored():
     b = a.copy()
     ImageDraw.Draw(b).rectangle([0, 860, 1280, 900], fill=(0, 120, 0))  # status bar / clock
     assert pagediff.reached_bottom(pagediff.small_gray(a), pagediff.small_gray(b))
+
+
+def test_change_only_in_the_centre_is_detected():
+    a = page(7)
+    b = a.copy()
+    w, h = b.size
+    ImageDraw.Draw(b).rectangle([w // 2 - 120, h // 2 - 60, w // 2 + 120, h // 2 + 60], fill=(200, 30, 30))
+    before, after = pagediff.small_gray(a), pagediff.small_gray(b)
+    assert pagediff.diff_ratio(before, before) == 0
+    assert pagediff.diff_ratio(before, after) > pagediff.BOTTOM_THRESHOLD
+    assert not pagediff.reached_bottom(before, after)

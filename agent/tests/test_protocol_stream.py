@@ -114,3 +114,61 @@ def test_event_flood_with_pings_and_screenshots_stays_json(protocol):
         json.loads(line)
     assert not any("stray write" in l for l in a.raw)
     assert any("stray write" in l for l in a.stderr)
+
+
+_THREADED_WRITER = r"""
+import threading
+import proto
+
+def worker(t):
+    for i in range(1000):
+        proto.send({"t": t, "i": i, "pad": "x" * (i % 64), "text": "Größe — 日本"})
+
+threads = [threading.Thread(target=worker, args=(t,)) for t in range(8)]
+for th in threads:
+    th.start()
+for th in threads:
+    th.join()
+proto.close(timeout=10)
+"""
+
+
+def test_writer_emits_one_line_per_message_across_threads():
+    import os
+    import subprocess
+    import sys
+
+    agent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out = subprocess.run(
+        [sys.executable, "-c", _THREADED_WRITER],
+        cwd=agent_dir,
+        capture_output=True,
+        timeout=60,
+        env={**os.environ, "PYTHONUTF8": "1"},
+    ).stdout.decode("utf-8")
+    lines = out.split("\n")
+    assert lines[-1] == ""
+    msgs = [json.loads(l) for l in lines[:-1]]
+    assert len(msgs) == 8000
+    assert {(m["t"], m["i"]) for m in msgs} == {(t, i) for t in range(8) for i in range(1000)}
+    assert all(m["text"] == "Größe — 日本" for m in msgs)
+
+
+@pytest.mark.parametrize(
+    "frame",
+    [{"v": 2, "id": 9}, {"v": 2, "id": 9, "cmd": 123}, {"v": 2, "id": 9, "cmd": "ping", "args": "x"}],
+)
+def test_malformed_v2_request_answers_with_its_own_id(frame):
+    a = AgentProc("--protocol", "2")
+    try:
+        a.send(frame)
+        a.send({"v": 2, "id": 10, "cmd": "ping"})
+        msg = a.wait_for(lambda m: m.get("id") in (9, 10))
+        assert msg["id"] == 9
+        if frame.get("cmd") == "ping":
+            assert msg["ok"] is True  # non-object args fall back to {}
+        else:
+            assert msg["ok"] is False and msg["error"]["code"]
+        assert a.wait_for(lambda m: m.get("id") == 10)["ok"] is True
+    finally:
+        a.close()
