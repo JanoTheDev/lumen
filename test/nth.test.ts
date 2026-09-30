@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { ocrNorm, correctNthElement } from '../src/main/query/nth'
-import type { ClaudeResponse } from '../src/main/claude'
+import type { ClaudeResponse } from '../src/main/ai'
 
 describe('ocrNorm', () => {
   it('lowercases', () => expect(ocrNorm('HELLO')).toBe('hello'))

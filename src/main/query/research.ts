@@ -2,7 +2,7 @@
 import type { Action, ModelResponse } from '@shared/types'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import type { CancelScope } from './cancel'
-import { callClaude, type CallOptions } from '../claude'
+import { callModel, type CallOptions } from '../ai'
 import { requireAgent } from '../agent/instance'
 import { executeActions } from '../actions/executor'
 import { log, type Timer } from '../logger'
@@ -24,7 +24,7 @@ export function runResearch(
   return runResearchAgent(
     prompt,
     activeWindow,
-    (p, s, w) => callClaude(p, s, w, opts),
+    (p, s, w) => callModel(p, s, w, opts),
     () => agent.screenshot(),
     (actions) => runBatch(actions as Action[], scope),
     () => {},
@@ -46,7 +46,7 @@ export async function runPlanned(
   const result = await executePlan(
     plan,
     activeWindow,
-    (p, s, w) => callClaude(p, s, w, opts),
+    (p, s, w) => callModel(p, s, w, opts),
     () => agent.screenshot(),
     (actions) => runBatch(actions as Action[], scope),
     (progress) => {

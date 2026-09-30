@@ -10,7 +10,6 @@ try {
 
 import { app, shell, BrowserWindow, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { warmupConnection } from './claude'
 import { AgentBridge } from './agent/bridge'
 import OpenAI, { toFile } from 'openai'
 import { log } from './logger'
@@ -310,7 +309,6 @@ app.whenReady().then(async () => {
     log('fail', `agent failed to start: ${(e as Error).message}`)
     setStatus('error', 'Agent failed to start — see logs', undefined, 8000)
   })
-  warmupConnection()
   loadConfig()  // warm cache
 
   agent.onEvent('hotkey-down', () => {

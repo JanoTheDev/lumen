@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSystemPrompt } from '../src/main/claude'
+import { buildSystemPrompt } from '../src/main/ai/prompts/system'
 import { UNTRUSTED_CONTENT_RULE } from '../src/main/ai/prompts/untrusted'
 
 describe('system prompt safety', () => {

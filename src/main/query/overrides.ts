@@ -1,7 +1,7 @@
 // Prompt steering the system prompt alone does not achieve reliably. Pure: prompt + context in,
 // effective prompt out.
 import { classifyQuery, type QueryIntent } from './query-classifier'
-import { detectRequestedApp } from '../claude'
+import { detectRequestedApp } from '../ai/app-context'
 
 // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
 const ORDINAL_RE = /\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|\d+(st|nd|rd|th))\b.{0,40}(email|mail|message|result|item|tweet|post|notification)/i

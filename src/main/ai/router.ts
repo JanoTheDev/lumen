@@ -1,4 +1,4 @@
-import { loadConfig } from './config'
+import { loadConfig } from '../config'
 
 export type ModelFunction = 'planning' | 'main' | 'fast' | 'verify'
 export type Provider = 'anthropic' | 'openai'
@@ -31,4 +31,21 @@ export function getModel(fn: ModelFunction): string {
   const override = loadConfig().models[fn]
   if (override && override.trim()) return override.trim()
   return MODELS[getProvider()][fn]
+}
+
+/** Computer Use is Anthropic-only: the main override applies only when it is a Claude model. */
+export function computerUseModel(): string {
+  const override = loadConfig().models.main?.trim()
+  return override && override.startsWith('claude-') ? override : MODELS.anthropic.main
+}
+
+/** gpt-5* and o-series models take `reasoning_effort`; other chat models reject it. */
+export function isReasoningModel(model: string): boolean {
+  return /^(gpt-5|o\d)/i.test(model)
+}
+
+/** Lowest reasoning effort the model accepts, or nothing for non-reasoning models. */
+export function reasoningParams(model: string): { reasoning_effort?: 'minimal' | 'low' } {
+  if (!isReasoningModel(model)) return {}
+  return { reasoning_effort: /^gpt-5/i.test(model) ? 'minimal' : 'low' }
 }

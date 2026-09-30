@@ -1,10 +1,12 @@
 // src/main/task-planner.ts
-import OpenAI from 'openai'
-import Anthropic from '@anthropic-ai/sdk'
-import { getModel, getProvider } from '../model-router'
+import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
+import { getModel, getProvider, reasoningParams } from '../ai/router'
+import { anthropicClient } from '../ai/providers/anthropic'
+import { openaiClient, type ChatParams } from '../ai/providers/openai'
 import { log, startTimer } from '../logger'
 import { hashScreenshot, shouldVerifyStep, verifyStep } from './step-verifier'
-import { type ClaudeResponse, type Action } from '../claude'
+import type { ClaudeResponse, Action } from '../ai'
 import { UNTRUSTED_CONTENT_RULE } from '../ai/prompts/untrusted'
 
 export interface PlanStep {
@@ -80,13 +82,12 @@ Return ONLY JSON, no markdown, no prose:
   let raw = ''
 
   if (provider === 'anthropic') {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const content: Anthropic.MessageParam['content'] = []
     if (screenshot) {
       content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: screenshot } })
     }
     content.push({ type: 'text', text: planPrompt })
-    const msg = await client.messages.create({
+    const msg = await anthropicClient().messages.create({
       model,
       max_tokens: 1024,
       system: systemPrompt,
@@ -94,21 +95,20 @@ Return ONLY JSON, no markdown, no prose:
     }, { signal })
     raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
   } else {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] = []
     if (screenshot) {
       userContent.push({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshot}`, detail: 'low' } })
     }
     userContent.push({ type: 'text', text: planPrompt })
-    const resp = await client.chat.completions.create({
+    const resp = await openaiClient().chat.completions.create({
       model,
       max_completion_tokens: 4096,
-      reasoning_effort: 'minimal',
+      ...reasoningParams(model),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent }
       ]
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' }, { signal })
+    } as ChatParams, { signal })
     raw = resp.choices[0]?.message?.content ?? ''
     const usage = resp.usage as (typeof resp.usage & { completion_tokens_details?: { reasoning_tokens?: number } }) | undefined
     if (usage) {

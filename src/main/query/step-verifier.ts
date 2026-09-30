@@ -1,7 +1,8 @@
 import crypto from 'crypto'
-import OpenAI from 'openai'
-import Anthropic from '@anthropic-ai/sdk'
-import { getProvider, type Provider } from '../model-router'
+import { getModel, getProvider, reasoningParams } from '../ai/router'
+import { usageCost } from '../ai/pricing'
+import { anthropicClient } from '../ai/providers/anthropic'
+import { openaiClient, type ChatParams } from '../ai/providers/openai'
 import { log } from '../logger'
 
 // Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
@@ -32,11 +33,6 @@ export interface VerifyResult {
   cost: number
 }
 
-const PRICING_VERIFY = {
-  anthropic: { input: 0.80, output: 4.00 },
-  openai:    { input: 0.05, output: 0.40 },
-}
-
 export async function verifyStep(
   stepDescription: string,
   afterScreenshot: string,
@@ -49,11 +45,7 @@ export async function verifyStep(
   }
 
   const provider = getProvider()
-  const VERIFY_MODEL: Record<Provider, string> = {
-    anthropic: 'claude-haiku-4-5-20251001',
-    openai: 'gpt-5-nano',
-  }
-  const model = VERIFY_MODEL[provider]
+  const model = getModel('verify')
   const start = Date.now()
   const prompt = `You verify if a screen action succeeded by looking at the resulting screenshot.
 Action attempted: "${stepDescription}"
@@ -70,8 +62,7 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
 
   try {
     if (provider === 'anthropic') {
-      const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-      const msg = await client.messages.create({
+      const msg = await anthropicClient().messages.create({
         model,
         max_tokens: 64,
         messages: [{
@@ -86,14 +77,12 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
       const parsed = JSON.parse(raw) as { success?: boolean; detail?: string }
       success = parsed.success ?? true
       detail = parsed.detail ?? 'ok'
-      const p = PRICING_VERIFY.anthropic
-      cost = ((msg.usage.input_tokens / 1_000_000) * p.input) + ((msg.usage.output_tokens / 1_000_000) * p.output)
+      cost = usageCost(model, msg.usage.input_tokens, msg.usage.output_tokens).total
     } else {
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-      const resp = await client.chat.completions.create({
+      const resp = await openaiClient().chat.completions.create({
         model,
         max_completion_tokens: 512,
-        reasoning_effort: 'minimal',
+        ...reasoningParams(model),
         messages: [{
           role: 'user',
           content: [
@@ -101,7 +90,7 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
             { type: 'text', text: prompt }
           ]
         }]
-      } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' })
+      } as ChatParams)
       const rawVerify = resp.choices[0]?.message?.content
       if (!rawVerify) {
         log('verify', 'no response from model, assuming success', { model, cost: 0, timeMs: Date.now() - start })
@@ -112,8 +101,7 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
       detail = parsed.detail ?? 'ok'
       const usage = resp.usage
       if (usage) {
-        const p = PRICING_VERIFY.openai
-        cost = ((usage.prompt_tokens / 1_000_000) * p.input) + ((usage.completion_tokens / 1_000_000) * p.output)
+        cost = usageCost(model, usage.prompt_tokens, usage.completion_tokens).total
       }
     }
   } catch (e) {

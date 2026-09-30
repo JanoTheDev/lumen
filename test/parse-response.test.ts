@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractFirstJson, parseResponse } from '../src/main/claude'
+import { extractFirstJson, parseResponse } from '../src/main/ai/schema'
 
 const SORRY = "Sorry, I couldn't process that."
 

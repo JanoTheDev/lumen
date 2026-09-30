@@ -2,13 +2,14 @@
 // planner or the research loop) and present the result.
 import type { ModelResponse } from '@shared/types'
 import type { CancelScope } from './cancel'
-import { takeSpeculative, type QueryContext } from './context'
+import { needsScreenshot, takeSpeculative, type QueryContext } from './context'
 import { applyOverrides, LOCATE_RE } from './overrides'
 import { isResearchIntent } from './query-classifier'
 import { correctNthElement } from './nth'
 import { runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
-import { addToHistory, callClaude, needsScreenshot, type CallOptions } from '../claude'
+import { callModel, type CallOptions } from '../ai'
+import { addToHistory } from '../ai/history'
 import { isHowToQuestion } from '../guides/voice-nav'
 import { requireAgent } from '../agent/instance'
 import { loadConfig } from '../config'
@@ -83,8 +84,8 @@ export async function runQuery(
   } else if (!opts.lowDetail && intent.planRequired) {
     result = await runPlanned(effectivePrompt, activeWindow, opts, scope, timer)
   } else {
-    result = correctNthElement(await callClaude(effectivePrompt, screenshot, activeWindow, opts))
-    timer.split('callClaude done')
+    result = correctNthElement(await callModel(effectivePrompt, screenshot, activeWindow, opts))
+    timer.split('callModel done')
   }
 
   log('done', `mode: ${result.mode}`)

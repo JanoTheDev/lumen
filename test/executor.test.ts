@@ -14,10 +14,10 @@ vi.mock('../src/main/util', () => ({ sleep: async () => {} }))
 vi.mock('../src/main/windows/highlight', () => ({ send: vi.fn(), show: vi.fn(), hide: vi.fn() }))
 vi.mock('../src/main/windows/status', () => ({ setStatus: vi.fn() }))
 const findClickCoordinates = vi.fn(async () => null as { x: number; y: number } | null)
-vi.mock('../src/main/claude', () => ({
-  findClickCoordinates: (...args: unknown[]) => findClickCoordinates(...(args as [])),
-  isBrowser: () => true
+vi.mock('../src/main/ai/computer-use', () => ({
+  findClickCoordinates: (...args: unknown[]) => findClickCoordinates(...(args as []))
 }))
+vi.mock('../src/main/ai/app-context', () => ({ isBrowser: () => true }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../src/main/actions/executor'
