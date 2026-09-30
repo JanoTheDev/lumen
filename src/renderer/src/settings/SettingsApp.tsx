@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Settings as IcGeneral, Mic as IcVoice, Accessibility as IcA11y, LayoutDashboard as IcInterface, BookOpen as IcLibrary, Cpu as IcModels, Palette as IcAppearance, Minus, Square, X, Play, Trash2 } from 'lucide-react'
 import { THEMES, applyTheme, type ThemeName } from '../themes'
 import { HotkeyCapture } from './HotkeyCapture'
+import { useDraft, isHexColor, parseClamped } from './draft'
 
 type Panel = 'general' | 'voice' | 'accessibility' | 'interface' | 'library' | 'models' | 'appearance'
 
@@ -240,11 +241,10 @@ function VoicePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) =
           <Toggle checked={cfg.wakeWord.enabled} onChange={v => patch({ wakeWord: { ...cfg.wakeWord, enabled: v } })} label="Always-on wake word" />
         </Field>
         <Field label="Phrase" hint="Keep it short and unusual. Uses offline Vosk — no cloud cost.">
-          <input
-            className="sx-input"
+          <DraftInput
             placeholder="hey lumen"
             value={cfg.wakeWord.phrase}
-            onChange={e => patch({ wakeWord: { ...cfg.wakeWord, phrase: e.target.value } })}
+            onCommit={v => patch({ wakeWord: { ...cfg.wakeWord, phrase: v } })}
           />
         </Field>
         <Field label="Offline model">
@@ -257,23 +257,22 @@ function VoicePanel({ cfg, patch }: { cfg: Config; patch: (u: Partial<Config>) =
           <Toggle checked={cfg.cancelVoice.enabled} onChange={v => patch({ cancelVoice: { ...cfg.cancelVoice, enabled: v } })} label="Listen for cancel phrases" />
         </Field>
         <Field label="Cancel phrases" hint="Comma-separated. Default: stop, cancel, abort, never mind.">
-          <input
-            className="sx-input"
+          <DraftInput
             placeholder="stop, cancel, abort"
             value={cfg.cancelVoice.phrases}
-            onChange={e => patch({ cancelVoice: { ...cfg.cancelVoice, phrases: e.target.value } })}
+            onCommit={v => patch({ cancelVoice: { ...cfg.cancelVoice, phrases: v } })}
           />
         </Field>
       </Card>
 
       <Card title="Vocabulary" description="Give Whisper a hint for brand names, people, or jargon.">
         <Field label="Custom words" hint="Comma or newline separated. Example: Exness, Kubernetes, Janokins.">
-          <textarea
-            className="sx-input"
+          <DraftInput
+            multiline
             style={{ minHeight: 72, resize: 'vertical', fontFamily: 'inherit' }}
             placeholder="Exness, Kubernetes, ..."
             value={cfg.voiceVocab}
-            onChange={e => patch({ voiceVocab: e.target.value })}
+            onCommit={v => patch({ voiceVocab: v })}
           />
         </Field>
       </Card>
@@ -647,11 +646,11 @@ function CustomColorField({ label, hint, value, onChange }: { label: string; hin
             style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
           />
         </label>
-        <input
-          className="sx-input"
+        <DraftInput
           style={{ width: 140, fontFamily: 'JetBrains Mono, SF Mono, ui-monospace, monospace', fontVariantNumeric: 'tabular-nums' }}
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onCommit={onChange}
+          accept={isHexColor}
           placeholder="#RRGGBB"
         />
       </div>
@@ -675,11 +674,10 @@ function ModelSelect({ value, presets, onChange }: { value: string; presets: str
   if (custom) {
     return (
       <div className="sx-model-select">
-        <input
-          className="sx-input"
+        <DraftInput
           value={value}
           placeholder="custom-model-id"
-          onChange={e => onChange(e.target.value)}
+          onCommit={onChange}
         />
         <button type="button" className="sx-link" onClick={() => { setCustom(false); onChange('') }}>Use preset</button>
       </div>
@@ -712,7 +710,7 @@ function WakeModelManager(): JSX.Element {
 
   useEffect(() => {
     window.api.wakeModelStatus().then(setStatus).catch(() => {})
-    window.api.onWakeModelProgress((p) => {
+    return window.api.onWakeModelProgress((p) => {
       setProgress(p)
       if (p.phase === 'done') {
         setInstalling(false)
@@ -765,22 +763,58 @@ function WakeModelManager(): JSX.Element {
   )
 }
 
+function DraftInput({ value, onCommit, accept, multiline, placeholder, style }: {
+  value: string
+  onCommit: (v: string) => void
+  accept?: (v: string) => boolean
+  multiline?: boolean
+  placeholder?: string
+  style?: React.CSSProperties
+}): JSX.Element {
+  const draft = useDraft(value, onCommit, { accept })
+  const common = {
+    className: 'sx-input',
+    style,
+    placeholder,
+    value: draft.value,
+    onBlur: draft.onBlur,
+  }
+  if (multiline) {
+    return <textarea {...common} onChange={e => draft.onChange(e.target.value)} />
+  }
+  return (
+    <input
+      {...common}
+      onChange={e => draft.onChange(e.target.value)}
+      onKeyDown={e => { if (e.key === 'Enter') draft.flush() }}
+    />
+  )
+}
+
 function NumberStepper({ value, onChange, step, min, max, suffix }: { value: number; onChange: (v: number) => void; step: number; min: number; max: number; suffix?: string }): JSX.Element {
+  // null while not editing, so the field follows the saved value.
+  const [text, setText] = useState<string | null>(null)
+
+  const commitText = (): void => {
+    if (text === null) return
+    const v = parseClamped(text, min, max)
+    setText(null)
+    if (v !== null && v !== value) onChange(v)
+  }
+
   return (
     <div className="sx-stepper">
       <button type="button" className="sx-stepper-btn" onClick={() => onChange(Math.max(min, value - step))}>−</button>
       <input
         type="number"
         className="sx-stepper-input"
-        value={value}
+        value={text ?? String(value)}
         min={min}
         max={max}
         step={step}
-        onChange={e => {
-          const v = Number(e.target.value)
-          if (!Number.isFinite(v)) return
-          onChange(Math.min(max, Math.max(min, v)))
-        }}
+        onChange={e => setText(e.target.value)}
+        onBlur={commitText}
+        onKeyDown={e => { if (e.key === 'Enter') commitText() }}
       />
       {suffix && <span className="sx-stepper-suffix">{suffix}</span>}
       <button type="button" className="sx-stepper-btn" onClick={() => onChange(Math.min(max, value + step))}>+</button>
