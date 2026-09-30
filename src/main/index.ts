@@ -49,6 +49,7 @@ import {
 import { configPatchSchema } from '../shared/config'
 import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
+import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
@@ -573,10 +574,6 @@ app.whenReady().then(async () => {
     setStatus('listening', 'Wake word detected — listening…')
   })
 
-  // Speculative screenshot: fire focus+capture immediately on hotkey-up while Whisper transcribes.
-  // Query handler uses the cache if it's fresh (< 4s), skipping the 0.8s sequential wait.
-  let speculativeShot: { screenshot: string; activeWindow: string; ts: number } | null = null
-
   agent.onEvent('hotkey-up', () => {
     if (loadConfig().handsFreeMode) {
       // In hands-free mode the VAD loop stops recording automatically; ignore release.
@@ -585,24 +582,8 @@ app.whenReady().then(async () => {
     console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
     hudWindow?.webContents.executeJavaScript('window.__voiceStop?.()', true).catch(() => {})
     setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
-
-    // Fire speculative screenshot in background — don't await
-    ;(async () => {
-      try {
-        // Always focus browser first — brings it to front if something (console, devtools, etc.)
-        // is covering it. If no browser is running this is a no-op.
-        const focusResult = await agent!.execute({ type: 'focus_browser' } as Action) as { title?: string } | null
-        highlightWindow?.hide()
-        await sleep(350)
-        // Use the title returned by focus_browser (avoids re-querying which may still see cmd.exe)
-        const aw = focusResult?.title || await agent!.activeWindow()
-        const shot = await agent!.screenshot()
-        speculativeShot = { screenshot: shot, activeWindow: aw, ts: Date.now() }
-        console.log('[speculative] screenshot ready, activeWindow:', aw)
-      } catch (e) {
-        console.warn('[speculative] screenshot failed:', (e as Error).message)
-      }
-    })()
+    // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
+    startSpeculativeCapture(() => captureContext(true))
   })
 
   ipcMain.on('close-hud', () => {
@@ -681,30 +662,11 @@ app.whenReady().then(async () => {
     const needsShot = needsScreenshot(prompt)
     log('plan', `needs screenshot: ${needsShot}`)
 
-    let activeWindow: string
-    let screenshot: string | null
-
-    const SPEC_TTL = 4000  // use speculative cache if taken within 4s
-    if (needsShot && speculativeShot && Date.now() - speculativeShot.ts < SPEC_TTL) {
-      log('plan', `using speculative screenshot (age: ${Date.now() - speculativeShot.ts}ms)`)
-      activeWindow = speculativeShot.activeWindow
-      screenshot = speculativeShot.screenshot
-      speculativeShot = null
-    } else {
-      if (needsShot) {
-        // Always focus browser — brings it to front if covered by console, devtools, etc.
-        // No-op if no browser is running (desktop app scenario unaffected).
-        console.log('[query] focusing browser before screenshot')
-        const focusResult = await agent.execute({ type: 'focus_browser' } as Action) as { title?: string } | null
-        highlightWindow?.hide()
-        await sleep(350)
-        // Use title from focus_browser — avoids re-querying activeWindow which may still see cmd
-        activeWindow = focusResult?.title || await agent.activeWindow()
-      } else {
-        activeWindow = await agent.activeWindow()
-      }
-      screenshot = needsShot ? await agent.screenshot() : null
-    }
+    const speculative = needsShot ? takeSpeculative() : null
+    let ctx = speculative ? await speculative.catch(() => null) : null
+    if (ctx) log('plan', 'using speculative screenshot')
+    else ctx = await captureContext(needsShot)
+    const { activeWindow, screenshot } = ctx
     timer.split('context gathered (screenshot + active window)')
     log('plan', `active window: ${activeWindow}`)
 
@@ -1301,6 +1263,19 @@ async function passesPolicy(action: Action, prev?: Action): Promise<boolean> {
   log('fail', `blocked by policy (${verdict}): ${reason ?? action.type}`)
   setStatus('error', `Blocked for safety: ${reason ?? action.type}`, undefined, 3000)
   return false
+}
+
+// Active window + optional screenshot. Lumen's own highlight layer is hidden first so it
+// is not in the image; the foreground app is never changed.
+async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
+  if (!agent) throw new Error('Agent not ready')
+  if (!withScreenshot) return { activeWindow: await agent.activeWindow(), screenshot: null }
+  if (highlightWindow?.isVisible()) {
+    highlightWindow.hide()
+    await sleep(32)
+  }
+  const [activeWindow, screenshot] = await Promise.all([agent.activeWindow(), agent.screenshot()])
+  return { activeWindow, screenshot }
 }
 
 const INVALID = { error: 'E_INVALID' } as const
