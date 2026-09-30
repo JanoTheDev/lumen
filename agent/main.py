@@ -22,6 +22,7 @@ log.info(dpi.describe())
 
 import capture
 import monitors
+import window
 from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
@@ -203,7 +204,7 @@ def register_commands(debug: bool = False) -> None:
     reg("capture", _cmd_capture, READ)
     reg("monitors", lambda args, token: {"monitors": monitors.enumerate_monitors()}, READ)
     if v2:
-        reg("active_window", lambda args, token: {"title": get_active_window()}, READ)
+        reg("active_window", lambda args, token: window.active(), READ)
     else:
         reg("active_window", lambda args, token: get_active_window(), READ)
     if debug:

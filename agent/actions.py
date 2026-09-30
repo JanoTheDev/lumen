@@ -6,6 +6,7 @@ import threading
 
 import pagediff
 import safety
+import window
 from errors import AgentError, E_NOT_FOUND
 
 log = logging.getLogger(__name__)
@@ -45,15 +46,9 @@ def _exists(control, seconds: float) -> bool:
 
 
 def _foreground_rect() -> dict | None:
-    import ctypes
-    import ctypes.wintypes
-    hwnd = ctypes.windll.user32.GetForegroundWindow()
-    rect = ctypes.wintypes.RECT()
-    if not hwnd or not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-        return None
-    if rect.right - rect.left < 32 or rect.bottom - rect.top < 32:
-        return None
-    return {"x": rect.left, "y": rect.top, "w": rect.right - rect.left, "h": rect.bottom - rect.top}
+    hwnd = window.foreground()
+    r = window.rect(hwnd) if hwnd else None
+    return r if r and r["w"] >= 32 and r["h"] >= 32 else None
 
 
 def _page_frame():
@@ -181,23 +176,7 @@ def _center(rect):
     )
 
 def _find_browser_hwnd():
-    import ctypes
-    user32 = ctypes.windll.user32
-    WNDENUMPROC = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_size_t, ctypes.c_size_t)
-    found = ctypes.c_size_t(0)
-
-    def _cb(hwnd, _):
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        buf = ctypes.create_unicode_buffer(512)
-        user32.GetWindowTextW(hwnd, buf, 512)
-        if any(b in buf.value.lower() for b in ('firefox', 'chrome', 'edge', 'brave', 'opera')):
-            if found.value == 0:
-                found.value = hwnd
-        return True
-
-    user32.EnumWindows(WNDENUMPROC(_cb), 0)
-    return found.value or None
+    return window.find_browser()
 
 def _bring_to_front(hwnd):
     import ctypes
@@ -246,14 +225,10 @@ def _execute(action: dict) -> dict:
             return {'reached_bottom': reached}
         else:  # left / right — no keyboard equivalent, use hscroll
             if x is None or y is None:
-                import ctypes
-                import ctypes.wintypes
                 hwnd = _find_browser_hwnd()
                 if hwnd:
-                    rect = ctypes.wintypes.RECT()
-                    ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect))
-                    x = (rect.left + rect.right) // 2
-                    y = (rect.top + rect.bottom) // 2
+                    r = window.rect(hwnd)
+                    x, y = r["x"] + r["w"] // 2, r["y"] + r["h"] // 2
                 else:
                     sw, sh = pyautogui.size()
                     x, y = sw // 2, sh // 2
@@ -294,11 +269,8 @@ def _execute(action: dict) -> dict:
         button = action.get("button", "left")
         bbox = action.get("bbox")  # optional [x1,y1,x2,y2] fallback (screen coords)
 
-        hwnd = ctypes.windll.user32.GetForegroundWindow()
-        buf = ctypes.create_unicode_buffer(512)
-        ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
-        win_title = buf.value.lower()
-        is_browser = any(b in win_title for b in ('firefox', 'chrome', 'edge', 'brave', 'opera'))
+        hwnd = window.foreground()
+        is_browser = bool(hwnd) and window.is_browser_process(window.process_name(hwnd))
 
         el = None
         ocr_pos = None
@@ -360,10 +332,7 @@ def _execute(action: dict) -> dict:
         url = safety.check_url(action.get("url", ""))
         hwnd = _find_browser_hwnd()
         if hwnd:
-            import ctypes
-            buf = ctypes.create_unicode_buffer(512)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
-            log.info(f"navigate_url hwnd={hwnd} title='{buf.value[:60]}' url={url}")
+            log.info(f"navigate_url hwnd={hwnd} title='{window.title(hwnd)[:60]}' url={url}")
             _bring_to_front(hwnd)
             _sleep(0.2)
             pyautogui.hotkey('ctrl', 'l')
@@ -384,10 +353,7 @@ def _execute(action: dict) -> dict:
         hwnd = _find_browser_hwnd()
         title = ""
         if hwnd:
-            import ctypes
-            buf = ctypes.create_unicode_buffer(512)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buf, 512)
-            title = buf.value[:80]
+            title = window.title(hwnd)[:80]
             log.info(f"focus_browser hwnd={hwnd} title='{title}'")
             _bring_to_front(hwnd)
         else:

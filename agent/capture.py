@@ -169,9 +169,8 @@ def take_screenshot() -> str:
 
 
 def get_active_window() -> str:
-    try:
-        import pywinctl as pwc
-        win = pwc.getActiveWindow()
-        return win.title if win else "Unknown"
-    except Exception:
-        return "Unknown"
+    """v1 `active_window`: the foreground window title."""
+    import window
+
+    hwnd = window.foreground()
+    return window.title(hwnd) if hwnd else "Unknown"

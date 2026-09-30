@@ -82,7 +82,7 @@ def test_capture_and_active_window_shapes(v2):
     assert isinstance(frame["data"], str)
     assert frame["monitor"]["primary"] is True and frame["scale"] >= 1
     win = req(v2, 9, "active_window")
-    assert isinstance(win["result"]["title"], str)
+    assert isinstance(win["result"]["title"], str) and isinstance(win["result"]["isBrowser"], bool)
 
 
 def test_cancel_in_v2(v2):
