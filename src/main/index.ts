@@ -19,8 +19,7 @@ import {
   Menu,
   nativeImage
 } from 'electron'
-import { writeFileSync, unlinkSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
-import { homedir } from 'os'
+import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
@@ -48,6 +47,8 @@ import {
   actionsSchema,
 } from '../shared/ipc'
 import { configPatchSchema } from '../shared/config'
+import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
+import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
@@ -283,73 +284,17 @@ type StatusKind = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'acting' 
 let statusHideTimer: ReturnType<typeof setTimeout> | null = null
 
 interface ActiveGuide {
-  steps: Array<{ label: string; target_hint: string; bbox?: [number, number, number, number] }>
+  steps: GuideStep[]
   index: number
 }
 let activeGuide: ActiveGuide | null = null
 let lastGuide: { task: string; steps: ActiveGuide['steps']; savedAt: number } | null = null
 
-// ─── Guide library (disk-persisted tutorials) ─────────────────────────────
-interface SavedGuide {
-  id: string
-  name: string
-  task: string
-  steps: ActiveGuide['steps']
-  createdAt: number
-}
-
-function guidesDir(): string {
-  const dir = join(homedir(), '.ai-overlay', 'guides')
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'guide'
-}
-
-function listSavedGuides(): SavedGuide[] {
-  try {
-    return readdirSync(guidesDir())
-      .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        try { return JSON.parse(readFileSync(join(guidesDir(), f), 'utf8')) as SavedGuide }
-        catch { return null }
-      })
-      .filter((g): g is SavedGuide => g !== null)
-      .sort((a, b) => b.createdAt - a.createdAt)
-  } catch {
-    return []
-  }
-}
-
 function saveLastAsGuide(name: string): SavedGuide | null {
   if (!lastGuide) return null
-  const base = slugify(name || lastGuide.task)
-  const id = `${base}-${Date.now().toString(36)}`
-  const entry: SavedGuide = {
-    id,
-    name: name?.trim() || lastGuide.task.slice(0, 60),
-    task: lastGuide.task,
-    steps: lastGuide.steps,
-    createdAt: Date.now(),
-  }
-  writeFileSync(join(guidesDir(), `${id}.json`), JSON.stringify(entry, null, 2), 'utf8')
-  log('done', `saved guide "${entry.name}" as ${id}`)
+  const entry = saveGuide(lastGuide.task, lastGuide.steps, name)
+  log('done', `saved guide "${entry.name}" as ${entry.id}`)
   return entry
-}
-
-function deleteSavedGuide(id: string): boolean {
-  try { unlinkSync(join(guidesDir(), `${id}.json`)); return true }
-  catch { return false }
-}
-
-function loadSavedGuide(id: string): SavedGuide | null {
-  try {
-    return JSON.parse(readFileSync(join(guidesDir(), `${id}.json`), 'utf8')) as SavedGuide
-  } catch {
-    return null
-  }
 }
 
 // Re-run a saved guide by sending its task back through the normal query pipeline.
@@ -363,15 +308,6 @@ function replaySavedGuide(id: string): SavedGuide | null {
   hudWindow?.webContents.send('run-query', entry.task)
   return entry
 }
-
-const SAVE_GUIDE_RE = /\b(save|remember)\s+(this\s+)?guide(\s+as\s+(?<name>.{1,40}))?\b/i
-
-const REPLAY_RE = /\b(replay|show\s+(me\s+)?(the\s+)?guide\s+again|open\s+(the\s+)?last\s+guide|last\s+guide|guide\s+replay|do\s+the\s+guide\s+again|one\s+more\s+time)\b/i
-
-const NAV_NEXT = /\b(next|next step|continue|go on|advance|forward)\b/i
-const NAV_PREV = /\b(previous|prev|back|go back|last step)\b/i
-const NAV_REPEAT = /\b(repeat|again|say again|what)\b/i
-const NAV_DONE = /\b(done|finished|finish|stop|close|dismiss|cancel|exit|never mind)\b/i
 
 function handleGuideNavCommand(prompt: string): { handled: boolean; response?: unknown } {
   if (!activeGuide) return { handled: false }
@@ -397,14 +333,15 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     }
   }
 
-  if (NAV_DONE.test(text)) {
+  const cmd = parseGuideNav(text)
+  if (cmd === 'done') {
     activeGuide = null
     highlightWindow?.hide()
     highlightWindow?.webContents.send('clear-highlights')
     setStatus('idle', 'Guide closed', undefined, 900)
     return { handled: true, response: { mode: 'answer', text: 'Guide closed.' } }
   }
-  if (NAV_NEXT.test(text)) {
+  if (cmd === 'next') {
     if (activeGuide.index >= activeGuide.steps.length - 1) {
       setStatus('answer', 'Last step', undefined, 1400)
       return { handled: true, response: { mode: 'answer', text: 'You are on the last step.' } }
@@ -412,11 +349,11 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     showStep(activeGuide.index + 1)
     return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
   }
-  if (NAV_PREV.test(text)) {
+  if (cmd === 'prev') {
     showStep(Math.max(0, activeGuide.index - 1))
     return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${activeGuide.steps[activeGuide.index].label}` } }
   }
-  if (NAV_REPEAT.test(text)) {
+  if (cmd === 'repeat') {
     const step = activeGuide.steps[activeGuide.index]
     setStatus('step', step.label, { index: activeGuide.index + 1, total: activeGuide.steps.length })
     return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` } }
@@ -914,7 +851,7 @@ app.whenReady().then(async () => {
 
     // Fallback: if AI still returns guide for an imperative request, auto-convert to click_bbox
     const IMPERATIVE_RE = /\b(open|click|go to|navigate|select|tap|press)\b/i
-    if (result.mode === 'guide' && IMPERATIVE_RE.test(prompt) && result.steps?.some(s => s.bbox)) {
+    if (result.mode === 'guide' && IMPERATIVE_RE.test(prompt) && !isHowToQuestion(prompt) && result.steps?.some(s => s.bbox)) {
       const best = result.steps.find(s => s.bbox)!
       console.log('[auto-action] guide→action fallback, clicking:', best.label)
       return {
@@ -1021,29 +958,26 @@ app.whenReady().then(async () => {
     if (nav.handled) return nav.response
 
     // Play-saved-guide voice: "play guide <name>" / "run guide <name>"
-    const playMatch = /\b(play|run|open)\s+guide(?:\s+(?:named|called)?\s*(?<name>.{2,40}))?\b/i.exec(prompt.trim())
-    if (playMatch?.groups?.name) {
-      const needle = playMatch.groups.name.trim().toLowerCase()
-      const guides = listSavedGuides()
-      const found = guides.find(g => g.name.toLowerCase().includes(needle))
-        ?? guides.find(g => slugify(g.name).includes(slugify(needle)))
+    const playName = matchPlayGuide(prompt)
+    if (playName) {
+      const found = findGuideByName(playName)
       if (found) {
         replaySavedGuide(found.id)
         return { mode: 'answer', text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.` }
       }
-      return { mode: 'answer', text: `No saved guide matches "${playMatch.groups.name.trim()}".` }
+      return { mode: 'answer', text: `No saved guide matches "${playName}".` }
     }
 
     // Save-guide voice command
-    const saveMatch = SAVE_GUIDE_RE.exec(prompt.trim())
+    const saveMatch = matchSaveGuide(prompt)
     if (saveMatch && lastGuide) {
-      const name = saveMatch.groups?.name?.trim() ?? lastGuide.task
+      const name = saveMatch.name ?? lastGuide.task
       const saved = saveLastAsGuide(name)
       if (saved) return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
     }
 
     // Guide replay: "replay last guide", "do the guide again"
-    if (lastGuide && REPLAY_RE.test(prompt.trim())) {
+    if (lastGuide && isReplayRequest(prompt)) {
       activeGuide = { steps: lastGuide.steps, index: 0 }
       setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
       highlightWindow?.webContents.send('show-highlights', lastGuide.steps)
