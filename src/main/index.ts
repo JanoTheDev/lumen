@@ -28,6 +28,7 @@ import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
 import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
+import { assertSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
 let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
@@ -819,10 +820,13 @@ app.whenReady().then(async () => {
         () => agent!.screenshot(),
         async (actions) => {
           const { scale } = screenshotDimensions()
+          let prev: Action | undefined
           for (const action of actions as Action[]) {
             const scaled = scaleActionForAgent(action, scale)
+            if (!(await passesPolicy(scaled, prev))) break
+            prev = scaled
             if (scaled.type === 'open_url' && scaled.url) {
-              await shell.openExternal(scaled.url)
+              await shell.openExternal(assertSafeUrl(scaled.url))
               await sleep(400)
               await agent!.execute({ type: 'focus_browser' } as Action)
             } else if (scaled.type === 'navigate_url' && scaled.url) {
@@ -849,10 +853,13 @@ app.whenReady().then(async () => {
         () => agent!.screenshot(),
         async (actions) => {
           const { scale } = screenshotDimensions()
+          let prev: Action | undefined
           for (const action of actions as Action[]) {
             const scaled = scaleActionForAgent(action, scale)
+            if (!(await passesPolicy(scaled, prev))) break
+            prev = scaled
             if (scaled.type === 'open_url' && scaled.url) {
-              await shell.openExternal(scaled.url)
+              await shell.openExternal(assertSafeUrl(scaled.url))
               await sleep(400)
               await agent!.execute({ type: 'focus_browser' } as Action)
             } else if (scaled.type === 'navigate_url' && scaled.url) {
@@ -1087,6 +1094,7 @@ app.whenReady().then(async () => {
     let reachedBottom = false
 
     let firstClick = true
+    let prevAction: Action | undefined
     for (const action of actions) {
       if (executionAborted) {
         log('skip', 'execution aborted by user')
@@ -1171,10 +1179,12 @@ app.whenReady().then(async () => {
         continue
       }
       console.log('[execute] running:', JSON.stringify(scaled))
+      if (!(await passesPolicy(scaled, prevAction))) break
+      prevAction = scaled
 
       if (scaled.type === 'open_url' && scaled.url) {
         console.log('[execute] opening URL:', scaled.url)
-        await shell.openExternal(scaled.url)
+        await shell.openExternal(assertSafeUrl(scaled.url))
         await sleep(400)
         await agent.execute({ type: 'focus_browser' } as Action)
       } else if (scaled.type === 'navigate_url' && scaled.url) {
@@ -1311,6 +1321,24 @@ app.on('will-quit', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+// Runs the central safety policy on one action. Actions that need confirmation are
+// blocked for now (there is no confirm flow yet) and the user is told why.
+async function passesPolicy(action: Action, prev?: Action): Promise<boolean> {
+  let windowTitle: string | undefined
+  if (needsWindowContext(action)) {
+    try {
+      windowTitle = await agent?.activeWindow()
+    } catch {
+      /* unknown window, policy treats it as non-shell */
+    }
+  }
+  const { verdict, reason } = checkAction(action, { windowTitle, afterType: prev?.type === 'type' })
+  if (verdict === 'allow') return true
+  log('fail', `blocked by policy (${verdict}): ${reason ?? action.type}`)
+  setStatus('error', `Blocked for safety: ${reason ?? action.type}`, undefined, 3000)
+  return false
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
