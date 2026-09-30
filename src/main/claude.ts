@@ -341,33 +341,62 @@ function logUsage(
   )
 }
 
-function extractFirstJson(s: string): string {
-  if (!s.startsWith('{')) return s
-  let depth = 0, end = -1
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '{') depth++
-    else if (s[i] === '}') { depth--; if (depth === 0) { end = i; break } }
+// Returns the first balanced {...} object in s (skipping any leading prose), or null.
+// Braces inside JSON strings are ignored.
+export function extractFirstJson(s: string): string | null {
+  const start = s.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < s.length; i++) {
+    const c = s[i]
+    if (inString) {
+      if (escape) escape = false
+      else if (c === '\\') escape = true
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') inString = true
+    else if (c === '{') depth++
+    else if (c === '}') {
+      depth--
+      if (depth === 0) return s.slice(start, i + 1)
+    }
   }
-  return end >= 0 ? s.slice(0, end + 1) : s
+  return null
+}
+
+const PARSE_FAILED_TEXT = "Sorry, I couldn't process that."
+
+function isValidBbox(b: unknown): b is [number, number, number, number] {
+  return Array.isArray(b) && b.length === 4 &&
+    b.every((n) => typeof n === 'number' && Number.isFinite(n)) &&
+    b[2] > 0 && b[3] > 0
+}
+
+// Unparseable output: keep plain prose answers, hide anything containing broken JSON.
+function parseFallback(cleaned: string): ClaudeResponse {
+  if (cleaned && !cleaned.includes('{')) return { mode: 'answer', text: cleaned }
+  return { mode: 'answer', text: PARSE_FAILED_TEXT }
 }
 
 export function parseResponse(raw: string): ClaudeResponse {
+  const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
   try {
-    const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
-    // Extract first complete JSON object BEFORE parsing — handles model returning double JSON
-    // (JSON.parse would throw on "{...}{...}", falling to catch and losing the action)
+    // Extract first complete JSON object BEFORE parsing: drops leading prose and handles
+    // the model returning double JSON ("{...}{...}" would make JSON.parse throw)
     const target = extractFirstJson(cleaned)
+    if (target === null) return parseFallback(cleaned)
     const parsed = JSON.parse(target) as Record<string, unknown>
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parseFallback(cleaned)
 
     // Model sometimes wraps real JSON inside {"mode":"answer","text":"{...}"}
     if (parsed.mode === 'answer' && typeof parsed.text === 'string') {
       const inner = (parsed.text as string).trim()
       if (inner.startsWith('{')) {
-        const firstJson = extractFirstJson(inner)
-        try {
-          const unwrapped = parseResponse(firstJson)
-          if (unwrapped.mode !== 'answer') return unwrapped
-        } catch { /* fall through */ }
+        const unwrapped = parseResponse(inner)
+        if (unwrapped.mode !== 'answer') return unwrapped
       }
     }
 
@@ -375,7 +404,16 @@ export function parseResponse(raw: string): ClaudeResponse {
       if (parsed.text || parsed.button) {
         return { mode: 'action', actions: [parsed as unknown as Action], summary: '' }
       }
-      return { mode: 'answer', text: raw }
+      return { mode: 'answer', text: PARSE_FAILED_TEXT }
+    }
+
+    // Locate items without a usable bbox cannot be highlighted
+    if (parsed.mode === 'locate') {
+      const items = Array.isArray(parsed.items) ? parsed.items as Array<Record<string, unknown>> : []
+      parsed.items = items.filter((it) => it && typeof it === 'object' && isValidBbox(it.bbox))
+      if ((parsed.items as unknown[]).length === 0) {
+        return { mode: 'answer', text: "I couldn't find that on screen." }
+      }
     }
 
     // Normalize mode=action where AI put open_url at top level
@@ -404,7 +442,7 @@ export function parseResponse(raw: string): ClaudeResponse {
 
     return parsed as unknown as ClaudeResponse
   } catch {
-    return { mode: 'answer', text: raw }
+    return parseFallback(cleaned)
   }
 }
 
