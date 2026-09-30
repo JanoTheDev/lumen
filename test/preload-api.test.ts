@@ -45,10 +45,10 @@ describe('preload api subscriptions', () => {
   it('passes payload without the event and stops after unsubscribe', () => {
     const cb = vi.fn()
     const unsub = api.onRunQuery(cb) as () => void
-    ipc.emitter!.emit('run-query', { sender: null }, 'open gmail')
+    ipc.emitter!.emit('assistant:run-query', { sender: null }, 'open gmail')
     expect(cb).toHaveBeenCalledWith('open gmail')
     unsub()
-    ipc.emitter!.emit('run-query', { sender: null }, 'again')
+    ipc.emitter!.emit('assistant:run-query', { sender: null }, 'again')
     expect(cb).toHaveBeenCalledTimes(1)
   })
 
@@ -57,11 +57,24 @@ describe('preload api subscriptions', () => {
       const unsub = api.onWakeModelProgress(() => {}) as () => void
       unsub()
     }
-    expect(ipc.emitter!.listenerCount('wake-model-progress')).toBe(0)
+    expect(ipc.emitter!.listenerCount('wake:model-progress')).toBe(0)
   })
 
   it('openLink sends on the assistant channel', () => {
     api.openLink('https://example.com')
     expect(ipc.send).toHaveBeenCalledWith('assistant:open-link', 'https://example.com')
+  })
+
+  it('window.lumen rejects channels outside the table', async () => {
+    const lumen = ipc.exposed.lumen as {
+      invoke: (c: string, ...a: unknown[]) => Promise<unknown>
+      send: (c: string, ...a: unknown[]) => void
+      on: (c: string, cb: () => void) => () => void
+    }
+    await expect(lumen.invoke('execute-shell', 'calc')).rejects.toThrow(/unknown channel/)
+    expect(() => lumen.send('close-hud')).toThrow(/unknown channel/)
+    expect(() => lumen.on('status-set', () => {})).toThrow(/unknown channel/)
+    lumen.send('assistant:cancel')
+    expect(ipc.send).toHaveBeenCalledWith('assistant:cancel')
   })
 })

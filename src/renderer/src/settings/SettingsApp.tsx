@@ -410,7 +410,7 @@ function LibraryPanel(): JSX.Element {
 
   const saveCurrent = async (): Promise<void> => {
     const res = await window.api.guidesSaveLast(saveName.trim())
-    if ('error' in res && res.error) { setMsg(res.error); return }
+    if ('error' in res) { setMsg(res.error); return }
     setMsg(`Saved "${res.name}"`)
     setSaveName('')
     refresh()

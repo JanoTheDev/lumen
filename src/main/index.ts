@@ -137,7 +137,7 @@ async function applyAgentState(cfg: AppConfig): Promise<void> {
 
 function broadcastConfig(cfg: AppConfig): void {
   for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow, dwellRingWindow]) {
-    if (win && !win.isDestroyed()) win.webContents.send('config-changed', cfg)
+    if (win && !win.isDestroyed()) win.webContents.send('settings:changed', cfg)
   }
   applyUiScale(cfg.uiScale)
 }
@@ -163,7 +163,7 @@ async function speakAnswer(text: string, voice: string): Promise<void> {
   })
   const buf = Buffer.from(await result.arrayBuffer())
   const b64 = buf.toString('base64')
-  answerOverlayWindow?.webContents.send('tts-audio', { mime: 'audio/mpeg', data: b64 })
+  answerOverlayWindow?.webContents.send('voice:tts-audio', { mime: 'audio/mpeg', data: b64 })
 }
 
 function applyUiScale(scale: number): void {
@@ -308,7 +308,7 @@ function replaySavedGuide(id: string): SavedGuide | null {
   if (!entry) return null
   log('step', `replaying saved guide "${entry.name}" (fresh query)`)
   setStatus('thinking', `Replaying: ${entry.name}`, { index: 2, total: 3 })
-  hudWindow?.webContents.send('run-query', entry.task)
+  hudWindow?.webContents.send('assistant:run-query', entry.task)
   return entry
 }
 
@@ -325,10 +325,10 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     const total = activeGuide.steps.length
     setStatus('step', step.label, { index: clamped + 1, total })
     if (step.bbox) {
-      highlightWindow?.webContents.send('show-highlights', [step])
+      highlightWindow?.webContents.send('screen:highlights', [step])
       highlightWindow?.show()
       const c = rectCenter(step.bbox)
-      highlightWindow?.webContents.send('show-pointer', {
+      highlightWindow?.webContents.send('screen:pointer', {
         x: Math.round(c.x),
         y: Math.round(c.y),
         text: `${clamped + 1}/${total}: ${step.label}`,
@@ -340,7 +340,7 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
   if (cmd === 'done') {
     activeGuide = null
     highlightWindow?.hide()
-    highlightWindow?.webContents.send('clear-highlights')
+    highlightWindow?.webContents.send('screen:clear')
     setStatus('idle', 'Guide closed', undefined, 900)
     return { handled: true, response: { mode: 'answer', text: 'Guide closed.' } }
   }
@@ -369,7 +369,7 @@ function setStatus(kind: StatusKind, text: string, step?: { index: number; total
   if (!statusWindow || statusWindow.isDestroyed()) return
   if (statusHideTimer) { clearTimeout(statusHideTimer); statusHideTimer = null }
   statusWindow.showInactive()
-  statusWindow.webContents.send('status-set', { kind, text, step })
+  statusWindow.webContents.send('status:set', { kind, text, step })
   if (autoHideMs && autoHideMs > 0) {
     statusHideTimer = setTimeout(() => hideStatus(), autoHideMs)
   }
@@ -377,7 +377,7 @@ function setStatus(kind: StatusKind, text: string, step?: { index: number; total
 
 function hideStatus(): void {
   if (!statusWindow || statusWindow.isDestroyed()) return
-  statusWindow.webContents.send('status-hide')
+  statusWindow.webContents.send('status:hide')
   // Tracked so a setStatus during the fade-out cancels the hide.
   statusHideTimer = setTimeout(() => {
     statusHideTimer = null
@@ -529,7 +529,7 @@ app.whenReady().then(async () => {
       lastRingRaise = now
       try { dwellRingWindow.moveTop() } catch { /* noop */ }
     }
-    dwellRingWindow.webContents.send('dwell-progress', { ...data, x: Math.round(pt.x), y: Math.round(pt.y) })
+    dwellRingWindow.webContents.send('screen:dwell', { ...data, x: Math.round(pt.x), y: Math.round(pt.y) })
   })
 
   agent.onEvent('dwell-trigger', (data) => {
@@ -552,10 +552,10 @@ app.whenReady().then(async () => {
       setStatus('error', 'Cancelled by voice', undefined, 1600)
     } else {
       // Not in a query — treat as "close any active UI"
-      hudWindow?.webContents.send('cancel-request')
+      hudWindow?.webContents.send('assistant:cancel-request')
       activeGuide = null
       highlightWindow?.hide()
-      highlightWindow?.webContents.send('clear-highlights')
+      highlightWindow?.webContents.send('screen:clear')
     }
   })
 
@@ -582,14 +582,14 @@ app.whenReady().then(async () => {
     startSpeculativeCapture(() => captureContext(true))
   })
 
-  ipcMain.on('close-hud', () => {
+  ipcMain.on('assistant:close', () => {
     globalShortcut.unregister('Escape')
     hudWindow?.setOpacity(0)
     hudWindow?.setIgnoreMouseEvents(true)
     hideStatus()
   })
 
-  ipcMain.on('hud-show', () => {
+  ipcMain.on('assistant:show', () => {
     if (!globalShortcut.isRegistered('Escape')) {
       globalShortcut.register('Escape', onEscape)
     }
@@ -600,19 +600,19 @@ app.whenReady().then(async () => {
   agent.onEvent('mouse-moved', () => {
     if (!loadConfig().guideAutoDismissOnMove) return
     highlightWindow?.hide()
-    highlightWindow?.webContents.send('clear-highlights')
+    highlightWindow?.webContents.send('screen:clear')
     activeGuide = null
   })
 
-  ipcMain.on('show-answer-overlay', (_e, raw: unknown) => {
-    const text = safeParse('show-answer-overlay', textSchema, raw)
+  ipcMain.on('answer:show', (_e, raw: unknown) => {
+    const text = safeParse('answer:show', textSchema, raw)
     if (text === undefined) return
-    answerOverlayWindow?.webContents.send('show-answer', text)
+    answerOverlayWindow?.webContents.send('answer:text', text)
     answerOverlayWindow?.show()
     // NOTE: TTS is kicked off inside runQuery (earlier) to minimize perceived delay.
   })
-  ipcMain.handle('tts-speak', async (_e, raw: unknown) => {
-    const text = safeParse('tts-speak', textSchema, raw)
+  ipcMain.handle('voice:speak', async (_e, raw: unknown) => {
+    const text = safeParse('voice:speak', textSchema, raw)
     if (text === undefined) return INVALID
     const cfg = loadConfig()
     if (!text || !text.trim()) return { ok: false, error: 'empty text' }
@@ -623,12 +623,12 @@ app.whenReady().then(async () => {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.on('hide-answer-overlay', () => {
+  ipcMain.on('answer:hide', () => {
     answerOverlayWindow?.hide()
   })
 
-  ipcMain.on('resize-answer-overlay', (_e, raw: unknown) => {
-    const h = safeParse('resize-answer-overlay', overlayHeightSchema, raw)
+  ipcMain.on('answer:resize', (_e, raw: unknown) => {
+    const h = safeParse('answer:resize', overlayHeightSchema, raw)
     if (h === undefined) return
     answerOverlayWindow?.setSize(360, h)
   })
@@ -636,7 +636,7 @@ app.whenReady().then(async () => {
   let lastTaskContext: string | null = null
   const userQueue = new TaskQueue(1, 'request-queue')
 
-  ipcMain.on('cancel-current', () => {
+  ipcMain.on('assistant:cancel', () => {
     if (cancelAll()) log('skip', 'cancel-current received — aborting in-flight work')
   })
 
@@ -845,11 +845,11 @@ app.whenReady().then(async () => {
       if (validItems.length === 0) {
         // Nothing found on screen — show the description as an answer
         const desc = result.items[0]?.description || 'Not visible on this page'
-        answerOverlayWindow?.webContents.send('show-answer', desc)
+        answerOverlayWindow?.webContents.send('answer:text', desc)
         answerOverlayWindow?.show()
       } else {
         const screenItems = validItems.map((item) => ({ ...item, bbox: toScreen(item.bbox) }))
-        highlightWindow?.webContents.send('show-locate', screenItems)
+        highlightWindow?.webContents.send('screen:locate', screenItems)
         highlightWindow?.show()
       }
     } else if (result.mode === 'guide' && result.steps?.some((s) => s.bbox)) {
@@ -859,14 +859,14 @@ app.whenReady().then(async () => {
       activeGuide = { steps: bboxSteps, index: 0 }
       lastGuide = { task: prompt, steps: bboxSteps, savedAt: Date.now() }
       setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
-      highlightWindow?.webContents.send('show-highlights', bboxSteps)
+      highlightWindow?.webContents.send('screen:highlights', bboxSteps)
       highlightWindow?.show()
 
       // Draw the pointer only; moving the real cursor could dismiss the guide.
       const first = bboxSteps[0]
       if (first?.bbox) {
         const c = rectCenter(first.bbox)
-        highlightWindow?.webContents.send('show-pointer', {
+        highlightWindow?.webContents.send('screen:pointer', {
           x: Math.round(c.x), y: Math.round(c.y),
           text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
         })
@@ -878,19 +878,19 @@ app.whenReady().then(async () => {
       )
       if (!hasRealClick) {
         highlightWindow?.hide()
-        highlightWindow?.webContents.send('clear-highlights')
+        highlightWindow?.webContents.send('screen:clear')
       }
     } else {
       highlightWindow?.hide()
-      highlightWindow?.webContents.send('clear-highlights')
+      highlightWindow?.webContents.send('screen:clear')
     }
 
     return result
   }  // end runQuery
 
-  ipcMain.handle('query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
-    const prompt = safeParse('query', promptSchema, rawPrompt)
-    const opts: CallOptions | undefined = safeParse('query', queryOptsSchema, rawOpts) ?? {}
+  ipcMain.handle('assistant:query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
+    const prompt = safeParse('assistant:query', promptSchema, rawPrompt)
+    const opts: CallOptions | undefined = safeParse('assistant:query', queryOptsSchema, rawOpts) ?? {}
     if (prompt === undefined) return INVALID
     // Guide voice nav: "next step", "back", "repeat", "done"
     const nav = handleGuideNavCommand(prompt)
@@ -919,7 +919,7 @@ app.whenReady().then(async () => {
     if (lastGuide && isReplayRequest(prompt)) {
       activeGuide = { steps: lastGuide.steps, index: 0 }
       setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
-      highlightWindow?.webContents.send('show-highlights', lastGuide.steps)
+      highlightWindow?.webContents.send('screen:highlights', lastGuide.steps)
       highlightWindow?.show()
       return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
     }
@@ -963,9 +963,9 @@ app.whenReady().then(async () => {
     }
   })
 
-  ipcMain.handle('announce-action', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
-    const summary = safeParse('announce-action', textSchema, rawSummary)
-    const confidence = safeParse('announce-action', confidenceSchema, rawConfidence)
+  ipcMain.handle('assistant:announce', async (_event, rawSummary: unknown, rawConfidence: unknown) => {
+    const summary = safeParse('assistant:announce', textSchema, rawSummary)
+    const confidence = safeParse('assistant:announce', confidenceSchema, rawConfidence)
     if (summary === undefined) return { delayMs: 0 }
     const cfg = loadConfig()
     if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
@@ -981,8 +981,8 @@ app.whenReady().then(async () => {
     return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
   })
 
-  ipcMain.handle('execute-action', async (_event, rawActions: unknown) => {
-    const parsed = safeParse('execute-action', actionsSchema, rawActions)
+  ipcMain.handle('assistant:execute', async (_event, rawActions: unknown) => {
+    const parsed = safeParse('assistant:execute', actionsSchema, rawActions)
     if (!parsed) return INVALID
     const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
     if (!agent) throw new Error('Agent not ready')
@@ -1022,7 +1022,7 @@ app.whenReady().then(async () => {
         }
 
         // Show bbox highlight on screen before clicking so user can see the target
-        highlightWindow?.webContents.send('show-highlights', [{
+        highlightWindow?.webContents.send('screen:highlights', [{
           label: 'Clicking here',
           target_hint: '',
           bbox: physRectToLogical(physRect),
@@ -1068,7 +1068,7 @@ app.whenReady().then(async () => {
         // Show pointer preview before first click
         if (firstClick && scaled.type === 'click' && scaled.x != null && scaled.y != null) {
           firstClick = false
-          highlightWindow?.webContents.send('show-pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
+          highlightWindow?.webContents.send('screen:pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
           highlightWindow?.show()
           await sleep(300)
         }
@@ -1090,14 +1090,14 @@ app.whenReady().then(async () => {
     return { done: !aborted, cancelled: aborted, reached_bottom: reachedBottom }
   })
 
-  ipcMain.handle('hide-highlights', () => {
+  ipcMain.handle('screen:hide', () => {
     highlightWindow?.hide()
-    highlightWindow?.webContents.send('clear-highlights')
+    highlightWindow?.webContents.send('screen:clear')
   })
 
-  ipcMain.handle('config-get', () => loadConfig())
-  ipcMain.handle('config-save', async (_e, raw: unknown) => {
-    const patch = safeParse('config-save', configPatchSchema, raw) as Partial<AppConfig> | undefined
+  ipcMain.handle('settings:get', () => loadConfig())
+  ipcMain.handle('settings:patch', async (_e, raw: unknown) => {
+    const patch = safeParse('settings:patch', configPatchSchema, raw) as Partial<AppConfig> | undefined
     if (!patch) return INVALID
     const prev = loadConfig()
     const next = saveConfig(patch)
@@ -1120,26 +1120,26 @@ app.whenReady().then(async () => {
     return next
   })
 
-  ipcMain.handle('guides-list', () => listSavedGuides())
-  ipcMain.handle('guides-save-last', (_e, raw: unknown) => {
-    const name = safeParse('guides-save-last', nameSchema.optional(), raw)
+  ipcMain.handle('guides:list', () => listSavedGuides())
+  ipcMain.handle('guides:save-last', (_e, raw: unknown) => {
+    const name = safeParse('guides:save-last', nameSchema.optional(), raw)
     const g = saveLastAsGuide(name ?? '')
     return g ?? { error: 'no guide to save — run a guide first' }
   })
-  ipcMain.handle('guides-replay', (_e, raw: unknown) => {
-    const id = safeParse('guides-replay', guideIdSchema, raw)
+  ipcMain.handle('guides:replay', (_e, raw: unknown) => {
+    const id = safeParse('guides:replay', guideIdSchema, raw)
     return (id && replaySavedGuide(id)) || { error: 'not found' }
   })
-  ipcMain.handle('guides-delete', (_e, raw: unknown) => {
-    const id = safeParse('guides-delete', guideIdSchema, raw)
+  ipcMain.handle('guides:delete', (_e, raw: unknown) => {
+    const id = safeParse('guides:delete', guideIdSchema, raw)
     return { ok: !!id && deleteSavedGuide(id) }
   })
 
-  ipcMain.handle('wake-model-status', () => ({
+  ipcMain.handle('wake:model-status', () => ({
     installed: modelInstalled(),
     path: modelRoot(),
   }))
-  ipcMain.handle('wake-model-install', async () => {
+  ipcMain.handle('wake:model-install', async () => {
     try {
       await installModel()
       return { ok: true }
@@ -1147,17 +1147,17 @@ app.whenReady().then(async () => {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.on('settings-open', () => createSettingsWindow())
-  ipcMain.on('settings-window-close', () => settingsWindow?.close())
-  ipcMain.on('settings-window-minimize', () => settingsWindow?.minimize())
-  ipcMain.on('settings-window-maximize', () => {
+  ipcMain.on('settings:open', () => createSettingsWindow())
+  ipcMain.on('settings:window-close', () => settingsWindow?.close())
+  ipcMain.on('settings:window-minimize', () => settingsWindow?.minimize())
+  ipcMain.on('settings:window-maximize', () => {
     if (!settingsWindow) return
     if (settingsWindow.isMaximized()) settingsWindow.unmaximize()
     else settingsWindow.maximize()
   })
 
-  ipcMain.handle('transcribe', async (_event, raw: unknown) => {
-    const audio = safeParse('transcribe', audioSchema, raw)
+  ipcMain.handle('voice:transcribe', async (_event, raw: unknown) => {
+    const audio = safeParse('voice:transcribe', audioSchema, raw)
     if (!audio) return ''
     if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
 
@@ -1237,7 +1237,7 @@ const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as con
 // Escape cancels in-flight work in main directly and tells the HUD to stop recording.
 function onEscape(): void {
   cancelAll()
-  hudWindow?.webContents.send('cancel-request')
+  hudWindow?.webContents.send('assistant:cancel-request')
 }
 
 // Validates a renderer payload; logs and returns undefined when it does not match.

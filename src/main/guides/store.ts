@@ -2,17 +2,10 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFile
 import { homedir } from 'os'
 import { join, resolve, sep } from 'path'
 import { normalizeBbox } from '../actions/coords'
-import type { GuideStep } from '@shared/types'
+import type { GuideStep, SavedGuide } from '@shared/types'
 
-export type { GuideStep }
+export type { GuideStep, SavedGuide }
 
-export interface SavedGuide {
-  id: string
-  name: string
-  task: string
-  steps: GuideStep[]
-  createdAt: number
-}
 
 // Older guide files stored bboxes as arrays. Converts them to Rects and rewrites the file.
 function readGuideFile(file: string): SavedGuide | null {

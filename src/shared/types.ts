@@ -98,6 +98,14 @@ export interface GuideStep {
   bbox?: Rect
 }
 
+export interface SavedGuide {
+  id: string
+  name: string
+  task: string
+  steps: GuideStep[]
+  createdAt: number
+}
+
 export interface LocateItem {
   label: string
   bbox: Rect

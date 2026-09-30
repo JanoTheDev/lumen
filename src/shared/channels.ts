@@ -1,7 +1,7 @@
 // IPC channel names and payload types (CONTRACTS C5). Zod-free so the sandboxed preload can
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
-import type { GuideStep, LocateItem, ModelResponse, Point } from './types'
+import type { GuideStep, LocateItem, ModelResponse, Point, SavedGuide } from './types'
 
 type Confidence = 'high' | 'medium' | 'low'
 
@@ -16,7 +16,7 @@ export interface InvokeChannels {
     result: { done?: boolean; cancelled?: boolean; reached_bottom?: boolean; error?: string }
   }
   'assistant:announce': {
-    args: [summary: string, confidence?: Confidence]
+    args: [summary: string, confidence?: Confidence | string]
     result: { delayMs: number }
   }
   'voice:transcribe': { args: [audio: ArrayBuffer]; result: string }
@@ -27,9 +27,9 @@ export interface InvokeChannels {
     result: Record<string, unknown>
   }
   'screen:hide': { args: []; result: void }
-  'guides:list': { args: []; result: unknown[] }
-  'guides:save-last': { args: [name?: string]; result: unknown }
-  'guides:replay': { args: [id: string]; result: unknown }
+  'guides:list': { args: []; result: SavedGuide[] }
+  'guides:save-last': { args: [name?: string]; result: SavedGuide | { error: string } }
+  'guides:replay': { args: [id: string]; result: SavedGuide | { error: string } }
   'guides:delete': { args: [id: string]; result: { ok: boolean } }
   'wake:model-status': { args: []; result: { installed: boolean; path: string } }
   'wake:model-install': { args: []; result: { ok: boolean; error?: string } }
@@ -57,7 +57,7 @@ export interface StatusMessage {
 }
 
 export interface WakeModelProgress {
-  phase: string
+  phase: 'downloading' | 'extracting' | 'done' | 'error'
   percent?: number
   bytes?: number
   total?: number

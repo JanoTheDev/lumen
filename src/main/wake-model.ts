@@ -37,7 +37,7 @@ export interface ProgressEvent {
 
 function broadcast(evt: ProgressEvent): void {
   for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed()) w.webContents.send('wake-model-progress', evt)
+    if (!w.isDestroyed()) w.webContents.send('wake:model-progress', evt)
   }
 }
 
