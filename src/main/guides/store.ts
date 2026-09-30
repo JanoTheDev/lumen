@@ -1,11 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve, sep } from 'path'
+import { normalizeBbox, type Rect } from '../actions/coords'
 
 export interface GuideStep {
   label: string
   target_hint: string
-  bbox?: [number, number, number, number]
+  bbox?: Rect
 }
 
 export interface SavedGuide {
@@ -14,6 +15,32 @@ export interface SavedGuide {
   task: string
   steps: GuideStep[]
   createdAt: number
+}
+
+// Older guide files stored bboxes as arrays. Converts them to Rects and rewrites the file.
+function readGuideFile(file: string): SavedGuide | null {
+  try {
+    const guide = JSON.parse(readFileSync(file, 'utf8')) as SavedGuide
+    let migrated = false
+    for (const step of guide.steps ?? []) {
+      if (Array.isArray(step.bbox)) {
+        const rect = normalizeBbox(step.bbox)
+        if (rect) step.bbox = rect
+        else delete step.bbox
+        migrated = true
+      }
+    }
+    if (migrated) {
+      try {
+        writeFileSync(file, JSON.stringify(guide, null, 2), 'utf8')
+      } catch {
+        /* read-only is fine; migration repeats next load */
+      }
+    }
+    return guide
+  } catch {
+    return null
+  }
 }
 
 export const GUIDE_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -58,13 +85,7 @@ export function listSavedGuides(): SavedGuide[] {
     const dir = guidesDir()
     return readdirSync(dir)
       .filter((f) => f.endsWith('.json'))
-      .map((f) => {
-        try {
-          return JSON.parse(readFileSync(join(dir, f), 'utf8')) as SavedGuide
-        } catch {
-          return null
-        }
-      })
+      .map((f) => readGuideFile(join(dir, f)))
       .filter((g): g is SavedGuide => g !== null)
       .sort((a, b) => b.createdAt - a.createdAt)
   } catch {
@@ -108,11 +129,7 @@ export function deleteSavedGuide(id: unknown): boolean {
 export function loadSavedGuide(id: unknown): SavedGuide | null {
   const file = guidePath(id)
   if (!file) return null
-  try {
-    return JSON.parse(readFileSync(file, 'utf8')) as SavedGuide
-  } catch {
-    return null
-  }
+  return readGuideFile(file)
 }
 
 // Case-insensitive lookup by name, falling back to slug containment.

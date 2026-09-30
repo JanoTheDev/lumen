@@ -18,7 +18,7 @@ const api = {
   onShowHighlights: (cb: (steps: unknown[]) => void) => listen('show-highlights', cb),
   onClearHighlights: (cb: () => void) => listen('clear-highlights', cb),
   onShowPointer: (cb: (data: { x: number; y: number; text: string }) => void) => listen('show-pointer', cb),
-  onShowLocate: (cb: (items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }>) => void) =>
+  onShowLocate: (cb: (items: Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; description?: string }>) => void) =>
     listen('show-locate', cb),
   voiceBarShow: (transcript: string) => ipcRenderer.send('voice-bar-show', transcript),
   voiceBarHide: () => ipcRenderer.send('voice-bar-hide'),

@@ -3,7 +3,7 @@ import { StringDecoder } from 'string_decoder'
 import { join } from 'path'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
-import type { Action } from './index'
+import type { AgentAction } from './actions/agent-action'
 
 export type AgentErrorCode =
   | 'E_AGENT_EXIT'
@@ -137,7 +137,7 @@ export class AgentBridge {
     return this.call('active_window', {}) as Promise<string>
   }
 
-  async execute(action: Action): Promise<unknown> {
+  async execute(action: AgentAction): Promise<unknown> {
     if (action.type === 'open_url') return
     return this.call('execute', { action })
   }

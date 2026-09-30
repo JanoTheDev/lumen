@@ -21,7 +21,7 @@ import {
 } from 'electron'
 import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { callClaude, needsScreenshot, screenshotDimensions, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
+import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
 import OpenAI from 'openai'
@@ -51,6 +51,8 @@ import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuide
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
 import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
+import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect, type Rect } from './actions/coords'
+import { toAgentAction, type AgentAction, type ModelAction } from './actions/agent-action'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
@@ -326,10 +328,10 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     if (step.bbox) {
       highlightWindow?.webContents.send('show-highlights', [step])
       highlightWindow?.show()
-      const [bx, by, bw, bh] = step.bbox
+      const c = rectCenter(step.bbox)
       highlightWindow?.webContents.send('show-pointer', {
-        x: Math.round(bx + bw / 2),
-        y: Math.round(by + bh / 2),
+        x: Math.round(c.x),
+        y: Math.round(c.y),
         text: `${clamped + 1}/${total}: ${step.label}`,
       })
     }
@@ -500,29 +502,31 @@ app.whenReady().then(async () => {
     }
   })
 
+  // Lumen's own visible windows, compared in logical px.
+  const isOverOwnWindow = (pt: { x: number; y: number }): boolean =>
+    [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
+      if (!w || w.isDestroyed() || !w.isVisible()) return false
+      const b = w.getBounds()
+      return pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height
+    })
+  let lastRingRaise = 0
+
   agent.onEvent('dwell-progress', (data) => {
     if (!loadConfig().dwellClick.enabled) return
     if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
     const xPhys = data?.x as number | undefined
     const yPhys = data?.y as number | undefined
     if (typeof xPhys !== 'number' || typeof yPhys !== 'number') return
-    // pyautogui returns physical pixel coords; Electron CSS uses logical.
-    const sf = screen.getPrimaryDisplay().scaleFactor || 1
-    const x = Math.round(xPhys / sf)
-    const y = Math.round(yPhys / sf)
-    // Suppress over Lumen's own visible windows (those use logical coords too)
-    const overOwn = [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
-      if (!w || w.isDestroyed() || !w.isVisible()) return false
-      const b = w.getBounds()
-      return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
-    })
-    if (overOwn) return
-    // Re-assert top-z every tick so the ring stays above the taskbar on Windows.
-    try {
-      dwellRingWindow.setAlwaysOnTop(true, 'screen-saver', 1)
-      dwellRingWindow.moveTop()
-    } catch { /* noop */ }
-    dwellRingWindow.webContents.send('dwell-progress', { ...data, x, y })
+    // The agent reports physical px; the ring window draws in logical px.
+    const pt = physToLogical({ x: xPhys, y: yPhys })
+    if (isOverOwnWindow(pt)) return
+    // Re-raise at most every 2s so the ring stays above the taskbar without churning z-order.
+    const now = Date.now()
+    if (now - lastRingRaise > 2000) {
+      lastRingRaise = now
+      try { dwellRingWindow.moveTop() } catch { /* noop */ }
+    }
+    dwellRingWindow.webContents.send('dwell-progress', { ...data, x: Math.round(pt.x), y: Math.round(pt.y) })
   })
 
   agent.onEvent('dwell-trigger', (data) => {
@@ -531,15 +535,10 @@ app.whenReady().then(async () => {
     const y = data?.y as number | undefined
     if (typeof x !== 'number' || typeof y !== 'number') return
     // Suppress dwell-click over the HUD / answer / status / settings windows
-    const isOverOwn = [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
-      if (!w || w.isDestroyed() || !w.isVisible()) return false
-      const b = w.getBounds()
-      return x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height
-    })
-    if (isOverOwn) return
+    if (isOverOwnWindow(physToLogical({ x, y }))) return
     console.log(`[dwell] click at (${x}, ${y})`)
     setStatus('acting', 'Dwell click', undefined, 900)
-    agent!.execute({ type: 'click', x, y, button: 'left' } as Action).catch(e =>
+    agent!.execute({ type: 'click', x, y, button: 'left' }).catch(e =>
       console.error('[dwell] click failed:', (e as Error).message))
   })
 
@@ -714,17 +713,17 @@ app.whenReady().then(async () => {
         (p, s, w) => callClaude(p, s, w, opts),
         () => agent!.screenshot(),
         async (actions) => {
-          const { scale } = screenshotDimensions()
-          let prev: Action | undefined
-          for (const action of actions as Action[]) {
+          const frame = currentFrame()
+          let prev: AgentAction | undefined
+          for (const action of actions as ModelAction[]) {
             if (scope.cancelled) break
-            const scaled = scaleActionForAgent(action, scale)
+            const scaled = toAgentAction(action, frame)
             if (!(await passesPolicy(scaled, prev))) break
             prev = scaled
             if (scaled.type === 'open_url' && scaled.url) {
               await shell.openExternal(assertSafeUrl(scaled.url))
               await sleep(400)
-              await agent!.execute({ type: 'focus_browser' } as Action)
+              await agent!.execute({ type: 'focus_browser' })
             } else if (scaled.type === 'navigate_url' && scaled.url) {
               await agent!.execute(scaled)
               await sleep(1500)
@@ -748,17 +747,17 @@ app.whenReady().then(async () => {
         (p, s, w) => callClaude(p, s, w, opts),
         () => agent!.screenshot(),
         async (actions) => {
-          const { scale } = screenshotDimensions()
-          let prev: Action | undefined
-          for (const action of actions as Action[]) {
+          const frame = currentFrame()
+          let prev: AgentAction | undefined
+          for (const action of actions as ModelAction[]) {
             if (scope.cancelled) break
-            const scaled = scaleActionForAgent(action, scale)
+            const scaled = toAgentAction(action, frame)
             if (!(await passesPolicy(scaled, prev))) break
             prev = scaled
             if (scaled.type === 'open_url' && scaled.url) {
               await shell.openExternal(assertSafeUrl(scaled.url))
               await sleep(400)
-              await agent!.execute({ type: 'focus_browser' } as Action)
+              await agent!.execute({ type: 'focus_browser' })
             } else if (scaled.type === 'navigate_url' && scaled.url) {
               await agent!.execute(scaled)
               await sleep(1500)
@@ -834,53 +833,38 @@ app.whenReady().then(async () => {
       addToHistory(prompt, summary)
     }
 
-    const { scale } = screenshotDimensions()
+    // Model bboxes are image px; overlays draw in logical px.
+    const frame = currentFrame()
+    const toScreen = (r: Rect): Rect => physRectToLogical(imageRectToPhys(frame, r))
 
     if (result.mode === 'locate' && result.items?.length) {
-      // Filter out zero-dimension bboxes (AI "not found" sentinel — [0,0,0,0] or similar)
-      const validItems = result.items.filter(item => {
-        const [x1, y1, x2, y2] = item.bbox
-        return (x2 - x1) > 4 && (y2 - y1) > 4
-      })
+      const validItems = result.items.filter((item) => isUsableRect(item.bbox))
       if (validItems.length === 0) {
         // Nothing found on screen — show the description as an answer
         const desc = result.items[0]?.description || 'Not visible on this page'
         answerOverlayWindow?.webContents.send('show-answer', desc)
         answerOverlayWindow?.show()
       } else {
-        const scaledItems = validItems.map(item => {
-          const [x1, y1, x2, y2] = item.bbox
-          return {
-            label: item.label,
-            bbox: [Math.round(x1 * scale), Math.round(y1 * scale), Math.round((x2 - x1) * scale), Math.round((y2 - y1) * scale)] as [number, number, number, number],
-            description: item.description
-          }
-        })
-        highlightWindow?.webContents.send('show-locate', scaledItems)
+        const screenItems = validItems.map((item) => ({ ...item, bbox: toScreen(item.bbox) }))
+        highlightWindow?.webContents.send('show-locate', screenItems)
         highlightWindow?.show()
       }
     } else if (result.mode === 'guide' && result.steps?.some((s) => s.bbox)) {
-      const bboxSteps = result.steps.filter((s) => s.bbox).map((s) => ({
-        ...s,
-        bbox: s.bbox ? [
-          Math.round(s.bbox[0] * scale), Math.round(s.bbox[1] * scale),
-          Math.round(s.bbox[2] * scale), Math.round(s.bbox[3] * scale)
-        ] as [number, number, number, number] : undefined
-      }))
+      const bboxSteps = result.steps
+        .filter((s) => s.bbox)
+        .map((s) => ({ ...s, bbox: s.bbox ? toScreen(s.bbox) : undefined }))
       activeGuide = { steps: bboxSteps, index: 0 }
       lastGuide = { task: prompt, steps: bboxSteps, savedAt: Date.now() }
       setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
       highlightWindow?.webContents.send('show-highlights', bboxSteps)
       highlightWindow?.show()
 
+      // Draw the pointer only; moving the real cursor could dismiss the guide.
       const first = bboxSteps[0]
       if (first?.bbox) {
-        const [bx, by, bw, bh] = first.bbox
-        const cx = Math.round(bx + bw / 2)
-        const cy = Math.round(by + bh / 2)
-        await agent.execute({ type: 'move', x: cx, y: cy })
+        const c = rectCenter(first.bbox)
         highlightWindow?.webContents.send('show-pointer', {
-          x: cx, y: cy,
+          x: Math.round(c.x), y: Math.round(c.y),
           text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
         })
       }
@@ -995,36 +979,28 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('execute-action', async (_event, rawActions: unknown) => {
-    const actions = safeParse('execute-action', actionsSchema, rawActions) as Action[] | undefined
-    if (!actions) return INVALID
+    const parsed = safeParse('execute-action', actionsSchema, rawActions)
+    if (!parsed) return INVALID
+    const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
     if (!agent) throw new Error('Agent not ready')
     const scope = beginScope()
     const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
-    const { scale } = screenshotDimensions()
-    log('step', `execute: ${actions.map(a => a.type).join(', ')} | scale: ${scale}`)
+    const frame = currentFrame()
+    log('step', `execute: ${actions.map(a => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`)
     let reachedBottom = false
 
     let firstClick = true
-    let prevAction: Action | undefined
+    let prevAction: AgentAction | undefined
     for (const action of actions) {
       if (scope.cancelled) {
         log('skip', 'execution aborted by user')
         break
       }
-      let scaled: Action
+      let scaled: AgentAction = toAgentAction(action, frame)
 
-      if (action.type === 'scroll') {
-        const cappedAmount = action.amount != null ? Math.min(Math.max(1, action.amount), 2) : 1
-        const base = { ...action, amount: cappedAmount }
-        scaled = base.x != null && base.y != null
-          ? { ...base, x: Math.round(base.x * scale), y: Math.round(base.y * scale) } as Action
-          : base as Action
-      } else if (action.type === 'click_bbox' && action.bbox) {
-        const [x1, y1, x2, y2] = action.bbox
-        const sx1 = Math.round(x1 * scale), sy1 = Math.round(y1 * scale)
-        const sx2 = Math.round(x2 * scale), sy2 = Math.round(y2 * scale)
-        let cx = Math.round((sx1 + sx2) / 2)
-        let cy = Math.round((sy1 + sy2) / 2)
+      if (action.type === 'click_bbox' && action.bbox) {
+        const physRect = imageRectToPhys(frame, action.bbox)
+        let target = rectCenter(physRect)
 
         // Use Computer Use API for precise coordinates when description is available
         // CU is fine-tuned for UI clicking (~92% accuracy vs ~75% for regular vision)
@@ -1032,14 +1008,12 @@ app.whenReady().then(async () => {
           console.log(`[execute] click_bbox CU lookup: "${action.description}"`)
           const freshShot = await agent.screenshot()
           if (freshShot) {
-            const { imgW, imgH } = screenshotDimensions()
-            const refined = await findClickCoordinates(freshShot, action.description, imgW, imgH, scope.signal)
+            const refined = await findClickCoordinates(freshShot, action.description, frame.imgW, frame.imgH, scope.signal)
             if (refined) {
-              cx = Math.round(refined.x * scale)
-              cy = Math.round(refined.y * scale)
-              console.log(`[execute] click_bbox CU refined → (${cx},${cy})`)
+              target = imageToPhys(frame, refined)
+              console.log(`[execute] click_bbox CU refined → (${target.x},${target.y})`)
             } else {
-              console.log(`[execute] click_bbox CU returned null, using bbox center (${cx},${cy})`)
+              console.log('[execute] click_bbox CU returned null, using bbox center')
             }
           }
         }
@@ -1048,41 +1022,26 @@ app.whenReady().then(async () => {
         highlightWindow?.webContents.send('show-highlights', [{
           label: 'Clicking here',
           target_hint: '',
-          bbox: [sx1, sy1, sx2 - sx1, sy2 - sy1] as [number, number, number, number]
+          bbox: physRectToLogical(physRect),
         }])
         highlightWindow?.show()
-        console.log(`[execute] click_bbox screen rect: (${sx1},${sy1})→(${sx2},${sy2}) center:(${cx},${cy}) [${Math.round(cx/scale*100/1280)}% x ${Math.round(cy/scale*100/720)}%]`)
         await sleep(600)
         highlightWindow?.hide()
-        scaled = { type: 'click', x: cx, y: cy, button: action.button ?? 'left' }
-      } else if ((action.type === 'click' || action.type === 'move') && action.x != null && action.y != null) {
-        scaled = { ...action, x: Math.round(action.x * scale), y: Math.round(action.y * scale) }
-      } else if (action.type === 'click_element' && action.bbox) {
-        const [x1, y1, x2, y2] = action.bbox
-        // Default: scale bbox and let Python handle OCR + UIA
-        scaled = {
-          ...action,
-          bbox: [Math.round(x1 * scale), Math.round(y1 * scale), Math.round(x2 * scale), Math.round(y2 * scale)]
-        } as Action
+        scaled = { type: 'click', x: Math.round(target.x), y: Math.round(target.y), button: action.button ?? 'left' }
+      } else if (action.type === 'click_element' && action.bbox && action.text && process.env.ANTHROPIC_API_KEY) {
         // In browser context: try CU for higher-accuracy click (overrides OCR path)
-        if (action.text && process.env.ANTHROPIC_API_KEY) {
-          const aw = await agent.activeWindow()
-          if (isBrowser(aw)) {
-            const freshShot = await agent.screenshot()
-            if (freshShot) {
-              const { imgW, imgH } = screenshotDimensions()
-              const refined = await findClickCoordinates(freshShot, action.text, imgW, imgH, scope.signal)
-              if (refined) {
-                const cx = Math.round(refined.x * scale)
-                const cy = Math.round(refined.y * scale)
-                console.log(`[execute] click_element CU refined "${action.text}" → (${cx},${cy})`)
-                scaled = { type: 'click', x: cx, y: cy, button: action.button ?? 'left' }
-              }
+        const aw = await agent.activeWindow()
+        if (isBrowser(aw)) {
+          const freshShot = await agent.screenshot()
+          if (freshShot) {
+            const refined = await findClickCoordinates(freshShot, action.text, frame.imgW, frame.imgH, scope.signal)
+            if (refined) {
+              const p = imageToPhys(frame, refined)
+              console.log(`[execute] click_element CU refined "${action.text}" → (${p.x},${p.y})`)
+              scaled = { type: 'click', x: p.x, y: p.y, button: action.button ?? 'left' }
             }
           }
         }
-      } else {
-        scaled = action
       }
 
       if (!scaled.type) {
@@ -1097,7 +1056,7 @@ app.whenReady().then(async () => {
         console.log('[execute] opening URL:', scaled.url)
         await shell.openExternal(assertSafeUrl(scaled.url))
         await sleep(400)
-        await agent.execute({ type: 'focus_browser' } as Action)
+        await agent.execute({ type: 'focus_browser' })
       } else if (scaled.type === 'navigate_url' && scaled.url) {
         console.log('[execute] navigate_url:', scaled.url)
         await agent.execute(scaled)
@@ -1106,7 +1065,7 @@ app.whenReady().then(async () => {
         // Show pointer preview before first click
         if (firstClick && scaled.type === 'click' && scaled.x != null && scaled.y != null) {
           firstClick = false
-          highlightWindow?.webContents.send('show-pointer', { x: scaled.x, y: scaled.y, text: 'Clicking here…' })
+          highlightWindow?.webContents.send('show-pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
           highlightWindow?.show()
           await sleep(300)
         }
@@ -1247,7 +1206,7 @@ app.on('window-all-closed', () => {
 
 // Runs the central safety policy on one action. Actions that need confirmation are
 // blocked for now (there is no confirm flow yet) and the user is told why.
-async function passesPolicy(action: Action, prev?: Action): Promise<boolean> {
+async function passesPolicy(action: AgentAction, prev?: AgentAction): Promise<boolean> {
   let windowTitle: string | undefined
   if (needsWindowContext(action)) {
     try {
@@ -1299,40 +1258,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-function scaleActionForAgent(action: Action, scale: number): Action {
-  if (action.type === 'scroll') {
-    // Cap AI-chosen scroll amounts to prevent full-page jumps that overshoot target content.
-    const cappedAmount = action.amount != null ? Math.min(Math.max(1, action.amount), 2) : 1
-    const base = { ...action, amount: cappedAmount }
-    if (base.x != null && base.y != null) {
-      return { ...base, x: Math.round(base.x * scale), y: Math.round(base.y * scale) } as Action
-    }
-    return base as Action
-  }
-  if (action.type === 'click_bbox' && action.bbox) {
-    const [x1, y1, x2, y2] = action.bbox
-    const cx = Math.round(((x1 + x2) / 2) * scale)
-    const cy = Math.round(((y1 + y2) / 2) * scale)
-    return { type: 'click', x: cx, y: cy, button: action.button ?? 'left' }
-  }
-  if ((action.type === 'click' || action.type === 'move') && action.x != null && action.y != null) {
-    return { ...action, x: Math.round(action.x * scale), y: Math.round(action.y * scale) }
-  }
-  if (action.type === 'click_element' && action.bbox) {
-    const [x1, y1, x2, y2] = action.bbox
-    return {
-      ...action,
-      bbox: [Math.round(x1 * scale), Math.round(y1 * scale), Math.round(x2 * scale), Math.round(y2 * scale)]
-    } as Action
-  }
-  return action
-}
-
 export type Action =
   | { type: 'move'; x: number; y: number }
   | { type: 'click'; x: number; y: number; button?: 'left' | 'right' }
-  | { type: 'click_bbox'; bbox: [number, number, number, number]; button?: 'left' | 'right'; description?: string }
-  | { type: 'click_element'; text: string; button?: 'left' | 'right'; bbox?: [number, number, number, number] }
+  | { type: 'click_bbox'; bbox: Rect; button?: 'left' | 'right'; description?: string }
+  | { type: 'click_element'; text: string; button?: 'left' | 'right'; bbox?: Rect }
   | { type: 'click_nth_element'; text: string; n: number; button?: 'left' | 'right' }
   | { type: 'type'; text: string }
   | { type: 'hotkey'; keys: string[] }

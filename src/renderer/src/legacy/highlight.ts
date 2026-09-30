@@ -1,4 +1,4 @@
-type Bbox = [number, number, number, number]
+interface Bbox { x: number; y: number; w: number; h: number }
 interface HighlightStep { bbox?: Bbox; label?: string; target_hint?: string }
 interface LocateItem { label: string; bbox: Bbox; description?: string }
 interface HighlightApi {
@@ -25,7 +25,7 @@ function drawHighlights(steps: HighlightStep[]): void {
 
   steps.forEach((step, i) => {
     if (!step.bbox) return
-    const [x, y, w, h] = step.bbox
+    const { x, y, w, h } = step.bbox
     const cx = x + w / 2
     const cy = y + h / 2
 
@@ -112,24 +112,24 @@ function clearAll(): void {
 }
 
 function unionBbox(a: Bbox, b: Bbox): Bbox {
-  const minX = Math.min(a[0], b[0])
-  const minY = Math.min(a[1], b[1])
-  const maxX = Math.max(a[0] + a[2], b[0] + b[2])
-  const maxY = Math.max(a[1] + a[3], b[1] + b[3])
-  return [minX, minY, maxX - minX, maxY - minY]
+  const minX = Math.min(a.x, b.x)
+  const minY = Math.min(a.y, b.y)
+  const maxX = Math.max(a.x + a.w, b.x + b.w)
+  const maxY = Math.max(a.y + a.h, b.y + b.h)
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
 }
 
 // Merge items whose bboxes overlap or are within `gap` pixels of each other
 function mergeAdjacent(items: LocateItem[], gap: number): LocateItem[] {
   if (items.length <= 1) return items
-  const result = items.map(i => ({ ...i, bbox: [...i.bbox] as Bbox }))
+  const result = items.map(i => ({ ...i, bbox: { ...i.bbox } }))
   let changed = true
   while (changed) {
     changed = false
     outer: for (let i = 0; i < result.length; i++) {
       for (let j = i + 1; j < result.length; j++) {
-        const [ax, ay, aw, ah] = result[i].bbox
-        const [bx, by, bw, bh] = result[j].bbox
+        const { x: ax, y: ay, w: aw, h: ah } = result[i].bbox
+        const { x: bx, y: by, w: bw, h: bh } = result[j].bbox
         const xClose = ax < bx + bw + gap && ax + aw + gap > bx
         const yClose = ay < by + bh + gap && ay + ah + gap > by
         if (xClose && yClose) {
@@ -156,7 +156,7 @@ function showLocate(rawItems: LocateItem[]): void {
   const pad = 8
 
   items.forEach(({ label, bbox, description }) => {
-    const [x, y, w, h] = bbox
+    const { x, y, w, h } = bbox
 
     // Punch hole to reveal element
     ctx.clearRect(x - pad, y - pad, w + pad * 2, h + pad * 2)

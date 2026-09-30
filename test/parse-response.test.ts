@@ -104,7 +104,8 @@ describe('parseResponse', () => {
       JSON.stringify({
         mode: 'locate',
         items: [
-          { label: 'ok', bbox: [1, 2, 3, 4] },
+          { label: 'ok', bbox: { x: 10, y: 20, w: 30, h: 40 } },
+          { label: 'legacy', bbox: [10, 20, 110, 60] },
           { label: 'none' },
           { label: 'short', bbox: [1, 2, 3] },
           { label: 'nan', bbox: [1, 2, 'x', 4] },
@@ -113,7 +114,8 @@ describe('parseResponse', () => {
       })
     )
     expect(r.mode).toBe('locate')
-    if (r.mode === 'locate') expect(r.items.map((i) => i.label)).toEqual(['ok'])
+    if (r.mode === 'locate') expect(r.items.map((i) => i.label)).toEqual(['ok', 'legacy'])
+    if (r.mode === 'locate') expect(r.items[1].bbox).toEqual({ x: 10, y: 20, w: 100, h: 40 })
   })
 
   it('falls back to an answer when no locate item has a bbox', () => {

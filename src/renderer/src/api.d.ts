@@ -20,7 +20,7 @@ interface ElectronAPI {
   onShowHighlights: (cb: (steps: unknown[]) => void) => Unsubscribe
   onClearHighlights: (cb: () => void) => Unsubscribe
   onShowPointer: (cb: (data: { x: number; y: number; text: string }) => void) => Unsubscribe
-  onShowLocate: (cb: (items: Array<{ label: string; bbox: [number, number, number, number]; description?: string }>) => void) => Unsubscribe
+  onShowLocate: (cb: (items: Array<{ label: string; bbox: { x: number; y: number; w: number; h: number }; description?: string }>) => void) => Unsubscribe
   voiceBarShow: (transcript: string) => void
   voiceBarHide: () => void
   showHUD: () => void

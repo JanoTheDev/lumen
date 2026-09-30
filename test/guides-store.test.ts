@@ -34,7 +34,7 @@ const steps = [
   {
     label: 'Click Settings',
     target_hint: 'gear icon',
-    bbox: [1, 2, 3, 4] as [number, number, number, number]
+    bbox: { x: 1, y: 2, w: 30, h: 40 }
   }
 ]
 
@@ -115,5 +115,22 @@ describe('guide store', () => {
   it('slugifies', () => {
     expect(slugify('Hello, World!')).toBe('hello-world')
     expect(slugify('!!!')).toBe('guide')
+  })
+})
+
+describe('legacy guide files', () => {
+  it('migrates array bboxes to Rect on load', async () => {
+    const { mkdtempSync, writeFileSync, readFileSync } = await import('fs')
+    const { tmpdir } = await import('os')
+    const { join } = await import('path')
+    const store = await import('../src/main/guides/store')
+    const dir = mkdtempSync(join(tmpdir(), 'lumen-guides-'))
+    store.setGuidesDir(dir)
+    const file = join(dir, 'old-guide.json')
+    writeFileSync(file, JSON.stringify({ id: 'old-guide', name: 'old', task: 't', createdAt: 1, steps: [{ label: 'a', target_hint: '', bbox: [10, 20, 110, 60] }] }))
+    const g = store.loadSavedGuide('old-guide')
+    expect(g?.steps[0].bbox).toEqual({ x: 10, y: 20, w: 100, h: 40 })
+    expect(JSON.parse(readFileSync(file, 'utf8')).steps[0].bbox).toEqual({ x: 10, y: 20, w: 100, h: 40 })
+    store.setGuidesDir(null)
   })
 })

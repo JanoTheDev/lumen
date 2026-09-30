@@ -17,7 +17,8 @@ export const audioSchema = z
   .refine((b) => b.byteLength <= MAX_AUDIO_BYTES, 'audio too large')
 
 const coord = z.number().finite()
-const bbox = z.tuple([coord, coord, coord, coord])
+// Rect {x,y,w,h}; legacy [x1,y1,x2,y2] arrays are still accepted and normalized in main.
+const bbox = z.union([z.object({ x: coord, y: coord, w: coord, h: coord }), z.tuple([coord, coord, coord, coord])])
 
 export const actionSchema = z
   .object({
