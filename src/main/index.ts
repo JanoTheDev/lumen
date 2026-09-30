@@ -19,13 +19,11 @@ import {
   Menu,
   nativeImage
 } from 'electron'
-import { writeFileSync, unlinkSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, detectRequestedApp, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
 import { AgentBridge } from './agent-bridge'
-import OpenAI from 'openai'
-import { createReadStream } from 'fs'
+import OpenAI, { toFile } from 'openai'
 import { classifyQuery, isResearchIntent } from './query-classifier'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
@@ -53,6 +51,7 @@ import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from 
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
 import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect, type Rect } from './actions/coords'
 import { toAgentAction, type AgentAction, type ModelAction } from './actions/agent-action'
+import trayIcon from '../../resources/icon.png?asset'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
@@ -175,9 +174,8 @@ function applyUiScale(scale: number): void {
 }
 
 function createTray(): void {
-  const emptyIcon = nativeImage.createEmpty()
-  tray = new Tray(emptyIcon)
-  tray.setToolTip('AI Overlay')
+  tray = new Tray(nativeImage.createFromPath(trayIcon).resize({ width: 16, height: 16 }))
+  tray.setToolTip('Lumen')
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Settings', click: () => createSettingsWindow() },
     { label: 'Open config folder', click: () => shell.showItemInFolder(configPath()) },
@@ -379,7 +377,11 @@ function setStatus(kind: StatusKind, text: string, step?: { index: number; total
 function hideStatus(): void {
   if (!statusWindow || statusWindow.isDestroyed()) return
   statusWindow.webContents.send('status-hide')
-  setTimeout(() => { if (statusWindow && !statusWindow.isDestroyed()) statusWindow.hide() }, 220)
+  // Tracked so a setStatus during the fade-out cancels the hide.
+  statusHideTimer = setTimeout(() => {
+    statusHideTimer = null
+    if (statusWindow && !statusWindow.isDestroyed()) statusWindow.hide()
+  }, 220)
 }
 
 function createAnswerOverlayWindow(): void {
@@ -1164,31 +1166,24 @@ app.whenReady().then(async () => {
       return ''
     }
 
-    const tmpPath = join(app.getPath('temp'), 'ai-overlay-recording.webm')
-    console.log('[transcribe] writing', audio.byteLength, 'bytes to', tmpPath)
-    writeFileSync(tmpPath, Buffer.from(audio))
-
-    try {
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
-      const userVocab = loadConfig().voiceVocab.trim()
-      const vocabList = userVocab
-        ? `, ${userVocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
-        : ''
-      const whisperPrompt = `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
-      const result = await client.audio.transcriptions.create({
-        file: createReadStream(tmpPath),
-        model: 'whisper-1',
-        language: 'en',
-        prompt: whisperPrompt,
-      })
-      console.log('[transcribe] result:', result.text)
-      const estSecs = audio.byteLength / 6000
-      const whisperCost = (estSecs / 60) * 0.006
-      console.log(`[tokens] whisper | ~${estSecs.toFixed(1)}s audio | $${whisperCost.toFixed(5)}`)
-      return result.text
-    } finally {
-      try { unlinkSync(tmpPath) } catch { /* ignore */ }
-    }
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 60000 })
+    const userVocab = loadConfig().voiceVocab.trim()
+    const vocabList = userVocab
+      ? `, ${userVocab.split(/[,\n]/).map(s => s.trim()).filter(Boolean).join(', ')}`
+      : ''
+    const whisperPrompt = `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
+    const result = await client.audio.transcriptions.create({
+      // Sent from memory; recordings never touch disk.
+      file: await toFile(Buffer.from(audio), 'recording.webm', { type: 'audio/webm' }),
+      model: 'whisper-1',
+      language: 'en',
+      prompt: whisperPrompt,
+    })
+    console.log('[transcribe] result:', result.text)
+    const estSecs = audio.byteLength / 6000
+    const whisperCost = (estSecs / 60) * 0.006
+    console.log(`[tokens] whisper | ~${estSecs.toFixed(1)}s audio | $${whisperCost.toFixed(5)}`)
+    return result.text
   })
 
   app.on('activate', () => {

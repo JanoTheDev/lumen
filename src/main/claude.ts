@@ -482,12 +482,20 @@ async function callAnthropic(
     content: h.content
   }))
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: opts.lowDetail ? 2048 : 4096,
-    system: systemPrompt,
-    messages: [...historyMessages, { role: 'user', content: userContent }]
-  }, { signal: opts.signal })
+  const send = (maxTokens: number): Promise<Anthropic.Message> =>
+    client.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [...historyMessages, { role: 'user', content: userContent }]
+    }, { signal: opts.signal })
+  const baseTokens = opts.lowDetail ? 2048 : 4096
+  let message = await send(baseTokens)
+  if (message.stop_reason === 'max_tokens') {
+    // Truncated JSON is unusable; one retry with more room.
+    console.log('[fail] truncated response, retrying with a larger max_tokens')
+    message = await send(baseTokens * 2)
+  }
   logUsage('claude-sonnet-4-6', message.usage.input_tokens, message.usage.output_tokens, !!screenshotBase64)
   const raw = message.content[0].type === 'text' ? message.content[0].text : ''
   return parseResponse(raw)
@@ -520,17 +528,24 @@ async function callOpenAI(
     content: h.content
   }))
 
-  const completion = await client.chat.completions.create({
-    model: getModel('execution'),
-    max_completion_tokens: opts.lowDetail ? 4096 : 8192,
-    reasoning_effort: 'minimal',
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: systemPrompt },
-      ...historyMessages,
-      { role: 'user', content: userContent }
-    ]
-  } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' }, { signal: opts.signal })
+  const baseTokens = opts.lowDetail ? 4096 : 8192
+  const send = (maxTokens: number): Promise<OpenAI.Chat.ChatCompletion> =>
+    client.chat.completions.create({
+      model: getModel('execution'),
+      max_completion_tokens: maxTokens,
+      reasoning_effort: 'minimal',
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...historyMessages,
+        { role: 'user', content: userContent }
+      ]
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' }, { signal: opts.signal })
+  let completion = await send(baseTokens)
+  if (completion.choices[0]?.finish_reason === 'length') {
+    console.log('[fail] truncated response, retrying with a larger max_completion_tokens')
+    completion = await send(baseTokens * 2)
+  }
   const usage = completion.usage
   if (usage) logUsage(getModel('execution'), usage.prompt_tokens, usage.completion_tokens, !!screenshotBase64)
   const raw = completion.choices[0]?.message?.content ?? ''
