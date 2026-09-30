@@ -6,7 +6,7 @@ import type { ChildProcess } from 'child_process'
 vi.mock('electron', () => ({ app: { getAppPath: () => '/app' } }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
-import { AgentBridge, AgentError, SpawnFn } from '../src/main/agent-bridge'
+import { AgentBridge, AgentError, SpawnFn } from '../src/main/agent/bridge'
 
 type Msg = { id: number; cmd: string; [k: string]: unknown }
 
