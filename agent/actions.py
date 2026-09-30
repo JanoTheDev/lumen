@@ -185,6 +185,7 @@ def execute_action(action: dict) -> dict:
         else:  # left / right — no keyboard equivalent, use hscroll
             if x is None or y is None:
                 import ctypes
+                import ctypes.wintypes
                 hwnd = _find_browser_hwnd()
                 if hwnd:
                     rect = ctypes.wintypes.RECT()

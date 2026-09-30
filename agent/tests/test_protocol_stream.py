@@ -39,3 +39,28 @@ def test_screenshots_interleaved_with_pings_stay_framed(agent):
     agent.close()
     for line in agent.raw:
         json.loads(line)
+
+
+def test_garbage_line_emits_protocol_error_then_ping_answers(agent):
+    agent.send("this is {not json")
+    agent.send({"id": 7, "cmd": "ping"})
+    first = agent.wait_for(lambda m: m.get("event") == "protocol-error" or "id" in m)
+    assert first["event"] == "protocol-error"
+    assert first["line"].startswith("this is")
+    pong = agent.wait_for(lambda m: "id" in m)
+    assert pong == {"id": 7, "result": "pong"}
+
+
+def test_non_object_json_is_protocol_error_not_reuse_of_previous_id(agent):
+    agent.send({"id": 1, "cmd": "ping"})
+    agent.wait_for(lambda m: m.get("id") == 1)
+    agent.send("[1, 2]")
+    msg = agent.wait_for(lambda m: m.get("event") == "protocol-error" or "id" in m)
+    assert msg["event"] == "protocol-error"
+
+
+def test_unknown_command_is_an_error(agent):
+    agent.send({"id": 3, "cmd": "nope"})
+    msg = agent.wait_for(lambda m: m.get("id") == 3)
+    assert "result" not in msg
+    assert "nope" in msg["error"]

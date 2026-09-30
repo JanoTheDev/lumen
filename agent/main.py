@@ -17,6 +17,7 @@ from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
+from errors import AgentError, E_UNSUPPORTED
 
 respond = proto.respond
 emit_event = proto.emit
@@ -97,90 +98,114 @@ def mouse_watcher():
     except Exception:
         pass
 
+def _cmd_execute(args):
+    return execute_action(args.get("action", {})) or {}
+
+
+def _cmd_set_hotkey(args):
+    combo = args.get("combo", "ctrl+space")
+    apply_hotkey(combo)
+    return {"ok": True, "combo": combo}
+
+
+def _cmd_wake_enable(args):
+    phrase = args.get("phrase", "")
+    cancel_phrases = args.get("cancel_phrases", [])
+
+    def on_match(kind, matched):
+        if kind == 'wake':
+            emit_event('wake-detected')
+        elif kind == 'cancel':
+            emit_event('voice-cancel', {"phrase": matched})
+
+    wake.start(phrase, cancel_phrases, on_match)
+    return {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases}
+
+
+def _cmd_wake_disable(args):
+    wake.stop()
+    return {"ok": True}
+
+
+def _cmd_dwell_enable(args):
+    dwell_ms = args.get("dwell_ms", 1400)
+    cooldown_ms = args.get("cooldown_ms", 1500)
+
+    def on_progress(x, y, p, active):
+        emit_event('dwell-progress', {"x": x, "y": y, "progress": p, "active": active})
+
+    dwell.start(
+        dwell_ms,
+        lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}),
+        cooldown_ms=cooldown_ms,
+        on_progress=on_progress,
+    )
+    return {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms}
+
+
+def _cmd_dwell_disable(args):
+    dwell.stop()
+    return {"ok": True}
+
+
+def _cmd_dwell_set_ms(args):
+    dwell.set_dwell_ms(int(args.get("dwell_ms", 1400)))
+    return {"ok": True}
+
+
+COMMANDS = {
+    "ping": lambda args: "pong",
+    "screenshot": lambda args: take_screenshot(),
+    "active_window": lambda args: get_active_window(),
+    "execute": _cmd_execute,
+    "set_hotkey": _cmd_set_hotkey,
+    "wake_enable": _cmd_wake_enable,
+    "wake_disable": _cmd_wake_disable,
+    "wake_status": lambda args: wake.status(),
+    "dwell_enable": _cmd_dwell_enable,
+    "dwell_disable": _cmd_dwell_disable,
+    "dwell_set_ms": _cmd_dwell_set_ms,
+}
+
+
+def handle_line(line: str) -> None:
+    line = line.strip()
+    if not line:
+        return
+    try:
+        msg = json.loads(line)
+    except ValueError:
+        msg = None
+    if not isinstance(msg, dict):
+        emit_event("protocol-error", {"line": line[:200]})
+        return
+
+    id = msg.get("id", 0)
+    cmd = msg.get("cmd")
+    args = {k: v for k, v in msg.items() if k not in ("id", "cmd")}
+    handler = COMMANDS.get(cmd)
+    try:
+        if handler is None:
+            raise AgentError(E_UNSUPPORTED, f"Unknown command: {cmd}")
+        result = handler(args)
+    except AgentError as e:
+        respond(id, error=e.message)
+        return
+    except Exception as e:
+        log.exception("%s failed", cmd)
+        respond(id, error=f"{cmd} failed: {e}" if str(e) else f"{cmd} failed")
+        return
+    respond(id, result)
+
+
 def main():
     threading.Thread(target=hotkey_watcher, daemon=True).start()
     threading.Thread(target=mouse_watcher, daemon=True).start()
 
     for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            msg = json.loads(line)
-            id = msg.get("id", 0)
-            cmd = msg.get("cmd")
+        handle_line(line)
+    proto.close()
 
-            if cmd == "ping":
-                respond(id, "pong")
-            elif cmd == "screenshot":
-                b64 = take_screenshot()
-                respond(id, b64)
-            elif cmd == "active_window":
-                title = get_active_window()
-                respond(id, title)
-            elif cmd == "execute":
-                action = msg.get("action", {})
-                result = execute_action(action)
-                respond(id, result or {})
-            elif cmd == "set_hotkey":
-                combo = msg.get("combo", "ctrl+space")
-                try:
-                    apply_hotkey(combo)
-                    respond(id, {"ok": True, "combo": combo})
-                except Exception as e:
-                    respond(id, error=f"set_hotkey failed: {e}")
-            elif cmd == "wake_enable":
-                phrase = msg.get("phrase", "")
-                cancel_phrases = msg.get("cancel_phrases", [])
-                try:
-                    def on_match(kind, matched):
-                        if kind == 'wake':
-                            emit_event('wake-detected')
-                        elif kind == 'cancel':
-                            emit_event('voice-cancel', {"phrase": matched})
-                    wake.start(phrase, cancel_phrases, on_match)
-                    respond(id, {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases})
-                except Exception as e:
-                    respond(id, error=f"wake_enable failed: {e}")
-            elif cmd == "wake_disable":
-                try:
-                    wake.stop()
-                    respond(id, {"ok": True})
-                except Exception as e:
-                    respond(id, error=f"wake_disable failed: {e}")
-            elif cmd == "wake_status":
-                respond(id, wake.status())
-            elif cmd == "dwell_enable":
-                dwell_ms = msg.get("dwell_ms", 1400)
-                cooldown_ms = msg.get("cooldown_ms", 1500)
-                try:
-                    def _on_progress(x, y, p, active):
-                        emit_event('dwell-progress', {"x": x, "y": y, "progress": p, "active": active})
-                    dwell.start(
-                        dwell_ms,
-                        lambda x, y: emit_event('dwell-trigger', {"x": x, "y": y}),
-                        cooldown_ms=cooldown_ms,
-                        on_progress=_on_progress,
-                    )
-                    respond(id, {"ok": True, "dwell_ms": dwell_ms, "cooldown_ms": cooldown_ms})
-                except Exception as e:
-                    respond(id, error=f"dwell_enable failed: {e}")
-            elif cmd == "dwell_disable":
-                try:
-                    dwell.stop()
-                    respond(id, {"ok": True})
-                except Exception as e:
-                    respond(id, error=f"dwell_disable failed: {e}")
-            elif cmd == "dwell_set_ms":
-                dwell.set_dwell_ms(int(msg.get("dwell_ms", 1400)))
-                respond(id, {"ok": True})
-            else:
-                respond(id, error=f"Unknown command: {cmd}")
-        except Exception as e:
-            try:
-                respond(msg.get("id", 0), error=str(e))
-            except Exception:
-                pass
 
 if __name__ == "__main__":
     main()
