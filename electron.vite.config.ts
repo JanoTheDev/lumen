@@ -3,11 +3,7 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {
-    define: {
-      'process.env.ANTHROPIC_API_KEY': JSON.stringify(process.env.ANTHROPIC_API_KEY)
-    }
-  },
+  main: {},
   preload: {},
   renderer: {
     resolve: {

@@ -1,6 +1,8 @@
 import { config } from 'dotenv'
 import { join } from 'path'
-config({ path: join(process.cwd(), '.env') })
+// Keys are read at runtime, never baked into the bundle. Dev: repo .env. Installed: userData/.env.
+config({ path: join(process.cwd(), '.env'), quiet: true })
+config({ path: join(app.getPath('userData'), '.env'), quiet: true })
 
 import {
   app,
