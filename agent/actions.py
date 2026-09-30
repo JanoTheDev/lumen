@@ -6,6 +6,7 @@ import threading
 
 import pagediff
 import safety
+import sendinput
 import window
 from errors import AgentError, E_NOT_FOUND
 
@@ -247,11 +248,8 @@ def _execute(action: dict) -> dict:
 
     elif t == "type":
         safety.check_input_target(action, "type")
-        import pyperclip
-        text = action.get("text", "")
-        pyperclip.copy(text)
-        _sleep(0.05)
-        pyautogui.hotkey('ctrl', 'v')
+        text = str(action.get("text", ""))
+        sendinput.type_text(text, check=_check, sleep=_sleep)
         log.info(f"type done in {time.time()-t0:.2f}s ({len(text)} chars)")
 
     elif t == "hotkey":
@@ -337,11 +335,10 @@ def _execute(action: dict) -> dict:
             _sleep(0.2)
             pyautogui.hotkey('ctrl', 'l')
             _sleep(0.15)
-            import pyperclip
-            pyperclip.copy(url)
             pyautogui.hotkey('ctrl', 'a')
-            pyautogui.hotkey('ctrl', 'v')
+            sendinput.type_text(url, check=_check, sleep=_sleep)
             _sleep(0.1)
+            pyautogui.press('delete')  # drop any inline autocompletion so Enter opens exactly `url`
             pyautogui.press('enter')
             _sleep(0.2)
         else:
