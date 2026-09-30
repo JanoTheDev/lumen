@@ -448,6 +448,7 @@ export function parseResponse(raw: string): ClaudeResponse {
 
 export interface CallOptions {
   lowDetail?: boolean  // use low-res image + fewer tokens (for follow_up row enumeration)
+  signal?: AbortSignal
 }
 
 async function callAnthropic(
@@ -482,7 +483,7 @@ async function callAnthropic(
     max_tokens: opts.lowDetail ? 2048 : 4096,
     system: systemPrompt,
     messages: [...historyMessages, { role: 'user', content: userContent }]
-  })
+  }, { signal: opts.signal })
   logUsage('claude-sonnet-4-6', message.usage.input_tokens, message.usage.output_tokens, !!screenshotBase64)
   const raw = message.content[0].type === 'text' ? message.content[0].text : ''
   return parseResponse(raw)
@@ -525,7 +526,7 @@ async function callOpenAI(
       ...historyMessages,
       { role: 'user', content: userContent }
     ]
-  } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' })
+  } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' }, { signal: opts.signal })
   const usage = completion.usage
   if (usage) logUsage(getModel('execution'), usage.prompt_tokens, usage.completion_tokens, !!screenshotBase64)
   const raw = completion.choices[0]?.message?.content ?? ''
@@ -566,7 +567,8 @@ export async function findClickCoordinates(
   screenshotBase64: string,
   description: string,
   imgW: number,
-  imgH: number
+  imgH: number,
+  signal?: AbortSignal
 ): Promise<{ x: number; y: number } | null> {
   if (!process.env.ANTHROPIC_API_KEY) return null
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -584,7 +586,7 @@ export async function findClickCoordinates(
           { type: 'text', text: `Find and click: ${description}` }
         ]
       }]
-    })
+    }, { signal })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const block of (response as any).content) {
       if (block.type === 'tool_use' && block.name === 'computer') {

@@ -34,7 +34,8 @@ const MAX_RETRIES = 3
 export async function buildPlan(
   prompt: string,
   screenshot: string | null,
-  activeWindow: string
+  activeWindow: string,
+  signal?: AbortSignal
 ): Promise<ExecutionPlan> {
   const provider = getProvider()
   const model = getModel('planning')
@@ -90,7 +91,7 @@ Return ONLY JSON, no markdown, no prose:
       max_tokens: 1024,
       system: systemPrompt,
       messages: [{ role: 'user', content }]
-    })
+    }, { signal })
     raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
   } else {
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -107,7 +108,7 @@ Return ONLY JSON, no markdown, no prose:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userContent }
       ]
-    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' })
+    } as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming & { reasoning_effort?: 'minimal' | 'low' | 'medium' | 'high' }, { signal })
     raw = resp.choices[0]?.message?.content ?? ''
     const usage = resp.usage as (typeof resp.usage & { completion_tokens_details?: { reasoning_tokens?: number } }) | undefined
     if (usage) {
@@ -191,6 +192,7 @@ IMPORTANT:
 
     const result = await queryAI(stepPrompt, screenshot, activeWindow)
     iterTimer.split('AI decision')
+    if (signal?.aborted) break
 
     if (result.mode === 'answer' && result.text?.trim()) {
       log('done', `research resolved on iter ${i + 1}`)
@@ -214,6 +216,7 @@ IMPORTANT:
   }
 
   timer.total()
+  if (signal?.aborted) return { mode: 'answer', text: 'Cancelled.' } as ClaudeResponse
   log('fail', `research exhausted ${MAX_RESEARCH_ITERATIONS} iterations`)
   onProgress({ stepIndex: MAX_RESEARCH_ITERATIONS, totalSteps: MAX_RESEARCH_ITERATIONS, description: 'Gave up', status: 'failed' })
   return { mode: 'answer', text: `I couldn't find a clear answer for "${query}" within ${MAX_RESEARCH_ITERATIONS} steps.` } as ClaudeResponse
@@ -225,13 +228,15 @@ export async function executePlan(
   queryAI: QueryAIFn,
   takeScreenshot: ScreenshotFn,
   executeActions: ExecuteActionFn,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  signal?: AbortSignal
 ): Promise<ClaudeResponse> {
   const totalSteps = plan.steps.length
   let completedSteps = 0
   let finalAnswerText: string | null = null
 
   for (const step of plan.steps) {
+    if (signal?.aborted) break
     const stepTimer = startTimer(`step ${step.index}/${totalSteps}: ${step.description.slice(0, 60)}`)
     log('step', `${step.index}/${totalSteps} ${step.description}`)
     onProgress({ stepIndex: step.index, totalSteps, description: step.description, status: 'running' })
@@ -246,6 +251,7 @@ export async function executePlan(
 
       const result = await queryAI(step.description, screenshot, activeWindow)
       stepTimer.split('AI query done')
+      if (signal?.aborted) break
 
       if (result.mode === 'answer') {
         finalAnswerText = result.text
@@ -257,6 +263,7 @@ export async function executePlan(
         const firstActionType = result.actions[0].type
         await executeActions(result.actions)
         stepTimer.split(`execute ${firstActionType}`)
+        if (signal?.aborted) break
 
         if (shouldVerifyStep(firstActionType)) {
           const afterScreenshot = await takeScreenshot()
@@ -285,6 +292,10 @@ export async function executePlan(
     if (!succeeded) break
   }
 
+  if (signal?.aborted) {
+    log('skip', 'plan cancelled by user')
+    return { mode: 'answer', text: 'Cancelled.' } as ClaudeResponse
+  }
   log('done', `${completedSteps}/${plan.steps.length} steps complete`)
   // Always return a plain answer-mode result. The renderer would otherwise re-execute
   // the last step's actions array (duplicate typing, double navigation, etc).

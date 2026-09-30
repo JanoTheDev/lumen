@@ -49,6 +49,7 @@ import {
 import { configPatchSchema } from '../shared/config'
 import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
+import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
 import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
@@ -485,9 +486,7 @@ app.whenReady().then(async () => {
     const handsFree = loadConfig().handsFreeMode
     console.log(`[hotkey] down — handsFree=${handsFree}`)
     if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', () => {
-        hudWindow?.webContents.send('cancel-request')
-      })
+      globalShortcut.register('Escape', onEscape)
     }
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
@@ -547,11 +546,8 @@ app.whenReady().then(async () => {
   agent.onEvent('voice-cancel', (data) => {
     const phrase = (data?.phrase as string | undefined) ?? 'cancel'
     console.log(`[cancel-voice] matched "${phrase}"`)
-    if ((currentAbort && !currentAbort.signal.aborted) || currentExecuteAbort) {
+    if (cancelAll()) {
       setStatus('error', 'Cancelled by voice', undefined, 1600)
-      executionAborted = true
-      if (currentAbort && !currentAbort.signal.aborted) currentAbort.abort()
-      if (currentExecuteAbort && !currentExecuteAbort.signal.aborted) currentExecuteAbort.abort()
     } else {
       // Not in a query — treat as "close any active UI"
       hudWindow?.webContents.send('cancel-request')
@@ -564,9 +560,7 @@ app.whenReady().then(async () => {
   agent.onEvent('wake-detected', () => {
     console.log('[wake] detected — showing HUD, starting recording with VAD auto-stop')
     if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', () => {
-        hudWindow?.webContents.send('cancel-request')
-      })
+      globalShortcut.register('Escape', onEscape)
     }
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
@@ -595,9 +589,7 @@ app.whenReady().then(async () => {
 
   ipcMain.on('hud-show', () => {
     if (!globalShortcut.isRegistered('Escape')) {
-      globalShortcut.register('Escape', () => {
-        hudWindow?.webContents.send('cancel-request')
-      })
+      globalShortcut.register('Escape', onEscape)
     }
     hudWindow?.setOpacity(1)
     hudWindow?.setIgnoreMouseEvents(false)
@@ -640,22 +632,15 @@ app.whenReady().then(async () => {
   })
 
   let lastTaskContext: string | null = null
-  let currentAbort: AbortController | null = null
-  let currentExecuteAbort: AbortController | null = null
-  let executionAborted = false
   const userQueue = new TaskQueue(1, 'request-queue')
 
   ipcMain.on('cancel-current', () => {
-    if (currentAbort) {
-      log('skip', 'cancel-current received — aborting in-flight query')
-      currentAbort.abort()
-    }
+    if (cancelAll()) log('skip', 'cancel-current received — aborting in-flight work')
   })
 
-  async function runQuery(prompt: string, opts: CallOptions): Promise<ClaudeResponse> {
+  async function runQuery(prompt: string, baseOpts: CallOptions, scope: CancelScope): Promise<ClaudeResponse> {
     if (!agent) throw new Error('Agent not ready')
-    const abortController = new AbortController()
-    currentAbort = abortController
+    const opts: CallOptions = { ...baseOpts, signal: scope.signal }
     const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
     log('plan', `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}`)
 
@@ -667,6 +652,7 @@ app.whenReady().then(async () => {
     if (ctx) log('plan', 'using speculative screenshot')
     else ctx = await captureContext(needsShot)
     const { activeWindow, screenshot } = ctx
+    scope.throwIfCancelled()
     timer.split('context gathered (screenshot + active window)')
     log('plan', `active window: ${activeWindow}`)
 
@@ -731,6 +717,7 @@ app.whenReady().then(async () => {
           const { scale } = screenshotDimensions()
           let prev: Action | undefined
           for (const action of actions as Action[]) {
+            if (scope.cancelled) break
             const scaled = scaleActionForAgent(action, scale)
             if (!(await passesPolicy(scaled, prev))) break
             prev = scaled
@@ -748,12 +735,12 @@ app.whenReady().then(async () => {
           }
         },
         (progress) => { hudWindow?.webContents.send('plan-progress', progress) },
-        abortController.signal
+        scope.signal
       )
       timer.split('research agent done')
     } else if (!opts.lowDetail && intent.planRequired) {
       // Multi-step: build plan, execute with verification
-      const plan = await buildPlan(effectivePrompt, null, activeWindow)
+      const plan = await buildPlan(effectivePrompt, null, activeWindow, scope.signal)
       timer.split('buildPlan done')
       result = await executePlan(
         plan,
@@ -764,6 +751,7 @@ app.whenReady().then(async () => {
           const { scale } = screenshotDimensions()
           let prev: Action | undefined
           for (const action of actions as Action[]) {
+            if (scope.cancelled) break
             const scaled = scaleActionForAgent(action, scale)
             if (!(await passesPolicy(scaled, prev))) break
             prev = scaled
@@ -787,7 +775,8 @@ app.whenReady().then(async () => {
             const statusKind: StatusKind = p.status === 'failed' ? 'error' : 'step'
             setStatus(statusKind, p.description, { index: p.stepIndex, total: p.totalSteps })
           }
-        }
+        },
+        scope.signal
       )
       timer.split('executePlan done')
       // Plan already executed every step. Strip any trailing follow_up so the renderer
@@ -803,6 +792,8 @@ app.whenReady().then(async () => {
 
     log('done', `mode: ${result.mode}`)
     timer.total()
+    // Nothing from a cancelled turn may reach the screen, TTS or history.
+    scope.throwIfCancelled()
 
     // Locate request → action+navigate+follow_up: AI generates action follow_up, but we need locate.
     // Replace the AI's follow_up with a proper locate query so highlights appear after navigation.
@@ -907,7 +898,6 @@ app.whenReady().then(async () => {
       highlightWindow?.webContents.send('clear-highlights')
     }
 
-    if (currentAbort === abortController) currentAbort = null
     return result
   }  // end runQuery
 
@@ -947,6 +937,7 @@ app.whenReady().then(async () => {
       return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
     }
     setStatus('thinking', 'Thinking', { index: 2, total: 3 })
+    const scope = beginScope()
     try {
       // Level 2: split read-only prompts into parallel subtasks.
       if (!opts.lowDetail) {
@@ -955,7 +946,7 @@ app.whenReady().then(async () => {
           const result = await userQueue.enqueue(`parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`, async () => {
             log('plan', `parallel subtasks: ${subtasks.length} — ${subtasks.map(s => `"${s.slice(0, 30)}"`).join(', ')}`)
             const timer = startTimer(`parallel subtasks (${subtasks.length})`)
-            const answers = await Promise.all(subtasks.map(st => runQuery(st, opts)))
+            const answers = await Promise.all(subtasks.map(st => runQuery(st, opts, scope.child())))
             timer.total()
             const texts = answers.map(a => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
             return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
@@ -966,15 +957,22 @@ app.whenReady().then(async () => {
       }
 
       // Level 1: serialize user requests through the queue.
-      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts))
+      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () => runQuery(prompt, opts, scope))
       const modeLabel = (result as { mode?: string }).mode
       if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
       else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
       else setStatus('answer', 'Done', { index: 3, total: 3 }, 1400)
       return result
     } catch (e) {
+      if (isAbortError(e) || scope.cancelled) {
+        log('skip', 'query cancelled')
+        setStatus('error', 'Cancelled', undefined, 1200)
+        return CANCELLED
+      }
       setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
       throw e
+    } finally {
+      endScope(scope)
     }
   })
 
@@ -1000,8 +998,7 @@ app.whenReady().then(async () => {
     const actions = safeParse('execute-action', actionsSchema, rawActions) as Action[] | undefined
     if (!actions) return INVALID
     if (!agent) throw new Error('Agent not ready')
-    executionAborted = false
-    currentExecuteAbort = new AbortController()
+    const scope = beginScope()
     const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
     const { scale } = screenshotDimensions()
     log('step', `execute: ${actions.map(a => a.type).join(', ')} | scale: ${scale}`)
@@ -1010,7 +1007,7 @@ app.whenReady().then(async () => {
     let firstClick = true
     let prevAction: Action | undefined
     for (const action of actions) {
-      if (executionAborted) {
+      if (scope.cancelled) {
         log('skip', 'execution aborted by user')
         break
       }
@@ -1036,7 +1033,7 @@ app.whenReady().then(async () => {
           const freshShot = await agent.screenshot()
           if (freshShot) {
             const { imgW, imgH } = screenshotDimensions()
-            const refined = await findClickCoordinates(freshShot, action.description, imgW, imgH)
+            const refined = await findClickCoordinates(freshShot, action.description, imgW, imgH, scope.signal)
             if (refined) {
               cx = Math.round(refined.x * scale)
               cy = Math.round(refined.y * scale)
@@ -1074,7 +1071,7 @@ app.whenReady().then(async () => {
             const freshShot = await agent.screenshot()
             if (freshShot) {
               const { imgW, imgH } = screenshotDimensions()
-              const refined = await findClickCoordinates(freshShot, action.text, imgW, imgH)
+              const refined = await findClickCoordinates(freshShot, action.text, imgW, imgH, scope.signal)
               if (refined) {
                 const cx = Math.round(refined.x * scale)
                 const cy = Math.round(refined.y * scale)
@@ -1124,11 +1121,10 @@ app.whenReady().then(async () => {
     }
 
     highlightWindow?.hide()
-    const aborted = executionAborted
+    const aborted = scope.cancelled
+    endScope(scope)
     log('done', aborted ? 'execute cancelled' : 'execute complete')
     execTimer.total()
-    currentExecuteAbort = null
-    executionAborted = false
     return { done: !aborted, cancelled: aborted, reached_bottom: reachedBottom }
   })
 
@@ -1279,6 +1275,13 @@ async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
 }
 
 const INVALID = { error: 'E_INVALID' } as const
+const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
+
+// Escape cancels in-flight work in main directly and tells the HUD to stop recording.
+function onEscape(): void {
+  cancelAll()
+  hudWindow?.webContents.send('cancel-request')
+}
 
 // Validates a renderer payload; logs and returns undefined when it does not match.
 function safeParse<T extends ZodType>(channel: string, schema: T, value: unknown): zInfer<T> | undefined {
