@@ -27,8 +27,9 @@ from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
+from mousewatch import MouseWatcher
 from dispatch import Dispatcher, INLINE, INPUT, READ
-from errors import AgentError, E_INVALID
+from errors import AgentError, E_INVALID, E_UNSUPPORTED
 from hotkey import HotkeyManager, parse_accelerator
 
 respond = proto.respond
@@ -37,18 +38,33 @@ emit_event = proto.emit
 hotkeys = HotkeyManager(emit_event)
 
 
-def mouse_watcher():
-    try:
-        import pyautogui
-        last_x, last_y = pyautogui.position()
-        while True:
-            x, y = pyautogui.position()
-            if abs(x - last_x) > 12 or abs(y - last_y) > 12:
-                emit_event('mouse-moved')
-                last_x, last_y = x, y
-            time.sleep(0.05)
-    except Exception:
-        pass
+mouse_watch = MouseWatcher(emit_event)
+SUBSCRIBABLE = {"mouse-moved": mouse_watch.set_enabled}
+_subscriptions: set = set()
+
+
+def _set_subscription(event: str, enabled: bool) -> None:
+    SUBSCRIBABLE[event](enabled)
+    (_subscriptions.add if enabled else _subscriptions.discard)(event)
+
+
+def _check_events(events) -> list:
+    if not isinstance(events, list) or not all(isinstance(e, str) for e in events):
+        raise AgentError(E_INVALID, "events must be a list of event names")
+    unknown = [e for e in events if e not in SUBSCRIBABLE]
+    if unknown:
+        raise AgentError(E_UNSUPPORTED, f"cannot subscribe to {', '.join(unknown)}")
+    return events
+
+
+def _cmd_subscribe(args, token):
+    events = _check_events(args.get("events", []))
+    enabled = args.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise AgentError(E_INVALID, "enabled must be a boolean")
+    for e in events:
+        _set_subscription(e, enabled)
+    return {"subscribed": sorted(_subscriptions)}
 
 
 AGENT_VERSION = "0.2.0"
@@ -169,6 +185,7 @@ def _cmd_init(args, token):
     level = args.get("logLevel", "info")
     if level not in LOG_LEVELS:
         raise AgentError(E_INVALID, f"init.logLevel must be one of {sorted(LOG_LEVELS)}")
+    subscriptions = _check_events(args.get("subscriptions", []))
     wake_cfg, dwell_cfg = _obj(args.get("wake")), _obj(args.get("dwell"))
     phrase = wake_cfg.get("phrase") if isinstance(wake_cfg.get("phrase"), str) else ""
     cancel_phrases = [p for p in wake_cfg.get("cancelPhrases") or [] if isinstance(p, str) and p.strip()]
@@ -181,6 +198,8 @@ def _cmd_init(args, token):
     else:
         wake.stop()
     dwell_ctl.configure({**dwell_cfg, "enabled": dwell_cfg.get("enabled") is True})
+    for event in SUBSCRIBABLE:
+        _set_subscription(event, event in subscriptions)
     return {}
 
 
@@ -213,6 +232,7 @@ def register_commands(debug: bool = False) -> None:
     reg("ping", (lambda args, token: {"t": time.time()}) if v2 else (lambda args, token: "pong"), INLINE)
     reg("init", _cmd_init, INLINE)
     reg("cancel", _cmd_cancel, INLINE)
+    reg("subscribe", _cmd_subscribe, INLINE)
     reg("set_hotkey", _cmd_set_hotkey, INLINE)
     reg("wake_enable", _cmd_wake_enable, INLINE)
     reg("wake_disable", _cmd_wake_disable, INLINE)
@@ -278,7 +298,8 @@ def main():
             hotkeys.bind(opts.hotkey)
         except AgentError as e:
             log.error("--hotkey %r rejected: %s", opts.hotkey, e.message)
-    threading.Thread(target=mouse_watcher, daemon=True).start()
+    if proto.version == 1:
+        _set_subscription("mouse-moved", True)  # v1 main expects it unconditionally
 
     sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     for line in sys.stdin:
