@@ -1,0 +1,4 @@
+NVDA Controller Client 2.0 (x64), unmodified, from NV Access:
+https://www.nvaccess.org/files/nvda/releases/2026.2/nvda_2026.2_controllerClient.zip
+License: GNU LGPL 2.1 (license.txt). Loaded dynamically by agent/announce.py; replace the DLL
+with any compatible build (or delete it) and announce falls back to {spoken: false}.

@@ -20,6 +20,7 @@ logging.basicConfig(
 log = logging.getLogger("agent")
 log.info(dpi.describe())
 
+import announce
 import capture
 import monitors
 import ocr
@@ -71,7 +72,7 @@ def _cmd_subscribe(args, token):
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr", "uia"]
+CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr", "uia", "announce"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -283,6 +284,7 @@ def register_commands(debug: bool = False) -> None:
     reg("uia_snapshot", _cmd_uia_snapshot, READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
     reg("uia_find", lambda args, token: uia.find_command(args, token), READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
     reg("uia_act", _cmd_uia_act, INPUT)
+    reg("announce", announce.announce, READ)
     if v2:
         reg("active_window", _cmd_active_window, READ)
     else:
