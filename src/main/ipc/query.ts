@@ -10,6 +10,7 @@ import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
 import { normalizeBbox } from '../actions/coords'
 import { executeActions } from '../actions/executor'
+import { armEscape, disarmEscape } from '../agent/escape'
 import { setStatus } from '../windows/status'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
@@ -37,6 +38,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
 
     setStatus('thinking', 'Thinking', { index: 2, total: 3 })
     const scope = beginScope()
+    armEscape()
     try {
       // Level 2: split read-only prompts into parallel subtasks.
       if (!opts.lowDetail) {
@@ -72,6 +74,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       throw e
     } finally {
       endScope(scope)
+      disarmEscape()
     }
   })
 
@@ -98,6 +101,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     if (!parsed) return INVALID
     const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
     const scope = beginScope()
+    armEscape()
     const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
     try {
       const r = await executeActions(actions, { signal: scope.signal })
@@ -105,6 +109,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       return { done: !r.cancelled, cancelled: r.cancelled, reached_bottom: r.reachedBottom }
     } finally {
       endScope(scope)
+      disarmEscape()
       execTimer.total()
     }
   })
