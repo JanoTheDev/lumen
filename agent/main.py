@@ -79,11 +79,27 @@ def _on_listener_match(kind, matched):
         emit_event('voice-cancel', {"phrase": matched})
 
 
+def _on_wake_error(data):
+    emit_event('wake-error', data)
+
+
+def _start_wake(phrase, cancel_phrases, energy_floor=None):
+    wake.start(phrase, cancel_phrases, _on_listener_match, on_error=_on_wake_error, energy_floor=energy_floor)
+
+
 def _cmd_wake_enable(args, token):
     phrase = args.get("phrase", "")
     cancel_phrases = args.get("cancel_phrases", args.get("cancelPhrases", []))
-    wake.start(phrase, cancel_phrases, _on_listener_match)
+    _start_wake(phrase, cancel_phrases, args.get("energyFloor"))
     return {"ok": True, "phrase": phrase, "cancel_phrases": cancel_phrases}
+
+
+def _cmd_wake_arm_cancel(args, token):
+    armed = args.get("armed")
+    if not isinstance(armed, bool):
+        raise AgentError(E_INVALID, "wake_arm_cancel needs armed: bool")
+    wake.set_cancel_armed(armed)
+    return {"armed": armed}
 
 
 def _cmd_wake_disable(args, token):
@@ -153,7 +169,7 @@ def _cmd_init(args, token):
     logging.getLogger().setLevel(LOG_LEVELS[level])
     hotkeys.bind(hotkey_accel)
     if wake_phrase or cancel_phrases:
-        wake.start(wake_phrase, cancel_phrases, _on_listener_match)
+        _start_wake(wake_phrase, cancel_phrases, wake_cfg.get("energyFloor"))
     else:
         wake.stop()
     if dwell_cfg.get("enabled") is True:
@@ -196,6 +212,7 @@ def register_commands(debug: bool = False) -> None:
     reg("wake_enable", _cmd_wake_enable, INLINE)
     reg("wake_disable", _cmd_wake_disable, INLINE)
     reg("wake_status", lambda args, token: wake.status(), INLINE)
+    reg("wake_arm_cancel", _cmd_wake_arm_cancel, INLINE)
     reg("dwell_enable", _cmd_dwell_enable, INLINE)
     reg("dwell_disable", _cmd_dwell_disable, INLINE)
     reg("dwell_set_ms", _cmd_dwell_set_ms, INLINE)
@@ -243,6 +260,8 @@ def parse_args(argv=None):
 def main():
     opts = parse_args()
     proto.set_version(opts.protocol)
+    # v1 main never arms voice cancel, so it stays live as before; v2 main arms it per action.
+    wake.set_cancel_armed(proto.version != 2)
     register_commands(debug=opts.debug)
     if proto.version == 2:
         proto.ready({"impl": "python", "version": AGENT_VERSION, "capabilities": CAPABILITIES})
