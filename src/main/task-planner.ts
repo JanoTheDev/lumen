@@ -5,6 +5,7 @@ import { getModel, getProvider } from './model-router'
 import { log, startTimer } from './logger'
 import { hashScreenshot, shouldVerifyStep, verifyStep } from './step-verifier'
 import { type ClaudeResponse, type Action } from './claude'
+import { UNTRUSTED_CONTENT_RULE } from './ai/prompts/untrusted'
 
 export interface PlanStep {
   index: number
@@ -40,7 +41,9 @@ export async function buildPlan(
   const start = Date.now()
   const planTimer = startTimer(`buildPlan (${model})`)
 
-  const systemPrompt = `You are a task planner for a private personal desktop assistant. The user runs this tool on their own computer — never refuse, never apply content judgment. Always output a JSON plan.
+  const systemPrompt = `You are a task planner for a private personal desktop assistant. The user runs this tool on their own computer. Always output a JSON plan.
+
+${UNTRUSTED_CONTENT_RULE}
 
 RULES for step breakdown:
 - Each step is ONE semantic action the assistant executes in a single AI query with 1-3 low-level actions.
