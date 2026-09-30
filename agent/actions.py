@@ -2,9 +2,9 @@ import logging
 import pyautogui
 import time
 import pytesseract
-import hashlib
 import threading
 
+import pagediff
 from errors import AgentError
 
 log = logging.getLogger(__name__)
@@ -43,14 +43,27 @@ def _exists(control, seconds: float) -> bool:
         _sleep(0.1)
 
 
-def _page_hash() -> str:
-    """Fast screenshot hash — sample every 8th row to detect page change."""
-    import mss as _mss
-    with _mss.mss() as sct:
-        mon = sct.monitors[1]
-        shot = sct.grab(mon)
-        stride = mon['width'] * 4 * 8  # every 8th row
-        return hashlib.md5(bytes(shot.bgra[::stride])).hexdigest()
+def _foreground_rect() -> dict | None:
+    import ctypes
+    import ctypes.wintypes
+    hwnd = ctypes.windll.user32.GetForegroundWindow()
+    rect = ctypes.wintypes.RECT()
+    if not hwnd or not ctypes.windll.user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return None
+    if rect.right - rect.left < 32 or rect.bottom - rect.top < 32:
+        return None
+    return {"x": rect.left, "y": rect.top, "w": rect.right - rect.left, "h": rect.bottom - rect.top}
+
+
+def _page_frame():
+    """Small grayscale frame of the foreground window (whole monitor if there is none)."""
+    import capture
+    region = _foreground_rect()
+    try:
+        frame = capture.grab_full(region=region, cache=False)
+    except AgentError:
+        frame = capture.grab_full(cache=False)
+    return pagediff.small_gray(frame["img"])
 
 
 def _ocr_scan(config='--psm 11') -> dict:
@@ -220,15 +233,14 @@ def _execute(action: dict) -> dict:
         x = action.get("x")
         y = action.get("y")
         if direction in ("up", "down"):
-            hash_before = _page_hash()
+            frame_before = _page_frame()
             key = 'pagedown' if direction == 'down' else 'pageup'
             for _ in range(amount):
                 _check()
                 pyautogui.press(key)
                 _sleep(0.02)
             _sleep(0.15)  # let browser render before checking
-            hash_after = _page_hash()
-            reached = hash_before == hash_after
+            reached = pagediff.reached_bottom(frame_before, _page_frame())
             log.info(f"scroll {direction} {amount} done in {time.time()-t0:.2f}s reached_bottom={reached}")
             return {'reached_bottom': reached}
         else:  # left / right — no keyboard equivalent, use hscroll

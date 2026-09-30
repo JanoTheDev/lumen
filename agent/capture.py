@@ -96,11 +96,11 @@ def _targets(monitor, region) -> list:
     return [(mon, rect, True)]
 
 
-def grab_full(monitor="foreground", region=None) -> dict:
-    """Fresh full-res frame {id, img, monitor, rect}; also cached."""
+def grab_full(monitor="foreground", region=None, cache: bool = True) -> dict:
+    """Fresh full-res frame {id, img, monitor, rect}; cached for ocr reuse unless cache=False."""
     mon, rect, _ = _targets(monitor, region)[0]
     img = _grab(rect)
-    fid = cache_frame(img, mon, rect)
+    fid = cache_frame(img, mon, rect) if cache else None
     return {"id": fid, "img": img, "monitor": mon, "rect": rect}
 
 
