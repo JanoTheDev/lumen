@@ -2,7 +2,11 @@ import { config } from 'dotenv'
 import { join } from 'path'
 // Keys are read at runtime, never baked into the bundle. Dev: repo .env. Installed: userData/.env.
 config({ path: join(process.cwd(), '.env'), quiet: true })
-config({ path: join(app.getPath('userData'), '.env'), quiet: true })
+try {
+  config({ path: join(app.getPath('userData'), '.env'), quiet: true })
+} catch {
+  /* userData unavailable this early on some setups; repo .env still applies */
+}
 
 import {
   app,
@@ -30,6 +34,7 @@ import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
 import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
+import { createWindow, loadRenderer } from './windows/factory'
 import { assertSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
 let hudWindow: BrowserWindow | null = null
@@ -46,7 +51,7 @@ function createSettingsWindow(): void {
     settingsWindow.focus()
     return
   }
-  settingsWindow = new BrowserWindow({
+  settingsWindow = createWindow({
     width: 860,
     height: 620,
     minWidth: 720,
@@ -56,19 +61,10 @@ function createSettingsWindow(): void {
     titleBarStyle: 'hidden',
     backgroundColor: '#0a0b10',
     resizable: true,
-    show: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true
-    }
+    show: false
   })
   settingsWindow.once('ready-to-show', () => settingsWindow?.show())
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/settings.html`)
-  } else {
-    settingsWindow.loadFile(join(__dirname, '../renderer/settings.html'))
-  }
+  loadRenderer(settingsWindow, 'settings')
   settingsWindow.on('closed', () => { settingsWindow = null })
 }
 
@@ -166,7 +162,7 @@ function createHUDWindow(): void {
   const w = 100
   const h = 44
 
-  hudWindow = new BrowserWindow({
+  hudWindow = createWindow({
     width: w,
     height: h,
     x: Math.round((width - w) / 2),
@@ -177,12 +173,7 @@ function createHUDWindow(): void {
     skipTaskbar: true,
     focusable: false,
     resizable: false,
-    show: true,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true
-    }
+    show: true
   })
   // Start invisible — use opacity instead of hide/show so Chromium never
   // suspends the renderer (which pauses audio tracks and kills recording)
@@ -193,11 +184,7 @@ function createHUDWindow(): void {
     if (is.dev) hudWindow?.webContents.openDevTools({ mode: 'detach' })
   })
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    hudWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    hudWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadRenderer(hudWindow, 'index')
 }
 
 function createStatusWindow(): void {
@@ -205,7 +192,7 @@ function createStatusWindow(): void {
   const w = 420
   const h = 44
 
-  statusWindow = new BrowserWindow({
+  statusWindow = createWindow({
     width: w,
     height: h,
     x: Math.round((width - w) / 2),
@@ -217,25 +204,16 @@ function createStatusWindow(): void {
     focusable: false,
     resizable: false,
     show: false,
-    hasShadow: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-    },
+    hasShadow: false
   })
   statusWindow.setIgnoreMouseEvents(true)
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    statusWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/status.html`)
-  } else {
-    statusWindow.loadFile(join(__dirname, '../renderer/status.html'))
-  }
+  loadRenderer(statusWindow, 'status')
 }
 
 function createDwellRingWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().bounds
-  dwellRingWindow = new BrowserWindow({
+  dwellRingWindow = createWindow({
     width,
     height,
     x: 0,
@@ -247,12 +225,7 @@ function createDwellRingWindow(): void {
     focusable: false,
     resizable: false,
     show: false,
-    hasShadow: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true,
-    },
+    hasShadow: false
   })
   dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
 
@@ -277,11 +250,7 @@ function createDwellRingWindow(): void {
   // Re-apply each time the app gains focus (OS sometimes resets z-order)
   app.on('browser-window-focus', () => forceTop())
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    dwellRingWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/dwellring.html`)
-  } else {
-    dwellRingWindow.loadFile(join(__dirname, '../renderer/dwellring.html'))
-  }
+  loadRenderer(dwellRingWindow, 'dwellring')
 }
 
 type StatusKind = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'acting' | 'answer' | 'error' | 'step'
@@ -450,7 +419,7 @@ function hideStatus(): void {
 function createAnswerOverlayWindow(): void {
   const { width } = screen.getPrimaryDisplay().workAreaSize
 
-  answerOverlayWindow = new BrowserWindow({
+  answerOverlayWindow = createWindow({
     width: 360,
     height: 220,
     x: width - 376,
@@ -460,26 +429,17 @@ function createAnswerOverlayWindow(): void {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
-    show: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true
-    }
+    show: false
   })
   answerOverlayWindow.setIgnoreMouseEvents(false)
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    answerOverlayWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/answeroverlay.html`)
-  } else {
-    answerOverlayWindow.loadFile(join(__dirname, '../renderer/answeroverlay.html'))
-  }
+  loadRenderer(answerOverlayWindow, 'answeroverlay')
 }
 
 function createHighlightWindow(): void {
   const { width, height } = screen.getPrimaryDisplay().bounds
 
-  highlightWindow = new BrowserWindow({
+  highlightWindow = createWindow({
     width,
     height,
     x: 0,
@@ -489,20 +449,11 @@ function createHighlightWindow(): void {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
-    show: false,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      contextIsolation: true
-    }
+    show: false
   })
   highlightWindow.setIgnoreMouseEvents(true)
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    highlightWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/highlight.html`)
-  } else {
-    highlightWindow.loadFile(join(__dirname, '../renderer/highlight.html'))
-  }
+  loadRenderer(highlightWindow, 'highlight')
 }
 
 app.whenReady().then(async () => {

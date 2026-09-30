@@ -1,8 +1,7 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+export {}
 
 declare global {
   interface Window {
-    electron: ElectronAPI
     api: {
       query: (prompt: string, opts?: { lowDetail?: boolean }) => Promise<unknown>
       executeAction: (actions: unknown[]) => Promise<{ done?: boolean; cancelled?: boolean; reached_bottom?: boolean }>
