@@ -1,7 +1,6 @@
 import logging
 import pyautogui
 import time
-import pytesseract
 import threading
 
 import pagediff
@@ -14,7 +13,6 @@ log = logging.getLogger(__name__)
 
 pyautogui.FAILSAFE = False  # user's mouse movement must not abort automation
 pyautogui.PAUSE = 0.05
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # Cancel token of the action running on this thread (set by execute_action).
 _ctx = threading.local()
@@ -63,15 +61,10 @@ def _page_frame():
     return pagediff.small_gray(frame["img"])
 
 
-def _ocr_scan(config='--psm 11') -> dict:
-    """Take fresh screenshot and return pytesseract image_to_data dict."""
-    from PIL import Image
-    import mss as _mss
-    with _mss.mss() as sct:
-        mon = sct.monitors[1]
-        shot = sct.grab(mon)
-        img = Image.frombytes('RGB', shot.size, shot.bgra, 'raw', 'BGRX')
-    return pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT, config=config)
+def _ocr_scan() -> dict:
+    """OCR of the foreground monitor: {words, lines, monitor} in physical px."""
+    import ocr
+    return ocr.run({}, getattr(_ctx, 'token', None))
 
 
 def _ocr_norm(s: str) -> str:
@@ -79,36 +72,37 @@ def _ocr_norm(s: str) -> str:
     return s.lower().replace('0', 'o').replace('1', 'l').replace('i', 'l')
 
 
-def _ocr_matches(data: dict, text: str) -> list:
-    """Return all (cx, cy, y1) matches for text phrase in OCR data, sorted top-to-bottom.
+ROW_BAND_LOGICAL = 30
+
+
+def _ocr_matches(words: list, text: str, row_band: float = ROW_BAND_LOGICAL) -> list:
+    """Return all (cx, cy, y1) matches for text phrase in OCR words, sorted top-to-bottom.
     Clusters matches within the same row band so that text appearing in both sender
     column and subject line (e.g. '0xGF' in sender + '[0xGF/...' in subject) counts as ONE row.
     Picks the leftmost-x match per cluster (sender column is leftmost)."""
     target_words = [_ocr_norm(w) for w in text.split()]
     nw = len(target_words)
-    words = data['text']
+    if nw == 0:
+        return []
     raw = []
     for i in range(len(words) - nw + 1):
-        chunk = [_ocr_norm(words[j].strip()) for j in range(i, i + nw)]
+        chunk = [_ocr_norm(words[j]['text'].strip()) for j in range(i, i + nw)]
         # Short words (≤3 chars) require exact match to avoid "OK" matching "BOOK", etc.
         if all(tw and cw and (cw == tw if len(tw) <= 3 else tw in cw) for tw, cw in zip(target_words, chunk)):
-            confs = [data['conf'][j] for j in range(i, i + nw)]
-            if min(confs) < 40:
-                continue
-            x1 = min(data['left'][j] for j in range(i, i + nw))
-            y1 = min(data['top'][j] for j in range(i, i + nw))
-            x2 = max(data['left'][j] + data['width'][j] for j in range(i, i + nw))
-            y2 = max(data['top'][j] + data['height'][j] for j in range(i, i + nw))
+            rects = [words[j]['rect'] for j in range(i, i + nw)]
+            x1 = min(r['x'] for r in rects)
+            y1 = min(r['y'] for r in rects)
+            x2 = max(r['x'] + r['w'] for r in rects)
+            y2 = max(r['y'] + r['h'] for r in rects)
             raw.append(((x1 + x2) // 2, (y1 + y2) // 2, y1, x1))
     raw.sort(key=lambda m: m[2])  # sort by y1
 
     # Cluster by first_y anchor (immutable per cluster) — prevents snowball merging.
     # Gmail: sender and subject are side-by-side (same y, ~0-5px diff).
-    # Adjacent rows are ~35-55px apart. ROW_BAND=30 collapses same-row dupes safely.
-    ROW_BAND = 30
+    # Adjacent rows are ~35-55 logical px apart; a 30 logical px band collapses same-row dupes.
     clusters = []  # each: [first_y, best_match_tuple]
     for m in raw:
-        if not clusters or m[2] - clusters[-1][0] > ROW_BAND:
+        if not clusters or m[2] - clusters[-1][0] > row_band:
             clusters.append([m[2], m])
         elif m[3] < clusters[-1][1][3]:  # prefer smaller x = sender column
             clusters[-1][1] = m
@@ -116,22 +110,22 @@ def _ocr_matches(data: dict, text: str) -> list:
     return [(c[1][0], c[1][1], c[1][2]) for c in clusters]
 
 
+def _scan_matches(text: str) -> tuple:
+    t0 = time.time()
+    data = _ocr_scan()
+    band = ROW_BAND_LOGICAL * data['monitor'].get('scale', 1.0)
+    return _ocr_matches(data['words'], text, band), len(data['words']), time.time() - t0
+
+
 def _find_text_ocr(text: str) -> tuple | None:
     """Find first occurrence of text on screen via OCR. Returns (cx, cy) or None."""
     try:
-        t0 = time.time()
-        data = _ocr_scan()
-        matches = _ocr_matches(data, text)
-        if not matches:
-            _check()
-            # Retry with fully-automatic layout analysis — catches text psm 11 misses
-            data = _ocr_scan('--psm 3')
-            matches = _ocr_matches(data, text)
+        matches, n_words, dt = _scan_matches(text)
         if matches:
             cx, cy, _ = matches[0]
-            log.info(f"found '{text}' at ({cx},{cy}) total={len(matches)} in {time.time()-t0:.2f}s")
+            log.info(f"found '{text}' at ({cx},{cy}) total={len(matches)} in {dt:.2f}s")
             return (cx, cy)
-        log.info(f"'{text}' not found ({len(data['text'])} words scanned) in {time.time()-t0:.2f}s")
+        log.info(f"'{text}' not found ({n_words} words scanned) in {dt:.2f}s")
         return None
     except AgentError:
         raise
@@ -143,15 +137,9 @@ def _find_text_ocr(text: str) -> tuple | None:
 def _find_nth_text_ocr(text: str, n: int) -> tuple | None:
     """Find the Nth occurrence (1-indexed, top-to-bottom) of text on screen via OCR."""
     try:
-        t0 = time.time()
-        data = _ocr_scan()
-        matches = _ocr_matches(data, text)
-        if not matches:
-            _check()
-            data = _ocr_scan('--psm 3')
-            matches = _ocr_matches(data, text)
+        matches, _, dt = _scan_matches(text)
         ys = [m[2] for m in matches]
-        log.info(f"'{text}' clusters={len(matches)} ys={ys} need={n} in {time.time()-t0:.2f}s")
+        log.info(f"'{text}' clusters={len(matches)} ys={ys} need={n} in {dt:.2f}s")
         if len(matches) >= n:
             cx, cy, _ = matches[n - 1]
             log.info(f"-> occurrence {n} at ({cx},{cy})")

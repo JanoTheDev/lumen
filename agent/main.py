@@ -22,6 +22,7 @@ log.info(dpi.describe())
 
 import capture
 import monitors
+import ocr
 import window
 from capture import take_screenshot, get_active_window
 from actions import execute_action
@@ -69,7 +70,7 @@ def _cmd_subscribe(args, token):
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "wake", "dwell", "capture"]
+CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -248,6 +249,7 @@ def register_commands(debug: bool = False) -> None:
     reg("screenshot", lambda args, token: take_screenshot(), READ)
     reg("capture", _cmd_capture, READ)
     reg("monitors", lambda args, token: {"monitors": monitors.enumerate_monitors()}, READ)
+    reg("ocr", lambda args, token: ocr.run(args, token), READ)
     if v2:
         reg("active_window", lambda args, token: window.active(), READ)
     else:
