@@ -9,6 +9,7 @@ import type { CallOptions } from '../claude'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
 import { normalizeBbox } from '../actions/coords'
+import { executeActions } from '../actions/executor'
 import { setStatus } from '../windows/status'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
@@ -17,7 +18,6 @@ export interface QueryIpcDeps {
   /** Handles guide voice commands before a model call; returns a response when it did. */
   intercept: (prompt: string) => unknown | undefined
   runQuery: (prompt: string, opts: CallOptions, scope: CancelScope) => Promise<ModelResponse>
-  execute: (actions: Action[]) => Promise<unknown>
 }
 
 export function registerQueryIpc(deps: QueryIpcDeps): void {
@@ -97,6 +97,15 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     const parsed = safeParse('assistant:execute', actionsSchema, rawActions)
     if (!parsed) return INVALID
     const actions = parsed.map((a) => ({ ...a, bbox: a.bbox ? normalizeBbox(a.bbox) ?? undefined : undefined })) as Action[]
-    return deps.execute(actions)
+    const scope = beginScope()
+    const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
+    try {
+      const r = await executeActions(actions, { signal: scope.signal })
+      log('done', r.cancelled ? 'execute cancelled' : 'execute complete')
+      return { done: !r.cancelled, cancelled: r.cancelled, reached_bottom: r.reachedBottom }
+    } finally {
+      endScope(scope)
+      execTimer.total()
+    }
   })
 }

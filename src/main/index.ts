@@ -10,19 +10,17 @@ try {
 
 import { app, shell, BrowserWindow, globalShortcut } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import type { Action } from '@shared/types'
-import { warmupConnection, findClickCoordinates, isBrowser } from './claude'
+import { warmupConnection } from './claude'
 import { AgentBridge } from './agent/bridge'
 import OpenAI, { toFile } from 'openai'
-import { log, startTimer } from './logger'
+import { log } from './logger'
 import { loadConfig, lastConfigWarning, type AppConfig } from './config'
 import { modelInstalled, installModel } from './wake-model'
 import { saveGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide } from './guides/voice-nav'
-import { beginScope, endScope, cancelAll } from './query/cancel'
+import { cancelAll } from './query/cancel'
 import { startSpeculativeCapture } from './query/context'
-import { currentFrame, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter } from './actions/coords'
-import { toAgentAction, type AgentAction } from './actions/agent-action'
+import { physToLogical, rectCenter } from './actions/coords'
 import { isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl } from './actions/safety'
 import { bus } from './bus'
@@ -35,9 +33,7 @@ import * as highlight from './windows/highlight'
 import * as dwellRing from './windows/dwell-ring'
 import * as tray from './windows/tray'
 import { setAgent } from './agent/instance'
-import { passesPolicy } from './actions/policy'
 import { captureContext, runQuery } from './query/pipeline'
-import { sleep } from './util'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerHighlightIpc } from './ipc/highlight'
@@ -391,113 +387,6 @@ app.whenReady().then(async () => {
 
 
 
-  // Runs actions the renderer confirmed (action mode and follow_up chains).
-  async function executeRendererActions(actions: Action[]): Promise<unknown> {
-    if (!agent) throw new Error('Agent not ready')
-    const scope = beginScope()
-    const execTimer = startTimer(`execute-action [${actions.map(a => a.type).join(', ')}]`)
-    const frame = currentFrame()
-    log('step', `execute: ${actions.map(a => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`)
-    let reachedBottom = false
-
-    let firstClick = true
-    let prevAction: AgentAction | undefined
-    for (const action of actions) {
-      if (scope.cancelled) {
-        log('skip', 'execution aborted by user')
-        break
-      }
-      let scaled: AgentAction = toAgentAction(action, frame)
-
-      if (action.type === 'click_bbox' && action.bbox) {
-        const physRect = imageRectToPhys(frame, action.bbox)
-        let target = rectCenter(physRect)
-
-        // Use Computer Use API for precise coordinates when description is available
-        // CU is fine-tuned for UI clicking (~92% accuracy vs ~75% for regular vision)
-        if (action.description && process.env.ANTHROPIC_API_KEY) {
-          console.log(`[execute] click_bbox CU lookup: "${action.description}"`)
-          const freshShot = await agent.screenshot()
-          if (freshShot) {
-            const refined = await findClickCoordinates(freshShot, action.description, frame.imgW, frame.imgH, scope.signal)
-            if (refined) {
-              target = imageToPhys(frame, refined)
-              console.log(`[execute] click_bbox CU refined → (${target.x},${target.y})`)
-            } else {
-              console.log('[execute] click_bbox CU returned null, using bbox center')
-            }
-          }
-        }
-
-        // Show bbox highlight on screen before clicking so user can see the target
-        highlight.send('screen:highlights', [{
-          label: 'Clicking here',
-          target_hint: '',
-          bbox: physRectToLogical(physRect),
-        }])
-        highlight.show()
-        await sleep(600)
-        highlight.hide()
-        scaled = { type: 'click', x: Math.round(target.x), y: Math.round(target.y), button: action.button ?? 'left' }
-      } else if (action.type === 'click_element' && action.bbox && action.text && process.env.ANTHROPIC_API_KEY) {
-        // In browser context: try CU for higher-accuracy click (overrides OCR path)
-        const aw = await agent.activeWindow()
-        if (isBrowser(aw)) {
-          const freshShot = await agent.screenshot()
-          if (freshShot) {
-            const refined = await findClickCoordinates(freshShot, action.text, frame.imgW, frame.imgH, scope.signal)
-            if (refined) {
-              const p = imageToPhys(frame, refined)
-              console.log(`[execute] click_element CU refined "${action.text}" → (${p.x},${p.y})`)
-              scaled = { type: 'click', x: p.x, y: p.y, button: action.button ?? 'left' }
-            }
-          }
-        }
-      }
-
-      if (!scaled.type) {
-        console.warn('[execute] skipping action with no type:', JSON.stringify(action))
-        continue
-      }
-      console.log('[execute] running:', JSON.stringify(scaled))
-      if (!(await passesPolicy(scaled, prevAction))) break
-      prevAction = scaled
-
-      if (scaled.type === 'open_url' && scaled.url) {
-        console.log('[execute] opening URL:', scaled.url)
-        await shell.openExternal(assertSafeUrl(scaled.url))
-        await sleep(400)
-        await agent.execute({ type: 'focus_browser' })
-      } else if (scaled.type === 'navigate_url' && scaled.url) {
-        console.log('[execute] navigate_url:', scaled.url)
-        await agent.execute(scaled)
-        await sleep(1500) // wait for page to finish loading before next action
-      } else {
-        // Show pointer preview before first click
-        if (firstClick && scaled.type === 'click' && scaled.x != null && scaled.y != null) {
-          firstClick = false
-          highlight.send('screen:pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
-          highlight.show()
-          await sleep(300)
-        }
-        const actionResult = await agent.execute(scaled) as Record<string, unknown> | null
-        if (actionResult?.reached_bottom) {
-          console.log('[execute] reached_bottom detected — stopping action loop')
-          reachedBottom = true
-          break
-        }
-      }
-      await sleep(scaled.type === 'hotkey' ? 300 : 150)
-    }
-
-    highlight.hide()
-    const aborted = scope.cancelled
-    endScope(scope)
-    log('done', aborted ? 'execute cancelled' : 'execute complete')
-    execTimer.total()
-    return { done: !aborted, cancelled: aborted, reached_bottom: reachedBottom }
-  }
-
   registerHudIpc({ armEscape, disarmEscape })
   registerAnswerIpc()
   registerHighlightIpc()
@@ -512,7 +401,6 @@ app.whenReady().then(async () => {
   registerQueryIpc({
     intercept: interceptGuideCommand,
     runQuery: (prompt, opts, scope) => runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide }),
-    execute: executeRendererActions,
   })
 
   app.on('activate', () => {

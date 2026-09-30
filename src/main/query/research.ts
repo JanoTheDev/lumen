@@ -1,39 +1,16 @@
 // Multi-step paths: the autonomous research loop and plan + verified execution.
-import { shell } from 'electron'
 import type { Action, ModelResponse } from '@shared/types'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import type { CancelScope } from './cancel'
 import { callClaude, type CallOptions } from '../claude'
 import { requireAgent } from '../agent/instance'
-import { currentFrame } from '../actions/coords'
-import { toAgentAction, type AgentAction } from '../actions/agent-action'
-import { assertSafeUrl } from '../actions/safety'
-import { passesPolicy } from '../actions/policy'
+import { executeActions } from '../actions/executor'
 import { log, type Timer } from '../logger'
 import { setStatus, type StatusKind } from '../windows/status'
-import { sleep } from '../util'
 
+// Planner and research batches run through the same executor as renderer actions.
 async function runBatch(actions: Action[], scope: CancelScope): Promise<void> {
-  const agent = requireAgent()
-  const frame = currentFrame()
-  let prev: AgentAction | undefined
-  for (const action of actions) {
-    if (scope.cancelled) break
-    const scaled = toAgentAction(action, frame)
-    if (!(await passesPolicy(scaled, prev))) break
-    prev = scaled
-    if (scaled.type === 'open_url' && scaled.url) {
-      await shell.openExternal(assertSafeUrl(scaled.url))
-      await sleep(400)
-      await agent.execute({ type: 'focus_browser' })
-    } else if (scaled.type === 'navigate_url' && scaled.url) {
-      await agent.execute(scaled)
-      await sleep(1500)
-    } else {
-      await agent.execute(scaled)
-    }
-    await sleep(scaled.type === 'hotkey' ? 300 : 150)
-  }
+  await executeActions(actions, { signal: scope.signal })
 }
 
 /** Autonomous loop: keep navigating/clicking/scrolling until the info is found or stuck. */
