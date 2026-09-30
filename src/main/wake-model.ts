@@ -3,7 +3,7 @@ import { join } from 'path'
 import { homedir, tmpdir } from 'os'
 import { spawn } from 'child_process'
 import { request } from 'https'
-import { BrowserWindow } from 'electron'
+import { broadcast as broadcastToWindows } from './windows/registry'
 import { log } from './logger'
 
 const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip'
@@ -36,9 +36,7 @@ export interface ProgressEvent {
 }
 
 function broadcast(evt: ProgressEvent): void {
-  for (const w of BrowserWindow.getAllWindows()) {
-    if (!w.isDestroyed()) w.webContents.send('wake:model-progress', evt)
-  }
+  broadcastToWindows('wake:model-progress', evt)
 }
 
 async function download(url: string, dest: string, onProgress: (p: { bytes: number; total: number }) => void): Promise<void> {

@@ -8,18 +8,8 @@ try {
   /* userData unavailable this early on some setups; repo .env still applies */
 }
 
-import {
-  app,
-  shell,
-  BrowserWindow,
-  ipcMain,
-  screen,
-  globalShortcut,
-  Tray,
-  Menu,
-  nativeImage
-} from 'electron'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { app, shell, BrowserWindow, ipcMain, globalShortcut } from 'electron'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import type { Action, Rect } from '@shared/types'
 import { callClaude, needsScreenshot, warmupConnection, addToHistory, findClickCoordinates, isBrowser, type CallOptions, type ClaudeResponse } from './claude'
 import { correctNthElement } from './nth-utils'
@@ -30,7 +20,7 @@ import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import { log, startTimer } from './logger'
 import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
-import { loadConfig, saveConfig, configPath, lastConfigWarning, type AppConfig } from './config'
+import { loadConfig, saveConfig, lastConfigWarning, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
 import type { ZodType, infer as zInfer } from 'zod'
 import {
@@ -46,47 +36,27 @@ import {
   actionsSchema,
 } from '@shared/ipc'
 import { configPatchSchema } from '@shared/config'
-import { saveGuide, listSavedGuides, deleteSavedGuide, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
+import { saveGuide, deleteSavedGuide, listSavedGuides, loadSavedGuide, findGuideByName, type GuideStep, type SavedGuide } from './guides/store'
 import { parseGuideNav, isReplayRequest, matchSaveGuide, matchPlayGuide, isHowToQuestion } from './guides/voice-nav'
 import { beginScope, endScope, cancelAll, isAbortError, type CancelScope } from './query/cancel'
 import { applyOverrides, LOCATE_RE } from './query/overrides'
 import { startSpeculativeCapture, takeSpeculative, type QueryContext } from './query/context'
 import { currentFrame, normalizeBbox, imageRectToPhys, imageToPhys, physRectToLogical, physToLogical, rectCenter, isUsableRect } from './actions/coords'
 import { toAgentAction, type AgentAction } from './actions/agent-action'
-import trayIcon from '../../resources/icon.png?asset'
-import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
+import { isOwnRendererUrl } from './windows/factory'
 import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
+import { bus } from './bus'
+import { applyUiScale, applyUiScaleOnLoad, broadcast, isOverOwnWindow } from './windows/registry'
+import { setStatus, hideStatus, type StatusKind } from './windows/status'
+import * as hud from './windows/hud'
+import * as statusWin from './windows/status'
+import * as answer from './windows/answer'
+import * as highlight from './windows/highlight'
+import * as dwellRing from './windows/dwell-ring'
+import * as settingsWin from './windows/settings'
+import * as tray from './windows/tray'
 
-let hudWindow: BrowserWindow | null = null
-let highlightWindow: BrowserWindow | null = null
-let answerOverlayWindow: BrowserWindow | null = null
-let settingsWindow: BrowserWindow | null = null
-let statusWindow: BrowserWindow | null = null
-let dwellRingWindow: BrowserWindow | null = null
-let tray: Tray | null = null
 let agent: AgentBridge | null = null
-
-function createSettingsWindow(): void {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus()
-    return
-  }
-  settingsWindow = createWindow({
-    width: 860,
-    height: 620,
-    minWidth: 720,
-    minHeight: 520,
-    title: 'Lumen Settings',
-    frame: false,
-    titleBarStyle: 'hidden',
-    backgroundColor: '#0a0b10',
-    resizable: true,
-    show: false
-  })
-  settingsWindow.once('ready-to-show', () => settingsWindow?.show())
-  loadRenderer(settingsWindow, 'settings')
-  settingsWindow.on('closed', () => { settingsWindow = null })
-}
 
 function cancelPhraseList(cfg: AppConfig): string[] {
   if (!cfg.cancelVoice.enabled) return []
@@ -98,13 +68,10 @@ function applyDwellState(cfg: AppConfig): void {
   if (cfg.dwellClick.enabled) {
     agent.enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs).catch(e =>
       console.error('[dwell] enable failed:', (e as Error).message))
-    if (dwellRingWindow && !dwellRingWindow.isDestroyed() && !dwellRingWindow.isVisible()) {
-      dwellRingWindow.showInactive()
-    }
   } else {
     agent.disableDwell().catch(() => {})
-    if (dwellRingWindow && !dwellRingWindow.isDestroyed()) dwellRingWindow.hide()
   }
+  dwellRing.setEnabled(cfg.dwellClick.enabled)
 }
 
 function applyListenerState(cfg: AppConfig): void {
@@ -137,9 +104,7 @@ async function applyAgentState(cfg: AppConfig): Promise<void> {
 }
 
 function broadcastConfig(cfg: AppConfig): void {
-  for (const win of [hudWindow, answerOverlayWindow, highlightWindow, settingsWindow, statusWindow, dwellRingWindow]) {
-    if (win && !win.isDestroyed()) win.webContents.send('settings:changed', cfg)
-  }
+  broadcast('settings:changed', cfg as unknown as Record<string, unknown>)
   applyUiScale(cfg.a11y.uiScale)
 }
 
@@ -164,128 +129,8 @@ async function speakAnswer(text: string, voice: string): Promise<void> {
   })
   const buf = Buffer.from(await result.arrayBuffer())
   const b64 = buf.toString('base64')
-  answerOverlayWindow?.webContents.send('voice:tts-audio', { mime: 'audio/mpeg', data: b64 })
+  answer.send('voice:tts-audio', { mime: 'audio/mpeg', data: b64 })
 }
-
-function applyUiScale(scale: number): void {
-  const s = Math.max(0.75, Math.min(1.6, scale || 1))
-  // Only zoom overlays the user-facing chrome sits on; keep settings/highlight at 1.
-  for (const win of [hudWindow, answerOverlayWindow, statusWindow]) {
-    if (win && !win.isDestroyed()) win.webContents.setZoomFactor(s)
-  }
-}
-
-function createTray(): void {
-  tray = new Tray(nativeImage.createFromPath(trayIcon).resize({ width: 16, height: 16 }))
-  tray.setToolTip('Lumen')
-  tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Settings', click: () => createSettingsWindow() },
-    { label: 'Open config folder', click: () => shell.showItemInFolder(configPath()) },
-    { type: 'separator' },
-    { label: 'Quit', click: () => app.quit() },
-  ]))
-  tray.on('click', () => createSettingsWindow())
-}
-
-function createHUDWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const w = 100
-  const h = 44
-
-  hudWindow = createWindow({
-    width: w,
-    height: h,
-    x: Math.round((width - w) / 2),
-    y: height - h - 32,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    resizable: false,
-    show: true
-  })
-  // Start invisible — use opacity instead of hide/show so Chromium never
-  // suspends the renderer (which pauses audio tracks and kills recording)
-  hudWindow.setOpacity(0)
-  hudWindow.setIgnoreMouseEvents(true)
-
-  hudWindow.webContents.on('did-finish-load', () => {
-    if (is.dev) hudWindow?.webContents.openDevTools({ mode: 'detach' })
-  })
-
-  loadRenderer(hudWindow, 'index')
-}
-
-function createStatusWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const w = 420
-  const h = 44
-
-  statusWindow = createWindow({
-    width: w,
-    height: h,
-    x: Math.round((width - w) / 2),
-    y: height - h - 78,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    resizable: false,
-    show: false,
-    hasShadow: false
-  })
-  statusWindow.setIgnoreMouseEvents(true)
-
-  loadRenderer(statusWindow, 'status')
-}
-
-function createDwellRingWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().bounds
-  dwellRingWindow = createWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    resizable: false,
-    show: false,
-    hasShadow: false
-  })
-  dwellRingWindow.setIgnoreMouseEvents(true, { forward: false })
-
-  const forceTop = (): void => {
-    if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
-    try {
-      // Cycle + stack on Windows: toggling off then on with a high relative level
-      // forces Windows to re-evaluate z-order above the taskbar's HWND_TOPMOST.
-      dwellRingWindow.setAlwaysOnTop(false)
-      dwellRingWindow.setAlwaysOnTop(true, 'screen-saver', 1)
-      dwellRingWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-      dwellRingWindow.moveTop()
-    } catch { /* noop */ }
-  }
-
-  dwellRingWindow.webContents.once('did-finish-load', () => {
-    if (dwellRingWindow && !dwellRingWindow.isDestroyed() && loadConfig().dwellClick.enabled) {
-      dwellRingWindow.showInactive()
-      forceTop()
-    }
-  })
-  // Re-apply each time the app gains focus (OS sometimes resets z-order)
-  app.on('browser-window-focus', () => forceTop())
-
-  loadRenderer(dwellRingWindow, 'dwellring')
-}
-
-type StatusKind = 'idle' | 'listening' | 'transcribing' | 'thinking' | 'acting' | 'answer' | 'error' | 'step'
-
-let statusHideTimer: ReturnType<typeof setTimeout> | null = null
 
 interface ActiveGuide {
   steps: GuideStep[]
@@ -309,7 +154,7 @@ function replaySavedGuide(id: string): SavedGuide | null {
   if (!entry) return null
   log('step', `replaying saved guide "${entry.name}" (fresh query)`)
   setStatus('thinking', `Replaying: ${entry.name}`, { index: 2, total: 3 })
-  hudWindow?.webContents.send('assistant:run-query', entry.task)
+  hud.send('assistant:run-query', entry.task)
   return entry
 }
 
@@ -326,10 +171,10 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     const total = activeGuide.steps.length
     setStatus('step', step.label, { index: clamped + 1, total })
     if (step.bbox) {
-      highlightWindow?.webContents.send('screen:highlights', [step])
-      highlightWindow?.show()
+      highlight.send('screen:highlights', [step])
+      highlight.show()
       const c = rectCenter(step.bbox)
-      highlightWindow?.webContents.send('screen:pointer', {
+      highlight.send('screen:pointer', {
         x: Math.round(c.x),
         y: Math.round(c.y),
         text: `${clamped + 1}/${total}: ${step.label}`,
@@ -340,8 +185,7 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
   const cmd = parseGuideNav(text)
   if (cmd === 'done') {
     activeGuide = null
-    highlightWindow?.hide()
-    highlightWindow?.webContents.send('screen:clear')
+    highlight.clear()
     setStatus('idle', 'Guide closed', undefined, 900)
     return { handled: true, response: { mode: 'answer', text: 'Guide closed.' } }
   }
@@ -363,67 +207,6 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     return { handled: true, response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` } }
   }
   return { handled: false }
-}
-
-function setStatus(kind: StatusKind, text: string, step?: { index: number; total: number }, autoHideMs?: number): void {
-  if (!loadConfig().statusBubble.enabled) return
-  if (!statusWindow || statusWindow.isDestroyed()) return
-  if (statusHideTimer) { clearTimeout(statusHideTimer); statusHideTimer = null }
-  statusWindow.showInactive()
-  statusWindow.webContents.send('status:set', { kind, text, step })
-  if (autoHideMs && autoHideMs > 0) {
-    statusHideTimer = setTimeout(() => hideStatus(), autoHideMs)
-  }
-}
-
-function hideStatus(): void {
-  if (!statusWindow || statusWindow.isDestroyed()) return
-  statusWindow.webContents.send('status:hide')
-  // Tracked so a setStatus during the fade-out cancels the hide.
-  statusHideTimer = setTimeout(() => {
-    statusHideTimer = null
-    if (statusWindow && !statusWindow.isDestroyed()) statusWindow.hide()
-  }, 220)
-}
-
-function createAnswerOverlayWindow(): void {
-  const { width } = screen.getPrimaryDisplay().workAreaSize
-
-  answerOverlayWindow = createWindow({
-    width: 360,
-    height: 220,
-    x: width - 376,
-    y: 20,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    show: false
-  })
-  answerOverlayWindow.setIgnoreMouseEvents(false)
-
-  loadRenderer(answerOverlayWindow, 'answeroverlay')
-}
-
-function createHighlightWindow(): void {
-  const { width, height } = screen.getPrimaryDisplay().bounds
-
-  highlightWindow = createWindow({
-    width,
-    height,
-    x: 0,
-    y: 0,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    show: false
-  })
-  highlightWindow.setIgnoreMouseEvents(true)
-
-  loadRenderer(highlightWindow, 'highlight')
 }
 
 app.whenReady().then(async () => {
@@ -452,21 +235,14 @@ app.whenReady().then(async () => {
     shell.openExternal(assertSafeUrl(url)).catch(() => {})
   })
 
-  createHUDWindow()
-  createHighlightWindow()
-  createAnswerOverlayWindow()
-  createStatusWindow()
-  createDwellRingWindow()
-  createTray()
+  hud.create()
+  highlight.create()
+  answer.create()
+  statusWin.create()
+  dwellRing.create()
+  tray.create()
   // Apply saved UI scale once windows finish loading
-  const scaleCfg = loadConfig().a11y.uiScale
-  const winsForScale = [hudWindow, answerOverlayWindow, statusWindow]
-  for (const w of winsForScale) {
-    if (!w) continue
-    w.webContents.once('did-finish-load', () => {
-      if (!w.isDestroyed()) w.webContents.setZoomFactor(Math.max(0.75, Math.min(1.6, scaleCfg || 1)))
-    })
-  }
+  applyUiScaleOnLoad(loadConfig().a11y.uiScale)
 
   const configWarning = lastConfigWarning()
   if (configWarning) setStatus('error', configWarning, undefined, 8000)
@@ -497,43 +273,14 @@ app.whenReady().then(async () => {
     if (!globalShortcut.isRegistered('Escape')) {
       globalShortcut.register('Escape', onEscape)
     }
-    hudWindow?.setOpacity(1)
-    hudWindow?.setIgnoreMouseEvents(false)
-    if (handsFree) {
-      // Tap-to-talk: same auto-stop-on-silence path as wake-word activation
-      hudWindow?.webContents.executeJavaScript('window.__wakeVoiceStart?.()', true).catch(() => {})
-      setStatus('listening', 'Listening (hands-free)…')
-    } else {
-      hudWindow?.webContents.executeJavaScript('window.__voiceStart?.()', true).catch(() => {})
-      setStatus('listening', 'Listening…')
-    }
+    // Tap-to-talk (hands-free) uses the same auto-stop-on-silence path as wake-word activation
+    bus.emit({ type: 'voice.started', handsFree })
+    setStatus('listening', handsFree ? 'Listening (hands-free)…' : 'Listening…')
   })
-
-  // Lumen's own visible windows, compared in logical px.
-  const isOverOwnWindow = (pt: { x: number; y: number }): boolean =>
-    [hudWindow, answerOverlayWindow, statusWindow, settingsWindow].some((w) => {
-      if (!w || w.isDestroyed() || !w.isVisible()) return false
-      const b = w.getBounds()
-      return pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height
-    })
-  let lastRingRaise = 0
 
   agent.onEvent('dwell-progress', (data) => {
     if (!loadConfig().dwellClick.enabled) return
-    if (!dwellRingWindow || dwellRingWindow.isDestroyed()) return
-    const xPhys = data?.x as number | undefined
-    const yPhys = data?.y as number | undefined
-    if (typeof xPhys !== 'number' || typeof yPhys !== 'number') return
-    // The agent reports physical px; the ring window draws in logical px.
-    const pt = physToLogical({ x: xPhys, y: yPhys })
-    if (isOverOwnWindow(pt)) return
-    // Re-raise at most every 2s so the ring stays above the taskbar without churning z-order.
-    const now = Date.now()
-    if (now - lastRingRaise > 2000) {
-      lastRingRaise = now
-      try { dwellRingWindow.moveTop() } catch { /* noop */ }
-    }
-    dwellRingWindow.webContents.send('screen:dwell', { ...data, x: Math.round(pt.x), y: Math.round(pt.y) })
+    dwellRing.progress(data)
   })
 
   agent.onEvent('dwell-trigger', (data) => {
@@ -556,10 +303,9 @@ app.whenReady().then(async () => {
       setStatus('error', 'Cancelled by voice', undefined, 1600)
     } else {
       // Not in a query — treat as "close any active UI"
-      hudWindow?.webContents.send('assistant:cancel-request')
+      bus.emit({ type: 'voice.cancelled' })
       activeGuide = null
-      highlightWindow?.hide()
-      highlightWindow?.webContents.send('screen:clear')
+      highlight.clear()
     }
   })
 
@@ -568,9 +314,7 @@ app.whenReady().then(async () => {
     if (!globalShortcut.isRegistered('Escape')) {
       globalShortcut.register('Escape', onEscape)
     }
-    hudWindow?.setOpacity(1)
-    hudWindow?.setIgnoreMouseEvents(false)
-    hudWindow?.webContents.executeJavaScript('window.__wakeVoiceStart?.()', true).catch(() => {})
+    bus.emit({ type: 'voice.started', handsFree: true })
     setStatus('listening', 'Wake word detected — listening…')
   })
 
@@ -580,7 +324,7 @@ app.whenReady().then(async () => {
       return
     }
     console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
-    hudWindow?.webContents.executeJavaScript('window.__voiceStop?.()', true).catch(() => {})
+    bus.emit({ type: 'voice.stopped' })
     setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
     // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
     startSpeculativeCapture(() => captureContext(true))
@@ -588,8 +332,7 @@ app.whenReady().then(async () => {
 
   ipcMain.on('assistant:close', () => {
     globalShortcut.unregister('Escape')
-    hudWindow?.setOpacity(0)
-    hudWindow?.setIgnoreMouseEvents(true)
+    hud.hide()
     hideStatus()
   })
 
@@ -597,22 +340,19 @@ app.whenReady().then(async () => {
     if (!globalShortcut.isRegistered('Escape')) {
       globalShortcut.register('Escape', onEscape)
     }
-    hudWindow?.setOpacity(1)
-    hudWindow?.setIgnoreMouseEvents(false)
+    hud.show()
   })
 
   agent.onEvent('mouse-moved', () => {
     if (!loadConfig().guideAutoDismissOnMove) return
-    highlightWindow?.hide()
-    highlightWindow?.webContents.send('screen:clear')
+    highlight.clear()
     activeGuide = null
   })
 
   ipcMain.on('answer:show', (_e, raw: unknown) => {
     const text = safeParse('answer:show', textSchema, raw)
     if (text === undefined) return
-    answerOverlayWindow?.webContents.send('answer:text', text)
-    answerOverlayWindow?.show()
+    answer.showText(text)
     // NOTE: TTS is kicked off inside runQuery (earlier) to minimize perceived delay.
   })
   ipcMain.handle('voice:speak', async (_e, raw: unknown) => {
@@ -628,13 +368,13 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.on('answer:hide', () => {
-    answerOverlayWindow?.hide()
+    answer.hide()
   })
 
   ipcMain.on('answer:resize', (_e, raw: unknown) => {
     const h = safeParse('answer:resize', overlayHeightSchema, raw)
     if (h === undefined) return
-    answerOverlayWindow?.setSize(360, h)
+    answer.resize(h)
   })
 
   let lastTaskContext: string | null = null
@@ -706,7 +446,7 @@ app.whenReady().then(async () => {
             await sleep(scaled.type === 'hotkey' ? 300 : 150)
           }
         },
-        (progress) => { hudWindow?.webContents.send('plan-progress', progress) },
+        () => {},
         scope.signal
       )
       timer.split('research agent done')
@@ -741,7 +481,6 @@ app.whenReady().then(async () => {
           }
         },
         (progress) => {
-          hudWindow?.webContents.send('plan-progress', progress)
           const p = progress as { stepIndex?: number; totalSteps?: number; description?: string; status?: string }
           if (p.stepIndex && p.totalSteps && p.description) {
             const statusKind: StatusKind = p.status === 'failed' ? 'error' : 'step'
@@ -815,12 +554,11 @@ app.whenReady().then(async () => {
       if (validItems.length === 0) {
         // Nothing found on screen — show the description as an answer
         const desc = result.items[0]?.description || 'Not visible on this page'
-        answerOverlayWindow?.webContents.send('answer:text', desc)
-        answerOverlayWindow?.show()
+        answer.showText(desc)
       } else {
         const screenItems = validItems.map((item) => ({ ...item, bbox: toScreen(item.bbox) }))
-        highlightWindow?.webContents.send('screen:locate', screenItems)
-        highlightWindow?.show()
+        highlight.send('screen:locate', screenItems)
+        highlight.show()
       }
     } else if (result.mode === 'guide' && result.steps?.some((s) => s.bbox)) {
       const bboxSteps = result.steps
@@ -829,14 +567,14 @@ app.whenReady().then(async () => {
       activeGuide = { steps: bboxSteps, index: 0 }
       lastGuide = { task: prompt, steps: bboxSteps, savedAt: Date.now() }
       setStatus('step', bboxSteps[0]?.label ?? 'Guide ready', { index: 1, total: bboxSteps.length })
-      highlightWindow?.webContents.send('screen:highlights', bboxSteps)
-      highlightWindow?.show()
+      highlight.send('screen:highlights', bboxSteps)
+      highlight.show()
 
       // Draw the pointer only; moving the real cursor could dismiss the guide.
       const first = bboxSteps[0]
       if (first?.bbox) {
         const c = rectCenter(first.bbox)
-        highlightWindow?.webContents.send('screen:pointer', {
+        highlight.send('screen:pointer', {
           x: Math.round(c.x), y: Math.round(c.y),
           text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`,
         })
@@ -847,12 +585,10 @@ app.whenReady().then(async () => {
         a.type === 'click_bbox' && a.bbox != null
       )
       if (!hasRealClick) {
-        highlightWindow?.hide()
-        highlightWindow?.webContents.send('screen:clear')
+        highlight.clear()
       }
     } else {
-      highlightWindow?.hide()
-      highlightWindow?.webContents.send('screen:clear')
+      highlight.clear()
     }
 
     return result
@@ -889,8 +625,8 @@ app.whenReady().then(async () => {
     if (lastGuide && isReplayRequest(prompt)) {
       activeGuide = { steps: lastGuide.steps, index: 0 }
       setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', { index: 1, total: lastGuide.steps.length })
-      highlightWindow?.webContents.send('screen:highlights', lastGuide.steps)
-      highlightWindow?.show()
+      highlight.send('screen:highlights', lastGuide.steps)
+      highlight.show()
       return { mode: 'answer', text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.` }
     }
     setStatus('thinking', 'Thinking', { index: 2, total: 3 })
@@ -992,14 +728,14 @@ app.whenReady().then(async () => {
         }
 
         // Show bbox highlight on screen before clicking so user can see the target
-        highlightWindow?.webContents.send('screen:highlights', [{
+        highlight.send('screen:highlights', [{
           label: 'Clicking here',
           target_hint: '',
           bbox: physRectToLogical(physRect),
         }])
-        highlightWindow?.show()
+        highlight.show()
         await sleep(600)
-        highlightWindow?.hide()
+        highlight.hide()
         scaled = { type: 'click', x: Math.round(target.x), y: Math.round(target.y), button: action.button ?? 'left' }
       } else if (action.type === 'click_element' && action.bbox && action.text && process.env.ANTHROPIC_API_KEY) {
         // In browser context: try CU for higher-accuracy click (overrides OCR path)
@@ -1038,8 +774,8 @@ app.whenReady().then(async () => {
         // Show pointer preview before first click
         if (firstClick && scaled.type === 'click' && scaled.x != null && scaled.y != null) {
           firstClick = false
-          highlightWindow?.webContents.send('screen:pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
-          highlightWindow?.show()
+          highlight.send('screen:pointer', { ...physToLogical({ x: scaled.x, y: scaled.y }), text: 'Clicking here…' })
+          highlight.show()
           await sleep(300)
         }
         const actionResult = await agent.execute(scaled) as Record<string, unknown> | null
@@ -1052,7 +788,7 @@ app.whenReady().then(async () => {
       await sleep(scaled.type === 'hotkey' ? 300 : 150)
     }
 
-    highlightWindow?.hide()
+    highlight.hide()
     const aborted = scope.cancelled
     endScope(scope)
     log('done', aborted ? 'execute cancelled' : 'execute complete')
@@ -1061,8 +797,7 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('screen:hide', () => {
-    highlightWindow?.hide()
-    highlightWindow?.webContents.send('screen:clear')
+    highlight.clear()
   })
 
   ipcMain.handle('settings:get', () => loadConfig())
@@ -1123,14 +858,10 @@ app.whenReady().then(async () => {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.on('settings:open', () => createSettingsWindow())
-  ipcMain.on('settings:window-close', () => settingsWindow?.close())
-  ipcMain.on('settings:window-minimize', () => settingsWindow?.minimize())
-  ipcMain.on('settings:window-maximize', () => {
-    if (!settingsWindow) return
-    if (settingsWindow.isMaximized()) settingsWindow.unmaximize()
-    else settingsWindow.maximize()
-  })
+  ipcMain.on('settings:open', () => settingsWin.create())
+  ipcMain.on('settings:window-close', () => settingsWin.close())
+  ipcMain.on('settings:window-minimize', () => settingsWin.minimize())
+  ipcMain.on('settings:window-maximize', () => settingsWin.toggleMaximize())
 
   ipcMain.handle('voice:transcribe', async (_event, raw: unknown) => {
     const audio = safeParse('voice:transcribe', audioSchema, raw)
@@ -1164,7 +895,7 @@ app.whenReady().then(async () => {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createHUDWindow()
+    if (BrowserWindow.getAllWindows().length === 0) hud.create()
   })
 })
 
@@ -1199,8 +930,8 @@ async function passesPolicy(action: AgentAction, prev?: AgentAction): Promise<bo
 async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
   if (!agent) throw new Error('Agent not ready')
   if (!withScreenshot) return { activeWindow: await agent.activeWindow(), screenshot: null }
-  if (highlightWindow?.isVisible()) {
-    highlightWindow.hide()
+  if (highlight.isVisible()) {
+    highlight.hide()
     await sleep(32)
   }
   const [activeWindow, screenshot] = await Promise.all([agent.activeWindow(), agent.screenshot()])
@@ -1213,7 +944,7 @@ const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as con
 // Escape cancels in-flight work in main directly and tells the HUD to stop recording.
 function onEscape(): void {
   cancelAll()
-  hudWindow?.webContents.send('assistant:cancel-request')
+  bus.emit({ type: 'voice.cancelled' })
 }
 
 // Validates a renderer payload; logs and returns undefined when it does not match.
