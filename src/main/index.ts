@@ -34,8 +34,8 @@ import { TaskQueue } from './task-queue'
 import { splitSubtasks, canParallelize, mergeAnswers } from './task-splitter'
 import { loadConfig, saveConfig, configPath, type AppConfig } from './config'
 import { modelInstalled, installModel, modelRoot } from './wake-model'
-import { createWindow, loadRenderer } from './windows/factory'
-import { assertSafeUrl, checkAction, needsWindowContext } from './actions/safety'
+import { createWindow, loadRenderer, isOwnRendererUrl } from './windows/factory'
+import { assertSafeUrl, isSafeUrl, checkAction, needsWindowContext } from './actions/safety'
 
 let hudWindow: BrowserWindow | null = null
 let highlightWindow: BrowserWindow | null = null
@@ -460,6 +460,26 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.aioverlay')
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+  // No Lumen window may open popups or navigate away from its own renderer.
+  app.on('web-contents-created', (_, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      if (isSafeUrl(url)) shell.openExternal(assertSafeUrl(url)).catch(() => {})
+      return { action: 'deny' }
+    })
+    contents.on('will-navigate', (event, url) => {
+      if (!isOwnRendererUrl(url)) {
+        event.preventDefault()
+        log('fail', `blocked navigation to ${url}`)
+      }
+    })
+  })
+  ipcMain.on('assistant:open-link', (_e, url: unknown) => {
+    if (!isSafeUrl(url)) {
+      log('fail', `blocked link: ${String(url).slice(0, 200)}`)
+      return
+    }
+    shell.openExternal(assertSafeUrl(url)).catch(() => {})
   })
 
   agent = new AgentBridge()
