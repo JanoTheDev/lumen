@@ -1,3 +1,4 @@
+import { APP_ID } from './app-id'
 import { config } from 'dotenv'
 import { join } from 'path'
 // Keys are read at runtime, never baked into the bundle. Dev: repo .env. Installed: userData/.env.
@@ -83,7 +84,7 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.aioverlay')
+  electronApp.setAppUserModelId(APP_ID)
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
