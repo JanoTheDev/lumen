@@ -20,6 +20,8 @@ const CASES: Array<[prompt: string, activeWindow: string, lowDetail?: boolean]> 
   ['open youtube and search for lofi', 'Untitled - Notepad'],
   ['find the save button', 'Blender'],
   ['open the 3rd email', 'Inbox - Gmail - Google Chrome', true],
+  ['open my third email in gmail', 'Untitled - Notepad'],
+  ['show me the emails from Stripe in gmail', 'Untitled - Notepad'],
 ]
 
 describe('applyOverrides', () => {
@@ -27,10 +29,18 @@ describe('applyOverrides', () => {
     const r = applyOverrides({ prompt, activeWindow, lowDetail, lastTaskContext: null })
     expect({
       effectivePrompt: r.effectivePrompt,
+      flags: r.flags,
       mode: r.intent.mode,
       requestedApp: r.requestedApp,
       nextTaskContext: r.nextTaskContext === r.effectivePrompt ? '<effective>' : r.nextTaskContext,
     }).toMatchSnapshot()
+  })
+
+  it('app switch composes with the ordinal block instead of being replaced', () => {
+    const r = applyOverrides({ prompt: 'open my third email in gmail', activeWindow: 'Untitled - Notepad', lastTaskContext: null })
+    expect(r.flags).toEqual(['app-switch', 'ordinal'])
+    expect(r.effectivePrompt).toContain('"type":"open_url"')
+    expect(r.effectivePrompt).toContain('ordinal list request detected')
   })
 
   it('continuations re-run the previous task', () => {

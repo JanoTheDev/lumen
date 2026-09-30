@@ -60,12 +60,13 @@ export async function runQuery(
   timer.split('context gathered (screenshot + active window)')
   log('plan', `active window: ${activeWindow}`)
 
-  const { effectivePrompt, intent, requestedApp, nextTaskContext } = applyOverrides({
+  const { effectivePrompt, flags, intent, requestedApp, nextTaskContext } = applyOverrides({
     prompt,
     activeWindow,
     lowDetail: opts.lowDetail,
     lastTaskContext,
   })
+  if (flags.length) log('plan', `overrides: ${flags.join(', ')}`)
   if (requestedApp) log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
   if (intent.isContinuation && lastTaskContext) log('plan', `continuation detected, re-running: "${lastTaskContext}"`)
   lastTaskContext = nextTaskContext

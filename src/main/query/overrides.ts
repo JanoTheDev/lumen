@@ -18,44 +18,68 @@ export interface OverrideInput {
   lastTaskContext: string | null
 }
 
+/** Steering blocks appended to the prompt; several can apply in one turn. */
+export type OverrideFlag = 'app-switch' | 'ordinal' | 'direct-action' | 'locate' | 'continuation'
+
 export interface OverrideResult {
   effectivePrompt: string
+  flags: OverrideFlag[]
   intent: QueryIntent
   requestedApp: { app: string; url: string } | null
   /** Value to remember as lastTaskContext after this turn. */
   nextTaskContext: string | null
 }
 
+function appSwitchBlock(app: string, url: string, activeWindow: string): string {
+  return `[SYSTEM OVERRIDE: User asked about "${app}" but the active window is "${activeWindow}". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"${url}"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]`
+}
+
+const ORDINAL_BLOCK = `[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]`
+
+const DIRECT_ACTION_BLOCK = `[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]`
+
+function locateBlock(prompt: string): string {
+  return `[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]`
+}
+
 export function applyOverrides({ prompt, activeWindow, lowDetail, lastTaskContext }: OverrideInput): OverrideResult {
   // Classify intent on the ORIGINAL prompt: override text adds verbs that would inflate
   // the action-verb count and force the planner for single-shot queries.
   const intent = classifyQuery(prompt)
+  const flags: OverrideFlag[] = []
+  const blocks: string[] = []
 
-  let effectivePrompt = prompt
   // User named an app (Gmail, LinkedIn, ...) that is not in front: navigate there first.
   const requestedApp = !lowDetail ? detectRequestedApp(prompt, activeWindow) : null
   if (requestedApp) {
-    effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: User asked about "${requestedApp.app}" but the active window is "${activeWindow}". You MUST respond with action mode. FIRST action: {"type":"open_url","url":"${requestedApp.url}"}. If further actions are needed after the page loads, put them in follow_up. NEVER return guide mode for an app that isn't currently visible.]`
+    flags.push('app-switch')
+    blocks.push(appSwitchBlock(requestedApp.app, requestedApp.url, activeWindow))
   }
+  // At most one of these: they prescribe conflicting click strategies.
   if (!lowDetail) {
     if (ORDINAL_RE.test(prompt)) {
-      effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: ordinal list request detected. Your response MUST be navigate_url to the list page + follow_up. Do NOT click directly. In follow_up use click_bbox with the exact row bounding box.]`
+      flags.push('ordinal')
+      blocks.push(ORDINAL_BLOCK)
     } else if (DIRECT_ACTION_RE.test(prompt)) {
-      effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: Direct click/open request. You MUST respond with action mode. Use click_bbox with the exact bbox of the target element visible in the screenshot. NEVER use guide mode for this request.]`
+      flags.push('direct-action')
+      blocks.push(DIRECT_ACTION_BLOCK)
     } else if (LOCATE_RE.test(prompt) && intent.mode === 'locate') {
       // Only when the classifier also said locate. Research intents ("show me positions
       // for X") go to the planner and must not take this path.
-      effectivePrompt = `${prompt}\n\n[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]`
+      flags.push('locate')
+      blocks.push(locateBlock(prompt))
     }
   }
+  let effectivePrompt = [prompt, ...blocks].join('\n\n')
 
   // Continuation: user said "do it" after an answer, re-run the original task.
   if (intent.isContinuation && lastTaskContext) {
+    flags.push('continuation')
     effectivePrompt = `${lastTaskContext}\n\n[User confirmed: proceed with action mode. Execute the task now.]`
   }
 
   // Remember the task for a later continuation (not for low-detail follow-ups).
   const nextTaskContext = !lowDetail && !intent.isContinuation ? effectivePrompt : lastTaskContext
 
-  return { effectivePrompt, intent, requestedApp, nextTaskContext }
+  return { effectivePrompt, flags, intent, requestedApp, nextTaskContext }
 }
