@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantState } from '@shared/events'
-import { LEVEL } from '../../src/main/teach/hints'
+import { LEVEL, pacingFor } from '../../src/main/teach/hints'
 import { noopPorts, type LessonScene, type Ports, type UiaEvent } from '../../src/main/teach/ports'
 import { DO_IT_CONFIRM_MS, LessonRunner } from '../../src/main/teach/runner'
 import { LESSON } from './fixtures'
@@ -76,7 +76,8 @@ describe('LessonRunner scene and state output (hint ladder)', () => {
     })
     expect(t.scenes.at(-1)).toEqual({
       highlights: [],
-      buddy: { to: { x: 440, y: 315 }, mode: 'fly' }
+      buddy: { to: { x: 440, y: 315 }, mode: 'fly' },
+      dwellSnap: RECT
     })
     expect(t.said).toEqual(['Open the File menu.'])
 
@@ -243,5 +244,56 @@ describe('LessonRunner "why?" (T20)', () => {
     t.runner.command('why')
     await flush()
     expect(t.said.at(-1)).toBe('This step is part of Three steps.')
+  })
+})
+
+describe('accessible pacing (T21)', () => {
+  it('"click it" invokes the target without counting as do-it-for-me', async () => {
+    const t = setup()
+    t.runner.start(LESSON, { autoStart: true })
+    await flush()
+    expect(t.runner.command('perform')).toBe(true)
+    await flush()
+    expect(t.exec).toHaveBeenCalledWith(
+      [{ t: 'invoke', element: { name: 'File', role: 'menuitem' } }],
+      expect.anything()
+    )
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(t.runner.state.phase).toBe('step.passed')
+    expect(t.said.at(-1)).not.toMatch(/for you/)
+    expect(t.runner.state.stats.open.doItForMe).toBe(false)
+  })
+
+  it('"press it" sends shortcut keys; steps without a target refuse it', async () => {
+    const t = setup()
+    t.runner.start(LESSON, { autoStart: true, stepIndex: 1 })
+    await flush()
+    t.runner.command('perform')
+    await flush()
+    expect(t.exec).toHaveBeenCalledWith([{ t: 'keys', combo: 'Ctrl+S' }], expect.anything())
+    const u = setup()
+    u.runner.start(LESSON, { autoStart: true, stepIndex: 2 })
+    expect(u.runner.command('perform')).toBe(false)
+  })
+
+  it('offers "do it" from the first level for voice-only and switch users', async () => {
+    const t = setup()
+    t.runner.start(LESSON, { autoStart: true, offerEarly: true })
+    await flush()
+    expect(t.states.at(-1)?.statusText).toBe('Open the File menu. Say “do it” and I will.')
+    // The caption keeps the step text: the spoken text does not change.
+    expect(t.said).toEqual(['Open the File menu.'])
+    const plain = setup()
+    plain.runner.start(LESSON, { autoStart: true })
+    expect(plain.states.at(-1)?.statusText).toBe('Open the File menu.')
+  })
+
+  it('pacing follows the a11y config', () => {
+    expect(pacingFor({})).toEqual({ pace: 1, offerEarly: false })
+    expect(pacingFor({ timings: { statusHoldMs: 12_000 } }).pace).toBe(2)
+    expect(pacingFor({ profiles: ['cognitive'] }).pace).toBe(1.5)
+    expect(pacingFor({ profiles: ['motor-voice'] }).offerEarly).toBe(true)
+    expect(pacingFor({ switch: { enabled: true } }).offerEarly).toBe(true)
+    expect(pacingFor({ profiles: ['eye-gaze'] }).offerEarly).toBe(false)
   })
 })

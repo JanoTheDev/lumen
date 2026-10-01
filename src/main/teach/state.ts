@@ -40,7 +40,8 @@ export const LESSON_COMMANDS: readonly LessonCommand[] = [
   'slower',
   'faster',
   'yes',
-  'no'
+  'no',
+  'perform'
 ]
 
 export type LessonSource = 'pack' | 'user' | 'generated'
@@ -67,6 +68,8 @@ export interface LessonState {
   stats: Record<string, StepStats>
   /** Rotating praise index. */
   praise: number
+  /** Voice-only / switch users: "do it" is offered from the first hint level (T21). */
+  offerEarly: boolean
 }
 
 export type TimerId = 'hint' | 'timeout' | 'advance'
@@ -82,6 +85,7 @@ export type LessonEvent =
       autoStart?: boolean
       pace?: number
       stats?: Record<string, StepStats>
+      offerEarly?: boolean
     }
   | { type: 'command'; command: LessonCommand }
   | { type: 'timer'; id: TimerId }
@@ -103,7 +107,8 @@ export type LessonEffect =
   | { type: 'startTimer'; id: TimerId; ms: number }
   | { type: 'cancelTimer'; id: TimerId }
   | { type: 'persist' }
-  | { type: 'exec'; step: number }
+  /** perform = the user's "click it" (not counted as do-it-for-me, no "I did it" line). */
+  | { type: 'exec'; step: number; perform?: boolean }
   /** Ask the model why the step matters (no `why` in the lesson), then say it. */
   | { type: 'explain'; step: number }
   | { type: 'event'; name: 'step-started' | 'step-completed'; step: number }
@@ -124,7 +129,8 @@ export const IDLE: LessonState = {
   level: 0,
   pace: 1,
   stats: {},
-  praise: 0
+  praise: 0,
+  offerEarly: false
 }
 
 /** A lesson is on (the voice grammar and lesson context apply). */

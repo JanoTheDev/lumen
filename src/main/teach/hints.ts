@@ -28,6 +28,25 @@ export function paceFromTimings(t: { statusHoldMs: number } | undefined): number
   return 1
 }
 
+export interface PacingInput {
+  timings?: { statusHoldMs: number }
+  profiles?: readonly string[]
+  switch?: { enabled: boolean }
+}
+
+/**
+ * Lesson pacing from the a11y config (T21): the slow-pace multiplier (status hold, or the
+ * cognitive profile) and whether "do it" is offered from the start of every step (voice-only
+ * and switch users).
+ */
+export function pacingFor(a: PacingInput): { pace: number; offerEarly: boolean } {
+  const profiles = a.profiles ?? []
+  const pace = Math.max(paceFromTimings(a.timings), profiles.includes('cognitive') ? 1.5 : 1)
+  const offerEarly =
+    !!a.switch?.enabled || profiles.includes('motor-voice') || profiles.includes('switch')
+  return { pace, offerEarly }
+}
+
 export function slowerPace(p: number): number {
   return PACES.find((x) => x > p) ?? PACES[PACES.length - 1]
 }
@@ -80,6 +99,8 @@ export function buildScene(step: LessonStep, level: number, r: ResolvedTarget | 
     return scene
   }
   if (!r || level < LEVEL.POINT) return scene
+  // Dwell users: a dwell near the target clicks the target (T21).
+  if (r.rect) scene.dwellSnap = r.rect
   scene.buddy = {
     to: r.rect ? center(r.rect) : r.point,
     mode: level === LEVEL.POINT ? 'fly' : 'point'
@@ -144,6 +165,19 @@ export function doItActions(step: LessonStep): DoAction[] | null {
   if ('shortcut' in t) return [{ t: 'keys', combo: t.shortcut }]
   if ('region' in t) return [{ t: 'click', region: t.region }]
   return null
+}
+
+/** What "click it" / "press it" runs: the target's own click or keys (T21); null = none. */
+export function performActions(step: LessonStep): DoAction[] | null {
+  const t = step.target
+  if (t && 'element' in t) return [{ t: 'invoke', element: t.element }]
+  if (t && 'shortcut' in t) return [{ t: 'keys', combo: t.shortcut }]
+  return null
+}
+
+/** The bar text for a step: the say text, plus the passive "do it" option when wanted. */
+export function stepCaption(step: LessonStep, offerEarly: boolean): string {
+  return offerEarly && doItActions(step) ? `${step.say} Say “do it” and I will.` : step.say
 }
 
 const KEY_WORDS: Record<string, string> = {

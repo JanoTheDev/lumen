@@ -46,6 +46,8 @@ export interface ScreenScene {
   /** Dwell v2 (06): scroll arrows around a point and the start of a dwell drag. */
   dwellUi?: { scrollAt?: Point; dragFrom?: Point }
   annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
+  /** Lesson step target (07 T21): dwell clicks near it snap onto it. Not drawn. */
+  dwellSnap?: Rect
   /** Switch scanning (06): ring around the highlighted item and/or a menu of the level. */
   scan?: ScanScene
 }
@@ -74,6 +76,8 @@ export type LessonCommand =
   | 'faster'
   | 'yes'
   | 'no'
+  /** "click it" / "press it": Lumen performs the step's own click or keys (07 T21). */
+  | 'perform'
 
 /** Summed cost of every model call made for one user turn. */
 export interface TurnCostSummary {

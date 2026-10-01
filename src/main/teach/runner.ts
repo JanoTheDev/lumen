@@ -8,6 +8,7 @@ import {
   describeDoIt,
   doItActions,
   fallbackWhy,
+  performActions,
   firstSentences,
   stepState,
   successScene
@@ -42,6 +43,8 @@ export interface StartOptions {
   autoStart?: boolean
   pace?: number
   stats?: Record<string, StepStats>
+  /** Voice-only / switch users: offer "do it" from the start of every step (T21). */
+  offerEarly?: boolean
 }
 
 export class LessonRunner {
@@ -106,7 +109,8 @@ export class LessonRunner {
       stepIndex: o.stepIndex,
       autoStart: o.autoStart,
       pace: o.pace,
-      stats: o.stats
+      stats: o.stats,
+      offerEarly: o.offerEarly
     })
   }
 
@@ -184,7 +188,7 @@ export class LessonRunner {
         this.opts.progress?.save(this.s)
         return
       case 'exec':
-        void this.exec(fx.step)
+        void this.exec(fx.step, !!fx.perform)
         return
       case 'explain':
         void this.explain(fx.step)
@@ -289,10 +293,10 @@ export class LessonRunner {
     if (this.s.phase === 'step.waiting') this.ports.screen.emitState(stepState(lesson, step, say))
   }
 
-  private async exec(step: number): Promise<void> {
+  private async exec(step: number, perform: boolean): Promise<void> {
     const st = this.s.lesson?.steps[step]
     if (!st) return
-    const actions = doItActions(st)
+    const actions = perform ? performActions(st) : doItActions(st)
     const done = (ok: boolean, said?: string): void => {
       if (this.s.index === step && this.s.phase === 'doing-it')
         this.dispatch({ type: 'do-it-done', step, ok, said })
@@ -315,6 +319,7 @@ export class LessonRunner {
       if (res !== 'pass') res = await handle.evaluate().catch(() => 'unknown' as const)
     }
     if (res === 'fail') this.ports.log('verify', `lesson do-it: check still fails after run`)
-    done(res !== 'fail', describeDoIt(actions))
+    // "click it" is the user's own step: praise, not "I clicked it for you".
+    done(res !== 'fail', perform ? undefined : describeDoIt(actions))
   }
 }

@@ -259,6 +259,24 @@ describe('DwellController', () => {
     expect(f.input).toEqual([[{ t: 'click', button: 'left', count: 1, x: 309, y: 309 }]])
   })
 
+  it('a lesson target snaps dwells near it, even without snap to element (150%)', async () => {
+    const f = fake({}, { scale: 1.5 })
+    f.c.setSnapHint({ x: 200, y: 200, w: 40, h: 20 })
+    // 30 logical px below the target: within the 48 px lesson reach.
+    f.c.onProgress({ x: 330, y: 375, progress: 0.5, active: true })
+    expect(f.rings.at(-1)?.target).toEqual({ x: 200, y: 200, w: 40, h: 20 })
+    await f.c.onTrigger({ x: 330, y: 375 })
+    expect(f.input).toEqual([[{ t: 'click', button: 'left', count: 1, x: 330, y: 315 }]])
+    // Far away, or once the lesson moved on: a plain click where the user dwelled.
+    await f.c.onTrigger({ x: 900, y: 900 })
+    f.c.setSnapHint(null)
+    await f.c.onTrigger({ x: 330, y: 375 })
+    expect(f.input.slice(1)).toEqual([
+      [{ t: 'click', button: 'left', count: 1, x: 900, y: 900 }],
+      [{ t: 'click', button: 'left', count: 1, x: 330, y: 375 }]
+    ])
+  })
+
   it('the ring shows the snapped target and the click type', () => {
     const box = btn('Ok', { x: 300, y: 300, w: 20, h: 20 })
     const f = fake({ snapToElement: true, ringSize: 'l' }, { nodes: [box] })

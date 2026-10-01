@@ -130,7 +130,20 @@ const PHRASES: Record<LessonCommand, string[]> = {
   slower: ['slower', 'slow down', 'more time', 'go slower', 'give me more time'],
   faster: ['faster', 'speed up', 'go faster', 'quicker', 'less time'],
   yes: ['yes', 'yeah', 'yep', 'yes please', 'sure', 'ok', 'okay', 'go ahead'],
-  no: ['no', 'nope', 'no thanks', 'no thank you', 'not now', 'ill try', 'i will try', 'let me try']
+  no: ['no', 'nope', 'no thanks', 'no thank you', 'not now', 'ill try', 'i will try', 'let me try'],
+  perform: [
+    'click it',
+    'click that',
+    'click this',
+    'press it',
+    'press that',
+    'press this',
+    'select it',
+    'select that',
+    'open it',
+    'tap it',
+    'toggle it'
+  ]
 }
 
 const TABLE = new Map<string, LessonCommand>()

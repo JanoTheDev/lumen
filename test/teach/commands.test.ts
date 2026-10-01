@@ -28,6 +28,8 @@ describe('parseLessonCommand', () => {
     ['do it for me', 'do-it'],
     ['why?', 'why'],
     ['done', 'done'],
+    ['click it', 'perform'],
+    ['press it please', 'perform'],
     ['I did it!', 'done'],
     ['slow down', 'slower'],
     ['faster', 'faster'],

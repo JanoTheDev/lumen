@@ -8,8 +8,10 @@ import {
   fasterPace,
   hintText,
   nextHintDelay,
+  performActions,
   slowerPace,
   startLevel,
+  stepCaption,
   stepState
 } from './hints'
 import type { LessonStep } from './lesson'
@@ -63,7 +65,7 @@ function present(s0: LessonState, index: number): Transition {
   if (!s.stats[step.id]) s = withStats(s, {})
   const effects: LessonEffect[] = [
     ...cancelAll,
-    { type: 'assistant', state: stepState(lesson, index, step.say) },
+    { type: 'assistant', state: stepState(lesson, index, stepCaption(step, s.offerEarly)) },
     { type: 'point', step: index, level },
     { type: 'say', text: step.say, interruptible: true },
     { type: 'startChecks', step: index },
@@ -127,11 +129,10 @@ function offer(s0: LessonState): Transition {
   }
 }
 
-function doIt(s0: LessonState): Transition {
-  const s: LessonState = withStats(
-    { ...s0, phase: 'doing-it', level: LEVEL.DO },
-    { doItForMe: true }
-  )
+/** perform = "click it" / "press it": the user's own action by voice, not a do-it-for-me. */
+function doIt(s0: LessonState, perform = false): Transition {
+  const moved: LessonState = { ...s0, phase: 'doing-it', level: perform ? s0.level : LEVEL.DO }
+  const s = perform ? moved : withStats(moved, { doItForMe: true })
   return {
     state: s,
     effects: [
@@ -139,9 +140,11 @@ function doIt(s0: LessonState): Transition {
       { type: 'cancelTimer', id: 'timeout' },
       {
         type: 'assistant',
-        state: stepState(s.lesson!, s.index, 'Doing this step for you', { phase: 'acting' })
+        state: stepState(s.lesson!, s.index, perform ? 'Doing it' : 'Doing this step for you', {
+          phase: 'acting'
+        })
       },
-      { type: 'exec', step: s.index }
+      { type: 'exec', step: s.index, ...(perform ? { perform: true } : {}) }
     ]
   }
 }
@@ -255,6 +258,8 @@ function intro(s0: LessonState): Transition {
 /** Whether `command` does something in this state (else the utterance goes to the assistant). */
 export function accepts(s: LessonState, command: LessonCommand): boolean {
   if (!isRunning(s)) return false
+  if (command === 'perform')
+    return (s.phase === 'step.waiting' || s.phase === 'offer-do-it') && !!performActions(stepOf(s))
   switch (s.phase) {
     case 'intro':
       return ['next', 'done', 'yes', 'resume', 'stop', 'repeat', 'pause'].includes(command)
@@ -275,6 +280,7 @@ export function accepts(s: LessonState, command: LessonCommand): boolean {
 function onCommand(s: LessonState, c: LessonCommand): Transition {
   if (!accepts(s, c)) return same(s)
   if (c === 'stop') return abort(s)
+  if (c === 'perform') return doIt(s, true)
 
   if (s.phase === 'intro') {
     if (c === 'repeat') return intro(s)
@@ -331,7 +337,10 @@ function onCommand(s: LessonState, c: LessonCommand): Transition {
         effects: [
           { type: 'point', step: s.index, level: s.level },
           { type: 'say', text: step.say, interruptible: true },
-          { type: 'assistant', state: stepState(s.lesson!, s.index, step.say) }
+          {
+            type: 'assistant',
+            state: stepState(s.lesson!, s.index, stepCaption(step, s.offerEarly))
+          }
         ]
       }
     case 'why':
@@ -379,6 +388,7 @@ export function reduce(s: LessonState, e: LessonEvent): Transition {
       source: e.source ?? 'pack',
       pace: e.pace ?? 1,
       stats: e.stats ?? {},
+      offerEarly: !!e.offerEarly,
       index: Math.min(Math.max(0, e.stepIndex ?? 0), e.lesson.steps.length - 1)
     }
     const prev: LessonEffect[] = isRunning(s) ? cancelAll : []

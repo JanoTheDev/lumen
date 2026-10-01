@@ -80,6 +80,8 @@ export function agentDwellConfig(s: DwellSettings, scale: number): AgentDwellCon
 export const RING_PX: Record<DwellSettings['ringSize'], number> = { s: 32, m: 48, l: 64, xl: 96 }
 /** Snap reach, logical px. */
 export const SNAP_PX = 24
+/** Reach of a lesson's snap target (07 T21), logical px around its rect. */
+export const HINT_SNAP_PX = 48
 /** Pause corner hot zone, logical px from the corner. */
 export const CORNER_PX = 40
 /** Scroll arrows: distance from the dwell point and hit box, logical px. */
@@ -263,8 +265,21 @@ export class DwellController {
   private dragFrom: { phys: Point; logical: Point } | null = null
   private scroll: { phys: Point; logical: Point } | null = null
   private confirm: { key: string; until: number } | null = null
+  /** The running lesson step's target (logical px): dwells near it land on it. */
+  private snapHint: Rect | null = null
 
   constructor(private readonly io: DwellIo) {}
+
+  /** Lesson target to snap dwells to (07 T21); null clears it. */
+  setSnapHint(rect: Rect | null): void {
+    this.snapHint = rect && rect.w > 0 && rect.h > 0 ? rect : null
+  }
+
+  /** The lesson target when the dwell point (logical) is within reach of it. */
+  private hintAt(at: Point): Rect | null {
+    const r = this.snapHint
+    return r && distToRect(at, r) <= HINT_SNAP_PX ? r : null
+  }
 
   get paused(): boolean {
     return this.userPaused
@@ -359,6 +374,8 @@ export class DwellController {
       // Paused: only the palette and the corner can be dwelled on (to resume).
       if (!palette && !corner) ring.active = false
       ring.paused = true
+    } else if (!palette && !corner && !this.scroll && this.hintAt(at)) {
+      ring.target = this.hintAt(at)!
     } else if (!palette && !corner && !this.scroll && s.snapToElement) {
       const target = this.snap({ x: ev.x, y: ev.y }, at)
       if (target) {
@@ -399,8 +416,9 @@ export class DwellController {
       return
     }
 
-    const node = s.snapToElement ? this.snap(phys, at) : null
-    const point = node ? centerOf(node.rect) : phys
+    const hint = this.hintAt(at)
+    const node = !hint && s.snapToElement ? this.snap(phys, at) : null
+    const point = hint ? this.io.logicalToPhys(centerOf(hint)) : node ? centerOf(node.rect) : phys
     const name = node?.name ?? ev.element?.name
     const rect = node?.rect ?? ev.element?.rect
     if (

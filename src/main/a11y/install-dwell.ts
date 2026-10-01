@@ -2,6 +2,7 @@
 // a cached UIA snapshot for snapping) and the config / focus wiring. installA11y() calls it.
 import { screen } from 'electron'
 import type { ElementNode, InputStep } from '@shared/types'
+import { bus } from '../bus'
 import { loadConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import { logicalToPhys, physRectToLogical, physToLogical } from '../actions/coords'
@@ -108,6 +109,8 @@ export function installDwell(deps: DwellInstallDeps): DwellController {
 
   const controller = new DwellController(io)
   setDwellController(controller)
+  // A lesson step's target: dwells near it click it (07 T21).
+  bus.on('lesson.scene', (e) => controller.setSnapHint(e.scene?.dwellSnap ?? null))
 
   const syncFocus = (cfg: AppConfig): void => deps.wantFocusEvents('dwell-snap', snapWanted(cfg))
   getAgent()?.onEvent('focus-changed', () => {

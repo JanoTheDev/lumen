@@ -28,7 +28,7 @@ import {
   type LessonCandidate
 } from './commands'
 import { setLessonContextProvider } from './context'
-import { paceFromTimings } from './hints'
+import { pacingFor } from './hints'
 import type { DoAction, ElementMatch, Lesson, LessonTarget } from './lesson'
 import { migrateGuides } from './migrate-guides'
 import type { Frame, Ports, ResolvedTarget, UiaEvent, WindowInfo } from './ports'
@@ -465,7 +465,7 @@ export function startLesson(
   runner.start(found.lesson, {
     skill: found.skill,
     source: found.skill.source === 'user' ? 'user' : 'pack',
-    pace: paceFromTimings(loadConfig().a11y.timings),
+    ...pacingFor(loadConfig().a11y),
     ...opts,
     stats: opts.stepIndex !== undefined && active?.lessonId === id ? active.steps : undefined
   })
@@ -485,7 +485,7 @@ function startGenerated(lesson: Lesson, skill: Skill | null): void {
     skill,
     source: 'generated',
     autoStart: true,
-    pace: paceFromTimings(loadConfig().a11y.timings)
+    ...pacingFor(loadConfig().a11y)
   })
 }
 
@@ -526,6 +526,7 @@ function resumeOffered(): boolean {
   if (o.lesson && !registry?.lesson(o.lessonId)) {
     // Generated lesson kept inline in the progress file.
     runner.start(o.lesson, {
+      ...pacingFor(loadConfig().a11y),
       source: 'generated',
       stepIndex: o.stepIndex,
       stats: store?.get().active?.steps
