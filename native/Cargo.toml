@@ -1,0 +1,52 @@
+[package]
+name = "lumen-native"
+version = "0.1.0"
+edition = "2024"
+description = "Lumen OS sidecar: hotkey, input, capture, OCR and UI Automation over stdio"
+license = "MIT"
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "lumen-native"
+path = "src/main.rs"
+
+[features]
+# Builds a manifest with uiAccess="true" (requires a signed binary under Program Files).
+uiaccess = []
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+crossbeam-channel = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "registry"] }
+
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.62"
+features = [
+  "Win32_Foundation",
+  "Win32_System_Console",
+  "Win32_System_Threading",
+  "Win32_System_Com",
+  "Win32_UI_HiDpi",
+]
+
+[dev-dependencies]
+proptest = "1"
+
+[build-dependencies]
+embed-resource = "3"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "unwind"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
