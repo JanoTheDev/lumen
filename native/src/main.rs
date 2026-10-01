@@ -10,6 +10,7 @@ mod hotkey;
 mod input;
 mod logging;
 mod monitors;
+mod ocr;
 mod proto;
 mod stdio;
 #[cfg(windows)]
