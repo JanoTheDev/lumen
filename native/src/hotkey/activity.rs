@@ -76,6 +76,42 @@ impl Default for Activity {
     }
 }
 
+/// `user-activity` pings: at most one per `gap`, so a moving mouse costs a few events a
+/// second. Owned by the hook thread (no atomics needed).
+#[derive(Debug, Clone, Copy)]
+pub struct Pinger {
+    gap: Duration,
+    last: Option<Instant>,
+}
+
+/// At most 4 `user-activity` events a second.
+pub const PING_GAP: Duration = Duration::from_millis(250);
+
+impl Pinger {
+    pub const fn new(gap: Duration) -> Self {
+        Pinger { gap, last: None }
+    }
+
+    /// True when a ping may go out at `now` (and records it).
+    pub fn hit(&mut self, now: Instant) -> bool {
+        if self.last.is_some_and(|t| now.saturating_duration_since(t) < self.gap) {
+            return false;
+        }
+        self.last = Some(now);
+        true
+    }
+
+    pub fn reset(&mut self) {
+        self.last = None;
+    }
+}
+
+impl Default for Pinger {
+    fn default() -> Self {
+        Self::new(PING_GAP)
+    }
+}
+
 /// The hook's activity record (process-wide: there is one keyboard hook).
 pub static KEYBOARD: Activity = Activity::new();
 
@@ -110,6 +146,22 @@ mod tests {
         // 'A' is not down per the async state: dropped for good.
         assert!(!a.key_held(|_| false));
         assert!(!a.key_held(|_| true));
+    }
+
+    #[test]
+    fn pings_are_throttled() {
+        let mut p = Pinger::new(Duration::from_millis(250));
+        let t0 = Instant::now();
+        assert!(p.hit(t0));
+        assert!(!p.hit(t0 + Duration::from_millis(100)));
+        assert!(!p.hit(t0 + Duration::from_millis(249)));
+        assert!(p.hit(t0 + Duration::from_millis(250)));
+        // 1000 Hz mouse for one second: at most 4 pings.
+        let mut p = Pinger::default();
+        let n = (0..1000).filter(|i| p.hit(t0 + Duration::from_millis(*i))).count();
+        assert_eq!(n, 4);
+        p.reset();
+        assert!(p.hit(t0 + Duration::from_millis(1000)));
     }
 
     #[test]

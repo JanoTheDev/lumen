@@ -1,7 +1,8 @@
 //! Global hotkeys via a `WH_KEYBOARD_LL` hook on a dedicated thread, plus what
 //! else needs the low-level hooks: switch keys/buttons (`switch.rs`, with a
 //! `WH_MOUSE_LL` hook only while mouse switches are set), observe-only `key-combo`
-//! events (`combo.rs`) and physical key activity for dwell (`activity.rs`).
+//! events (`combo.rs`), physical key activity for dwell (`activity.rs`) and throttled
+//! `user-activity` pings (any physical key or mouse event, never which key) while subscribed.
 //!
 //! The hook callbacks only step thread-local state, write atomics and queue events
 //! with a non-blocking send; they take no locks shared with other threads. Config
@@ -37,6 +38,7 @@ struct Bound {
     switches: Switches,
     combos: bool,
     activity: bool,
+    user_activity: bool,
 }
 
 /// Everything the hook thread needs.
@@ -48,11 +50,22 @@ pub struct HookConfig {
     pub combos: bool,
     /// Track physical key activity (dwell is on).
     pub activity: bool,
+    /// Report `user-activity` (subscribed): needs both hooks.
+    pub user_activity: bool,
 }
 
 impl HookConfig {
     pub fn is_idle(&self) -> bool {
-        self.hotkeys.is_idle() && self.switches.is_empty() && !self.combos && !self.activity
+        self.hotkeys.is_idle()
+            && self.switches.is_empty()
+            && !self.combos
+            && !self.activity
+            && !self.user_activity
+    }
+
+    /// The mouse hook is only needed for mouse switches and user-activity.
+    pub fn wants_mouse(&self) -> bool {
+        !self.switches.mouse.is_empty() || self.user_activity
     }
 }
 
@@ -79,6 +92,7 @@ pub struct Update<'a> {
     pub switches: Option<Switches>,
     pub combos: Option<bool>,
     pub activity: Option<bool>,
+    pub user_activity: Option<bool>,
 }
 
 fn parse_opt(accel: &str) -> Result<Option<accel::Hotkey>, AgentError> {
@@ -127,6 +141,9 @@ impl Service {
         if let Some(a) = update.activity {
             next.activity = a;
         }
+        if let Some(u) = update.user_activity {
+            next.user_activity = u;
+        }
         let mut bindings = vec![];
         if let Some(hk) = parse_opt(&next.assistant)? {
             bindings.push(Binding { hotkey: hk, down: "hotkey-down", up: "hotkey-up" });
@@ -139,6 +156,7 @@ impl Service {
             switches: next.switches.clone(),
             combos: next.combos,
             activity: next.activity,
+            user_activity: next.user_activity,
         };
         if config.is_idle() && self.hook.lock().unwrap().is_none() {
             *bound = next;
@@ -207,6 +225,8 @@ struct HookCtx {
     combos: bool,
     /// Last reported key-down, to skip its auto-repeat.
     combo_vk: Option<u16>,
+    user_activity: bool,
+    pinger: activity::Pinger,
     out: Option<Out>,
 }
 
@@ -221,11 +241,24 @@ impl HookCtx {
         }
         self.combos = config.combos;
         self.combo_vk = None;
+        self.user_activity = config.user_activity;
+        self.pinger.reset();
+    }
+
+    /// A physical key or mouse event: a throttled `user-activity` ping while subscribed.
+    fn user_ping(&mut self) {
+        if !self.user_activity || !self.pinger.hit(std::time::Instant::now()) {
+            return;
+        }
+        if let Some(out) = &self.out {
+            out.try_emit("user-activity", json!({}));
+        }
     }
 
     /// One physical key event; returns whether to suppress it.
     fn key(&mut self, ev: fsm::KeyEvent, is_down: &dyn Fn(u16) -> bool) -> bool {
         let Some(out) = self.out.clone() else { return false };
+        self.user_ping();
         deliver(&out, self.fsm.resync(ev, is_down));
         let (suppress, report) = self.switch.key(ev.vk, ev.down, self.fsm.mods());
         if let Some((index, down)) = report {
@@ -384,7 +417,7 @@ mod hook {
     /// Runs on the hook thread, which owns the hooks.
     fn apply_config(hooks: &mut Hooks, config: HookConfig) -> Result<(), String> {
         let keyboard = !config.is_idle();
-        let mouse = !config.switches.mouse.is_empty();
+        let mouse = config.wants_mouse();
         HOOK_CTX.with(|c| {
             if let Some(ctx) = c.borrow_mut().as_mut() {
                 ctx.configure(config);
@@ -454,10 +487,13 @@ mod hook {
             // SAFETY: for HC_ACTION, lparam points at an MSLLHOOKSTRUCT owned by the system.
             let ms = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
             let injected = ms.flags & LLMHF_INJECTED != 0 || ms.dwExtraInfo == EXTRA_INFO;
-            if !injected && let Some((button, down)) = button_of(wparam.0 as u32, ms.mouseData) {
+            if !injected {
+                let button = button_of(wparam.0 as u32, ms.mouseData);
                 let suppress = HOOK_CTX.with(|c| {
                     let Ok(mut c) = c.try_borrow_mut() else { return false };
-                    c.as_mut().is_some_and(|ctx| ctx.button(button, down))
+                    let Some(ctx) = c.as_mut() else { return false };
+                    ctx.user_ping();
+                    button.is_some_and(|(button, down)| ctx.button(button, down))
                 });
                 if suppress {
                     return LRESULT(1);

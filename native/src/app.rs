@@ -35,6 +35,7 @@ pub const CAPABILITIES: &[&str] = &[
     "key-combo",
     "switch",
     "uia-text",
+    "user-activity",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -271,6 +272,18 @@ pub fn register_core(app: &Arc<App>) {
             && let Err(e) = app.hotkeys.apply(hotkey::Update { combos: Some(on), ..Default::default() })
         {
             tracing::warn!("key-combo: {}", e.message);
+        }
+    });
+
+    // Throttled pings for the user's own (physical) keyboard and mouse: the input lane pauses
+    // the agent while the user works. Never which key.
+    let weak = Arc::downgrade(app);
+    app.add_subscribable("user-activity", move |on| {
+        if let Some(app) = weak.upgrade()
+            && let Err(e) =
+                app.hotkeys.apply(hotkey::Update { user_activity: Some(on), ..Default::default() })
+        {
+            tracing::warn!("user-activity: {}", e.message);
         }
     });
 
