@@ -1,9 +1,10 @@
 // Copies everything main prints (console.*) into <logs>/main.log so an installed build, which
-// has no console, still leaves a trail for "Export diagnostics". Key-shaped strings are
-// redacted before they reach the file. Rotates at 5 MB, keeping 5 files.
+// has no console, still leaves a trail for "Export diagnostics". Key-shaped strings and every
+// other sensitive span (JWTs, private keys, cards ...) are redacted before they reach the file. Rotates at 5 MB, keeping 5 files.
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'fs'
 import { join } from 'path'
 import { format } from 'util'
+import { redactForLog } from '../actions/redact'
 
 export const LOG_FILE = 'main.log'
 const MAX_BYTES = 5 * 1024 * 1024
@@ -16,11 +17,11 @@ const SECRETS: [RegExp, string][] = [
   [/((?:api[_-]?key|x-api-key|authorization)["']?\s*[:=]\s*["']?)[^\s"',}]{8,}/gi, '$1[redacted]']
 ]
 
-/** Removes API-key-shaped strings. */
+/** Removes API-key-shaped strings, then whatever the shared sensitive-data detector finds. */
 export function redact(text: string): string {
   let out = text
   for (const [re, sub] of SECRETS) out = out.replace(re, sub)
-  return out
+  return redactForLog(out)
 }
 
 /** main.log → main.1.log → … → main.<KEEP-1>.log; the oldest is dropped. */

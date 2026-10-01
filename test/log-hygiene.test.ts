@@ -60,10 +60,8 @@ describe('redaction over representative log lines', () => {
     expect(leaks(out[0])).toEqual([])
   })
 
-  // The main.log tee only knows key-shaped strings (sk-, Bearer, api_key=), so a JWT printed
-  // with console.* (the bridge logs non-JSON agent lines that way) reaches the file.
-  // See 10-quality/tasks.md Notes: log-file.ts should reuse ai/memory/sensitive redact().
-  it.fails('a raw console.* JWT is filtered before main.log', () => {
+  // The bridge logs non-JSON agent lines with console.*, bypassing log().
+  it('a raw console.* JWT is filtered before main.log', () => {
     expect(leaks(redactFile(format(JWT_LINE)))).toEqual([])
   })
 
