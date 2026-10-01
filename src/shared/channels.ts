@@ -23,7 +23,6 @@ import type {
 
 type Confidence = 'high' | 'medium' | 'low'
 
-/** renderer → main, request/response (`ipcRenderer.invoke`). */
 /** Settings, Smart helpers: what the shortcut coach and fatigue proposals remember. */
 export interface CoachStatus {
   /** Shortcuts the user now uses (tips stopped). */
@@ -34,6 +33,7 @@ export interface CoachStatus {
   answered: { id: string; answer: 'yes' | 'no' }[]
 }
 
+/** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
   'assistant:query': {
     args: [prompt: string, opts?: { lowDetail?: boolean }]
