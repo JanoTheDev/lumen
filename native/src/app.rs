@@ -28,6 +28,7 @@ pub const CAPABILITIES: &[&str] = &[
     "a11y-state",
     "system-settings",
     "a11y-events",
+    "system-info",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -222,6 +223,7 @@ pub fn register_core(app: &Arc<App>) {
 
     app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
     app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
+    app.cmd("system_info", Lane::Read, Some(2000), |_, _, _| crate::system::cmd_system_info());
     for event in [crate::system::SETTINGS_EVENT, crate::system::A11Y_EVENT] {
         let out = app.router.out().clone();
         app.add_subscribable(event, move |on| crate::system::set_enabled(&out, event, on));

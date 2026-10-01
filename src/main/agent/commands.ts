@@ -78,7 +78,8 @@ const CAPABILITY: Record<string, string> = {
   ocr: 'ocr',
   uia_snapshot: 'uia',
   uia_act: 'uia',
-  announce: 'announce'
+  announce: 'announce',
+  system_info: 'system-info'
 }
 
 function send<T>(
@@ -197,4 +198,17 @@ export function marksRender(
   opts?: RequestOptions
 ): Promise<MarksRenderResult> {
   return send(bridge, 'marks_render', args, opts)
+}
+
+export interface SystemInfo {
+  /** Lumen runs as administrator (the agent shares its token). */
+  elevated: boolean
+  /** Windows build number, e.g. 26200; null when unreadable. */
+  osBuild: number | null
+  /** Update build revision (UBR). */
+  osRevision: number | null
+}
+
+export function systemInfo(bridge: AgentBridge, opts?: RequestOptions): Promise<SystemInfo> {
+  return send(bridge, 'system_info', {}, opts)
 }

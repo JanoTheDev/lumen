@@ -1,11 +1,10 @@
 // firstrun:* channels for the setup flow, wired to the real probes.
 import { app, ipcMain, shell, systemPreferences } from 'electron'
-import { execFile } from 'child_process'
 import { z } from 'zod'
 import { INVALID, safeParse } from '../ipc/validate'
 import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
-import { ocr } from '../agent/commands'
+import { ocr, systemInfo } from '../agent/commands'
 import { KEY_PROVIDERS, hasKey } from '../keys/vault'
 import { installWakeModel } from '../ipc/wake'
 import { patchConfig } from '../ipc/settings'
@@ -23,17 +22,22 @@ function waitForHotkey(ms: number): Promise<boolean> {
 
 let elevatedCache: boolean | null = null
 
-/** High mandatory level (S-1-16-12288) in the process token = running as administrator. */
-function elevated(): Promise<boolean> {
-  if (elevatedCache !== null) return Promise.resolve(elevatedCache)
-  if (process.platform !== 'win32') return Promise.resolve(false)
-  const whoami = `${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\whoami.exe`
-  return new Promise((resolve) => {
-    execFile(whoami, ['/groups'], { windowsHide: true, timeout: 5000 }, (err, stdout) => {
-      elevatedCache = !err && /S-1-16-12288/.test(stdout)
-      resolve(elevatedCache)
-    })
-  })
+/** Running as administrator, from the agent's process token (it inherits Lumen's). */
+export async function elevated(): Promise<boolean> {
+  if (elevatedCache !== null) return elevatedCache
+  const agent = getAgent()
+  if (!agent?.running) return false
+  try {
+    elevatedCache = (await systemInfo(agent, { timeoutMs: 3000 })).elevated === true
+    return elevatedCache
+  } catch {
+    return false
+  }
+}
+
+/** Tests only. */
+export function resetElevatedCache(): void {
+  elevatedCache = null
 }
 
 const probes: CheckProbes = {

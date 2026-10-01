@@ -122,13 +122,32 @@ fn read_settings() -> Value {
     settings_value(None, false, true)
 }
 
+/// `system_info`: whether this process (and so Lumen, which spawned it) runs elevated, and the
+/// Windows build ("26200" and its update revision).
+pub fn info_value(elevated: bool, build: Option<&str>, ubr: Option<u32>) -> Value {
+    let build = build.and_then(|b| b.trim().parse::<u32>().ok());
+    json!({"elevated": elevated, "osBuild": build, "osRevision": build.and(ubr)})
+}
+
+#[cfg(windows)]
+pub fn cmd_system_info() -> crate::proto::CmdResult {
+    Ok(info_value(imp::elevated(), imp::os_build().as_deref(), imp::os_revision()))
+}
+
+#[cfg(not(windows))]
+pub fn cmd_system_info() -> crate::proto::CmdResult {
+    Ok(info_value(false, None, None))
+}
+
 #[cfg(windows)]
 pub(crate) mod imp {
     use std::sync::atomic::Ordering;
 
     use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-    use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+    use windows::Win32::System::Registry::{
+        HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_DWORD, RRF_RT_REG_SZ, RegGetValueW,
+    };
     use windows::Win32::UI::Accessibility::{HCF_HIGHCONTRASTON, HIGHCONTRASTW};
     use windows::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, MSG, PostMessageW, RegisterClassW,
@@ -158,6 +177,64 @@ pub(crate) mod imp {
             )
         };
         r.is_ok().then_some(v)
+    }
+
+    pub fn reg_string(root: HKEY, key: PCWSTR, value: PCWSTR) -> Option<String> {
+        let mut buf = [0u16; 128];
+        let mut size = std::mem::size_of_val(&buf) as u32;
+        // SAFETY: the out-buffer is `size` bytes; REG_SZ comes back NUL-terminated.
+        let r = unsafe {
+            RegGetValueW(
+                root,
+                key,
+                value,
+                RRF_RT_REG_SZ,
+                None,
+                Some(buf.as_mut_ptr() as *mut _),
+                Some(&mut size),
+            )
+        };
+        if r.is_err() {
+            return None;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
+    }
+
+    const CURRENT_VERSION: PCWSTR = w!("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+
+    pub fn os_build() -> Option<String> {
+        reg_string(HKEY_LOCAL_MACHINE, CURRENT_VERSION, w!("CurrentBuildNumber"))
+    }
+
+    pub fn os_revision() -> Option<u32> {
+        reg_dword(HKEY_LOCAL_MACHINE, CURRENT_VERSION, w!("UBR"))
+    }
+
+    /// TokenElevation of our own process token.
+    pub fn elevated() -> bool {
+        use windows::Win32::Foundation::{CloseHandle, HANDLE};
+        use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+        use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+        let mut token = HANDLE::default();
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut len = 0u32;
+        // SAFETY: the token handle is closed below; the out-buffer is a sized TOKEN_ELEVATION.
+        unsafe {
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
+                return false;
+            }
+            let ok = GetTokenInformation(
+                token,
+                TokenElevation,
+                Some(&mut elevation as *mut _ as *mut _),
+                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+                &mut len,
+            )
+            .is_ok();
+            let _ = CloseHandle(token);
+            ok && elevation.TokenIsElevated != 0
+        }
     }
 
     pub fn text_scale() -> Option<u32> {
@@ -290,6 +367,26 @@ mod tests {
             settings_value(Some(125), true, false),
             json!({"textScale": 125, "highContrast": true, "reduceMotion": true})
         );
+    }
+
+    #[test]
+    fn system_info_shape() {
+        assert_eq!(
+            info_value(true, Some("26200"), Some(6584)),
+            json!({"elevated": true, "osBuild": 26200, "osRevision": 6584})
+        );
+        assert_eq!(
+            info_value(false, Some("bogus"), Some(1)),
+            json!({"elevated": false, "osBuild": null, "osRevision": null})
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reads_this_machine() {
+        let v = cmd_system_info().unwrap();
+        assert!(v["osBuild"].as_u64().is_some_and(|b| b >= 10_000), "{v}");
+        assert!(v["elevated"].is_boolean());
     }
 
     #[test]
