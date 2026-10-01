@@ -1,7 +1,7 @@
 // Autopilot permission policy (08 T35/T36, claude-code.md "Autopilot"): what Lumen does with a
 // permission prompt Claude Code would show. Pure. The hard list always asks the user with the
 // exact command, at every level, and is denied when nobody is there to answer.
-import { resolve, sep } from 'path'
+import { relative, resolve, sep } from 'path'
 import type { AutopilotLevel } from '@shared/claude-code'
 import type { Risk } from '../actions/safety'
 
@@ -66,19 +66,20 @@ const MESSAGE_RE =
   /\b(gh\s+(pr\s+(create|comment|review|merge|close)|issue\s+(create|comment|close)|api\b[^;&|\n]*\/comments)|sendmail|mailx?\s|Send-MailMessage|hooks\.slack\.com|discord(app)?\.com\/api\/webhooks|api\.telegram\.org|api\.twilio\.com|sendMail\b)/i
 const MCP_MESSAGE_RE = /^mcp__[^_]+.*__(send|post|reply|message|email|mail|comment|publish|tweet)/i
 
-const RM_RE = /(^|[;&|]\s*)(sudo\s+)?rm\s+((-\w+\s+)*)(.+)$/
+const RM_RE = /(^|[;&|]\s*)((sudo|xargs|env|command|exec|nohup|time)\s+)*rm\s+((-\w+\s+)*)(.+)$/
 const PS_RM_RE = /\b(remove-item|rmdir|rd|del|erase)\b/i
 
 /** Targets of `rm -r…` (or Remove-Item -Recurse / rmdir /s) that leave the project. */
 function rmOutside(cmd: string, req: ToolRequest): boolean {
-  for (const part of cmd.split(/&&|\|\||;|\n/)) {
+  // Every command position, also inside substitutions and subexpressions.
+  for (const part of cmd.split(/&&|\|\||[;|&\n`(){}]|\$\(/)) {
     const p = part.trim()
     const m = RM_RE.exec(p)
     let recursive = false
     let targets: string[] = []
     if (m) {
-      recursive = /-\w*[rR]|--recursive/.test(m[3] ?? '') || /\s-\w*[rR]\b/.test(p)
-      targets = (m[5] ?? '').split(/\s+/).filter((t) => t && !t.startsWith('-'))
+      recursive = /-\w*[rR]|--recursive/.test(m[4] ?? '') || /\s-\w*[rR]\b/.test(p)
+      targets = (m[6] ?? '').split(/\s+/).filter((t) => t && !t.startsWith('-'))
     } else if (PS_RM_RE.test(p)) {
       recursive = /-recurse\b|\/s\b/i.test(p)
       targets = p
@@ -135,37 +136,203 @@ const READ_TOOLS = new Set([
 ])
 const EDIT_TOOLS = new Set(['Edit', 'MultiEdit', 'Write', 'NotebookEdit'])
 
-const SAFE_COMMAND_RES = [
-  /^(npm|pnpm|yarn|bun)\s+(run\s+)?(test|lint|typecheck|type-check|check|build|format:check|lint:fix|format)\b/,
-  /^npx\s+(vitest|jest|eslint|tsc|prettier|playwright\s+test|biome\s+check)\b/,
-  /^(\.\/)?(node_modules[\\/]\.bin[\\/])?(vitest|jest|eslint|tsc|prettier)\b/,
-  /^cargo\s+(test|check|clippy|build|fmt)\b/,
-  /^(python3?\s+-m\s+)?(pytest|mypy|ruff|black\s+--check|flake8)\b/,
-  /^[\w./\\-]*python(\.exe)?\s+-m\s+(pytest|mypy|ruff)\b/,
-  /^go\s+(test|vet|build|fmt)\b/,
-  /^dotnet\s+(test|build)\b/,
-  /^git\s+(status|diff|log|show|branch(\s+--?\w+)*\s*$|rev-parse|ls-files|blame|remote\s+-v|stash\s+list|add\b|commit\b(?![^;&|\n]*--amend)|switch\s+-c\b|checkout\s+-b\b)/,
-  /^(ls|dir|cat|type|head|tail|wc|pwd|echo|which|where|tree|rg|grep|sort|uniq|diff|file|stat|du)\b/,
-  /^(get-childitem|get-content|select-string|test-path|get-item|measure-object)\b/i,
-  /^find\b(?![^;&|\n]*(-delete|-exec))/,
-  /^mkdir\b/,
-  /^cd\b/
-]
+// Fail closed: a command is approved only when every part matches one of the exact shapes below.
+// Anything that can run, chain or redirect something else is never auto-approved: command and
+// process substitution (backticks, $( ), <( )), variables, PowerShell subexpressions, script
+// blocks and splatting, `;`, a single `&`, pipes into anything but a read-only filter,
+// redirection, cmd.exe %VAR% expansion, line breaks.
+const SHELL_META_RE = /[`$(){}<>;&|%@\r\n\0]/
+const EVAL_RE = /\b(iex|invoke-expression|invoke-command|start-process)\b|\s-enc(odedcommand)?\b/i
+
+/** Flags that write files or run another program, refused on every command. */
+const WRITE_EXEC_FLAG_RE =
+  /^(-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)|--?(output|outfile|out-file|outdir|out-dir|output-file|output-dir|pre|pre-glob|ext-diff|exec|upload-pack|receive-pack|config|global|system)(=.*)?)$/i
+
+const SCRIPT_RE =
+  /^(test|lint|typecheck|type-check|check|build|format|format:check|lint:fix)(:[\w:-]+)?$/
+const NPX_TOOLS = new Set(['vitest', 'jest', 'eslint', 'tsc', 'prettier'])
+const BIN_RE =
+  /^(\.[\\/])?(node_modules[\\/]\.bin[\\/])?(vitest|jest|eslint|tsc|prettier)(\.cmd)?$/i
+const GIT_READ = new Set([
+  'status',
+  'diff',
+  'log',
+  'show',
+  'rev-parse',
+  'ls-files',
+  'blame',
+  'add',
+  'commit'
+])
+const READERS = new Set([
+  'ls',
+  'dir',
+  'cat',
+  'type',
+  'head',
+  'tail',
+  'wc',
+  'pwd',
+  'echo',
+  'which',
+  'where',
+  'tree',
+  'rg',
+  'grep',
+  'sort',
+  'uniq',
+  'diff',
+  'file',
+  'stat',
+  'du',
+  'find',
+  'get-childitem',
+  'get-content',
+  'select-string',
+  'test-path',
+  'get-item',
+  'measure-object'
+])
+/** Read-only filters a safe command may pipe into. */
+const FILTERS = new Set([
+  'head',
+  'tail',
+  'wc',
+  'grep',
+  'sort',
+  'uniq',
+  'select-string',
+  'select-object',
+  'measure-object'
+])
+
+const unquote = (t: string): string => t.replace(/^(["'])(.*)\1$/, '$2')
+const isFlag = (t: string): boolean => /^-/.test(t) || /^\/[a-z?]$/i.test(t)
+/** Positional words and the values of `--flag=value`. */
+const operands = (args: string[]): string[] =>
+  args.flatMap((a) => (isFlag(a) ? (/^--?[\w-]+=(.+)$/.exec(a)?.slice(1) ?? []) : [a]))
+const pathish = (t: string): boolean => /[\\/]|^~|^\.\.|^[a-z]:/i.test(t)
+
+function words(part: string): string[] {
+  return (part.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map(unquote)
+}
+
+/** Tools that build, test or write: every path they are given stays in the project. */
+function pathsInside(args: string[], req: ToolRequest): boolean {
+  return operands(args).every((t) => !pathish(t) || inside(req.project, t, req.cwd))
+}
+
+function sortWrites(args: string[]): boolean {
+  return args.some((a) => /^-[a-z]*o/i.test(a))
+}
+
+function safeSimple(w: string[], req: ToolRequest, filter: boolean): boolean {
+  if (!w.length) return false
+  const [head, ...args] = w
+  const cmd = head.toLowerCase()
+  if (args.some((a) => WRITE_EXEC_FLAG_RE.test(a))) return false
+  // UNC paths reach out to other machines.
+  if (args.some((a) => /^(\\\\|\/\/)/.test(a))) return false
+  if (filter) {
+    if (!FILTERS.has(cmd) || (cmd === 'sort' && sortWrites(args))) return false
+    return cmd !== 'uniq' || operands(args).length === 0
+  }
+  switch (cmd) {
+    case 'npm':
+    case 'pnpm':
+    case 'yarn':
+    case 'bun': {
+      const rest = args[0] === 'run' ? args.slice(1) : args
+      return !!rest[0] && SCRIPT_RE.test(rest[0]) && pathsInside(rest.slice(1), req)
+    }
+    case 'npx': {
+      const [tool, ...rest] = args
+      if (!tool) return false
+      const ok =
+        NPX_TOOLS.has(tool) ||
+        (tool === 'playwright' && rest[0] === 'test') ||
+        (tool === 'biome' && rest[0] === 'check')
+      return ok && pathsInside(rest, req)
+    }
+    case 'cargo':
+      return /^(test|check|clippy|build|fmt)$/.test(args[0] ?? '') && pathsInside(args, req)
+    case 'go':
+    case 'dotnet': {
+      const subs = cmd === 'go' ? /^(test|vet|build|fmt)$/ : /^(test|build)$/
+      if (!subs.test(args[0] ?? '') || args.some((a) => /^-o$|^--?o(utput)?=/i.test(a)))
+        return false
+      return pathsInside(args, req)
+    }
+    case 'pytest':
+    case 'mypy':
+    case 'ruff':
+    case 'flake8':
+      return pathsInside(args, req)
+    case 'black':
+      return args.includes('--check') && pathsInside(args, req)
+    case 'git': {
+      const [sub, ...rest] = args
+      if (!sub) return false
+      if (GIT_READ.has(sub)) return sub !== 'commit' || !rest.includes('--amend')
+      if (sub === 'branch') return rest.every(isFlag)
+      if (sub === 'remote') return rest.length === 1 && rest[0] === '-v'
+      if (sub === 'stash') return rest.length === 1 && rest[0] === 'list'
+      if (sub === 'switch' || sub === 'checkout')
+        return rest.length === 2 && rest[0] === (sub === 'switch' ? '-c' : '-b') && !isFlag(rest[1])
+      return false
+    }
+    case 'mkdir':
+    case 'cd': {
+      const targets = args.filter((a) => a !== '-p')
+      if (cmd === 'cd' && targets.length !== 1) return false
+      return (
+        targets.length > 0 && targets.every((t) => !isFlag(t) && inside(req.project, t, req.cwd))
+      )
+    }
+  }
+  if (/(^|[\\/])python3?(\.exe)?$/i.test(head))
+    return args[0] === '-m' && /^(pytest|mypy|ruff)$/.test(args[1] ?? '') && pathsInside(args, req)
+  if (BIN_RE.test(head)) return pathsInside(args, req)
+  if (!READERS.has(cmd)) return false
+  if (cmd === 'sort' && sortWrites(args)) return false
+  if (cmd === 'tree' && args.some((a) => /^-o$/i.test(a))) return false
+  if (cmd === 'file' && args.some((a) => /^-[a-z]*C|^--compile$/.test(a))) return false
+  if (cmd === 'uniq' && operands(args).length > 1) return false
+  return true
+}
 
 function safeCommand(cmd: string, req: ToolRequest): boolean {
-  if (!cmd.trim()) return false
-  // Every part of a chain must be safe; output redirection into files is a write.
-  if (/[`$]\(|>|<\(/.test(cmd)) return false
-  return cmd
-    .split(/&&|\|\||;|\||\n/)
-    .map((p) => p.trim())
-    .filter(Boolean)
-    .every((p) => {
-      if (!SAFE_COMMAND_RES.some((re) => re.test(p))) return false
-      // mkdir / cd only inside the project.
-      const m = /^(mkdir|cd)\s+(?:-p\s+)?(\S+)/.exec(p)
-      return !m || inside(req.project, m[2].replace(/^["']|["']$/g, ''), req.cwd)
-    })
+  // Merging stderr into stdout is the one redirection that writes nothing.
+  const c = cmd.replace(/(^|\s)2>&1(?=\s|$)/g, ' ').trim()
+  if (!c || EVAL_RE.test(c)) return false
+  return c.split('&&').every((chain) => {
+    const stages = chain.split('|').map((s) => s.trim())
+    // `||` or an empty stage is not a pipe into a filter.
+    if (stages.some((s) => !s)) return false
+    return stages.every((s, i) => !SHELL_META_RE.test(s) && safeSimple(words(s), req, i > 0))
+  })
+}
+
+// Files whose contents decide what runs later (git config and hooks, Claude Code settings and
+// hooks, editor tasks, direnv): an edit there is never approved on its own, even in the project.
+const EXEC_CONFIG_RE =
+  /(^|\/)(\.git|\.claude|\.vscode|\.idea|\.husky|\.githooks)(\/|$)|(^|\/)(\.envrc|\.gitmodules|\.npmrc|\.yarnrc(\.yml)?|\.mcp\.json)$/
+
+/** The path is a file that configures what runs (see EXEC_CONFIG_RE). */
+export function execConfigPath(project: string, p: string, cwd = project): boolean {
+  const rel = relative(resolve(project), resolve(cwd, p))
+  const segs = rel
+    .split(/[\\/]+/)
+    // Windows ignores trailing dots / spaces and reads `name:stream` as `name`; 8.3 names
+    // (GIT~1) hide the long name.
+    .map((x) =>
+      x
+        .split(':')[0]
+        .replace(/[. ]+$/, '')
+        .toLowerCase()
+    )
+  if (segs.some((x) => /~\d/.test(x))) return true
+  return EXEC_CONFIG_RE.test(segs.join('/'))
 }
 
 export function decidePermission(req: ToolRequest, level: AutopilotLevel): ClaudeDecision {
@@ -179,9 +346,11 @@ export function decidePermission(req: ToolRequest, level: AutopilotLevel): Claud
     return { verdict: 'allow', risk: 'low', reason: 'reads and searches are fine', what }
   if (EDIT_TOOLS.has(req.tool)) {
     const p = filePath(req.input)
-    return p && inside(req.project, p, req.cwd)
-      ? { verdict: 'allow', risk: 'low', reason: 'an edit inside the project', what }
-      : { verdict: 'ask', risk: 'medium', reason: 'it writes outside the project', what }
+    if (!p || !inside(req.project, p, req.cwd))
+      return { verdict: 'ask', risk: 'medium', reason: 'it writes outside the project', what }
+    if (execConfigPath(req.project, p, req.cwd))
+      return { verdict: 'ask', risk: 'medium', reason: 'it changes settings that run code', what }
+    return { verdict: 'allow', risk: 'low', reason: 'an edit inside the project', what }
   }
   if (req.tool === 'Bash' || req.tool === 'PowerShell') {
     const cmd = str(req.input.command)

@@ -212,15 +212,43 @@ export class PermissionBridge {
       return out('deny', { message: SAID_NO })
     }
     audit(final === 'always' ? 'always-by-user' : 'confirmed-by-user', true)
-    const suggestions = Array.isArray(payload.permission_suggestions)
-      ? payload.permission_suggestions
-      : []
-    // "Always": the CLI's own suggested session rules (e.g. allow this command for the session).
+    // "Always": the CLI's own suggested rules, narrowed to this session (e.g. allow this command
+    // until the session ends). Nothing is written to a settings file and the mode never changes.
+    const suggestions = sessionRules(payload.permission_suggestions)
     return out(
       'allow',
       final === 'always' && suggestions.length ? { updatedPermissions: suggestions } : {}
     )
   }
+}
+
+/**
+ * The CLI's permission suggestions an "always" may send back: only `addRules` that allow one
+ * tool with a specific rule (`Bash(npm install:*)`), always with destination `session`. Mode
+ * switches (`setMode`), extra directories, deny / ask rules, rules without content (the whole
+ * tool) and any settings-file destination are dropped.
+ */
+export function sessionRules(suggestions: unknown): Json[] {
+  if (!Array.isArray(suggestions)) return []
+  const out: Json[] = []
+  for (const s of suggestions as unknown[]) {
+    if (!s || typeof s !== 'object') continue
+    const o = s as Json
+    if (o.type !== 'addRules' || o.behavior !== 'allow' || !Array.isArray(o.rules)) continue
+    const rules = (o.rules as unknown[]).flatMap((r) => {
+      const x = r as Json | null
+      return x &&
+        typeof x.toolName === 'string' &&
+        /^[\w-]+$/.test(x.toolName) &&
+        typeof x.ruleContent === 'string' &&
+        !/^[\s:*]*$/.test(x.ruleContent)
+        ? [{ toolName: x.toolName, ruleContent: x.ruleContent }]
+        : []
+    })
+    if (rules.length)
+      out.push({ type: 'addRules', rules, behavior: 'allow', destination: 'session' })
+  }
+  return out
 }
 
 /** The confirm card text for a permission. */
