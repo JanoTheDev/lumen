@@ -1,4 +1,4 @@
-"""Global push-to-talk hotkey.
+"""Global push-to-talk hotkeys (assistant and dictation each own one manager).
 
 Electron accelerators ("CommandOrControl+Shift+Space") are parsed into
 `keyboard` key names. Hook callbacks only flip state under a lock and queue an
@@ -123,8 +123,11 @@ def parse_accelerator(accelerator: str) -> Hotkey:
 class HotkeyManager:
     """Owns the keyboard hooks for one push-to-talk combo."""
 
-    def __init__(self, emit, keyboard_module=None):
+    def __init__(self, emit, keyboard_module=None, down_event="hotkey-down", up_event="hotkey-up"):
         self._emit = emit
+        self._down_event = down_event
+        self._up_event = up_event
+        self._label = "hotkey" if down_event == "hotkey-down" else down_event.replace("-down", " hotkey")
         self._kb = keyboard_module
         self._lock = threading.Lock()
         self._active = False
@@ -148,7 +151,7 @@ class HotkeyManager:
             if self._active:
                 return
             self._active = True
-            self._emit("hotkey-down")
+            self._emit(self._down_event)
 
     def _on_key_event(self, event):
         if event.event_type != "up":
@@ -157,7 +160,7 @@ class HotkeyManager:
             if not self._active:
                 return
             self._active = False
-            self._emit("hotkey-up")
+            self._emit(self._up_event)
 
     def _unhook(self) -> None:
         kb = self._kb
@@ -185,7 +188,7 @@ class HotkeyManager:
         if not accelerator or not accelerator.strip():
             self._unhook()
             self._accelerator, self._hotkey = "", None
-            log.info("hotkey unbound")
+            log.info("%s unbound", self._label)
             return None
         hk = parse_accelerator(accelerator)
         kb = self._keyboard()
@@ -208,7 +211,7 @@ class HotkeyManager:
                     self._accelerator, self._hotkey = "", None
             raise
         self._accelerator, self._hotkey = accelerator, hk
-        log.info("hotkey bound %s -> %s", accelerator, hk.combo)
+        log.info("%s bound %s -> %s", self._label, accelerator, hk.combo)
         return hk
 
     def unbind(self) -> None:

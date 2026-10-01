@@ -69,6 +69,24 @@ def test_find_exact_before_substring_and_nth():
 
 # ---- live against a WinForms fixture ---------------------------------------
 
+
+@pytest.mark.parametrize(
+    "role, has_value, readonly, has_text_edit, password, expected",
+    [
+        ("edit", True, False, False, False, True),
+        ("edit", False, None, False, False, True),
+        ("edit", True, True, False, False, False),
+        ("edit", True, False, False, True, False),
+        ("document", False, None, True, False, True),
+        ("document", True, True, False, False, False),
+        ("document", True, False, False, False, True),
+        ("button", True, False, False, False, False),
+        ("listitem", False, None, False, False, False),
+    ],
+)
+def test_is_editable(role, has_value, readonly, has_text_edit, password, expected):
+    assert uia.is_editable(role, has_value, readonly, has_text_edit, password) is expected
+
 @pytest.fixture(scope="module")
 def fixture_hwnd():
     proc = subprocess.Popen(

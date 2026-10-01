@@ -441,3 +441,57 @@ def warm_up(hwnd) -> None:
 
     _warm["thread"] = threading.Thread(target=run, name="uia-warm", daemon=True)
     _warm["thread"].start()
+
+
+# ---- focused element (dictation) --------------------------------------------
+
+FOCUS_VALUE_TAIL = 200
+_FREE_TEXT_ROLES = {"edit", "document", "combobox", "custom", "group", "pane"}
+
+
+def is_editable(role: str, has_value: bool, readonly, has_text_edit: bool, password: bool) -> bool:
+    """Whether typed text would land in an editable text field."""
+    if password or readonly is True:
+        return False
+    if role == "edit" or has_text_edit:
+        return True
+    return has_value and readonly is False and role in _FREE_TEXT_ROLES
+
+
+def focus_info(token=None) -> dict:
+    """`focus_info`: foreground process plus the keyboard-focused element (role, editable, value tail)."""
+    info = window.active()
+    out = {"process": info["process"], "title": info["title"], "uia": False, "role": "", "name": "",
+           "editable": False, "password": False, "valueTail": ""}
+    try:
+        client = _Client.get()
+        el = client.u.GetFocusedElement()
+    except Exception as e:
+        log.debug("focus_info: no focused element (%s)", e)
+        return out
+    if token is not None:
+        token.check()
+    m, p = client.m, client.props
+
+    def prop(pid, default=None):
+        try:
+            return el.GetCurrentPropertyValue(pid)
+        except Exception:
+            return default
+
+    role = ROLES.get(prop(p["role"]), "custom")
+    password = bool(prop(p["password"], False))
+    has_value = bool(prop(m.UIA_IsValuePatternAvailablePropertyId, False))
+    readonly = bool(prop(p["readonly"], False)) if has_value else None
+    text_edit_id = getattr(m, "UIA_IsTextEditPatternAvailablePropertyId", None)
+    has_text_edit = bool(prop(text_edit_id, False)) if text_edit_id is not None else False
+    value = prop(p["value"], "") if has_value and not password else ""
+    out.update({
+        "uia": True,
+        "role": role,
+        "name": str(prop(p["name"], "") or "")[:NAME_MAX],
+        "editable": is_editable(role, has_value, readonly, has_text_edit, password),
+        "password": password,
+        "valueTail": str(value or "")[-FOCUS_VALUE_TAIL:],
+    })
+    return out

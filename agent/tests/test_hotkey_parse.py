@@ -140,3 +140,25 @@ def test_rebind_replaces_hooks_and_empty_unbinds():
     mgr.bind("")
     assert kb.hotkeys == {} and kb.hooks == {}
     assert mgr.accelerator == ""
+
+
+def test_dictation_manager_emits_its_own_events():
+    events = []
+    kb = FakeKeyboard()
+    mgr = HotkeyManager(events.append, keyboard_module=kb, down_event="dictation-down", up_event="dictation-up")
+    mgr.bind("Ctrl+Shift+D")
+    kb.press()
+    kb.release("d")
+    assert events == ["dictation-down", "dictation-up"]
+
+
+def test_two_managers_hook_independently():
+    events = []
+    kb = FakeKeyboard()
+    main = HotkeyManager(events.append, keyboard_module=kb)
+    dictation = HotkeyManager(events.append, keyboard_module=kb, down_event="dictation-down", up_event="dictation-up")
+    main.bind("Ctrl+Shift+Space")
+    dictation.bind("Ctrl+Shift+D")
+    dictation.bind("")
+    assert [c for c, _ in kb.hotkeys.values()] == ["ctrl+shift+space"]
+    assert main.accelerator == "Ctrl+Shift+Space" and dictation.accelerator == ""

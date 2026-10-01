@@ -104,3 +104,23 @@ def test_v1_default_has_no_ready_line():
     first = a.next()
     a.close()
     assert first == {"id": 1, "result": "pong"}
+
+
+def test_dictation_hotkey_binds_and_rejects_the_assistant_combo(v2):
+    req(v2, 20, "init", hotkey="Ctrl+Alt+F23", dictationHotkey="Ctrl+Alt+F22", logLevel="info")
+    same = req(v2, 21, "set_dictation_hotkey", combo="Ctrl+Alt+F23")
+    assert same["ok"] is False and same["error"]["code"] == "E_INVALID"
+    bad = req(v2, 22, "set_dictation_hotkey", combo="Ctrl+Nope")
+    assert bad["ok"] is False and bad["error"]["code"] == "E_INVALID"
+    ok = req(v2, 23, "set_dictation_hotkey", combo="Ctrl+Alt+F21")
+    assert ok["ok"] is True
+    v2.close()
+    assert any("dictation hotkey bound Ctrl+Alt+F22" in l for l in v2.stderr)
+    assert any("dictation hotkey bound Ctrl+Alt+F21" in l for l in v2.stderr)
+
+
+def test_init_skips_a_dictation_hotkey_equal_to_the_assistant_one(v2):
+    msg = req(v2, 24, "init", hotkey="Ctrl+Alt+F23", dictationHotkey="ctrl+alt+f23", logLevel="info")
+    assert msg["ok"] is True
+    v2.close()
+    assert not any("dictation hotkey bound" in l for l in v2.stderr)

@@ -39,6 +39,7 @@ respond = proto.respond
 emit_event = proto.emit
 
 hotkeys = HotkeyManager(emit_event)
+dictation_hotkeys = HotkeyManager(emit_event, down_event="dictation-down", up_event="dictation-up")
 
 
 mouse_watch = MouseWatcher(emit_event)
@@ -72,7 +73,7 @@ def _cmd_subscribe(args, token):
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "wake", "dwell", "capture", "ocr", "uia", "announce"]
+CAPABILITIES = ["hotkey", "dictation-hotkey", "wake", "dwell", "capture", "ocr", "uia", "announce"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -88,6 +89,22 @@ def _cmd_set_hotkey(args, token):
     if not isinstance(combo, str):
         raise AgentError(E_INVALID, "set_hotkey needs a combo string")
     hotkeys.bind(combo)
+    return {"ok": True, "combo": combo}
+
+
+def _same_combo(a: str, b: str) -> bool:
+    if not a.strip() or not b.strip():
+        return False
+    return parse_accelerator(a).combo == parse_accelerator(b).combo
+
+
+def _cmd_set_dictation_hotkey(args, token):
+    combo = args.get("combo")
+    if not isinstance(combo, str):
+        raise AgentError(E_INVALID, "set_dictation_hotkey needs a combo string")
+    if _same_combo(combo, hotkeys.accelerator):
+        raise AgentError(E_INVALID, "dictation hotkey must differ from the assistant hotkey")
+    dictation_hotkeys.bind(combo)
     return {"ok": True, "combo": combo}
 
 
@@ -185,6 +202,14 @@ def _cmd_init(args, token):
         raise AgentError(E_INVALID, "init.hotkey must be a string")
     if hotkey_accel.strip():
         parse_accelerator(hotkey_accel)
+    dictation_accel = args.get("dictationHotkey", "")
+    if not isinstance(dictation_accel, str):
+        raise AgentError(E_INVALID, "init.dictationHotkey must be a string")
+    if dictation_accel.strip():
+        parse_accelerator(dictation_accel)
+    if _same_combo(dictation_accel, hotkey_accel):
+        log.warning("dictation hotkey %r equals the assistant hotkey; not bound", dictation_accel)
+        dictation_accel = ""
     level = args.get("logLevel", "info")
     if level not in LOG_LEVELS:
         raise AgentError(E_INVALID, f"init.logLevel must be one of {sorted(LOG_LEVELS)}")
@@ -196,6 +221,7 @@ def _cmd_init(args, token):
 
     logging.getLogger().setLevel(LOG_LEVELS[level])
     hotkeys.bind(hotkey_accel)
+    dictation_hotkeys.bind(dictation_accel)
     if wake_phrase or cancel_phrases:
         _start_wake(wake_phrase, cancel_phrases, wake_cfg.get("energyFloor"))
     else:
@@ -266,6 +292,7 @@ def register_commands(debug: bool = False) -> None:
     reg("cancel", _cmd_cancel, INLINE)
     reg("subscribe", _cmd_subscribe, INLINE)
     reg("set_hotkey", _cmd_set_hotkey, INLINE)
+    reg("set_dictation_hotkey", _cmd_set_dictation_hotkey, INLINE)
     reg("wake_enable", _cmd_wake_enable, INLINE)
     reg("wake_disable", _cmd_wake_disable, INLINE)
     reg("wake_status", lambda args, token: wake.status(), INLINE)
@@ -285,6 +312,7 @@ def register_commands(debug: bool = False) -> None:
     reg("uia_snapshot", _cmd_uia_snapshot, READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
     reg("uia_find", lambda args, token: uia.find_command(args, token), READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)
     reg("uia_act", _cmd_uia_act, INPUT)
+    reg("focus_info", lambda args, token: uia.focus_info(token), READ, timeout_ms=1000)
     reg("announce", announce.announce, READ)
     if v2:
         reg("active_window", _cmd_active_window, READ)
