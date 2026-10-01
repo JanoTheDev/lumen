@@ -10,6 +10,7 @@ import {
   type AgentMessage,
   type ChatChunk,
   type CompleteResult,
+  type DocumentInput,
   type Effort,
   type LlmProvider,
   type StructuredRequest,
@@ -54,22 +55,32 @@ export function reasoningEffort(
 
 type CreateParams = OpenAI.Responses.ResponseCreateParamsNonStreaming
 
+/** A shared PDF as an inline `input_file` (base64 data URL). */
+export function inputFile(d: DocumentInput): OpenAI.Responses.ResponseInputFile {
+  return {
+    type: 'input_file',
+    filename: d.name,
+    file_data: `data:${d.mediaType};base64,${d.base64}`
+  }
+}
+
 export function buildParams(req: StructuredRequest<unknown>): CreateParams {
   const input: OpenAI.Responses.ResponseInput = req.messages.map((m, i) => {
     const isLast = i === req.messages.length - 1
-    if (!isLast || m.role !== 'user' || !req.images?.length) {
+    if (!isLast || m.role !== 'user' || !(req.images?.length || req.documents?.length)) {
       return { role: m.role, content: m.content }
     }
     return {
       role: 'user',
       content: [
-        ...req.images.map(
+        ...(req.images ?? []).map(
           (img): OpenAI.Responses.ResponseInputImage => ({
             type: 'input_image',
             image_url: `data:${img.mediaType ?? 'image/jpeg'};base64,${img.base64}`,
             detail: img.detail ?? 'high'
           })
         ),
+        ...(req.documents ?? []).map(inputFile),
         { type: 'input_text', text: m.content }
       ]
     }
@@ -142,6 +153,7 @@ type InputItem = OpenAI.Responses.ResponseInputItem
 
 function inputContent(c: ToolContent): OpenAI.Responses.ResponseInputContent {
   if (c.type === 'text') return { type: 'input_text', text: c.text }
+  if (c.type === 'document') return inputFile(c)
   return {
     type: 'input_image',
     image_url: `data:${c.mediaType ?? 'image/jpeg'};base64,${c.base64}`,
@@ -173,21 +185,30 @@ function inputItems(m: AgentMessage): InputItem[] {
     const text = c.content.filter((x) => x.type === 'text').map((x) => x.text)
     const body = (c.isError ? ['Error: ', ...text] : text).join('\n')
     const images = c.content.filter((x) => x.type === 'image')
+    const docs = c.content.filter((x) => x.type === 'document')
     items.push({
       type: 'function_call_output',
       call_id: c.id,
-      output: images.length
-        ? [
-            { type: 'input_text', text: body },
-            ...images.map(
-              (img): OpenAI.Responses.ResponseInputImageContent => ({
-                type: 'input_image',
-                image_url: `data:${img.mediaType ?? 'image/jpeg'};base64,${img.base64}`,
-                detail: 'high'
-              })
-            )
-          ]
-        : body
+      output:
+        images.length || docs.length
+          ? [
+              { type: 'input_text', text: body },
+              ...images.map(
+                (img): OpenAI.Responses.ResponseInputImageContent => ({
+                  type: 'input_image',
+                  image_url: `data:${img.mediaType ?? 'image/jpeg'};base64,${img.base64}`,
+                  detail: 'high'
+                })
+              ),
+              ...docs.map(
+                (d): OpenAI.Responses.ResponseInputFileContent => ({
+                  type: 'input_file',
+                  filename: d.name,
+                  file_data: `data:${d.mediaType};base64,${d.base64}`
+                })
+              )
+            ]
+          : body
     })
   }
   if (rest.length) items.push({ role: 'user', content: rest })

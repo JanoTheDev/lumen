@@ -10,6 +10,7 @@ import {
   type AgentMessage,
   type ChatChunk,
   type CompleteResult,
+  type DocumentInput,
   type LlmProvider,
   type StructuredRequest,
   type ToolCall,
@@ -52,6 +53,15 @@ export function thinkingOff(model: string): Anthropic.ThinkingConfigParam | unde
 
 type CreateParams = Anthropic.MessageCreateParamsNonStreaming
 
+/** A shared PDF as a base64 `document` block (text and page images both reach the model). */
+export function documentBlock(d: DocumentInput): Anthropic.DocumentBlockParam {
+  return {
+    type: 'document',
+    source: { type: 'base64', media_type: d.mediaType, data: d.base64 },
+    title: d.name
+  }
+}
+
 export function buildParams(req: StructuredRequest<unknown>): CreateParams {
   const system: Anthropic.TextBlockParam[] = req.system.map((b) => ({
     type: 'text',
@@ -63,14 +73,15 @@ export function buildParams(req: StructuredRequest<unknown>): CreateParams {
     content: m.content
   }))
   const last = messages[messages.length - 1]
-  if (last && last.role === 'user' && req.images?.length) {
+  if (last && last.role === 'user' && (req.images?.length || req.documents?.length)) {
     last.content = [
-      ...req.images.map(
+      ...(req.images ?? []).map(
         (img): Anthropic.ImageBlockParam => ({
           type: 'image',
           source: { type: 'base64', media_type: img.mediaType ?? 'image/jpeg', data: img.base64 }
         })
       ),
+      ...(req.documents ?? []).map(documentBlock),
       { type: 'text', text: req.messages[req.messages.length - 1].content }
     ]
   }
@@ -116,8 +127,14 @@ function addUsage(a: Usage, b: Usage): Usage {
 
 // Tool use -----------------------------------------------------------------------------------
 
-function contentBlock(c: ToolContent): Anthropic.TextBlockParam | Anthropic.ImageBlockParam {
+type ContentParam =
+  | Anthropic.TextBlockParam
+  | Anthropic.ImageBlockParam
+  | Anthropic.DocumentBlockParam
+
+function contentBlock(c: ToolContent): ContentParam {
   if (c.type === 'text') return { type: 'text', text: c.text }
+  if (c.type === 'document') return documentBlock(c)
   return {
     type: 'image',
     source: { type: 'base64', media_type: c.mediaType ?? 'image/jpeg', data: c.base64 }
@@ -136,7 +153,7 @@ function messageParam(m: AgentMessage): Anthropic.MessageParam {
   }
   // tool_result blocks must come first in a user message.
   const results: Anthropic.ToolResultBlockParam[] = []
-  const rest: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = []
+  const rest: ContentParam[] = []
   for (const c of m.content) {
     if (c.type === 'tool_result')
       results.push({

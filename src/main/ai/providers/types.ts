@@ -21,6 +21,13 @@ export interface Frame {
   detail?: 'low' | 'high' | 'auto'
 }
 
+/** A PDF the user shared (08 T21): an Anthropic `document` block / OpenAI `input_file`. */
+export interface DocumentInput {
+  name: string
+  base64: string
+  mediaType: 'application/pdf'
+}
+
 export type Effort = 'low' | 'medium' | 'high'
 
 export interface ChatRequest {
@@ -29,6 +36,8 @@ export interface ChatRequest {
   /** Oldest first; the last entry must be the user turn. Images attach to it. */
   messages: ChatMessage[]
   images?: Frame[]
+  /** PDFs sent with the last user message, after the images. Local servers ignore them. */
+  documents?: DocumentInput[]
   maxTokens: number
   /** Dropped for models that do not accept it. */
   effort?: Effort
@@ -138,6 +147,7 @@ export function looseToolSchema(
 export type ToolContent =
   | { type: 'text'; text: string }
   | { type: 'image'; base64: string; mediaType?: 'image/jpeg' | 'image/png' }
+  | ({ type: 'document' } & DocumentInput)
 
 export interface ToolCall {
   id: string
