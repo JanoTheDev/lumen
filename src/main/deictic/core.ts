@@ -11,6 +11,8 @@ import { parseDeictic, words, type DeicticCommand } from './grammar'
 export const UTTERANCE_TTL_MS = 30_000
 /** Two points closer than this are one place. */
 export const SAME_PLACE_PX = 12
+/** Words that point at a file ("summarize this file", "convert that to Excel"). */
+const FILE_POINT = new Set(['this', 'that', 'these', 'those', 'here', 'it'])
 /** "what's this" with files shared counts as pointing only after a move this recent. */
 export const POINTED_MS = 5000
 
@@ -36,6 +38,8 @@ export class Deictic {
   readonly ring = new PointerRing()
   private recording: number | null = null
   private last: UtteranceTiming | null = null
+  /** The timing a non-deictic utterance used up (pointFor reads it for that same text). */
+  private spent: { utterance: string; timing: UtteranceTiming } | null = null
 
   constructor(private readonly deps: DeicticDeps) {}
 
@@ -70,8 +74,9 @@ export class Deictic {
   }
 
   /** The spoken utterance this command came from, or null (typed / too old). */
-  private timing(): UtteranceTiming | null {
-    const t = this.last
+  private timing(utterance?: string): UtteranceTiming | null {
+    const t =
+      this.last ?? (utterance && this.spent?.utterance === utterance ? this.spent.timing : null)
     if (!t || this.deps.now() - t.end > UTTERANCE_TTL_MS) return null
     return t
   }
@@ -90,6 +95,29 @@ export class Deictic {
     })
   }
 
+  /**
+   * Where "this file" pointed (files/pointed.ts): around the first pointing word, the middle
+   * of a circling motion, else the position held longest, else the pointer now. Leaves the
+   * utterance's timing in place for the command that follows.
+   */
+  pointFor(utterance: string): Point {
+    const timing = this.timing(utterance)
+    const now = this.deps.now()
+    if (!timing) return this.deps.cursor()
+    const w = words(utterance)
+    const i = w.findIndex((x) => FILE_POINT.has(x))
+    const times = wordTimes(w, timing)
+    const wt = times[i < 0 ? 0 : i]
+    if (!wt) return this.ring.at(now) ?? this.deps.cursor()
+    return (
+      this.ring.circled(wt.t - 1.5 * wt.slack, wt.t + 1.5 * wt.slack) ??
+      this.ring.circled(timing.start, timing.end) ??
+      this.ring.heldNear(wt.t, wt.slack, now) ??
+      this.ring.at(now) ??
+      this.deps.cursor()
+    )
+  }
+
   /** The command's response (or its promise), undefined when it is not a deictic command. */
   intercept(utterance: string): unknown | undefined {
     if (!this.deps.enabled()) return undefined
@@ -97,6 +125,7 @@ export class Deictic {
     // later typed "click this" uses the pointer now, not where it rested back then.
     const cmd = parseDeictic(utterance)
     if (!cmd) {
+      this.spent = this.last ? { utterance, timing: this.last } : null
       this.last = null
       return undefined
     }

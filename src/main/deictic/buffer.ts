@@ -13,6 +13,8 @@ export interface PointerSample {
 /** 60 Hz for 10 s. */
 export const RING_SIZE = 600
 export const RING_MS = 10_000
+/** A pointer going round one file icon or list row stays within this box. */
+export const CIRCLE_PX = 160
 
 export class PointerRing {
   private buf: PointerSample[] = []
@@ -48,6 +50,28 @@ export class PointerRing {
       hit = s
     }
     return hit ? { x: hit.x, y: hit.y } : null
+  }
+
+  /**
+   * Circling: between `from` and `to` most of the pointer's moves (at least `minSamples`)
+   * stayed within a `maxSpread` px box around their median, so it was going round one thing
+   * (a quick move there first does not count). Returns the middle of that box, else null.
+   */
+  circled(from: number, to: number, maxSpread = CIRCLE_PX, minSamples = 6): Point | null {
+    const list = this.samples().filter((s) => s.t >= from && s.t <= to)
+    if (list.length < minSamples) return null
+    const median = (v: number[]): number => [...v].sort((a, b) => a - b)[v.length >> 1]
+    const mx = median(list.map((s) => s.x))
+    const my = median(list.map((s) => s.y))
+    const half = maxSpread / 2
+    const near = list.filter((s) => Math.abs(s.x - mx) <= half && Math.abs(s.y - my) <= half)
+    if (near.length < minSamples || near.length < list.length * 0.6) return null
+    const xs = near.map((s) => s.x)
+    const ys = near.map((s) => s.y)
+    const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)]
+    if (x1 - x0 > maxSpread || y1 - y0 > maxSpread) return null
+    if (x1 - x0 < 4 && y1 - y0 < 4) return null
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 }
   }
 
   /**

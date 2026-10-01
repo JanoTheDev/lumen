@@ -76,6 +76,11 @@ export function installDeictic(): void {
   onConfigPatched(sync)
 }
 
+/** Where the user pointed while saying `utterance` ("this file"), physical px. */
+export function pointedAt(utterance: string): Point {
+  return deictic?.pointFor(utterance) ?? logicalToPhys(screen.getCursorScreenPoint())
+}
+
 /** Voice entry: "click this", "move this there", "what's that" (only with helpers.deictic). */
 export function interceptDeictic(prompt: string): unknown | undefined {
   return deictic?.intercept(prompt)
