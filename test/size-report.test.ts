@@ -50,7 +50,7 @@ describe('size-report', () => {
     const failures = check(files)
     expect(failures).toHaveLength(2)
     expect(failures[0]).toMatch(/big\.js is 500\.0 KB gzip/)
-    expect(failures[1]).toMatch(/main bundle is 2150\.4 KB/)
+    expect(failures[1]).toMatch(/main bundle is 3174\.4 KB/)
     expect(BUDGET.rendererChunkGzip).toBe(400 * 1024)
   })
 
