@@ -166,7 +166,7 @@ const DIR: Record<string, Point> = {
 export class A11yCommands {
   readonly marks = new MarksState()
   readonly grid = new MouseGrid()
-  private autoScroll: { timer: ReturnType<typeof setInterval>; dir: string; speed: number } | null =
+  private autoScroll: { timer: ReturnType<typeof setTimeout>; dir: string; speed: number } | null =
     null
   private caps = false
   private snapshotNodes: ElementNode[] = []
@@ -566,21 +566,24 @@ export class A11yCommands {
   private startAutoScroll(dir: string): void {
     this.stopAutoScroll()
     const d = DIR[dir]
-    const state = {
-      dir,
-      speed: 1,
-      timer: setInterval(() => {
-        this.io
-          .input([{ t: 'scroll', dx: d.x * state.speed, dy: d.y * state.speed }])
-          .catch(() => this.stopAutoScroll())
-      }, AUTOSCROLL_MS)
+    // Each tick waits for the previous scroll, so a slow agent never gets a backlog.
+    const tick = (): void => {
+      this.io
+        .input([{ t: 'scroll', dx: d.x * state.speed, dy: d.y * state.speed }])
+        .then(() => {
+          if (this.autoScroll === state) state.timer = setTimeout(tick, AUTOSCROLL_MS)
+        })
+        .catch(() => {
+          if (this.autoScroll === state) this.stopAutoScroll()
+        })
     }
+    const state = { dir, speed: 1, timer: setTimeout(tick, AUTOSCROLL_MS) }
     this.autoScroll = state
     this.io.feedback(`Scrolling ${dir}. Say stop to stop`, true)
   }
 
   stopAutoScroll(): void {
-    if (this.autoScroll) clearInterval(this.autoScroll.timer)
+    if (this.autoScroll) clearTimeout(this.autoScroll.timer)
     this.autoScroll = null
   }
 

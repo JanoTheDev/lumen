@@ -206,6 +206,31 @@ describe('basic commands (T05)', () => {
     }
   })
 
+  it('auto-scroll waits for a slow scroll before sending the next', async () => {
+    vi.useFakeTimers()
+    try {
+      const { a11y, io } = setup()
+      let pending = 0
+      const done: (() => void)[] = []
+      io.input = () => {
+        pending++
+        return new Promise<void>((resolve) => done.push(resolve))
+      }
+      a11y.tryHandle('start scrolling down')
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(pending).toBe(1)
+      done.shift()!()
+      await vi.advanceTimersByTimeAsync(260)
+      expect(pending).toBe(2)
+      a11y.stopAutoScroll()
+      done.shift()!()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(pending).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reports dwell that is not set up, and toggles the wake word', async () => {
     const s = setup({ dwell: false })
     await s.say('pause dwell')
