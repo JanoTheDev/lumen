@@ -18,6 +18,7 @@ import type { SectionProps } from '../meta'
 import { Challenges } from './Challenges'
 import { CommunityPacks } from './CommunityPacks'
 import { Handoff } from './Handoff'
+import { LessonImport } from './LessonImport'
 import { RecordSteps } from './RecordSteps'
 
 function play(id: string): void {
@@ -78,6 +79,8 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
   const [progress, setProgress] = useState<LessonProgressView | null>(null)
   const [name, setName] = useState('')
   const [msg, setMsg] = useState('')
+  // Bumped when a tutorial import makes a draft, so Record my steps shows it.
+  const [draftKey, setDraftKey] = useState(0)
 
   const refresh = useCallback(() => {
     window.lumen
@@ -199,7 +202,9 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
         {msg && <p className="ui-hint">{msg}</p>}
       </Card>
 
-      <RecordSteps onSaved={refresh} />
+      <LessonImport apps={apps} onDraft={() => setDraftKey((k) => k + 1)} />
+
+      <RecordSteps key={draftKey} onSaved={refresh} />
 
       <Card
         title="Your lessons"

@@ -81,6 +81,8 @@ export interface ToLessonContext {
   regions?: Record<string, unknown>
   /** No usable UIA: uia-event checks become vision checks. */
   uiaNone?: boolean
+  /** Steps kept (default MAX_STEPS; imported tutorials allow more). */
+  maxSteps?: number
 }
 
 function toTarget(t: GenStep['target'], ctx: ToLessonContext): LessonTarget | null {
@@ -165,7 +167,7 @@ function toCheck(
 export function toLesson(g: GenLesson, ctx: ToLessonContext): Lesson | null {
   const used = new Set<string>()
   const steps: StoredLesson['steps'] = []
-  for (const s of g.steps.slice(0, MAX_STEPS)) {
+  for (const s of g.steps.slice(0, ctx.maxSteps ?? MAX_STEPS)) {
     const say = spoken(s.say, 200)
     if (say.length < 3) continue
     const target = toTarget(s.target, ctx)

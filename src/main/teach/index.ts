@@ -1,7 +1,8 @@
 // Lesson engine wiring (plans 07 Phase 1): the real ports on top of the agent, the verifier,
 // the announcer and the bus; the registry and progress store; the router hook for lesson
 // voice commands. index.ts calls installTeach() once the agent and a11y are set up.
-import { app, powerMonitor, shell } from 'electron'
+import { app, clipboard, powerMonitor, shell } from 'electron'
+import { existsSync, readFileSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import type {
@@ -66,6 +67,14 @@ import { createRecorder, type Recorder } from './recording'
 import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
 import { withInputLane } from '../agent-mode/input-lane'
 import { installChallenges, interceptChallenge } from './challenge-install'
+import {
+  importTutorial,
+  matchImportCommand,
+  type ImportApp,
+  type ImportResult,
+  type TutorialSource
+} from './importers'
+import { tutorialSchema } from './importers/tutorial'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -558,6 +567,67 @@ export function startSkillRecording(title?: string): { ok: boolean; error?: stri
   return recorder.start(title, 'skill')
 }
 
+// ---- Tutorial → lesson (11 T12) ----
+
+const TUTORIAL_TIMEOUT_MS = 60_000
+
+function importApp(skill: Skill | null | undefined): ImportApp | null {
+  if (!skill) return null
+  let shortcuts: string | undefined
+  const file = skill.dir ? join(skill.dir, 'shortcuts.md') : ''
+  try {
+    if (file && existsSync(file)) shortcuts = readFileSync(file, 'utf8').slice(0, 3000)
+  } catch {
+    shortcuts = undefined
+  }
+  return { id: skill.id, name: skill.name, regions: skill.regions, shortcuts }
+}
+
+/** A transcript, web tutorial or subtitle text becomes the lesson draft to review. */
+export function importTutorialFrom(src: TutorialSource, appId?: string): Promise<ImportResult> {
+  if (!recorder) return Promise.resolve({ ok: false, error: 'lessons are not ready yet' })
+  const rec = recorder
+  return importTutorial(
+    src,
+    { appId },
+    {
+      fetch: (url, init) => fetch(url, init),
+      app: (id) => importApp(registry?.get(id)),
+      appByName: (name) => {
+        const all = registry?.all() ?? []
+        const first =
+          name
+            .replace(/[^A-Za-z0-9 ]/g, ' ')
+            .trim()
+            .split(/\s+/)[0] ?? ''
+        const id = matchAppOnly(name, all) ?? (first ? matchAppOnly(first, all) : null)
+        return importApp(id ? registry?.get(id) : null)
+      },
+      complete: async (system, user, signal) => {
+        const { llm, model, effort } = getProvider('fast')
+        const timeout = AbortSignal.timeout(TUTORIAL_TIMEOUT_MS)
+        const res = await llm.complete(
+          {
+            model,
+            system: [{ text: system, cacheable: true }],
+            messages: [{ role: 'user', content: user }],
+            maxTokens: 6000,
+            effort,
+            schema: tutorialSchema,
+            schemaName: 'lumen_tutorial_lesson'
+          },
+          signal ? AbortSignal.any([signal, timeout]) : timeout
+        )
+        log('plan', `tutorial lesson written (${res.model})`)
+        return res.data
+      },
+      offer: (lesson, note) => rec.offerDraft(lesson, note),
+      readingLevel: (id) => readingLevelLineFor(loadConfig().helpers, id),
+      log: (msg) => log('plan', msg)
+    }
+  )
+}
+
 export function recordStatus(): RecordingStatus {
   return recorder?.status() ?? { phase: 'idle', events: 0, draft: null }
 }
@@ -891,6 +961,19 @@ export function interceptLesson(utterance: string): unknown | undefined {
   if (running && cmd && runner.command(cmd)) {
     log('plan', `lesson command: ${cmd}`)
     return HANDLED
+  }
+  // Tutorial → lesson (11 T12): the copied transcript or tutorial link.
+  if (!running && matchImportCommand(utterance)) {
+    const text = clipboard.readText()
+    if (!text.trim())
+      return {
+        mode: 'answer',
+        text: 'The clipboard is empty. Copy the tutorial’s transcript or its web address first.'
+      }
+    announce('Reading the tutorial. This takes a moment.', { kind: 'answer' })
+    return importTutorialFrom({ kind: 'text', text: text.slice(0, 200_000) }).then((r) =>
+      r.ok ? HANDLED : { mode: 'answer', text: `I could not make a lesson: ${r.error}` }
+    )
   }
   // Practice challenges (11 T22): start / check / give up / streak.
   if (!running) {

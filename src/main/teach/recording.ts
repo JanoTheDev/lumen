@@ -79,6 +79,8 @@ export interface Recorder {
   playDraft(): boolean
   intercept(utterance: string): unknown | undefined
   recording(): boolean
+  /** A lesson made elsewhere (a tutorial import, 11 T12) becomes the draft to review. */
+  offerDraft(lesson: Lesson, note?: string): { ok: boolean; error?: string }
 }
 
 export function createRecorder(deps: RecordingDeps): Recorder {
@@ -301,6 +303,19 @@ export function createRecorder(deps: RecordingDeps): Recorder {
 
     playDraft() {
       return !!draft && phase !== 'recording' && deps.play(draft)
+    },
+
+    offerDraft(lesson, note) {
+      if (phase === 'recording' || phase === 'drafting')
+        return { ok: false, error: 'a recording is running' }
+      draft = lesson
+      draftAt = deps.now()
+      phase = 'draft'
+      writeDraft(lesson)
+      const line = draftSummary(lesson)
+      deps.showLine(line)
+      deps.say(note ? `${line} ${note}` : line)
+      return { ok: true }
     },
 
     intercept(utterance) {

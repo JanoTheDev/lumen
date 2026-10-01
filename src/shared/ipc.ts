@@ -99,6 +99,21 @@ export const challengeStartSchema = z
     level: z.enum(['beginner', 'intermediate', 'advanced', 'harder', 'easier']).optional()
   })
   .strict()
+/** Tutorial → lesson (11 T12). */
+const importAppId = z
+  .string()
+  .max(60)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  .optional()
+export const tutorialImportSchema = z.discriminatedUnion('kind', [
+  z
+    .object({ kind: z.literal('text'), text: z.string().min(1).max(200_000), appId: importAppId })
+    .strict(),
+  z
+    .object({ kind: z.literal('url'), url: z.string().url().max(2000), appId: importAppId })
+    .strict(),
+  z.object({ kind: z.literal('file'), appId: importAppId }).strict()
+])
 /** helpers:journal-read day (11 T23). */
 export const journalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 /** Background task ids (08 T29) and a typed answer to a task's question. */

@@ -147,6 +147,22 @@ export interface ChallengeView {
   }[]
 }
 
+/** Tutorial → lesson (11 T12): what to read; `file` opens a subtitle file picker. */
+export type TutorialImportRequest =
+  | { kind: 'text'; text: string; appId?: string }
+  | { kind: 'url'; url: string; appId?: string }
+  | { kind: 'file'; appId?: string }
+
+export interface TutorialImportResult {
+  ok: boolean
+  title?: string
+  steps?: number
+  appName?: string
+  /** Spoken version-drift line, "" when the tutorial names no version. */
+  drift?: string
+  error?: string
+}
+
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
   'assistant:query': {
@@ -353,6 +369,8 @@ export interface InvokeChannels {
   }
   'teach:challenge-check': { args: []; result: { ok: boolean; text: string } }
   'teach:challenge-stop': { args: []; result: { ok: boolean } }
+  /** Tutorial → lesson draft (11 T12), reviewed like a recording. */
+  'teach:import-tutorial': { args: [req: TutorialImportRequest]; result: TutorialImportResult }
   /** Skills (11 T05/T06): Settings → Skills. */
   'skills:list': { args: []; result: SkillSummary[] }
   /** The full SKILL.md and the skill's file list, for View / Edit. */
@@ -1126,6 +1144,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:challenge-start',
   'teach:challenge-check',
   'teach:challenge-stop',
+  'teach:import-tutorial',
   'skills:list',
   'skills:get',
   'skills:set-enabled',
