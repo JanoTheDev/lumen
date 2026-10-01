@@ -69,6 +69,49 @@ export function buildHandoff(
   return { id, data: zip(entries), lessons: picked.length, labels: labelApps.length }
 }
 
+/** A labels-only handoff for one app (community labels, 11 T13). */
+export function buildLabelsHandoff(
+  file: NonNullable<ReturnType<NonNullable<ReturnType<typeof labelStore>>['exportFile']>>,
+  now = new Date()
+): { id: string; data: Buffer } {
+  const id = handoffId(`labels ${file.app}`)
+  const meta: Handoff = {
+    format: 1,
+    id,
+    title: `Button names for ${file.appName ?? file.app}`,
+    createdAt: now.toISOString(),
+    lessons: [],
+    labels: [file.app]
+  }
+  const entries: ZipEntry[] = [
+    { name: `${id}/${HANDOFF_FILE}`, data: json(parseHandoff(meta)) },
+    { name: `${id}/labels/${file.app}.json`, data: json(file) }
+  ]
+  return { id, data: zip(entries) }
+}
+
+export async function exportLabelsHandoff(
+  appId: string,
+  sender?: Electron.WebContents
+): Promise<{ ok: boolean; path?: string; error?: string }> {
+  const file = labelStore()?.exportFile(appId)
+  if (!file) return { ok: false, error: 'no labels for that app' }
+  const built = buildLabelsHandoff(file)
+  const opts: Electron.SaveDialogOptions = {
+    title: 'Share button names',
+    defaultPath: join(app.getPath('documents'), `${appId}-labels.lumen`),
+    filters: [{ name: 'Lumen files', extensions: ['lumen'] }]
+  }
+  const parent = parentOf(sender)
+  const pick = parent
+    ? await dialog.showSaveDialog(parent, opts)
+    : await dialog.showSaveDialog(opts)
+  if (pick.canceled || !pick.filePath) return { ok: false, error: 'cancelled' }
+  writeFileSync(pick.filePath, built.data)
+  log('done', `labels for ${appId} exported as ${built.id}`)
+  return { ok: true, path: pick.filePath }
+}
+
 const parentOf = (sender?: Electron.WebContents): BrowserWindow | undefined =>
   (sender && BrowserWindow.fromWebContents(sender)) || undefined
 

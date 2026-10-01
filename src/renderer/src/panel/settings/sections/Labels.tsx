@@ -28,6 +28,17 @@ function Entries({ app, onChanged }: { app: string; onChanged: () => void }): JS
       setNote(r.ok && r.path ? `Saved to ${r.path}` : r.error === 'cancelled' ? '' : 'Not saved.')
     })
   }
+  const share = (): void => {
+    void window.lumen.invoke('labels:export-lumen', app).then((r) => {
+      setNote(
+        r.ok && r.path
+          ? `Saved to ${r.path}. They open it in Settings, Lessons, Share with someone.`
+          : r.error === 'cancelled'
+            ? ''
+            : 'Not saved.'
+      )
+    })
+  }
   return (
     <>
       <ul className="panel-list" aria-label="Labels">
@@ -57,9 +68,10 @@ function Entries({ app, onChanged }: { app: string; onChanged: () => void }): JS
         ))}
       </ul>
       <Button onClick={save}>Save as labels.json</Button>
+      <Button onClick={share}>Save as a .lumen file to send</Button>
       <p className="ui-hint">
-        To share these with everyone, add the file to the app’s pack (skills/{app}/labels.json) in a
-        pull request, or send it to someone in a lesson file (Lessons, Share with someone).
+        To share these with everyone, add labels.json to the app’s pack (skills/{app}/labels.json)
+        in a pull request. To give them to one person, send the .lumen file.
       </p>
       {note && <p role="status">{note}</p>}
     </>

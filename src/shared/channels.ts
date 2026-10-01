@@ -309,6 +309,11 @@ export interface InvokeChannels {
     args: [app: string]
     result: { ok: boolean; path?: string; error?: string }
   }
+  /** The app's labels as a `.lumen` file (a labels-only helper handoff, 11 T24). */
+  'labels:export-lumen': {
+    args: [app: string]
+    result: { ok: boolean; path?: string; error?: string }
+  }
   /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
   'teach:list': { args: [appId?: string]; result: LessonListItem[] }
   /** Starts a lesson; the lesson left part-way resumes on its step. */
@@ -1119,6 +1124,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'labels:edit',
   'labels:remove-app',
   'labels:save-json',
+  'labels:export-lumen',
   'teach:list',
   'teach:start',
   'teach:command',

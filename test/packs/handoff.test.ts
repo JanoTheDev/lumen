@@ -22,6 +22,7 @@ vi.mock('../../src/main/labels', () => ({
 
 import {
   buildHandoff,
+  buildLabelsHandoff,
   installHandoff,
   listHandoffs,
   removeHandoff
@@ -172,6 +173,32 @@ describe('helper handoff', () => {
         }
       ])
     ).toThrow()
+  })
+
+  it('a labels-only file adds the button names', () => {
+    const user = profile()
+    user.reg.load()
+    const built = buildLabelsHandoff({
+      format: 1,
+      app: 'gimp',
+      appName: 'GIMP',
+      labels: [
+        {
+          role: 'button',
+          iconHash: '00ff00ff00ff00ff',
+          label: 'Paint',
+          source: 'human',
+          confidence: 1
+        }
+      ]
+    })
+    const r = installHandoff(
+      { registry: () => user.reg, skillsRoot: () => user.root },
+      built.data,
+      'gimp.lumen'
+    )
+    expect(r).toMatchObject({ ok: true, installed: [{ id: 'handoff-labels-gimp', lessons: 0 }] })
+    expect(put).toHaveBeenCalledWith('gimp', 'GIMP', expect.any(Array), 'shared')
   })
 
   it('handoffId', () => {

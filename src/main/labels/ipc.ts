@@ -5,6 +5,7 @@ import { labelAppSchema, labelEditSchema } from '@shared/ipc'
 import { INVALID, safeParse } from '../ipc/validate'
 import { labelsChanged, labelStore, saveLabelsJson } from '.'
 import { labelKey } from './store'
+import { exportLabelsHandoff } from '../teach/handoff'
 
 export function registerLabelsIpc(): void {
   ipcMain.handle('labels:apps', () => labelStore()?.apps() ?? [])
@@ -39,5 +40,10 @@ export function registerLabelsIpc(): void {
     const app = safeParse('labels:save-json', labelAppSchema, raw)
     if (!app) return INVALID
     return saveLabelsJson(app, e.sender)
+  })
+  ipcMain.handle('labels:export-lumen', (e, raw: unknown) => {
+    const app = safeParse('labels:export-lumen', labelAppSchema, raw)
+    if (!app) return INVALID
+    return exportLabelsHandoff(app, e.sender)
   })
 }
