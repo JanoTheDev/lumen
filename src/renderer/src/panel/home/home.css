@@ -159,3 +159,83 @@
 .home-toggles {
   gap: var(--space-3);
 }
+
+/* Background tasks (08 T29) */
+.home-tasks {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-task__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.home-task__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+  transition: background-color var(--dur-fast) var(--ease-in-out);
+}
+
+.home-task__main:not(:disabled):hover {
+  background: var(--accent-soft);
+}
+
+.home-task__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-task__status {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-task.is-unseen .home-task__title::after {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: var(--space-2);
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+.home-task.is-failed .home-task__status {
+  color: var(--danger, var(--fg-muted));
+}
+
+.home-task__question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.home-task__choices,
+.home-task__answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.home-task__answer .ui-input {
+  flex: 1;
+  min-width: 0;
+}

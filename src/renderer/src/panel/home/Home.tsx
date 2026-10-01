@@ -1,4 +1,5 @@
-// Home flyout (tray): status, ask box, suggestions, recent questions and quick toggles.
+// Home flyout (tray): status, ask box, background tasks, suggestions, recent questions and
+// quick toggles.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import type { HomeInfo, LessonProgressView } from '@shared/channels'
 import { IconButton, Kbd, Switch, icons } from '../../ui'
@@ -6,6 +7,7 @@ import { animateSpring } from '../../ui/motion'
 import { invoke, send, useIpc } from '../../lib/ipc'
 import { useConfig } from '../settings/useConfig'
 import { DEFAULT_SUGGESTIONS, moveIndex } from './suggestions'
+import { Tasks } from './Tasks'
 
 function useHomeInfo(): [HomeInfo | null, () => void] {
   const [info, setInfo] = useState<HomeInfo | null>(null)
@@ -162,6 +164,8 @@ export function Home(): JSX.Element {
         />
         <IconButton icon={icons.play} label="Ask" type="submit" disabled={!ask.trim()} />
       </form>
+
+      <Tasks />
 
       <section className="home-section" aria-labelledby="home-try">
         <h2 id="home-try" className="home-label">

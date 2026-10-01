@@ -33,6 +33,7 @@ import { exportDiagnostics } from '../diagnostics/export'
 import { openLogsFolder } from '../diagnostics/ipc'
 import * as home from './home'
 import * as settings from './settings'
+import { backgroundManager } from '../agent-mode/background'
 
 const ICONS: Record<string, string> = {
   'ready-dark.ico': readyDark,
@@ -93,7 +94,13 @@ function refresh(): void {
     tray.setImage(nativeImage.createFromPath(ICONS[name]))
     lastIcon = name
   }
-  tray.setToolTip(trayTooltip(i))
+  // Badge (08 T29): finished background tasks not looked at yet.
+  const unseen = backgroundManager().unseenCount()
+  tray.setToolTip(
+    unseen
+      ? `${trayTooltip(i)} · ${unseen} finished ${unseen === 1 ? 'task' : 'tasks'}`
+      : trayTooltip(i)
+  )
 }
 
 /** "Pause listening" in the tray: turns the wake word off and remembers why. */
@@ -191,6 +198,7 @@ export function create(): void {
   }
   bus.on('voice.stopped', stop)
   bus.on('voice.cancelled', stop)
+  bus.on('task.changed', refresh)
   bus.on('query.started', () => error && setError(false))
   bus.on('query.failed', (e) => {
     if (!e.cancelled) setError(true)
