@@ -19,6 +19,8 @@ export interface AgentInitOptions {
   scale?: number
   /** focus-changed is wanted by an a11y feature. */
   focusEvents?: boolean
+  /** mouse-moved is wanted (follow buddy); guide auto-dismiss comes from the config. */
+  mouseEvents?: boolean
   logLevel?: AgentLogLevel
 }
 
@@ -38,9 +40,13 @@ export function dictationHotkeyOf(cfg: AppConfig, mainHotkey: string): string {
 }
 
 /** Agent events main needs while `cfg` (and the a11y features) are as they are. */
-export function agentSubscriptions(cfg: AppConfig, focusEvents = false): string[] {
+export function agentSubscriptions(
+  cfg: AppConfig,
+  focusEvents = false,
+  mouseEvents = false
+): string[] {
   const subs: string[] = []
-  if (cfg.guideAutoDismissOnMove) subs.push('mouse-moved')
+  if (cfg.guideAutoDismissOnMove || mouseEvents) subs.push('mouse-moved')
   if (focusEvents) subs.push('focus-changed')
   return subs
 }
@@ -50,7 +56,7 @@ export function buildAgentInitState(cfg: AppConfig, opts: AgentInitOptions = {})
     hotkey: cfg.hotkey,
     dictationHotkey: dictationHotkeyOf(cfg, cfg.hotkey),
     dwell: agentDwellConfig(dwellSettings(cfg), opts.scale ?? 1),
-    subscriptions: agentSubscriptions(cfg, opts.focusEvents),
+    subscriptions: agentSubscriptions(cfg, opts.focusEvents, opts.mouseEvents),
     logLevel: opts.logLevel ?? 'info'
   }
 }

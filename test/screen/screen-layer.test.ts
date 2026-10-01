@@ -44,9 +44,12 @@ vi.mock('../../src/main/windows/registry', () => ({
   onBroadcast: () => {},
   registerWindowSet: () => {}
 }))
-vi.mock('../../src/main/config', () => ({
-  loadConfig: () => ({ buddy: { enabled: false, followCursor: false } })
+const h = vi.hoisted(() => ({
+  cfg: { buddy: { enabled: false, followCursor: false } },
+  want: vi.fn()
 }))
+vi.mock('../../src/main/config', () => ({ loadConfig: () => h.cfg }))
+vi.mock('../../src/main/agent/subscriptions', () => ({ mouseEvents: { want: h.want } }))
 
 import type { ScreenScene } from '../../src/shared/events'
 import * as layer from '../../src/main/windows/screen-layer'
@@ -109,5 +112,32 @@ describe('screen layer scene', () => {
     const raises = w.moveTop.mock.calls.length
     for (let i = 0; i < 10; i++) layer.dwell({ x: 100, y: 100, progress: i / 10, active: true })
     expect(w.moveTop.mock.calls.length).toBe(raises)
+  })
+
+  it('follows agent mouse-moved only while the follow buddy is on', () => {
+    const w = wins[0]
+    const cursors = (): unknown[] =>
+      w.sent.filter(([ch]) => ch === 'screen:cursor').map(([, p]) => p)
+    const before = cursors().length
+    layer.onCursorMoved({ x: 5, y: 5 })
+    expect(cursors()).toHaveLength(before)
+
+    h.cfg.buddy = { enabled: true, followCursor: true }
+    layer.onConfigChanged()
+    expect(h.want).toHaveBeenLastCalledWith('buddy-follow', true)
+    layer.onCursorMoved({ x: 40, y: 30 })
+    layer.onCursorMoved({ x: 40, y: 30 })
+    expect(cursors().slice(-2)).toEqual([
+      { x: 0, y: 0 },
+      { x: 40, y: 30 }
+    ])
+
+    h.cfg.buddy = { enabled: false, followCursor: false }
+    layer.onConfigChanged()
+    expect(h.want).toHaveBeenLastCalledWith('buddy-follow', false)
+    expect(cursors().at(-1)).toBeNull()
+    const n = cursors().length
+    layer.onCursorMoved({ x: 90, y: 90 })
+    expect(cursors()).toHaveLength(n)
   })
 })

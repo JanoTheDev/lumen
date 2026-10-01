@@ -1,14 +1,19 @@
 // Agent events (hotkey, dictation, dwell, mouse) and agent lifecycle status.
 import type { AgentBridge } from './bridge'
-import { applyMouseSubscription } from './sync'
+import { mouseEvents, moveGate } from './subscriptions'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { dwellController } from '../a11y/dwell'
 import { dismissGuide } from '../guides/session'
+import { physToLogical } from '../actions/coords'
+import * as screenLayer from '../windows/screen-layer'
 import { onConfigPatched } from '../ipc/settings'
 import { setStatus } from '../windows/status'
 import { onDictationDown, onDictationUp } from '../speech/dictation/pipeline'
 import { onAssistantHotkeyDown, onAssistantHotkeyUp } from '../speech/hotkey'
+
+/** Physical px the cursor must travel before a guide is dismissed on move. */
+const GUIDE_DISMISS_PX = 12
 
 let agentFailed = false
 
@@ -45,11 +50,15 @@ export function wireAgentEvents(agent: AgentBridge): void {
       .catch((e) => console.error('[dwell] click failed:', (e as Error).message))
   })
 
-  agent.onEvent('mouse-moved', () => {
-    if (!loadConfig().guideAutoDismissOnMove) return
-    dismissGuide()
+  // mouse-moved {x, y} physical px, ~60 Hz while moving: follow buddy + guide auto-dismiss.
+  const guideMove = moveGate(GUIDE_DISMISS_PX)
+  agent.onEvent('mouse-moved', (data) => {
+    const p = data as { x?: unknown; y?: unknown } | undefined
+    if (typeof p?.x !== 'number' || typeof p.y !== 'number') return
+    const phys = { x: p.x, y: p.y }
+    screenLayer.onCursorMoved(physToLogical(phys))
+    if (guideMove(phys) && loadConfig().guideAutoDismissOnMove) dismissGuide()
   })
-  onConfigPatched((next, prev) => {
-    if (next.guideAutoDismissOnMove !== prev.guideAutoDismissOnMove) applyMouseSubscription(next)
-  })
+  mouseEvents.want('guide-dismiss', loadConfig().guideAutoDismissOnMove)
+  onConfigPatched((next) => mouseEvents.want('guide-dismiss', next.guideAutoDismissOnMove))
 }

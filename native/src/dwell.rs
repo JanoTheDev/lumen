@@ -437,14 +437,23 @@ fn snap_element(x: i32, y: i32) -> Option<Value> {
     }
 }
 
-/// `mouse-moved` events while subscribed (20 Hz poll, > 12 px moves).
+/// `mouse-moved {x, y}` (physical px) while subscribed: every cursor change, polled at ~60 Hz
+/// while the cursor moves and 20 Hz once it has been still for a moment. Nothing is sent while
+/// it rests. Consumers apply their own thresholds (main dismisses guides after 12 px).
 pub struct MouseWatch {
     out: Out,
     stop: Mutex<Option<Arc<AtomicBool>>>,
 }
 
+/// Poll interval for the next tick: fast while moving or just stopped, slow when idle.
+pub fn mouse_poll_interval(idle: Duration) -> Duration {
+    if idle < MouseWatch::IDLE_AFTER { MouseWatch::FAST_POLL } else { MouseWatch::SLOW_POLL }
+}
+
 impl MouseWatch {
-    pub const MOVE_PX: f64 = 12.0;
+    pub const FAST_POLL: Duration = Duration::from_millis(16);
+    pub const SLOW_POLL: Duration = Duration::from_millis(50);
+    pub const IDLE_AFTER: Duration = Duration::from_millis(250);
 
     pub fn new(out: Out) -> Self {
         MouseWatch { out, stop: Mutex::new(None) }
@@ -467,13 +476,14 @@ impl MouseWatch {
         let spawned = std::thread::Builder::new().name("mouse-watch".into()).spawn(move || {
             let flag = thread_flag;
             let mut last = crate::input::sendinput::cursor_pos();
+            let mut moved_at = Instant::now().checked_sub(Self::IDLE_AFTER).unwrap_or_else(Instant::now);
             while !flag.load(Ordering::SeqCst) {
-                std::thread::sleep(Duration::from_millis(50));
+                std::thread::sleep(mouse_poll_interval(moved_at.elapsed()));
                 let cur = crate::input::sendinput::cursor_pos();
-                let d = (((cur.0 - last.0) as f64).powi(2) + ((cur.1 - last.1) as f64).powi(2)).sqrt();
-                if d > Self::MOVE_PX {
+                if cur != last {
                     last = cur;
-                    out.try_emit("mouse-moved", json!({}));
+                    moved_at = Instant::now();
+                    out.try_emit("mouse-moved", json!({"x": cur.0, "y": cur.1}));
                 }
             }
         });
@@ -547,6 +557,13 @@ mod tests {
         assert_eq!(triggers(&evs), 1);
         let evs = run(&mut f, 2.04, 3.0, 400, 5, false);
         assert!(evs.contains(&Ev::Trigger { x: 400, y: 5, click_type: "drag", phase: Some("drag-end") }));
+    }
+
+    #[test]
+    fn mouse_watch_polls_fast_only_while_moving() {
+        assert_eq!(mouse_poll_interval(Duration::ZERO), MouseWatch::FAST_POLL);
+        assert_eq!(mouse_poll_interval(Duration::from_millis(200)), MouseWatch::FAST_POLL);
+        assert_eq!(mouse_poll_interval(Duration::from_secs(1)), MouseWatch::SLOW_POLL);
     }
 
     #[test]

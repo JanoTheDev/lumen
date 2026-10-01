@@ -242,6 +242,10 @@ describe('buildAgentInitState', () => {
       'focus-changed'
     ])
     expect(agentSubscriptions(cfg)).toEqual(['mouse-moved'])
+    expect(agentSubscriptions(makeConfig(), false, true)).toEqual(['mouse-moved'])
+    expect(buildAgentInitState(makeConfig(), { mouseEvents: true }).subscriptions).toEqual([
+      'mouse-moved'
+    ])
   })
 
   it('binds the dictation hotkey only when enabled and distinct from the main one', () => {

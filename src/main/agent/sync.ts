@@ -1,11 +1,7 @@
 // Pushes hotkey, subscription and dwell settings to the agent; `init` carries all of it on start.
 import { getAgent } from './instance'
-import {
-  agentSubscriptions,
-  buildAgentInitState,
-  dictationHotkeyOf,
-  type AgentInitArgs
-} from './state'
+import { buildAgentInitState, dictationHotkeyOf, type AgentInitArgs } from './state'
+import { mouseEvents } from './subscriptions'
 import type { AppConfig } from '../config'
 import { screen } from 'electron'
 import { agentDwellConfig, dwellSettings } from '../a11y/dwell'
@@ -18,7 +14,8 @@ import * as dwellRing from '../windows/dwell-ring'
 export function agentInitArgs(cfg: AppConfig): AgentInitArgs {
   return buildAgentInitState(cfg, {
     scale: screen.getPrimaryDisplay().scaleFactor,
-    focusEvents: focusEventsWanted()
+    focusEvents: focusEventsWanted(),
+    mouseEvents: mouseEvents.wanted()
   })
 }
 
@@ -32,16 +29,6 @@ export function applyDwellState(cfg: AppConfig): void {
   agent
     .request('dwell_config', { ...agentDwellConfig(dwellSettings(cfg), scale) })
     .catch((e) => console.error('[dwell] config failed:', (e as Error).message))
-}
-
-/** mouse-moved is only sent while subscribed; guides dismissed on move need it. */
-export function applyMouseSubscription(cfg: AppConfig): void {
-  const agent = getAgent()
-  if (!agent?.running) return
-  const on = agentSubscriptions(cfg).includes('mouse-moved')
-  agent
-    .request('subscribe', { events: ['mouse-moved'], enabled: on })
-    .catch((e) => console.error('[agent] mouse-moved subscribe failed:', (e as Error).message))
 }
 
 /** Wake word + voice cancel: the keyword spotter in main. */

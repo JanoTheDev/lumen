@@ -10,6 +10,7 @@ import type { DwellRingData } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { onBroadcast, registerWindowSet } from './registry'
 import { loadConfig } from '../config'
+import { mouseEvents } from '../agent/subscriptions'
 
 type Highlight = ScreenScene['highlights'][number]
 type Scene = Omit<ScreenScene, 'monitorId'>
@@ -29,13 +30,12 @@ const EXIT_MS = 260
 /** Locate spotlights clear themselves (surfaces.md §3.4). */
 const LOCATE_MS = 6000
 const FAILURE_MS = 1500
-const CURSOR_MS = 16
-const CURSOR_IDLE_MS = 100
 
 const layers = new Map<number, Layer>()
 let scene: Scene = { highlights: [] }
 let suppressed = false
-let cursorTimer: ReturnType<typeof setTimeout> | null = null
+/** The follow buddy gets the agent's mouse-moved stream (~60 Hz while moving, nothing at rest). */
+let following = false
 let lastCursor: Point | null = null
 let cursorDisplay: number | null = null
 let captureDisplay: number | null = null
@@ -166,7 +166,7 @@ function renderLayer(l: Layer): void {
 
 function render(): void {
   for (const l of layers.values()) renderLayer(l)
-  syncCursorPolling()
+  syncCursorFollow()
 }
 
 function sendCursorTo(l: Layer): void {
@@ -177,33 +177,37 @@ function sendCursorTo(l: Layer): void {
   )
 }
 
-function pollCursor(): void {
-  cursorTimer = null
-  const p = screen.getCursorScreenPoint()
-  const moved = !lastCursor || p.x !== lastCursor.x || p.y !== lastCursor.y
+function moveCursor(p: Point): void {
+  if (lastCursor && p.x === lastCursor.x && p.y === lastCursor.y) return
   lastCursor = p
-  if (moved) {
-    const d = screen.getDisplayNearestPoint(p)
-    const prev = cursorDisplay
-    cursorDisplay = d.id
-    for (const l of layers.values()) {
-      if (l.display.id === d.id || l.display.id === prev) {
-        sendCursorTo(l)
-        if (l.display.id === d.id) showLayer(l, false)
-        else if (!l.hasScene) hideLater(l)
-      }
+  const d = screen.getDisplayNearestPoint(p)
+  const prev = cursorDisplay
+  cursorDisplay = d.id
+  for (const l of layers.values()) {
+    if (l.display.id === d.id || l.display.id === prev) {
+      sendCursorTo(l)
+      if (l.display.id === d.id) showLayer(l, false)
+      else if (!l.hasScene) hideLater(l)
     }
   }
-  cursorTimer = setTimeout(pollCursor, moved ? CURSOR_MS : CURSOR_IDLE_MS)
 }
 
-/** Cursor polling runs only while the follow buddy is on; otherwise it costs nothing. */
-function syncCursorPolling(): void {
+/** Agent mouse-moved, already in global logical px. Ignored unless the buddy follows. */
+export function onCursorMoved(p: Point): void {
+  if (following) moveCursor(p)
+}
+
+/** mouse-moved is subscribed only while the follow buddy is on; otherwise it costs nothing. */
+function syncCursorFollow(): void {
   const want = followCursor() && !suppressed
-  if (want && !cursorTimer) pollCursor()
-  else if (!want && cursorTimer) {
-    clearTimeout(cursorTimer)
-    cursorTimer = null
+  if (want === following) return
+  following = want
+  mouseEvents.want('buddy-follow', want)
+  if (want) {
+    lastCursor = null
+    moveCursor(screen.getCursorScreenPoint())
+  } else {
+    lastCursor = null
     cursorDisplay = null
     for (const l of layers.values()) {
       if (l.ready) l.win.webContents.send('screen:cursor', null)
@@ -376,7 +380,7 @@ export function hide(): void {
     }
     if (!l.hasScene) l.win.hide()
   }
-  syncCursorPolling()
+  syncCursorFollow()
 }
 
 export function show(): void {
@@ -439,7 +443,7 @@ export function toGlobal(win: BrowserWindow | null, p: Point): Point {
 }
 
 export function onConfigChanged(): void {
-  syncCursorPolling()
+  syncCursorFollow()
   render()
 }
 
