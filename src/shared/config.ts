@@ -428,8 +428,7 @@ export function withV2Defaults(partial: Record<string, unknown>): Record<string,
 
 const s2 = configV2Schema.shape
 
-/** Schema for a settings patch sent from the renderer: any subset of top-level v2 keys, nested objects partial. */
-export const configPatchSchema = z
+const patchObject = z
   .object({
     agentImpl: s2.agentImpl,
     theme: s2.theme,
@@ -465,5 +464,24 @@ export const configPatchSchema = z
   })
   .partial()
   .strict()
+
+// zod fills `.default()` fields into partial objects, which would reset settings the patch
+// never mentioned; keep only the keys the patch actually sent.
+function keepGiven(input: unknown, out: unknown): unknown {
+  if (!isPlainObject(input) || !isPlainObject(out)) return out
+  const res: Record<string, unknown> = {}
+  for (const k of Object.keys(input)) if (k in out) res[k] = keepGiven(input[k], out[k])
+  return res
+}
+
+/** Schema for a settings patch sent from the renderer: any subset of top-level v2 keys, nested objects partial. */
+export const configPatchSchema = z.unknown().transform((input, ctx) => {
+  const r = patchObject.safeParse(input)
+  if (!r.success) {
+    for (const issue of r.error.issues) ctx.addIssue(issue as Parameters<typeof ctx.addIssue>[0])
+    return z.NEVER
+  }
+  return keepGiven(input, r.data) as z.infer<typeof patchObject>
+})
 
 export type ConfigPatch = z.infer<typeof configPatchSchema>

@@ -298,3 +298,12 @@ describe('config', () => {
     )
   })
 })
+
+describe('configPatchSchema defaults', () => {
+  it('does not fill defaults into fields the patch leaves out', () => {
+    expect(configPatchSchema.parse({ a11y: { uiScale: 1.5 } })).toEqual({ a11y: { uiScale: 1.5 } })
+    expect(configPatchSchema.parse({ wakeWord: { enabled: true } })).toEqual({
+      wakeWord: { enabled: true }
+    })
+  })
+})
