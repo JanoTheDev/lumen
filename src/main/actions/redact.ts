@@ -41,12 +41,31 @@ export function maskSecrets(text: string): string {
   return out + text.slice(pos)
 }
 
+/**
+ * Config-file secrets the detector misses: `DB_PASSWORD=…`, `"client_secret": "…"`,
+ * `GITHUB_TOKEN: …` (a name ending in password / secret / token / api key / access key / private
+ * key / credentials, or with an `_…` suffix after it; "tokens" counters are not secrets).
+ */
+const CONFIG_SECRET_RE =
+  /\b([A-Za-z0-9_.-]*?(?:password|passwd|passphrase|secret|token|api[_-]?key|access[_-]?key|private[_-]?key|credentials?)(?:_[A-Za-z0-9_]*)?["']?\s*[=:]\s*["']?)([^\s"',;&]{4,})/gi
+
+/** `scheme://user:password@host`: the password part. */
+const URL_USERINFO_RE = /\b([a-z][a-z0-9+.-]*:\/\/[^\s/:@]+):([^\s/@]+)@/gi
+
+function redactConfigSecrets(text: string): string {
+  return text
+    .replace(URL_USERINFO_RE, (_m, head: string) => `${head}:[redacted:password]@`)
+    .replace(CONFIG_SECRET_RE, (m, name: string, value: string) =>
+      value.startsWith('[redacted:') ? m : `${name}[redacted:password]`
+    )
+}
+
 /** Log lines: every sensitive span becomes `[redacted:<kind>]`. */
 export function redactForLog(text: string): string {
-  return redact(text)
+  return redact(redactConfigSecrets(text))
 }
 
 /** Model input (screen text, page text, tool results): same rewrite as the log. */
 export function redactForModel(text: string): string {
-  return redact(text)
+  return redact(redactConfigSecrets(text))
 }

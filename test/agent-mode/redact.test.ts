@@ -64,6 +64,28 @@ describe('redactForLog / redactForModel', () => {
   it('leaves ordinary text alone', () => {
     const line = 'execute: click, type | image 1280x720 → phys 2560x1440'
     expect(redactForLog(line)).toBe(line)
+    for (const ok of ['turn {"inputTokens":512,"maxTokens":2048}', 'passwords: 3'])
+      expect(redactForLog(ok)).toBe(ok)
+  })
+
+  it('catches config secrets: NAME_PASSWORD=, *_SECRET*, *_TOKEN, JSON keys, URL passwords', () => {
+    const pw = ['hunter2', 'hunter2'].join('')
+    const lines = [
+      `DB_PASSWORD=${pw}`,
+      `SECRET_KEY = "${pw}"`,
+      `GITHUB_TOKEN: ${pw}`,
+      `{"client_secret": "${pw}"}`,
+      `DATABASE_URL=postgres://admin:${pw}@db.local:5432/app`,
+      `export STRIPE_API_KEY='${pw}'`
+    ]
+    for (const l of lines) {
+      expect(redactForLog(l)).not.toContain(pw)
+      expect(redactForModel(l)).not.toContain(pw)
+    }
+    expect(redactForLog(`DB_PASSWORD=${pw}`)).toBe('DB_PASSWORD=[redacted:password]')
+    expect(redactForLog(`postgres://admin:${pw}@db`)).toBe(
+      'postgres://admin:[redacted:password]@db'
+    )
   })
 })
 
