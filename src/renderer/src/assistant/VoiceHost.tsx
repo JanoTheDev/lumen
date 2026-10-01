@@ -9,6 +9,9 @@ import { startBargeIn, takePreRoll } from '../voice/barge-in'
 import { setWakeFeedPaused, startWakeFeed } from '../voice/wake-feed'
 import { startMicDeviceSync } from '../voice/mic'
 import { RmsGate } from '../voice/vad/rms'
+import { playEarcon } from '../voice/earcons'
+import { whisperThreshold } from '../voice/whisper'
+import { DEFAULT_EXTRAS, readExtras, type VoiceExtras } from '../voice/extras'
 
 interface VadConfig {
   speechThreshold: number
@@ -24,7 +27,6 @@ const DEFAULT_MAX_RECORD_MS = 30000
 // Dictation: held up to 10 min; hands-free ends after a longer pause than a query.
 const DICTATION_MAX_RECORD_MS = 10 * 60_000
 const DICTATION_HANDS_FREE_MAX_MS = 3 * 60_000
-const DICTATION_SILENCE_MS = 2000
 const PROCESSING_TIMEOUT_MS = 60_000
 
 const NOTHING_HEARD = 'Didn’t catch that. Try again.'
@@ -33,6 +35,12 @@ const lumen = (): Window['lumen'] => window.lumen
 
 function readVad(cfg: unknown): VadConfig | null {
   return (cfg as { vad?: VadConfig } | null)?.vad ?? null
+}
+
+/** The bar draws the compact dictation pill while this is set (assistant.css). */
+function setPill(on: boolean): void {
+  if (on) document.documentElement.dataset.dictating = 'pill'
+  else delete document.documentElement.dataset.dictating
 }
 
 function closeBar(): void {
@@ -48,6 +56,14 @@ export function VoiceHost(): null {
   // The current recording is dictation (typed by main), not an assistant query.
   const dictationRef = useRef(false)
   const vadRef = useRef<VadConfig | null>(null)
+  const extrasRef = useRef<VoiceExtras>(DEFAULT_EXTRAS)
+  // A dictation recording is open: its stop sound is still due.
+  const stopSoundRef = useRef(false)
+  const dictationStoppedRef = useRef(() => {
+    if (!stopSoundRef.current) return
+    stopSoundRef.current = false
+    if (extrasRef.current.sounds) playEarcon('stop')
+  })
   // A turn waiting on a confirm in the bar survives the recording that answers it ("yes").
   const confirmWaitRef = useRef<number | null>(null)
   const confirmShownRef = useRef(false)
@@ -108,6 +124,7 @@ export function VoiceHost(): null {
     } catch (err) {
       console.error('[dictation] error:', err)
     } finally {
+      setPill(false)
       closeBar()
     }
   }
@@ -157,7 +174,10 @@ export function VoiceHost(): null {
 
   const handleError = (message: string): void => {
     console.error('[voice] error:', message)
-    if (!dictationRef.current) lumen().send('voice:ended')
+    stopSoundRef.current = false
+    // Also for dictation: main restores ducked media and its recording state on this.
+    lumen().send('voice:ended')
+    setPill(false)
     if (wakeTimerRef.current) {
       clearTimeout(wakeTimerRef.current)
       wakeTimerRef.current = null
@@ -193,7 +213,9 @@ export function VoiceHost(): null {
   useEffect(() => {
     return lumen().on('assistant:cancel-request', () => {
       cancelledRef.current = true
+      dictationStoppedRef.current()
       dictationRef.current = false
+      setPill(false)
       survivorsRef.current.clear()
       voiceSessionRef.current++
       clearTimersRef.current()
@@ -234,12 +256,15 @@ export function VoiceHost(): null {
       .invoke('settings:get')
       .then((cfg) => {
         const v = readVad(cfg)
-        if (alive && v) vadRef.current = v
+        if (!alive) return
+        if (v) vadRef.current = v
+        extrasRef.current = readExtras(cfg)
       })
       .catch(() => {})
     const unsub = lumen().on('settings:changed', (cfg) => {
       const v = readVad(cfg)
       if (v) vadRef.current = v
+      extrasRef.current = readExtras(cfg)
     })
     return () => {
       alive = false
@@ -252,6 +277,8 @@ export function VoiceHost(): null {
       clearTimers()
       cancelledRef.current = false
       dictationRef.current = false
+      setPill(false)
+      stopSoundRef.current = false
       const waiting = confirmWaitRef.current
       if (waiting !== null && confirmShownRef.current) survivorsRef.current.add(waiting)
       return ++voiceSessionRef.current
@@ -260,10 +287,16 @@ export function VoiceHost(): null {
   })
 
   useEffect(() => {
+    /** Speech threshold, lowered in whisper mode. */
+    const threshold = (vad: VadConfig): number =>
+      extrasRef.current.whisper ? whisperThreshold(vad.speechThreshold) : vad.speechThreshold
+    const whisper = (): boolean => extrasRef.current.whisper
+    /** The dictation recording is over (key released, tap, silence): the stop sound. */
+    const dictationStopped = (): void => dictationStoppedRef.current()
     const startHold = (): void => {
       beginSessionRef.current()
       const vad = vadRef.current ?? DEFAULT_VAD
-      start({ speechThreshold: vad.speechThreshold })
+      start({ speechThreshold: threshold(vad), whisper: whisper() })
     }
     // Auto-stop after sustained silence once speech was heard, give up when nothing is said
     // within maxWaitMs, hard stop at maxRecordMs (also enforced in useVoice).
@@ -286,7 +319,8 @@ export function VoiceHost(): null {
       // The hotkey state in main must know the recording is over, or the next press stops
       // a recording that no longer exists.
       const ended = (): void => {
-        if (!dictationRef.current) lumen().send('voice:ended')
+        dictationStopped()
+        lumen().send('voice:ended')
       }
       const tick = (): void => {
         wakeTimerRef.current = null
@@ -327,9 +361,9 @@ export function VoiceHost(): null {
       const maxRecordMs = vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS
       // After a voice barge-in, the words that interrupted the answer lead the recording.
       const preRoll = takePreRoll() ?? undefined
-      start({ speechThreshold: vad.speechThreshold, maxRecordMs, preRoll })
+      start({ speechThreshold: threshold(vad), maxRecordMs, preRoll, whisper: whisper() })
       watchSilence(session, {
-        threshold: vad.speechThreshold,
+        threshold: threshold(vad),
         silenceMs: vad.silenceMs,
         maxWaitMs: vad.maxWaitMs,
         maxRecordMs,
@@ -341,19 +375,24 @@ export function VoiceHost(): null {
     const startDictation = (): void => {
       beginSessionRef.current()
       dictationRef.current = true
+      const extras = extrasRef.current
+      if (extras.pill) setPill(true)
+      if (extras.sounds) playEarcon('start')
+      stopSoundRef.current = true
       const vad = vadRef.current ?? DEFAULT_VAD
       start({
-        speechThreshold: vad.speechThreshold,
+        speechThreshold: threshold(vad),
         maxRecordMs: DICTATION_MAX_RECORD_MS,
         watchdogMs: DICTATION_MAX_RECORD_MS + 5000,
-        dictation: true
+        dictation: true,
+        whisper: whisper()
       })
     }
     // A quick tap on the assistant hotkey: keep listening, stop on silence.
     const assistantHandsFree = (): void => {
       const vad = vadRef.current ?? DEFAULT_VAD
       watchSilence(voiceSessionRef.current, {
-        threshold: vad.speechThreshold,
+        threshold: threshold(vad),
         silenceMs: vad.silenceMs,
         maxWaitMs: vad.maxWaitMs,
         maxRecordMs: vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS,
@@ -364,8 +403,8 @@ export function VoiceHost(): null {
       if (!dictationRef.current) return assistantHandsFree()
       const vad = vadRef.current ?? DEFAULT_VAD
       watchSilence(voiceSessionRef.current, {
-        threshold: vad.speechThreshold,
-        silenceMs: Math.max(vad.silenceMs, DICTATION_SILENCE_MS),
+        threshold: threshold(vad),
+        silenceMs: extrasRef.current.dictationSilenceMs,
         maxWaitMs: vad.maxWaitMs,
         maxRecordMs: DICTATION_HANDS_FREE_MAX_MS,
         onNoSpeech: () => {
@@ -379,7 +418,10 @@ export function VoiceHost(): null {
     const starters = { hold: startHold, 'hands-free': startHandsFree, dictation: startDictation }
     const offs = [
       lumen().on('voice:start', ({ mode }) => starters[mode]?.()),
-      lumen().on('voice:stop', () => void stop()),
+      lumen().on('voice:stop', () => {
+        dictationStopped()
+        void stop()
+      }),
       lumen().on('voice:hands-free', dictationHandsFree)
     ]
     return () => offs.forEach((off) => off())

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 'react'
 import { toSttWav } from './wav'
 import { dropMic, getMicStream, holdMic } from './mic'
+import { WHISPER_METER_GAIN } from './whisper'
 
 export interface VoiceResultInfo {
   // Milliseconds of audio above the speech threshold during the recording.
@@ -18,6 +19,8 @@ export interface VoiceStartOptions {
   watchdogMs?: number
   // 16 kHz audio captured just before the recording (barge-in), put in front of it.
   preRoll?: Float32Array
+  // Whisper mode: the recording is boosted before transcription, the meter scaled up.
+  whisper?: boolean
 }
 
 interface UseVoiceReturn {
@@ -219,7 +222,9 @@ export function useVoice(
           const blob = new Blob(chunks, { type: mimeType })
           const encoded = await blob.arrayBuffer()
           // 16 kHz WAV for the local engine; the encoded recording is the fallback.
-          const arrayBuffer = await toSttWav(encoded, opts.preRoll).catch((err) => {
+          const arrayBuffer = await toSttWav(encoded, opts.preRoll, {
+            whisper: opts.whisper
+          }).catch((err) => {
             console.warn('[voice] wav conversion failed, sending encoded audio:', err)
             return encoded
           })
@@ -305,7 +310,7 @@ export function useVoice(
           last = now
           if (sessionRef.current === s) {
             levelRef.current = level
-            publishVoiceLevel(level)
+            publishVoiceLevel(opts.whisper ? level * WHISPER_METER_GAIN : level)
           }
           s.raf = requestAnimationFrame(tick)
         }

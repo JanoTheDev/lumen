@@ -529,3 +529,13 @@ body,
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ---- Dictation pill (04 T47): a compact card, next to the text caret when main finds it ---- */
+
+:root[data-dictating='pill'] .as-shell {
+  width: min(17rem, calc(100% - 3rem));
+}
+
+:root[data-dictating='pill'] .as-card .as-actions {
+  display: none;
+}

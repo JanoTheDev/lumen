@@ -1,5 +1,7 @@
 // Turns a recording into 16 kHz mono 16-bit WAV: the format the local speech engine reads and
 // the cloud one accepts. 32 KB per second, so a 10 minute dictation stays under 20 MB.
+import { boostQuiet } from './whisper'
+
 export const STT_SAMPLE_RATE = 16000
 
 export function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffer {
@@ -37,8 +39,15 @@ export function prependPcm(head: Float32Array | undefined, body: Float32Array): 
   return out
 }
 
-/** Decodes a MediaRecorder blob and resamples it to 16 kHz mono WAV, after optional pre-roll. */
-export async function toSttWav(encoded: ArrayBuffer, preRoll?: Float32Array): Promise<ArrayBuffer> {
+/**
+ * Decodes a MediaRecorder blob and resamples it to 16 kHz mono WAV, after optional pre-roll.
+ * `whisper`: quiet speech is boosted (whisper mode).
+ */
+export async function toSttWav(
+  encoded: ArrayBuffer,
+  preRoll?: Float32Array,
+  opts: { whisper?: boolean } = {}
+): Promise<ArrayBuffer> {
   const ctx = new AudioContext()
   let decoded: AudioBuffer
   try {
@@ -53,5 +62,6 @@ export async function toSttWav(encoded: ArrayBuffer, preRoll?: Float32Array): Pr
   src.connect(offline.destination)
   src.start()
   const rendered = await offline.startRendering()
-  return encodeWav(prependPcm(preRoll, rendered.getChannelData(0)), STT_SAMPLE_RATE)
+  const pcm = prependPcm(preRoll, rendered.getChannelData(0))
+  return encodeWav(opts.whisper ? boostQuiet(pcm) : pcm, STT_SAMPLE_RATE)
 }
