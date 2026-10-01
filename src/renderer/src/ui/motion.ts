@@ -191,13 +191,16 @@ export function fadeIn(el: HTMLElement, shift = 8): Promise<void> {
   )
 }
 
-/** Exits are ~70% of the enter duration. */
-export function fadeOut(el: HTMLElement, shift = 8): Promise<void> {
+/** Exits are ~70% of the enter duration; `scale` shrinks it on the way out (the bar: 0.96). */
+export function fadeOut(el: HTMLElement, shift = 8, scale = 1): Promise<void> {
   return play(
     el,
     [
       { opacity: 1, transform: 'none' },
-      { opacity: 0, transform: `translateY(${shift}px)` }
+      {
+        opacity: 0,
+        transform: `translateY(${shift}px)${scale === 1 ? '' : ` scale(${scale})`}`
+      }
     ],
     DURATION.fast,
     EASE.in

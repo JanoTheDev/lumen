@@ -773,6 +773,17 @@
   font-size: var(--text-lg);
 }
 
+/* Streaming: each new word fades in where it already sits (opacity only, no reflow). */
+.ui-md__w {
+  animation: ui-word-in 120ms var(--ease-out) both;
+}
+
+@keyframes ui-word-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* ---- Dev gallery ---- */
 .gallery {
   min-height: 100vh;

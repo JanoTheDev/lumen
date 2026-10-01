@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Markdown } from '../ui'
 import { prefersReducedMotion } from '../ui/motion'
-import { appendChunks, smoothLevel, type Chunk } from './model'
+import { revealText, smoothLevel } from './model'
 
 /** Keeps children mounted for their exit fade, then unmounts them. */
 export function Fade({
@@ -144,8 +144,9 @@ export function RollingNumber({ value }: { value: number }): JSX.Element {
 }
 
 /**
- * The answer. While streaming, each new chunk is its own span that fades in (opacity only,
- * the text already holds its place). The final text renders as Markdown.
+ * The answer, rendered as Markdown from the first word: while streaming, whole words appear
+ * and fade in (opacity only, each already holds its place), and the final render lays out the
+ * same text, so the card never jumps when the answer completes.
  */
 export function AnswerText({
   markdown,
@@ -156,26 +157,9 @@ export function AnswerText({
   streaming: boolean
   onLink: (url: string) => void
 }): JSX.Element {
-  const [chunks, setChunks] = useState<Chunk[]>(() => appendChunks([], markdown))
-  const [source, setSource] = useState(markdown)
-  if (source !== markdown) {
-    setSource(markdown)
-    setChunks((prev) => appendChunks(prev, markdown))
-  }
-  if (!streaming) {
-    return (
-      <div className="as-answer__md as-fade-in">
-        <Markdown source={markdown} onLink={onLink} />
-      </div>
-    )
-  }
   return (
-    <p className="as-answer__stream">
-      {chunks.map((c) => (
-        <span key={c.id} className="as-chunk">
-          {c.text}
-        </span>
-      ))}
-    </p>
+    <div className="as-answer__md">
+      <Markdown source={revealText(markdown, streaming)} streaming={streaming} onLink={onLink} />
+    </div>
   )
 }

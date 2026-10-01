@@ -1,7 +1,8 @@
 // The bar's background, split into a top cap, a stretchable body and a bottom cap so a height
 // change can spring with transforms only: the caps keep their rounded corners while the body
 // scales. Content is laid out at its final size immediately and clipped to the moving top
-// edge, so nothing pokes out while the surface grows.
+// edge, so nothing pokes out while the surface grows. Rows that move because a row appeared
+// or left below them glide to their new place (FLIP with a spring) instead of jumping.
 import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from 'react'
 import { animateSpring, prefersReducedMotion, type SpringHandle } from '../ui/motion'
 
@@ -29,6 +30,48 @@ export function MorphSurface({
     let shown = -1
     let layout = 0
     let spring: SpringHandle | null = null
+    // Each row's distance from the card's bottom edge (the card is anchored at the bottom).
+    const rows = new Map<HTMLElement, number>()
+    const rowSprings = new Map<HTMLElement, { handle: SpringHandle; y: number }>()
+
+    const flipRows = (animate: boolean): void => {
+      const content = contentRef.current
+      if (!content) return
+      const h = content.offsetHeight
+      const seen = new Set<HTMLElement>()
+      for (const child of Array.from(content.children)) {
+        const el = child as HTMLElement
+        if (getComputedStyle(el).position === 'absolute') continue
+        seen.add(el)
+        const d = h - el.offsetTop
+        const before = rows.get(el)
+        rows.set(el, d)
+        if (!animate || before === undefined || Math.abs(before - d) < 0.5) continue
+        const running = rowSprings.get(el)
+        const from = (running?.y ?? 0) + d - before
+        running?.handle.cancel()
+        const entry = { handle: null as unknown as SpringHandle, y: from }
+        entry.handle = animateSpring({
+          from: [from],
+          to: [0],
+          preset: 'snappy',
+          onFrame: ([y]) => {
+            entry.y = y
+            el.style.translate = Math.abs(y) < 0.05 ? '' : `0 ${y}px`
+          }
+        })
+        rowSprings.set(el, entry)
+        void entry.handle.done.then(() => {
+          if (rowSprings.get(el) === entry) rowSprings.delete(el)
+        })
+      }
+      for (const el of Array.from(rows.keys())) {
+        if (seen.has(el)) continue
+        rows.delete(el)
+        rowSprings.get(el)?.handle.cancel()
+        rowSprings.delete(el)
+      }
+    }
 
     const paint = (h: number): void => {
       shown = h
@@ -45,6 +88,7 @@ export function MorphSurface({
 
     const ro = new ResizeObserver(() => {
       layout = box.offsetHeight
+      flipRows(shown >= 0 && !prefersReducedMotion())
       if (shown < 0 || prefersReducedMotion()) {
         spring?.cancel()
         spring = null
@@ -74,6 +118,7 @@ export function MorphSurface({
     return () => {
       ro.disconnect()
       spring?.cancel()
+      rowSprings.forEach((r) => r.handle.cancel())
     }
   }, [])
 

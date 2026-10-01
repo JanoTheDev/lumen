@@ -1,4 +1,5 @@
-// Pure helpers for the assistant bar: labels, streaming chunks, meter smoothing, error hints.
+// Pure helpers for the assistant bar: labels, streaming reveal, simple mode, meter smoothing,
+// error hints.
 import type { AssistantView } from '@shared/channels'
 import type { AgentTask, AssistantPhase } from '@shared/events'
 
@@ -21,22 +22,34 @@ export function statusLine(v: Pick<AssistantView, 'phase' | 'statusText' | 'answ
   return PHASE_LABEL[v.phase]
 }
 
-export interface Chunk {
-  id: number
-  text: string
+/**
+ * What the streaming answer shows: the text up to the last whole word, so words appear one
+ * at a time instead of growing letter by letter. The final text is shown as is.
+ */
+export function revealText(text: string, streaming: boolean): string {
+  if (!streaming || /\s$/.test(text)) return text
+  return text.replace(/\S+$/, '')
 }
 
-/**
- * Streaming text as appended chunks, so only the new words fade in. A text that does not
- * extend the previous one (a new turn, or the final rewrite) starts over.
- */
-export function appendChunks(prev: Chunk[], text: string): Chunk[] {
-  const joined = prev.map((c) => c.text).join('')
-  if (!text.startsWith(joined) || (!text && prev.length)) return text ? [{ id: 0, text }] : []
-  const extra = text.slice(joined.length)
-  if (!extra) return prev
-  const id = prev.length ? prev[prev.length - 1].id + 1 : 0
-  return [...prev, { id, text: extra }]
+/** The rows the bar can show; simple mode shows one of them at a time. */
+export type BarRow = 'confirm' | 'answer' | 'task' | 'step' | 'notice' | 'live' | 'caption'
+
+/** Simple mode (06 T18): the one row that matters most right now, or null for the bar only. */
+export function simpleRow(
+  v: Pick<
+    AssistantView,
+    'confirm' | 'answer' | 'error' | 'agentTask' | 'step' | 'notice' | 'live' | 'caption'
+  > & { captionEdit?: unknown }
+): BarRow | null {
+  if (v.confirm) return 'confirm'
+  if (v.captionEdit) return 'caption'
+  if (v.answer || v.error) return 'answer'
+  if (v.agentTask) return 'task'
+  if (v.step) return 'step'
+  if (v.notice) return 'notice'
+  if (v.live && !v.live.echo) return 'live'
+  if (v.caption) return 'caption'
+  return null
 }
 
 /** One-pole smoothing with separate attack and release times (ms), frame time `dtMs`. */
@@ -70,4 +83,15 @@ export function errorHint(message: string): string | undefined {
 export function progressLabel(task: Pick<AgentTask, 'steps'>): string {
   const done = task.steps.filter((s) => s.status === 'done').length
   return `${done} of ${task.steps.length} steps done`
+}
+
+/** The step simple mode shows: the running one, else the first failed or still to do. */
+export function currentStep(
+  task: Pick<AgentTask, 'steps'>
+): AgentTask['steps'][number] | undefined {
+  return (
+    task.steps.find((s) => s.status === 'running') ??
+    task.steps.find((s) => s.status === 'failed') ??
+    task.steps.find((s) => s.status === 'pending')
+  )
 }
