@@ -491,4 +491,20 @@ describe('task chat ipc payloads', () => {
     expect(chatControlSchema.safeParse({ id: 'cc_abc123', op: 'pause' }).success).toBe(true)
     expect(chatControlSchema.safeParse({ id: 'cc_abc123', op: 'delete' }).success).toBe(false)
   })
+
+  it('steer words with no task name never go to an idle Claude session', () => {
+    const idle = {
+      id: 'cc_idle01',
+      kind: 'claude' as const,
+      title: 'Claude: app: fix tests',
+      phase: 'done' as const,
+      at: 3
+    }
+    expect(pickChat('', [idle], { steer: true })).toBeNull()
+    expect(pickChat('agent', [idle], { steer: true })).toBeNull()
+    expect(pickChat('claude', [idle], { steer: true })?.id).toBe('cc_idle01')
+    expect(pickChat('', [{ ...idle, phase: 'running' }], { steer: true })?.id).toBe('cc_idle01')
+    // Opening a view is harmless: "show me the task" still finds it.
+    expect(pickChat('', [idle])?.id).toBe('cc_idle01')
+  })
 })

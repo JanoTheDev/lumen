@@ -268,7 +268,7 @@ export function interceptTaskChat(prompt: string): unknown | undefined {
     return reply(`Opening “${row.title}”.`)
   }
   const steerable = rows.filter((r) => chatHeader(r.id)?.canSteer)
-  const row = pickChat(intent.name, steerable)
+  const row = pickChat(intent.name, steerable, { steer: true })
   // Nothing running to tell: the words go on as a normal request.
   if (!row) return undefined
   const r = steerChat(row.id, intent.text)

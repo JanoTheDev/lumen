@@ -45,17 +45,29 @@ export function matchTaskChatIntent(utterance: string): ChatIntent | null {
 
 const OPEN = new Set(['queued', 'running', 'paused', 'asking', 'confirm'])
 
-/** The chat a spoken name means: the best title match (open ones win a tie), else the newest open one. */
-export function pickChat(name: string, rows: readonly ChatSummary[]): ChatSummary | null {
-  if (!rows.length) return null
+/**
+ * The chat a spoken name means: the best title match (open ones win a tie), else the newest open
+ * one. `steer`: words go to it, so without a name only a running chat counts, and a Claude
+ * session only when it is busy or the user said "Claude".
+ */
+export function pickChat(
+  name: string,
+  rows: readonly ChatSummary[],
+  opts: { steer?: boolean } = {}
+): ChatSummary | null {
   const words = name
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
     .filter((w) => w.length >= 3)
-  if (!words.length) return rows.find((r) => OPEN.has(r.phase)) ?? rows[0]
+  const pool = opts.steer
+    ? rows.filter((r) => r.kind !== 'claude' || OPEN.has(r.phase) || words.includes('claude'))
+    : rows
+  if (!pool.length) return null
+  if (!words.length)
+    return pool.find((r) => OPEN.has(r.phase)) ?? (opts.steer ? null : (pool[0] ?? null))
   let best: ChatSummary | null = null
   let bestScore = 0
-  for (const r of rows) {
+  for (const r of pool) {
     const title = r.title.toLowerCase().split(/[^\p{L}\p{N}]+/u)
     let score = 0
     for (const w of words)
