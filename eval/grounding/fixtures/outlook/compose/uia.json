@@ -1,0 +1,16 @@
+{
+  "snapshotId": "outlook-compose",
+  "root":
+    { "id": "e0", "role": "window", "name": "Mail - Jan Om - Outlook", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+      { "id": "e1", "role": "button", "name": "New mail", "rect": { "x": 100, "y": 60, "w": 120, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e9", "role": "group", "name": "Reading Pane", "rect": { "x": 900, "y": 140, "w": 1000, "h": 900 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+        { "id": "e2", "role": "button", "name": "Send", "rect": { "x": 920, "y": 160, "w": 90, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+        { "id": "e3", "role": "button", "name": "Discard", "rect": { "x": 1020, "y": 160, "w": 90, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+        { "id": "e4", "role": "edit", "name": "To", "rect": { "x": 960, "y": 210, "w": 900, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+        { "id": "e5", "role": "edit", "name": "Cc", "rect": { "x": 960, "y": 250, "w": 900, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+        { "id": "e6", "role": "edit", "name": "Add a subject", "rect": { "x": 920, "y": 300, "w": 940, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+        { "id": "e7", "role": "document", "name": "Message body, press Alt+F10 to exit", "rect": { "x": 920, "y": 350, "w": 940, "h": 500 }, "monitorId": 0, "enabled": true, "patterns": ["value", "text"] },
+        { "id": "e8", "role": "button", "name": "Attach file", "rect": { "x": 1120, "y": 160, "w": 110, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] }
+      ] }
+    ] }
+}

@@ -1,0 +1,7 @@
+{
+  "snapshotId": "gmail-message",
+  "root":
+    { "id": "e0", "role": "window", "name": "Lunch on Friday - jip@example.com - Gmail - Google Chrome", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+      { "id": "e1", "role": "document", "name": "Lunch on Friday - jip@example.com - Gmail", "rect": { "x": 0, "y": 80, "w": 1920, "h": 960 }, "monitorId": 0, "enabled": true, "patterns": ["text"] }
+    ] }
+}

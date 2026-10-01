@@ -1,0 +1,10 @@
+{
+  "synthetic": true,
+  "app": "outlook-classic",
+  "capturedAt": "2026-10-01",
+  "monitor": { "id": 0, "x": 0, "y": 0, "w": 1920, "h": 1080, "scaleFactor": 1, "primary": true },
+  "window": { "title": "Untitled - Message (HTML)", "process": "OUTLOOK.EXE", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 } },
+  "frame": { "w": 1920, "h": 1080, "downscaled": { "w": 1280, "h": 720 } },
+  "theme": "light",
+  "locale": "en-US"
+}

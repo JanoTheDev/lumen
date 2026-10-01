@@ -1,0 +1,24 @@
+{
+  "snapshotId": "outlook-inbox",
+  "root":
+    { "id": "e0", "role": "window", "name": "Mail - Jan Om - Outlook", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+      { "id": "e1", "role": "edit", "name": "Search", "rect": { "x": 600, "y": 8, "w": 720, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+      { "id": "e2", "role": "button", "name": "New mail", "rect": { "x": 100, "y": 60, "w": 120, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e3", "role": "button", "name": "Delete", "rect": { "x": 240, "y": 60, "w": 90, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e4", "role": "button", "name": "Archive", "rect": { "x": 340, "y": 60, "w": 90, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e5", "role": "button", "name": "Reply", "rect": { "x": 460, "y": 60, "w": 80, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e6", "role": "button", "name": "Reply all", "rect": { "x": 550, "y": 60, "w": 100, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e7", "role": "button", "name": "Forward", "rect": { "x": 660, "y": 60, "w": 100, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e8", "role": "button", "name": "Read / Unread", "rect": { "x": 780, "y": 60, "w": 130, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e9", "role": "treeitem", "name": "Inbox 2 unread", "rect": { "x": 100, "y": 150, "w": 270, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e10", "role": "treeitem", "name": "Drafts", "rect": { "x": 100, "y": 186, "w": 270, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e11", "role": "treeitem", "name": "Sent Items", "rect": { "x": 100, "y": 222, "w": 270, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e15", "role": "list", "name": "Message list", "rect": { "x": 380, "y": 140, "w": 500, "h": 900 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+        { "id": "e12", "role": "listitem", "name": "Unread Anna Berg Lunch on Friday 10:42 Hi Jan, are you free on Friday?", "rect": { "x": 380, "y": 140, "w": 500, "h": 80 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e13", "role": "listitem", "name": "Lumen Billing Your invoice for September 09:15 Your invoice is ready", "rect": { "x": 380, "y": 220, "w": 500, "h": 80 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e14", "role": "listitem", "name": "Unread Mark de Vries Re: Project plan Yesterday Thanks for the notes", "rect": { "x": 380, "y": 300, "w": 500, "h": 80 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] }
+      ] },
+      { "id": "e16", "role": "text", "name": "Lunch on Friday", "rect": { "x": 900, "y": 150, "w": 600, "h": 36 }, "monitorId": 0, "enabled": true, "patterns": [] },
+      { "id": "e17", "role": "document", "name": "Message body", "rect": { "x": 900, "y": 260, "w": 1000, "h": 700 }, "monitorId": 0, "enabled": true, "patterns": ["text"] }
+    ] }
+}

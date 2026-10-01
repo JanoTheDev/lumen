@@ -1,0 +1,14 @@
+{
+  "snapshotId": "outlook-classic-compose",
+  "root":
+    { "id": "e0", "role": "window", "name": "Untitled - Message (HTML)", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+      { "id": "e1", "role": "button", "name": "Send", "rect": { "x": 20, "y": 220, "w": 80, "h": 100 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e2", "role": "button", "name": "To", "rect": { "x": 110, "y": 220, "w": 70, "h": 30 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e3", "role": "edit", "name": "To", "rect": { "x": 190, "y": 220, "w": 1700, "h": 30 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+      { "id": "e4", "role": "button", "name": "Cc", "rect": { "x": 110, "y": 260, "w": 70, "h": 30 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e5", "role": "edit", "name": "Cc", "rect": { "x": 190, "y": 260, "w": 1700, "h": 30 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+      { "id": "e6", "role": "edit", "name": "Subject", "rect": { "x": 190, "y": 300, "w": 1700, "h": 30 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+      { "id": "e7", "role": "button", "name": "Attach File", "rect": { "x": 400, "y": 70, "w": 80, "h": 90 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e8", "role": "document", "name": "Message", "rect": { "x": 20, "y": 350, "w": 1880, "h": 680 }, "monitorId": 0, "enabled": true, "patterns": ["value", "text"] }
+    ] }
+}

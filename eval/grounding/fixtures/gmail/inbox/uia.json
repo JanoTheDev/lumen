@@ -1,0 +1,20 @@
+{
+  "snapshotId": "gmail-inbox",
+  "root":
+    { "id": "e0", "role": "window", "name": "Inbox (3) - jip@example.com - Gmail - Google Chrome", "rect": { "x": 0, "y": 0, "w": 1920, "h": 1040 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+      { "id": "e1", "role": "combobox", "name": "Search mail", "rect": { "x": 240, "y": 90, "w": 720, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["value"] },
+      { "id": "e2", "role": "button", "name": "Compose", "rect": { "x": 16, "y": 150, "w": 140, "h": 56 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e3", "role": "hyperlink", "name": "Inbox 3 unread", "rect": { "x": 0, "y": 220, "w": 256, "h": 32 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e4", "role": "hyperlink", "name": "Sent", "rect": { "x": 0, "y": 252, "w": 256, "h": 32 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e5", "role": "hyperlink", "name": "Drafts", "rect": { "x": 0, "y": 284, "w": 256, "h": 32 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e6", "role": "checkbox", "name": "Select", "rect": { "x": 270, "y": 150, "w": 40, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["toggle"] },
+      { "id": "e7", "role": "button", "name": "Refresh", "rect": { "x": 330, "y": 150, "w": 40, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e13", "role": "grid", "name": "Conversations", "rect": { "x": 256, "y": 200, "w": 1640, "h": 220 }, "monitorId": 0, "enabled": true, "patterns": [], "children": [
+        { "id": "e8", "role": "dataitem", "name": "unread, Anna Berg, Lunch on Friday, 10:42 AM, Hi Jan, are you free on Friday?", "rect": { "x": 256, "y": 200, "w": 1640, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e9", "role": "dataitem", "name": "unread, Lumen Billing, Your invoice for September, 9:15 AM, Your invoice is ready", "rect": { "x": 256, "y": 240, "w": 1640, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e10", "role": "dataitem", "name": "Mark de Vries, Re: Project plan, Sep 30, Thanks for the notes", "rect": { "x": 256, "y": 280, "w": 1640, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e11", "role": "dataitem", "name": "unread, Anna Berg, Photos from the trip, Sep 29, Here are the photos", "rect": { "x": 256, "y": 320, "w": 1640, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] },
+        { "id": "e12", "role": "dataitem", "name": "Weekly Digest, Your week in review, Sep 28, Top stories this week", "rect": { "x": 256, "y": 360, "w": 1640, "h": 40 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem", "invoke"] }
+      ] }
+    ] }
+}
