@@ -83,6 +83,8 @@ export type LessonEvent =
   | { type: 'do-it-done'; step: number; ok: boolean; said?: string }
   /** The lesson app lost focus for over a minute. */
   | { type: 'app-blur' }
+  /** Idle hints were switched off mid-lesson: the timer ladder takes over again. */
+  | { type: 'idle-hints-off' }
 
 export type LessonEffect =
   | { type: 'say'; text: string; interruptible: boolean }

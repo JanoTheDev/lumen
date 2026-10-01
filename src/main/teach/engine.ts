@@ -4,6 +4,7 @@
 import {
   LEVEL,
   OFFER_ACTION_ID,
+  doItActions,
   PRAISE,
   fasterPace,
   hintText,
@@ -95,7 +96,12 @@ function present(s0: LessonState, index: number): Transition {
 function escalate(s0: LessonState, target: number, quiet = false): Transition {
   const lesson = s0.lesson!
   const step = stepOf(s0)
-  const level = Math.max(s0.level, target)
+  const canDo = !!doItActions(step)
+  // No do-it (untrusted lesson): the ladder stops at the ring, without repeating it.
+  const level = canDo
+    ? Math.max(s0.level, target)
+    : Math.min(Math.max(s0.level, target), LEVEL.RING)
+  if (!canDo && level === s0.level && level === LEVEL.RING) return { state: s0, effects: [] }
   if (level >= LEVEL.OFFER) return offer({ ...s0, level: LEVEL.OFFER }, quiet)
   let s: LessonState = { ...s0, level }
   const text = hintText(step, level)
@@ -138,6 +144,10 @@ function offer(s0: LessonState, quiet = false): Transition {
 
 /** perform = "click it" / "press it": the user's own action by voice, not a do-it-for-me. */
 function doIt(s0: LessonState, perform = false): Transition {
+  if (!perform && !doItActions(stepOf(s0))) {
+    const text = 'I can’t do steps from this lesson for you. Try it, or say “help” for a hint.'
+    return { state: s0, effects: [{ type: 'say', text, interruptible: true }] }
+  }
   const moved: LessonState = { ...s0, phase: 'doing-it', level: perform ? s0.level : LEVEL.DO }
   const s = perform ? moved : withStats(moved, { doItForMe: true })
   return {
@@ -453,5 +463,13 @@ export function reduce(s: LessonState, e: LessonEvent): Transition {
       return s.phase === 'step.waiting' || s.phase === 'offer-do-it'
         ? pause(s, 'app blur')
         : same(s)
+    case 'idle-hints-off': {
+      if (!s.idleHints) return same(s)
+      const next: LessonState = { ...s, idleHints: false }
+      return {
+        state: next,
+        effects: next.phase === 'step.waiting' ? hintTimer(next, next.level) : []
+      }
+    }
   }
 }

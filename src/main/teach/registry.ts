@@ -12,7 +12,7 @@ import { matchSkill, type SkillPack, type SkillRegion } from '../ai/skills'
 import { HANDOFF_FILE } from '../packs/handoff-kind'
 import { packMarker, type PackTrust } from '../packs/install'
 import { parseCurriculum, type Curriculum } from './curriculum'
-import { parseLesson, type Lesson } from './lesson'
+import { parseLesson, type Lesson, type LessonStep } from './lesson'
 
 export type SkillSource = 'builtin' | 'user'
 
@@ -311,8 +311,7 @@ function withoutDoIt(lesson: Lesson): Lesson {
   return {
     ...lesson,
     steps: lesson.steps.map((s) => {
-      if (!s.doItForMe) return s
-      const copy = { ...s }
+      const copy: LessonStep = { ...s, noDoIt: true }
       delete copy.doItForMe
       return copy
     })

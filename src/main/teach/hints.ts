@@ -158,6 +158,7 @@ export function fallbackWhy(lesson: Lesson): string {
 
 /** What "do it for me" runs: the step's own actions, else one derived from its target. */
 export function doItActions(step: LessonStep): DoAction[] | null {
+  if (step.noDoIt) return null
   if (step.doItForMe?.actions.length) return step.doItForMe.actions
   const t = step.target
   if (!t) return null

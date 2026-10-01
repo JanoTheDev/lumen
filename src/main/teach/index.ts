@@ -239,6 +239,12 @@ async function resolveTarget(
 
 const uiaSubs = new Set<{ kinds: Set<string>; cb: (e: UiaEvent) => void }>()
 const keySubs = new Set<(combo: string) => void>()
+/** The lesson's own entries in uiaSubs / keySubs: 'lesson' is released when these empty. */
+const lessonUiaSubs = new Set<unknown>()
+const lessonKeySubs = new Set<unknown>()
+
+/** A recording owns the agent's event streams and the bar until it stops. */
+const recordingNow = (): boolean => !!recorder?.recording()
 
 function elementOf(data: unknown): UiaEvent['element'] {
   const el = ((data as { element?: Record<string, unknown> } | null)?.element ?? {}) as Record<
@@ -682,11 +688,14 @@ function realPorts(): Ports {
       subscribe: (kinds, cb) => {
         const sub = { kinds: new Set<string>(kinds), cb }
         uiaSubs.add(sub)
+        lessonUiaSubs.add(sub)
         wantFocusEvents('lesson', true)
         uiaEvents.want('lesson', true)
         return () => {
           uiaSubs.delete(sub)
-          if (uiaSubs.size) return
+          lessonUiaSubs.delete(sub)
+          // Per owner: a recording's own subscription must not keep 'lesson' wanted.
+          if (lessonUiaSubs.size) return
           wantFocusEvents('lesson', false)
           uiaEvents.want('lesson', false)
         }
@@ -702,10 +711,12 @@ function realPorts(): Ports {
       available: () => !!getAgent()?.hasCapability('key-combo'),
       onCombo: (cb) => {
         keySubs.add(cb)
+        lessonKeySubs.add(cb)
         keyComboEvents.want('lesson', true)
         return () => {
           keySubs.delete(cb)
-          if (!keySubs.size) keyComboEvents.want('lesson', false)
+          lessonKeySubs.delete(cb)
+          if (!lessonKeySubs.size) keyComboEvents.want('lesson', false)
         }
       }
     },
@@ -759,13 +770,22 @@ export function userSkillsRoot(): string {
   return skillsRoot
 }
 
+/** A lesson cannot start while a recording runs (its clicks would be recorded as steps). */
+function refuseWhileRecording(): boolean {
+  if (!recordingNow()) return false
+  announce('Stop the recording first: say “stop recording”, then start the lesson.', {
+    kind: 'answer'
+  })
+  return true
+}
+
 /** Starts a pack lesson by id; false when there is no such lesson. */
 export function startLesson(
   id: string,
   opts: { stepIndex?: number; autoStart?: boolean } = {}
 ): boolean {
   const found = registry?.lesson(id)
-  if (!found || !runner) return false
+  if (!found || !runner || refuseWhileRecording()) return false
   offer = null
   const active = store?.get().active
   runner.start(found.lesson, {
@@ -827,7 +847,7 @@ export function saveGeneratedLesson(name?: string): Lesson | null {
  * its intro.
  */
 export function startOrResume(id: string): boolean {
-  if (!runner) return false
+  if (!runner || refuseWhileRecording()) return false
   if (runner.running() && runner.state.lesson?.id === id) {
     if (runner.state.phase === 'paused') runner.command('resume')
     return true
@@ -942,6 +962,8 @@ function resumeOffered(): boolean {
  */
 export function interceptLesson(utterance: string): unknown | undefined {
   if (!runner || !registry) return undefined
+  // While recording, only the recording's own commands; nothing starts a lesson.
+  if (recordingNow()) return recorder?.intercept(utterance)
   // Record my steps (T31): its commands while recording, "watch me …", draft review.
   if (!runner.running()) {
     const recorded = recorder?.intercept(utterance)
@@ -1081,7 +1103,13 @@ function installLearning(): void {
     handled: HANDLED
   })
   bus.on('lesson.done', (e) => learning?.onLessonDone(e.lessonId, e.completed))
-  onBroadcast('settings:changed', () => learning?.sync())
+  onBroadcast('settings:changed', () => {
+    learning?.sync()
+    // Idle hints switched off mid-lesson: back to the timer ladder, not no hints at all.
+    const st = runner?.state
+    if (st?.idleHints && !learning?.idleHintsFor(st.skillId ?? st.lesson?.app ?? ''))
+      runner?.idleHintsOff()
+  })
   learning.install()
 }
 

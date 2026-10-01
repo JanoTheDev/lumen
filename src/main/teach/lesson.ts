@@ -54,6 +54,11 @@ export interface LessonStep {
   hints: string[]
   why?: string
   doItForMe?: { actions: DoAction[] }
+  /**
+   * Untrusted lesson (community pack, helper handoff): no "do it for me" at all, not even
+   * the one derived from the target. "Click it" (an explicit request) still works.
+   */
+  noDoIt?: boolean
   timeoutSec?: number
 }
 

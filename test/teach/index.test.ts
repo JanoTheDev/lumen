@@ -35,6 +35,8 @@ import {
   interceptLesson,
   lessonCommand,
   lessonProgress,
+  recordAction,
+  recordStatus,
   sleep,
   startLesson,
   startOrResume
@@ -134,6 +136,18 @@ describe('teach wiring', () => {
       { events: ['key-combo'], enabled: true },
       { events: ['key-combo'], enabled: true }
     ])
+  })
+
+  it('no lesson starts while a recording runs (review teach #1)', async () => {
+    expect((await recordAction('start')).ok).toBe(true)
+    expect(recordStatus().phase).toBe('recording')
+    expect(startLesson(A.id)).toBe(false)
+    expect(startOrResume(A.id)).toBe(false)
+    expect(interceptLesson('start lesson 1')).toBeUndefined()
+    // "cancel recording" is still heard.
+    expect(interceptLesson('cancel recording')).toMatchObject({ local: true })
+    expect(recordStatus().phase).not.toBe('recording')
+    expect(startLesson(A.id)).toBe(true)
   })
 
   it('time away from one lesson does not count against the next', async () => {

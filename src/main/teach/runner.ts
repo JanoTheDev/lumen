@@ -142,6 +142,11 @@ export class LessonRunner {
     return true
   }
 
+  /** Idle hints went off in Settings: the running lesson gets its hint timers back. */
+  idleHintsOff(): void {
+    if (this.s.idleHints) this.dispatch({ type: 'idle-hints-off' })
+  }
+
   appBlurred(): void {
     this.dispatch({ type: 'app-blur' })
   }

@@ -129,6 +129,35 @@ describe('lesson reducer', () => {
     expect(says(t.effects)[0]).toMatch(/^I couldn't do that one\./)
   })
 
+  it('idle hints switched off mid-lesson bring the timer ladder back (review teach #5)', () => {
+    let t = drive([{ type: 'start', lesson: LESSON, idleHints: true }, next])
+    expect(t.effects.some((f) => f.type === 'startTimer' && f.id === 'hint')).toBe(false)
+    t = drive([{ type: 'idle-hints-off' }], t.state)
+    expect(t.state.idleHints).toBe(false)
+    expect(t.effects).toContainEqual({ type: 'startTimer', id: 'hint', ms: 20_000 })
+    expect(drive([{ type: 'idle-hints-off' }], t.state).effects).toEqual([])
+  })
+
+  it('an untrusted lesson never offers or runs do-it (review teach #2)', () => {
+    const lesson = { ...LESSON, steps: LESSON.steps.map((st) => ({ ...st, noDoIt: true })) }
+    const hint: LessonEvent = { type: 'timer', id: 'hint' }
+    let t = drive([{ type: 'start', lesson }, next, hint, hint])
+    expect(t.state.level).toBe(LEVEL.RING)
+    t = drive([hint], t.state)
+    expect(t.state.phase).toBe('step.waiting')
+    expect(t.state.level).toBe(LEVEL.RING)
+    expect(t.effects).toEqual([])
+    t = drive([{ type: 'timer', id: 'timeout' }], t.state)
+    expect(t.state.phase).toBe('step.waiting')
+    t = drive([{ type: 'command', command: 'do-it' }], t.state)
+    expect(t.state.phase).toBe('step.waiting')
+    expect(has(t.effects, 'exec')).toBe(false)
+    expect(says(t.effects)[0]).toMatch(/can’t do steps from this lesson/)
+    // "click it" is the user's explicit request and still works.
+    t = drive([{ type: 'command', command: 'perform' }], t.state)
+    expect(t.effects).toContainEqual({ type: 'exec', step: 0, perform: true })
+  })
+
   it('"no" to the offer goes back to waiting, checks still pass the step', () => {
     let t = drive([start, next, { type: 'timer', id: 'timeout' }])
     expect(t.state.phase).toBe('offer-do-it')
