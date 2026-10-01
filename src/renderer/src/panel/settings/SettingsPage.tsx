@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { NavList, Toast, icons } from '../../ui'
+import { Button, NavList, Toast, icons } from '../../ui'
 import { filterSections, SECTIONS, type SectionId, type SectionProps } from './meta'
 import { useConfig } from './useConfig'
 import { About } from './sections/About'
@@ -40,6 +40,9 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
   const prev = useRef<SectionId>(section)
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
   const firstRender = useRef(true)
+  // Simple mode lists the essential sections; "Show all settings" lifts that for this visit.
+  const [showAll, setShowAll] = useState(false)
+  const essentials = !!cfg?.a11y.simpleMode && !showAll
 
   useEffect(() => {
     const order = (id: SectionId): number => SECTIONS.findIndex((s) => s.id === id)
@@ -52,7 +55,7 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
     headingRef.current?.focus()
   }, [section])
 
-  const visible = filterSections(query)
+  const visible = filterSections(query, essentials)
   const meta = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0]
   const View = VIEWS[meta.id]
 
@@ -115,6 +118,11 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
             hrefPrefix="#/settings/"
           />
           {query && !visible.length && <p className="ui-hint">No matches.</p>}
+          {!query && cfg?.a11y.simpleMode && (
+            <Button variant="quiet" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+              {showAll ? 'Show fewer settings' : 'Show all settings'}
+            </Button>
+          )}
         </aside>
 
         <main className="panel-main" aria-labelledby="panel-heading">

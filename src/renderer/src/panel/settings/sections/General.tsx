@@ -17,6 +17,14 @@ export function General({ cfg, patch }: SectionProps): JSX.Element {
           onCommit={(homeHotkey) => patch({ ui: { homeHotkey } })}
           hint="Opens the Lumen panel next to the clock, from any app."
         />
+        <HotkeyField
+          label="Focus the assistant bar"
+          value={cfg.a11y.shortcuts.focusBar}
+          onCommit={(focusBar) =>
+            patch({ a11y: { shortcuts: { ...cfg.a11y.shortcuts, focusBar } } })
+          }
+          hint="Moves the keyboard into the answer bar: Tab between Repeat, Copy, Pin and Close, Esc to go back to your app."
+        />
       </Card>
 
       <Card title="Conversation" description="What Lumen keeps between questions.">

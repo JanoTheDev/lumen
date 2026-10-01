@@ -10,13 +10,21 @@ export interface HotkeyFieldProps {
   value: string
   onCommit: (combo: string) => void
   hint?: string
+  /** In a table row that already names it: label and idle hint are for screen readers only. */
+  compact?: boolean
 }
 
 /**
  * Press the button, then the shortcut. Escape cancels, Tab keeps the current one and
  * moves on (Tab is never swallowed).
  */
-export function HotkeyField({ label, value, onCommit, hint }: HotkeyFieldProps): JSX.Element {
+export function HotkeyField({
+  label,
+  value,
+  onCommit,
+  hint,
+  compact
+}: HotkeyFieldProps): JSX.Element {
   const id = useId()
   const [recording, setRecording] = useState(false)
   const [preview, setPreview] = useState('')
@@ -56,7 +64,7 @@ export function HotkeyField({ label, value, onCommit, hint }: HotkeyFieldProps):
 
   return (
     <div className="ui-field">
-      <span id={`${id}-label`} className="ui-field__label">
+      <span id={`${id}-label`} className={compact ? 'visually-hidden' : 'ui-field__label'}>
         {label}
       </span>
       <button
@@ -89,7 +97,12 @@ export function HotkeyField({ label, value, onCommit, hint }: HotkeyFieldProps):
           )}
         </span>
       </button>
-      <span id={`${id}-hint`} className={problem ? 'ui-field__error' : 'ui-hint'}>
+      <span
+        id={`${id}-hint`}
+        className={
+          problem ? 'ui-field__error' : compact && !recording ? 'visually-hidden' : 'ui-hint'
+        }
+      >
         {problem ||
           (recording
             ? 'Press keys… (Esc to cancel, Tab to keep current)'

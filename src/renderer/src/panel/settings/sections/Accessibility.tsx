@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
 import type { ShortcutStatus } from '@shared/channels'
 import { profileSummary } from '@shared/profiles'
-import { Button, Card, NumberField, SegmentedControl, Slider, Switch } from '../../../ui'
+import {
+  Button,
+  Card,
+  HotkeyField,
+  IconButton,
+  NumberField,
+  SegmentedControl,
+  Slider,
+  Switch,
+  icons
+} from '../../../ui'
 import type { SectionProps } from '../meta'
 
 // Keys a commercial switch interface usually sends; two keys = step scanning (move, pick).
@@ -70,6 +80,9 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
   const switchKeys = sw.keys.join(',')
   const keyChoice = SWITCH_KEYS.some((k) => k.value === switchKeys) ? switchKeys : 'Space'
   const shortcuts = useShortcuts(cfg)
+  // The whole object is patched (06 T17); '' = no shortcut.
+  const setShortcut = (action: ShortcutStatus['action'], combo: string): void =>
+    void patch({ a11y: { shortcuts: { ...cfg.a11y.shortcuts, [action]: combo } } })
   const [showAll, setShowAll] = useState(false)
   // Simple mode (T18): only the essentials until the user asks for everything.
   const brief = cfg.a11y.simpleMode && !showAll
@@ -374,7 +387,7 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
 
       <Card
         title="Keyboard shortcuts"
-        description="Work anywhere in Windows. Answer keys only act while an answer shows."
+        description="Work anywhere in Windows. Answer keys only act while an answer shows. Select a shortcut to change it."
       >
         <table className="panel-table">
           <thead>
@@ -388,7 +401,23 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
             {shortcuts.map((s) => (
               <tr key={s.action}>
                 <td>{s.label}</td>
-                <td>{s.accelerator ? <kbd>{s.accelerator}</kbd> : 'None'}</td>
+                <td>
+                  <span className="panel-row">
+                    <HotkeyField
+                      compact
+                      label={s.label}
+                      value={cfg.a11y.shortcuts[s.action] ?? ''}
+                      onCommit={(combo) => setShortcut(s.action, combo)}
+                    />
+                    {cfg.a11y.shortcuts[s.action] && (
+                      <IconButton
+                        icon={icons.close}
+                        label={`Turn off ${s.label}`}
+                        onClick={() => setShortcut(s.action, '')}
+                      />
+                    )}
+                  </span>
+                </td>
                 <td>
                   {SHORTCUT_STATE[s.state]}
                   {s.with ? ` with ${s.with}` : ''}

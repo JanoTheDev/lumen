@@ -26,6 +26,8 @@ export interface SectionMeta {
   label: string
   icon: IconComponent
   keywords: string
+  /** Shown in simple mode (a11y.simpleMode); search still finds every section. */
+  essential?: boolean
 }
 
 export const SECTIONS: readonly SectionMeta[] = [
@@ -33,27 +35,31 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'general',
     label: 'General',
     icon: icons.settings,
-    keywords: 'hotkey shortcut push to talk tap hands-free history guide highlights'
+    keywords: 'hotkey shortcut push to talk tap hands-free history guide highlights focus',
+    essential: true
   },
   {
     id: 'voice',
     label: 'Voice',
     icon: icons.mic,
     keywords:
-      'wake word phrase hey lumen sensitivity microphone mic device test level hold tap activation vocabulary words cancel stop silence pause speech read aloud tts voice'
+      'wake word phrase hey lumen sensitivity microphone mic device test level hold tap activation vocabulary words cancel stop silence pause speech read aloud tts voice',
+    essential: true
   },
   {
     id: 'accessibility',
     label: 'Accessibility',
     icon: icons.accessibility,
     keywords:
-      'scale size text zoom motion animation contrast timings auto-close dwell click narrate confidence switch scanning shortcuts keyboard captions deaf hearing screen reader announce i heard confirm focus'
+      'scale size text zoom motion animation contrast timings auto-close dwell click narrate confidence switch scanning shortcuts keyboard captions deaf hearing screen reader announce i heard confirm focus simple mode plain eye gaze tracker tobii eye control head pointer tracking',
+    essential: true
   },
   {
     id: 'look',
     label: 'Buddy & look',
     icon: icons.palette,
-    keywords: 'theme dark light high contrast colour color accent custom buddy cursor appearance'
+    keywords: 'theme dark light high contrast colour color accent custom buddy cursor appearance',
+    essential: true
   },
   {
     id: 'models',
@@ -92,17 +98,26 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.shield,
     keywords: 'privacy screenshots telemetry data sent logs'
   },
-  { id: 'about', label: 'About', icon: icons.info, keywords: 'about version licence license help' }
+  {
+    id: 'about',
+    label: 'About',
+    icon: icons.info,
+    keywords: 'about version licence license help',
+    essential: true
+  }
 ]
 
 export function isSectionId(v: string): v is SectionId {
   return SECTIONS.some((s) => s.id === v)
 }
 
-/** Sections whose label or keywords contain every word of the query. */
-export function filterSections(query: string): SectionMeta[] {
+/**
+ * Sections whose label or keywords contain every word of the query. Without a query, simple
+ * mode (`essentials`) lists only the essential sections.
+ */
+export function filterSections(query: string, essentials = false): SectionMeta[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  if (!words.length) return [...SECTIONS]
+  if (!words.length) return SECTIONS.filter((s) => !essentials || s.essential)
   return SECTIONS.filter((s) => {
     const hay = `${s.label} ${s.keywords}`.toLowerCase()
     return words.every((w) => hay.includes(w))
