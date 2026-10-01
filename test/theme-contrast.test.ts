@@ -21,6 +21,7 @@ describe('contrast maths', () => {
   it('picks black on yellow and white on navy', () => {
     expect(pickOnColor('#FFFF00')).toBe('#000')
     expect(pickOnColor('#1B2A6B')).toBe('#fff')
+    expect(pickOnColor('#2F6FEB')).toBe('#fff')
   })
 
   it('nudges a low-contrast colour until it passes', () => {

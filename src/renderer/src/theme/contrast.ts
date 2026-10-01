@@ -46,9 +46,11 @@ export function ratio(a: string, b: string): number {
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05)
 }
 
-/** Black or white, whichever reads better on `bg`. */
+/** White when it reaches AA on `bg` (the platform convention), otherwise the better of black or white. */
 export function pickOnColor(bg: string): '#000' | '#fff' {
-  return ratio(bg, '#000000') >= ratio(bg, '#FFFFFF') ? '#000' : '#fff'
+  const white = ratio(bg, '#FFFFFF')
+  if (white >= 4.5) return '#fff'
+  return ratio(bg, '#000000') >= white ? '#000' : '#fff'
 }
 
 /** Mixes `a` into `b` by `amount` (0..1) in sRGB, like CSS color-mix. */
