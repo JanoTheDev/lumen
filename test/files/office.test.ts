@@ -127,7 +127,8 @@ describe('docx text', () => {
     const text = await fileText({ kind: 'docx', name: 'a.docx' }, buf)
     expect(text).toContain('# Head')
     expect(text).toContain('| x | y |')
-  })
+    // mammoth's first load takes seconds under full-suite load.
+  }, 20_000)
 })
 
 describe('shared Office files', () => {

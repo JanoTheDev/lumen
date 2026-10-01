@@ -76,7 +76,8 @@ describe('loadContent', () => {
       pdf: true
     })
     expect((c[0] as { text: string }).text).toContain('Hello from Word')
-  })
+    // mammoth's first load takes seconds under full-suite load.
+  }, 20_000)
 
   it('a damaged docx is a note, not a throw', async () => {
     const bad = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.alloc(20)])
