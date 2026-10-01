@@ -18,6 +18,9 @@ import { announce } from '../../a11y'
 import { bus } from '../../bus'
 import { configPath, loadConfig } from '../../config'
 import { mcpToolSet } from '../../connectors'
+import { CREATE_FILE_TOOL, createFileHandler } from '../../docs-out/tool'
+import { GRANTED_FILE_TOOLS, grantedFileHandlers, realGrantedPorts } from '../../files/granted'
+import type { GateCtx } from '../../actions/policy'
 import { recordSkillRun } from '../../skills'
 import { log, type LogTag } from '../../logger'
 import { windowOnlyContext } from '../../query/context'
@@ -430,7 +433,27 @@ async function runTask(
         prompt: userText,
         unattended: { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
       })
-      return { ...set, defs: envelopes.reduce((defs, e) => connectorDefsFor(defs, e), set.defs) }
+      const defs = envelopes.reduce((d, e) => connectorDefsFor(d, e), set.defs)
+      // File tools (docs-out, files/granted): the policy gate with this task's origin and
+      // unattended confirms; reads, renames and moves only in the granted folders.
+      const gateCtx = (): GateCtx => ({
+        origin: task.origin === 'routine' ? 'routine' : 'agent',
+        taskId: `background:${id}`,
+        userText,
+        unattended: { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
+      })
+      const granted = realGrantedPorts(
+        () => cfg.readFolders,
+        (action, result, reason) => audit(task, action, result, reason)
+      )
+      return {
+        defs: [...defs, CREATE_FILE_TOOL, ...Object.values(GRANTED_FILE_TOOLS)],
+        handlers: {
+          ...set.handlers,
+          create_file: createFileHandler(gateCtx),
+          ...grantedFileHandlers(() => granted, gateCtx)
+        }
+      }
     },
     ...(shapes ? { guard: routineGuard(shapes) } : {}),
     ...(envelopes.length
