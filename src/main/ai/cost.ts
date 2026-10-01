@@ -2,7 +2,8 @@
 // and to the session and day totals.
 import { AsyncLocalStorage } from 'async_hooks'
 import { EMPTY_USAGE, type Usage } from './providers/types'
-import { formatUsage, roundUsd as round, usageCost } from './pricing'
+import { formatUsage, rateFor, roundUsd as round, usageCost } from './pricing'
+import { addDayUsage, usageSummary, type UsageSummary } from './usage-log'
 
 export interface TurnCost {
   usd: number
@@ -31,6 +32,7 @@ export function recordUsage(model: string, usage: Usage, hasImage = false, now =
     if (usage.cacheReadTokens > 0) cache.hits++
   }
   const cost = usageCost(model, usage).total
+  addDayUsage(cost, usage, rateFor(model).known, now)
   sessionUsd = round(sessionUsd + cost)
   const key = dayKey(now)
   day = { key, usd: round((day.key === key ? day.usd : 0) + cost) }
@@ -60,6 +62,11 @@ export function cacheStats(): { callRate: number; tokenRate: number } | null {
 
 export function costTotals(): { sessionUsd: number; dayUsd: number } {
   return { sessionUsd, dayUsd: day.key === dayKey(new Date()) ? day.usd : 0 }
+}
+
+/** Session, today (persisted across restarts) and the last 30 days, plus a per-day estimate. */
+export function usageOverview(now = new Date()): UsageSummary {
+  return usageSummary(sessionUsd, now)
 }
 
 /** Runs one user turn with its own cost accumulator; `onDone` gets the total even on failure. */

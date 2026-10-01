@@ -55,6 +55,7 @@ import { registerSettingsIpc } from './ipc/settings'
 import { registerVoiceIpc } from './ipc/voice'
 import { registerWakeIpc } from './ipc/wake'
 import { registerMemoryIpc } from './ipc/memory'
+import { registerUsageIpc } from './ipc/usage'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 
@@ -98,6 +99,7 @@ function registerIpc(): void {
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerMemoryIpc()
+  registerUsageIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
     cancel: () => {

@@ -54,6 +54,8 @@ export interface InvokeChannels {
   'memory:export': { args: []; result: MemoryResult & { path?: string } }
   /** Deletes the whole memory folder; `confirm` must be the word DELETE typed by the user. */
   'memory:delete-all': { args: [confirm: string]; result: MemoryResult }
+  /** Model spend: today, this session, the last 30 days and a rough per-day estimate. */
+  'usage:get': { args: []; result: UsageOverview }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -151,6 +153,32 @@ export interface MemoryProposalView {
   fact: string
   confidence: number
   createdAt: string
+}
+
+/** One local day of model usage (~/.ai-overlay/usage.json). */
+export interface UsageDay {
+  /** Local date, YYYY-MM-DD. */
+  date: string
+  usd: number
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
+export interface UsageOverview {
+  today: UsageDay
+  /** Since the app started. */
+  sessionUsd: number
+  /** Oldest first, only days with calls, at most 30. */
+  days: UsageDay[]
+  /** Average over the days with calls in the last 7 (today included); 0 without data. */
+  estimatePerDay: number
+  /** estimatePerDay x 30. */
+  estimatePerMonth: number
+  /** Some calls this session used a model without a known price (counted at the Sonnet rate). */
+  estimated: boolean
 }
 
 /** Everything the Settings → Memory page shows, in one call. */
@@ -294,7 +322,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:episodes',
   'memory:episode-delete',
   'memory:export',
-  'memory:delete-all'
+  'memory:delete-all',
+  'usage:get'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
