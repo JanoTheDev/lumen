@@ -3,10 +3,12 @@ import { filterSections } from '../src/renderer/src/panel/settings/meta'
 import { parseRoute } from '../src/renderer/src/panel/routes'
 import { comboFromEvent } from '../src/renderer/src/ui/hotkey'
 
+type KeyLike = Parameters<typeof comboFromEvent>[0]
+
 const key = (
   k: string,
   mods: Partial<Record<'ctrlKey' | 'altKey' | 'shiftKey' | 'metaKey', boolean>> = {}
-) => ({
+): KeyLike => ({
   key: k,
   ctrlKey: false,
   altKey: false,
