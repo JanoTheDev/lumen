@@ -16,6 +16,7 @@ export type SectionId =
   | 'models'
   | 'memory'
   | 'lessons'
+  | 'skills'
   | 'bridges'
   | 'privacy'
   | 'about'
@@ -71,6 +72,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Lessons',
     icon: icons.book,
     keywords: 'lessons guides library saved replay learn teach tutorial show me how'
+  },
+  {
+    id: 'skills',
+    label: 'Skills',
+    icon: icons.sparkles,
+    keywords:
+      'skills abilities automations install share export import lumen file community trust permissions triggers'
   },
   {
     id: 'bridges',

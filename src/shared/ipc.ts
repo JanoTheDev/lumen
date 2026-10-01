@@ -31,6 +31,18 @@ export const lessonDraftEditSchema = z
 /** A GitHub link to a community pack (07 T32). */
 export const packUrlSchema = z.string().trim().url().max(500)
 
+/** Skills (11, CONTRACTS C10): kebab-case names, SKILL.md text, install preview tokens. */
+export const skillNameSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+export const skillTextSchema = z
+  .string()
+  .min(1)
+  .max(256 * 1024)
+export const skillDescriptionSchema = z.string().max(200)
+export const skillTokenSchema = z.string().regex(/^[a-f0-9]{24}$/)
+
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])
 /** App bridges (07 T23–T26). */

@@ -2,7 +2,16 @@
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
-import type { GuideStep, LocateItem, ModelResponse, Point, Rect, SavedGuide } from './types'
+import type {
+  GuideStep,
+  LocateItem,
+  ModelResponse,
+  Point,
+  Rect,
+  SavedGuide,
+  SkillPermissions,
+  SkillSummary
+} from './types'
 
 type Confidence = 'high' | 'medium' | 'low'
 
@@ -132,6 +141,25 @@ export interface InvokeChannels {
     args: [id: string]
     result: { ok: boolean; path?: string; error?: string }
   }
+  /** Skills (11 T05/T06): Settings → Skills. */
+  'skills:list': { args: []; result: SkillSummary[] }
+  /** The full SKILL.md and the skill's file list, for View / Edit. */
+  'skills:get': { args: [name: string]; result: SkillDetail | { ok: false; error: string } }
+  'skills:set-enabled': { args: [name: string, enabled: boolean]; result: { ok: boolean } }
+  /** Trust a community skill (its actions stop asking every time once the runner lands). */
+  'skills:set-trusted': { args: [name: string, trusted: boolean]; result: { ok: boolean } }
+  /** Saves an edited SKILL.md; a builtin skill is copied to the user folder first. */
+  'skills:save': { args: [name: string, text: string]; result: SkillActionResult }
+  'skills:create': { args: [name: string, description: string]; result: SkillActionResult }
+  'skills:delete': { args: [name: string]; result: SkillActionResult }
+  /** Install step 1: pick a `.lumen` file / fetch a GitHub link and show what it asks for. */
+  'skills:preview-file': { args: []; result: SkillInstallPreview }
+  'skills:preview-url': { args: [url: string]; result: SkillInstallPreview }
+  /** Install step 2: the user accepted the permissions screen. */
+  'skills:install': { args: [token: string]; result: PackInstallResult }
+  'skills:install-cancel': { args: [token: string]; result: { ok: boolean } }
+  /** Saves a skill as a `.lumen` file (save dialog). */
+  'skills:export': { args: [name: string]; result: { ok: boolean; path?: string; error?: string } }
   /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
   'bridges:status': { args: []; result: BridgeStatus[] }
   'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
@@ -601,6 +629,35 @@ export type PackInstallResult =
   | { ok: true; installed: { id: string; name: string; updated: boolean }[] }
   | { ok: false; error: string; problems?: string[] }
 
+export type SkillActionResult = { ok: true } | { ok: false; error: string; problems?: string[] }
+
+export interface SkillDetail {
+  ok: true
+  summary: SkillSummary
+  /** SKILL.md as written. */
+  text: string
+  files: { path: string; bytes: number }[]
+}
+
+/** One skill in an archive, before it is installed (the permissions screen). */
+export interface SkillPreviewInfo {
+  name: string
+  description: string
+  version: string
+  author?: string
+  permissions: SkillPermissions
+  apps: string[]
+  triggers: string[]
+  files: number
+  hasSteps: boolean
+  /** An installed copy will be replaced. */
+  updates: boolean
+}
+
+export type SkillInstallPreview =
+  | { ok: true; token: string; source: string; skills: SkillPreviewInfo[] }
+  | { ok: false; error: string; problems?: string[] }
+
 /** One app's learning progress (07 T27). */
 export interface LearningApp {
   appId: string
@@ -799,6 +856,18 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:pack-install-url',
   'teach:pack-remove',
   'teach:pack-export',
+  'skills:list',
+  'skills:get',
+  'skills:set-enabled',
+  'skills:set-trusted',
+  'skills:save',
+  'skills:create',
+  'skills:delete',
+  'skills:preview-file',
+  'skills:preview-url',
+  'skills:install',
+  'skills:install-cancel',
+  'skills:export',
   'bridges:status',
   'bridges:test',
   'bridges:blender-addon',

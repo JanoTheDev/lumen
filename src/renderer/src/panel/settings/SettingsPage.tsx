@@ -11,6 +11,7 @@ import { Look } from './sections/Look'
 import { Memory } from './sections/Memory'
 import { Models } from './sections/Models'
 import { Privacy } from './sections/Privacy'
+import { Skills } from './sections/Skills'
 import { Voice } from './sections/Voice'
 
 const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
@@ -21,6 +22,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   models: Models,
   memory: Memory,
   lessons: Lessons,
+  skills: Skills,
   bridges: Bridges,
   privacy: Privacy,
   about: About
