@@ -16,6 +16,7 @@ import { writeAudit } from '../../audit/log'
 import { announce } from '../../a11y'
 import { bus } from '../../bus'
 import { configPath, loadConfig } from '../../config'
+import { mcpToolSet } from '../../connectors'
 import { log, type LogTag } from '../../logger'
 import { windowOnlyContext } from '../../query/context'
 import { allowsForeground, routineGuard } from '../../routines/preapproval'
@@ -286,6 +287,8 @@ async function runTask(
       ...(skills.skill ? { skill: { name: skills.skill.name, text: skills.skill.text } } : {})
     },
     log: (tag, msg) => log(tag as LogTag, `[${id}] ${msg}`),
+    // Connector tools; every call goes through the policy gate with origin "mcp".
+    moreTools: () => mcpToolSet({ taskId: id, prompt: task.prompt }),
     ...(shapes ? { guard: routineGuard(shapes) } : {})
   })
 }

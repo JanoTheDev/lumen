@@ -36,6 +36,8 @@ export interface BgRunEnv {
     skill?: { name: string; text?: string }
   }
   log?(tag: string, msg: string): void
+  /** More tools for this run (MCP connectors); a failure leaves them out. */
+  moreTools?(): Promise<{ defs: ToolDef[]; handlers: Record<string, ToolHandler> }>
   /**
    * Checked before every tool call: a reason refuses the call (E_DENIED, audited). Routines
    * skip high-risk calls they did not pre-approve.
@@ -80,7 +82,10 @@ export function capsFor(c: BackgroundCaps): Partial<Caps> {
 export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<RunOutcome> {
   const task = ctl.task()
   const skills = env.skills
-  const all = { ...createBackgroundHandlers(env.ports), ...skills?.handlers }
+  const more = env.moreTools
+    ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
+    : { defs: [] as ToolDef[], handlers: {} }
+  const all = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
   const handlers = env.guard ? guarded(all, env.guard, env.ports.audit) : all
   const startedAt = task.counters.startedAt
 
@@ -119,7 +124,11 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
       prompt: task.prompt,
       context: {},
       tools: ['ask_user', 'finish'],
-      extraTools: [...backgroundToolDefs({ child: !!task.parentId }), ...(skills?.defs ?? [])],
+      extraTools: [
+        ...backgroundToolDefs({ child: !!task.parentId }),
+        ...(skills?.defs ?? []),
+        ...more.defs
+      ],
       parallelTools: ['spawn_task'],
       cancelWindowMs: 0,
       skipPlan: true,
