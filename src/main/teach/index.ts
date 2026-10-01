@@ -626,8 +626,9 @@ function resumeOffered(): boolean {
 
 /**
  * Router hook, before 06's grammar: lesson commands while a lesson runs (whole utterance
- * only), "resume" / "no" for a resume offer, and "start lesson …" / "teach me …" for a pack
- * lesson. Anything else returns undefined and goes on to the assistant with lesson context.
+ * only), "resume" / "no" for a resume offer, and "start lesson …" / "teach me …" / "play
+ * guide …" for a pack or user lesson (also while another lesson runs). Anything else returns
+ * undefined and goes on to the assistant with lesson context.
  */
 export function interceptLesson(utterance: string): unknown | undefined {
   if (!runner || !registry) return undefined
@@ -642,14 +643,12 @@ export function interceptLesson(utterance: string): unknown | undefined {
       : { mode: 'answer', text: 'I could not save that lesson.' }
   }
   const cmd = parseLessonCommand(utterance)
-  if (runner.running()) {
-    if (cmd && runner.command(cmd)) {
-      log('plan', `lesson command: ${cmd}`)
-      return HANDLED
-    }
-    return undefined
+  const running = runner.running()
+  if (running && cmd && runner.command(cmd)) {
+    log('plan', `lesson command: ${cmd}`)
+    return HANDLED
   }
-  if (offer && cmd) {
+  if (!running && offer && cmd) {
     if (cmd === 'resume' || cmd === 'yes' || cmd === 'next')
       return resumeOffered() ? HANDLED : undefined
     if (cmd === 'no') {
