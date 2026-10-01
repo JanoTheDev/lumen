@@ -22,6 +22,7 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 | _"In the background, find internships at Exness."_     | Works on it as a background task while you keep using the PC, and tells you when it's done. |
 | _"Show numbers"_ → _"click 5"_                         | Numbers every clickable thing and clicks it, instantly, without calling the AI.             |
 | _"Read this aloud"_ / _"Summarize this page"_          | Built-in skills that run on whatever is on screen.                                          |
+| _"Top news today"_ → _"open the second one"_           | Short brief from free news feeds, with numbered sources you can open by voice.              |
 | _"Click this… move this there"_ (while pointing)       | Point and say: combines your words with where the pointer or gaze was.                      |
 | _"Every weekday at 9, read me my calendar."_           | Creates a routine that runs on that schedule.                                               |
 | _"Undo that."_                                         | Reverses Lumen's last actions where possible, and says what can't be undone.                |
@@ -53,12 +54,14 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Hold or tap** the hotkey; **double-tap** for conversation mode, where every sentence is a question until you stop.
 - **Spoken answers** with Windows voices, sentence by sentence, with optional barge-in (talk over it to interrupt).
 - **Dictation anywhere:** light cleanup that never drops your words, a personal dictionary that learns from your corrections, and a guard that never presses Enter in terminals.
+- **Dictation that keeps up:** "Tuesday, actually Wednesday" types Wednesday; spoken lists, numbers, dates and addresses are formatted; each app gets its own style; select text and say "make this friendlier"; snippets, whisper mode, coding mode ("camel case user name"), "send it", mouse-button push-to-talk, history, notes ("take a note…") and local stats.
 
 ### Accessibility
 
 - **Local voice commands:** "show numbers", "click 5", "show grid", "scroll down" and more run instantly, with no AI call. Lumen steps aside when Windows Voice Access or Dragon is running.
 - **Point and say:** "click this", "move this… there", "what's that?" use where your pointer or gaze was as you spoke.
 - **Community labels:** unnamed buttons get a clear name your screen reader can use, shareable with others.
+- **Face gestures** (opt-in, local): open your mouth to click, raise your eyebrows to scroll, tilt your head to pick, with a calibration wizard. Camera frames never leave the PC.
 - **Mouse grid**, **dwell clicking** with a click-type palette (left, right, double, drag) and tremor smoothing that suits eye-gaze and head pointers, plus an on-screen keyboard.
 - **Switch scanning** with a scan ring, menu and scan keyboard for one- or two-switch users.
 - **Screen reader output** through NVDA, JAWS or Narrator, focus narration, "describe the screen" and "read this".
@@ -74,6 +77,7 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Practice challenges** per app, with feedback and a streak.
 - **App helpers** for Blender and OBS read the app's real state, so lesson checks don't have to guess from the screen.
 - **Progress is saved**, so "continue where we left off" works across sessions. A local **learning journal** answers "what did I learn this week?"
+- **Lessons from tutorials:** paste a transcript, a web page link or a subtitle file and Lumen drafts a lesson for the real app.
 - **Share packs and lessons** as a single `.lumen` file, e.g. a teacher or helper sending one to a learner; install community packs from a file or link.
 - **Reading level:** plain, standard or expert explanations; say "explain simpler" or "more detail".
 
@@ -232,25 +236,25 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 - [x] Claude Code by voice, with optional autopilot
 - [x] File drop on the assistant bar (PDF, Word, text, images)
 - [x] Local speech recognition, Windows voices, barge-in, conversation mode, seven reply languages
-- [x] Dictation anywhere with a learning dictionary
+- [x] Dictation anywhere: corrections, formatting, per-app styles, voice edits, snippets, history and notes
+- [x] Read the web with me: summarize pages, news briefs from free feeds, open sources by voice
 - [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning
 - [x] Point and say ("click this", "move this there")
 - [x] Screen reader output (NVDA, JAWS, Narrator), community labels, simple mode, text scale, reduced motion, high contrast
 - [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress
 - [x] Blender and OBS app helpers for exact lesson checks
+- [x] Lessons from tutorial transcripts, web pages and subtitle files
+- [x] Face-gesture input (webcam, local, opt-in)
 - [x] Sharing packs and lessons as `.lumen` files
 - [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording or "save that as a skill"
 - [x] Smart helpers: focus mode, undo, shortcut coach, comfort, error rescue, what changed, reading level, learning journal
 - [x] Assistant bar, screen layer, cursor buddy, Home, first-run setup, rebuilt Settings, memory
 - [x] Experimental local models (Ollama, LM Studio)
 
-**In progress**
-
-- [ ] Turn a YouTube or web tutorial into a step-by-step lesson in the real app
-
 **Next**
 
-- [ ] Face-gesture input (webcam, local)
+- [ ] Offline spoken-language detection
+- [ ] Head-pointer mouse movement for face gestures
 - [ ] Browser research through the page itself, not screenshots
 - [ ] Optional streaming cloud voices (paid, opt-in)
 - [ ] winget package
@@ -264,7 +268,9 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 - Screenshots are sent with a request and never written to disk.
 - API keys come from `.env` (development) or the encrypted key store (Windows DPAPI), never from the config file or logs. Passwords and secrets are redacted before anything reaches the model.
 - Memory is off by default, stays on your PC, and can be viewed, edited or wiped in Settings.
-- The audit log stays on your PC, stores typed text only as a length and hash, and is pruned after 30 days.
+- The audit log stays on your PC, stores typed text only as a length and hash (a redacted copy only if you turn that on), and is pruned after 30 days by default.
+- The camera is used only while face gestures are on; frames are processed locally and never stored or sent.
+- News and page reading fetch only public https pages, respect robots.txt and never refetch one-time links.
 - No telemetry or analytics. Crash dumps stay local.
 
 ---
