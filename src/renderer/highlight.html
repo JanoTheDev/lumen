@@ -196,6 +196,15 @@
         height: 8px;
         box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
       }
+      /* Windows "Animation effects" off: no endless ping, entries appear at once. */
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
     </style>
   </head>
   <body>
