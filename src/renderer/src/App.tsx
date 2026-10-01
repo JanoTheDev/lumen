@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 import { startSpeaker } from './voice/speaker'
+import { RmsGate } from './voice/vad/rms'
 
 type ClaudeResponse = ModelResponse
 
@@ -315,6 +316,7 @@ export default function App(): JSX.Element {
       }
     ): void => {
       const startedAt = Date.now()
+      const gate = new RmsGate({ threshold: opts.threshold })
       let heardSpeech = false
       let silenceStart = 0
       // The hotkey state in main must know the recording is over, or the next press stops
@@ -333,7 +335,7 @@ export default function App(): JSX.Element {
           stop()
           return
         }
-        if (levelRef.current > opts.threshold) {
+        if (gate.update(levelRef.current)) {
           heardSpeech = true
           silenceStart = 0
         } else if (heardSpeech) {
