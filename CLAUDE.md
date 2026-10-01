@@ -82,7 +82,7 @@ Rust crate `lumen-native`, protocol v2 only (`--protocol 2`). Build with `cargo 
 
 ### Agent selection (`src/main/agent/impl.ts`)
 
-`agentImpl`: `python` | `native` | `auto` (default). Paths: dev `native/target/release/lumen-native.exe` (then `fastrel`) and `agent/.venv/Scripts/python.exe agent/main.py`; packaged `resources/native/lumen-native.exe` and `resources/agent/lumen-agent.exe` (falls back to the bundled venv). `auto` runs native when the exe exists and its `ready.capabilities` include `REQUIRED_NATIVE_CAPABILITIES` (incl. `execute`, which native does not advertise yet), otherwise Python. Native failing to start under `auto`, or crashing 3 times within 60 s under any setting, switches the session to Python (`agent-impl-fallback` event, logged).
+`agentImpl`: `python` | `native` | `auto` (default). Paths: dev `native/target/release/lumen-native.exe` (then `fastrel`) and `agent/.venv/Scripts/python.exe agent/main.py`; packaged `resources/native/lumen-native.exe` and `resources/agent/lumen-agent.exe` (falls back to the bundled venv). `auto` runs native when the exe exists and its `ready.capabilities` include `REQUIRED_NATIVE_CAPABILITIES` (incl. `execute`), otherwise Python. Native failing to start under `auto`, or crashing 3 times within 60 s under any setting, switches the session to Python (`agent-impl-fallback` event, logged). `agent:info` (invoke) returns the running impl, version, protocol and fallback reason for Settings.
 
 ### Coordinates
 
