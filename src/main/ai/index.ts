@@ -1,9 +1,13 @@
-// Model calls for the query pipeline. Provider is chosen by the router from the available keys.
+// Model calls for the query pipeline. Provider and model come from the role router.
 import type { ModelResponse } from '@shared/types'
-import { callAnthropic } from './providers/anthropic'
-import { callOpenAI } from './providers/openai'
-import { getProvider } from './router'
-import { sanitizeResponse } from './schema'
+import { bus } from '../bus'
+import { currentFrame } from '../actions/coords'
+import { historyMessages } from './history'
+import { buildSystemBlocks } from './prompts/system'
+import { getModel, getProvider } from './router'
+import { parseResponse, sanitizeResponse } from './schema'
+import { LlmError, REFUSAL_MESSAGE, onUsage, providerFor, warmupProviders } from './providers'
+import { logUsage } from './pricing'
 
 export type {
   Action,
@@ -23,9 +27,41 @@ export async function callModel(
   activeWindow: string,
   opts: CallOptions = {}
 ): Promise<ModelResponse> {
-  const call = getProvider() === 'anthropic' ? callAnthropic : callOpenAI
-  return sanitizeResponse(await call(prompt, screenshotBase64, activeWindow, opts))
+  const { imgW, imgH } = currentFrame()
+  try {
+    const res = await providerFor(getProvider()).complete(
+      {
+        model: getModel('main'),
+        system: buildSystemBlocks(activeWindow),
+        messages: [
+          ...historyMessages(),
+          {
+            role: 'user',
+            content: `Active window: ${activeWindow}\nScreenshot dimensions: ${imgW}x${imgH} pixels (all coordinates must be within this range)\n\nUser request: ${prompt}`
+          }
+        ],
+        images: screenshotBase64
+          ? [{ base64: screenshotBase64, detail: opts.lowDetail ? 'low' : 'high' }]
+          : [],
+        maxTokens: opts.lowDetail ? 2048 : 4096,
+        effort: 'low',
+        json: true
+      },
+      opts.signal
+    )
+    return sanitizeResponse(parseResponse(res.text))
+  } catch (e) {
+    if (e instanceof LlmError && e.code === 'E_REFUSED')
+      return { mode: 'answer', text: REFUSAL_MESSAGE }
+    throw e
+  }
 }
 
 /** @deprecated Use callModel. */
 export const callClaude = callModel
+
+// Warm the SDK connection pools at startup (after .env is loaded) and whenever the user starts
+// speaking, so the request after the transcript skips the TLS handshake.
+onUsage(logUsage)
+if (process.versions.electron) setImmediate(() => warmupProviders())
+bus.on('voice.started', () => warmupProviders())

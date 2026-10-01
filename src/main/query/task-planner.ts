@@ -1,9 +1,6 @@
 // src/main/task-planner.ts
-import type Anthropic from '@anthropic-ai/sdk'
-import type OpenAI from 'openai'
-import { getModel, getProvider, reasoningParams } from '../ai/router'
-import { anthropicClient } from '../ai/providers/anthropic'
-import { openaiClient, type ChatParams } from '../ai/providers/openai'
+import { getModel, getProvider } from '../ai/router'
+import { providerFor } from '../ai/providers'
 import { log, startTimer } from '../logger'
 import { hashScreenshot, shouldVerifyStep, verifyStep } from './step-verifier'
 import type { ClaudeResponse, Action } from '../ai'
@@ -83,61 +80,19 @@ Current app: ${activeWindow}
 Return ONLY JSON, no markdown, no prose:
 {"task":"<brief title>","steps":[{"index":1,"description":"<imperative action>"}]}`
 
-  let raw = ''
-
-  if (provider === 'anthropic') {
-    const content: Anthropic.MessageParam['content'] = []
-    if (screenshot) {
-      content.push({
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: screenshot }
-      })
-    }
-    content.push({ type: 'text', text: planPrompt })
-    const msg = await anthropicClient().messages.create(
-      {
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content }]
-      },
-      { signal }
-    )
-    raw = msg.content[0].type === 'text' ? msg.content[0].text : ''
-  } else {
-    const userContent: OpenAI.Chat.ChatCompletionContentPart[] = []
-    if (screenshot) {
-      userContent.push({
-        type: 'image_url',
-        image_url: { url: `data:image/jpeg;base64,${screenshot}`, detail: 'low' }
-      })
-    }
-    userContent.push({ type: 'text', text: planPrompt })
-    const resp = await openaiClient().chat.completions.create(
-      {
-        model,
-        max_completion_tokens: 4096,
-        ...reasoningParams(model),
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userContent }
-        ]
-      } as ChatParams,
-      { signal }
-    )
-    raw = resp.choices[0]?.message?.content ?? ''
-    const usage = resp.usage as
-      | (typeof resp.usage & { completion_tokens_details?: { reasoning_tokens?: number } })
-      | undefined
-    if (usage) {
-      const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? 0
-      log(
-        'plan',
-        `usage: in:${usage.prompt_tokens} out:${usage.completion_tokens} (reasoning:${reasoning})`
-      )
-    }
-  }
-
+  const res = await providerFor(provider).complete(
+    {
+      model,
+      system: [{ text: systemPrompt, cacheable: true }],
+      messages: [{ role: 'user', content: planPrompt }],
+      images: screenshot ? [{ base64: screenshot, detail: 'low' }] : [],
+      maxTokens: 2048,
+      effort: 'low',
+      json: true
+    },
+    signal
+  )
+  const raw = res.text
   planTimer.split('API response received')
 
   if (!raw.trim()) {

@@ -3,13 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import {
-  computerUseModel,
-  getModel,
-  getProvider,
-  isReasoningModel,
-  reasoningParams
-} from '../src/main/ai/router'
+import { computerUseModel, getModel, getProvider } from '../src/main/ai/router'
+import { isReasoningModel, reasoningEffort } from '../src/main/ai/providers/openai'
 import { usageCost } from '../src/main/ai/pricing'
 import { addToHistory, clearHistory, historyMessages } from '../src/main/ai/history'
 import { setConfigDir, saveConfig } from '../src/main/config'
@@ -82,20 +77,25 @@ describe('model-router', () => {
 })
 
 describe('reasoning params', () => {
-  it('only reasoning models get reasoning_effort', () => {
+  it('only reasoning models get a reasoning effort', () => {
     expect(isReasoningModel('gpt-5-mini')).toBe(true)
     expect(isReasoningModel('o4-mini')).toBe(true)
     expect(isReasoningModel('gpt-4o')).toBe(false)
     expect(isReasoningModel('claude-sonnet-4-6')).toBe(false)
-    expect(reasoningParams('gpt-5-nano')).toEqual({ reasoning_effort: 'minimal' })
-    expect(reasoningParams('o3')).toEqual({ reasoning_effort: 'low' })
-    expect(reasoningParams('gpt-4o')).toEqual({})
+    expect(reasoningEffort('gpt-5-nano')).toBe('minimal')
+    expect(reasoningEffort('o3')).toBe('low')
+    expect(reasoningEffort('gpt-4o')).toBeUndefined()
   })
 })
 
 describe('pricing', () => {
   it('prices Haiku 4.5 at $1 / $5 per MTok', () => {
-    const c = usageCost('claude-haiku-4-5-20251001', 1_000_000, 1_000_000)
+    const c = usageCost('claude-haiku-4-5-20251001', {
+      inputTokens: 1_000_000,
+      outputTokens: 1_000_000,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0
+    })
     expect(c.input).toBeCloseTo(1)
     expect(c.output).toBeCloseTo(5)
   })

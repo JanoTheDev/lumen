@@ -1,8 +1,7 @@
 import crypto from 'crypto'
-import { getModel, getProvider, reasoningParams } from '../ai/router'
+import { getModel, getProvider } from '../ai/router'
 import { usageCost } from '../ai/pricing'
-import { anthropicClient } from '../ai/providers/anthropic'
-import { openaiClient, type ChatParams } from '../ai/providers/openai'
+import { providerFor } from '../ai/providers'
 import { log } from '../logger'
 
 // Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
@@ -58,68 +57,33 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
   let cost = 0
 
   try {
-    if (provider === 'anthropic') {
-      const msg = await anthropicClient().messages.create({
+    const res = await providerFor(provider).complete({
+      model,
+      system: [],
+      messages: [{ role: 'user', content: prompt }],
+      images: [{ base64: afterScreenshot, detail: 'low' }],
+      maxTokens: 256,
+      effort: 'low',
+      json: true
+    })
+    cost = usageCost(res.model, res.usage).total
+    const rawVerify = res.text.trim()
+    if (!rawVerify) {
+      log('verify', 'no response from model, assuming success', {
         model,
-        max_tokens: 64,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: 'image/jpeg', data: afterScreenshot }
-              },
-              { type: 'text', text: prompt }
-            ]
-          }
-        ]
+        cost,
+        timeMs: Date.now() - start
       })
-      const raw = msg.content[0].type === 'text' ? msg.content[0].text : '{}'
-      const parsed = JSON.parse(raw) as { success?: boolean; detail?: string }
-      success = parsed.success ?? true
-      detail = parsed.detail ?? 'ok'
-      cost = usageCost(model, msg.usage.input_tokens, msg.usage.output_tokens).total
-    } else {
-      const resp = await openaiClient().chat.completions.create({
-        model,
-        max_completion_tokens: 512,
-        ...reasoningParams(model),
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: `data:image/jpeg;base64,${afterScreenshot}`, detail: 'low' }
-              },
-              { type: 'text', text: prompt }
-            ]
-          }
-        ]
-      } as ChatParams)
-      const rawVerify = resp.choices[0]?.message?.content
-      if (!rawVerify) {
-        log('verify', 'no response from model, assuming success', {
-          model,
-          cost: 0,
-          timeMs: Date.now() - start
-        })
-        return { success: true, detail: 'no response, assuming success', cost: 0 }
-      }
-      const parsed = JSON.parse(
-        rawVerify
-          .replace(/```json\n?/g, '')
-          .replace(/```\n?/g, '')
-          .trim()
-      ) as { success?: boolean; detail?: string }
-      success = parsed.success ?? true
-      detail = parsed.detail ?? 'ok'
-      const usage = resp.usage
-      if (usage) {
-        cost = usageCost(model, usage.prompt_tokens, usage.completion_tokens).total
-      }
+      return { success: true, detail: 'no response, assuming success', cost }
     }
+    const parsed = JSON.parse(
+      rawVerify
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim()
+    ) as { success?: boolean; detail?: string }
+    success = parsed.success ?? true
+    detail = parsed.detail ?? 'ok'
   } catch (e) {
     detail = `verify error: ${(e as Error).message}`
   }

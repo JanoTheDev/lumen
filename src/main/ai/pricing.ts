@@ -1,3 +1,5 @@
+import type { Usage } from './providers/types'
+
 // USD per million tokens.
 const PRICING: Record<string, { input: number; output: number }> = {
   'claude-sonnet-4-6': { input: 3.0, output: 15.0 },
@@ -11,22 +13,18 @@ const FALLBACK = { input: 3.0, output: 15.0 }
 
 export function usageCost(
   model: string,
-  inputTokens: number,
-  outputTokens: number
+  usage: Usage
 ): { input: number; output: number; total: number } {
   const p = PRICING[model] ?? FALLBACK
-  const input = (inputTokens / 1_000_000) * p.input
-  const output = (outputTokens / 1_000_000) * p.output
+  const inTokens = usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+  const input = (inTokens / 1_000_000) * p.input
+  const output = (usage.outputTokens / 1_000_000) * p.output
   return { input, output, total: input + output }
 }
 
-export function logUsage(
-  model: string,
-  inputTokens: number,
-  outputTokens: number,
-  hasImage: boolean
-): void {
-  const cost = usageCost(model, inputTokens, outputTokens)
+export function logUsage(model: string, usage: Usage, hasImage: boolean): void {
+  const { inputTokens, outputTokens } = usage
+  const cost = usageCost(model, usage)
   const imageNote = hasImage ? ' +vision (img tokens in "in")' : ''
   console.log(
     `[tokens] ${model}${imageNote} | in:${inputTokens} out:${outputTokens} | $${cost.total.toFixed(4)} (in:$${cost.input.toFixed(4)} out:$${cost.output.toFixed(4)})`

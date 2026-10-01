@@ -1,12 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { ModelResponse } from '@shared/types'
-import { buildSystemPrompt } from '../prompts/system'
-import { historyMessages } from '../history'
-import { getModel } from '../router'
-import { logUsage } from '../pricing'
-import { parseResponse } from '../schema'
-import { currentFrame } from '../../actions/coords'
-import type { CallOptions } from '../index'
+import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
+import type { ZodType } from 'zod'
+import {
+  EMPTY_USAGE,
+  LlmError,
+  REFUSAL_MESSAGE,
+  retryBudget,
+  type ChatChunk,
+  type ChatRequest,
+  type CompleteResult,
+  type LlmProvider,
+  type StructuredRequest,
+  type Usage
+} from './types'
 
 let client: Anthropic | null = null
 let clientKey: string | undefined
@@ -21,48 +27,159 @@ export function anthropicClient(): Anthropic {
   return client
 }
 
-export async function callAnthropic(
-  prompt: string,
-  screenshotBase64: string | null,
-  activeWindow: string,
-  opts: CallOptions = {}
-): Promise<ModelResponse> {
-  const model = getModel('main')
-  const systemPrompt = buildSystemPrompt(activeWindow)
+/** `output_config.effort` is accepted by Opus 4.5+, Sonnet 4.6+ and every 5.x model; not Haiku. */
+export function supportsEffort(model: string): boolean {
+  return /^claude-(opus-4-[5-9]|sonnet-4-6|(opus|sonnet|fable|mythos)-[5-9])/.test(model)
+}
 
-  const userContent: Anthropic.MessageParam['content'] = []
-  if (screenshotBase64) {
-    userContent.push({
-      type: 'image',
-      source: { type: 'base64', media_type: 'image/jpeg', data: screenshotBase64 }
-    })
-  }
-  const { imgW, imgH } = currentFrame()
-  userContent.push({
+/** Opus 4.7+ and the 5.x family reject non-default sampling parameters. */
+export function supportsTemperature(model: string): boolean {
+  return !/^claude-(opus-4-[7-9]|(opus|sonnet|fable|mythos)-[5-9])/.test(model)
+}
+
+/**
+ * Thinking setting for a latency-sensitive call. Sonnet 5.5 thinks adaptively unless told
+ * `between_tools`; Opus 5.5 cannot turn it off; older models are off by default.
+ */
+export function thinkingOff(model: string): Anthropic.ThinkingConfigParam | undefined {
+  return /^claude-sonnet-5-5/.test(model) ? { type: 'between_tools' } : undefined
+}
+
+type CreateParams = Anthropic.MessageCreateParamsNonStreaming
+
+export function buildParams(req: ChatRequest): CreateParams {
+  const system: Anthropic.TextBlockParam[] = req.system.map((b) => ({
     type: 'text',
-    text: `Active window: ${activeWindow}\nScreenshot dimensions: ${imgW}x${imgH} pixels (all coordinates must be within this range)\n\nUser request: ${prompt}`
-  })
-
-  const history: Anthropic.MessageParam[] = historyMessages()
-
-  const send = (maxTokens: number): Promise<Anthropic.Message> =>
-    anthropicClient().messages.create(
-      {
-        model,
-        max_tokens: maxTokens,
-        system: systemPrompt,
-        messages: [...history, { role: 'user', content: userContent }]
-      },
-      { signal: opts.signal }
-    )
-  const baseTokens = opts.lowDetail ? 2048 : 4096
-  let message = await send(baseTokens)
-  if (message.stop_reason === 'max_tokens') {
-    // Truncated JSON is unusable; one retry with more room.
-    console.log('[fail] truncated response, retrying with a larger max_tokens')
-    message = await send(baseTokens * 2)
+    text: b.text,
+    ...(b.cacheable ? { cache_control: { type: 'ephemeral' as const } } : {})
+  }))
+  const messages: Anthropic.MessageParam[] = req.messages.map((m) => ({
+    role: m.role,
+    content: m.content
+  }))
+  const last = messages[messages.length - 1]
+  if (last && last.role === 'user' && req.images?.length) {
+    last.content = [
+      ...req.images.map(
+        (img): Anthropic.ImageBlockParam => ({
+          type: 'image',
+          source: { type: 'base64', media_type: img.mediaType ?? 'image/jpeg', data: img.base64 }
+        })
+      ),
+      { type: 'text', text: req.messages[req.messages.length - 1].content }
+    ]
   }
-  logUsage(model, message.usage.input_tokens, message.usage.output_tokens, !!screenshotBase64)
-  const raw = message.content[0].type === 'text' ? message.content[0].text : ''
-  return parseResponse(raw)
+  const params: CreateParams = { model: req.model, max_tokens: req.maxTokens, messages }
+  if (system.length) params.system = system
+  const thinking = req.thinking ? undefined : thinkingOff(req.model)
+  if (thinking) params.thinking = thinking
+  if (req.effort && supportsEffort(req.model)) params.output_config = { effort: req.effort }
+  if (req.temperature !== undefined && supportsTemperature(req.model))
+    params.temperature = req.temperature
+  return params
+}
+
+export function toUsage(u: Partial<Anthropic.Usage> | undefined): Usage {
+  if (!u) return { ...EMPTY_USAGE }
+  return {
+    inputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    cacheReadTokens: u.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: u.cache_creation_input_tokens ?? 0
+  }
+}
+
+function textOf(msg: Anthropic.Message): string {
+  return msg.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('')
+}
+
+function addUsage(a: Usage, b: Usage): Usage {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens
+  }
+}
+
+export function createAnthropicProvider(getClient: () => Anthropic = anthropicClient): LlmProvider {
+  async function send<T>(
+    params: CreateParams,
+    schema: ZodType<T> | undefined,
+    signal?: AbortSignal
+  ): Promise<{ msg: Anthropic.Message; data: T | null }> {
+    if (!schema) {
+      return { msg: await getClient().messages.create(params, { signal }), data: null }
+    }
+    const parsed = await getClient().messages.parse(
+      {
+        ...params,
+        output_config: { ...params.output_config, format: zodOutputFormat(schema) }
+      },
+      { signal }
+    )
+    return { msg: parsed, data: (parsed.parsed_output as T | null) ?? null }
+  }
+
+  return {
+    id: 'anthropic',
+
+    async complete<T = unknown>(
+      req: StructuredRequest<T>,
+      signal?: AbortSignal
+    ): Promise<CompleteResult<T>> {
+      const params = buildParams(req)
+      let { msg, data } = await send(params, req.schema, signal)
+      let usage = toUsage(msg.usage)
+      if (msg.stop_reason === 'max_tokens') {
+        const budget = retryBudget(params.max_tokens)
+        if (budget === null) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+        console.log(`[fail] truncated response, retrying with max_tokens ${budget}`)
+        ;({ msg, data } = await send({ ...params, max_tokens: budget }, req.schema, signal))
+        usage = addUsage(usage, toUsage(msg.usage))
+        if (msg.stop_reason === 'max_tokens')
+          throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+      }
+      if (msg.stop_reason === 'refusal') throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
+      return { data, text: textOf(msg), usage, model: msg.model, stopReason: msg.stop_reason ?? '' }
+    },
+
+    async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk> {
+      const events = await getClient().messages.create(
+        { ...buildParams(req), stream: true },
+        { signal }
+      )
+      let text = ''
+      let model = req.model
+      let stopReason = ''
+      let usage: Usage = { ...EMPTY_USAGE }
+      for await (const ev of events) {
+        if (signal?.aborted) return
+        if (ev.type === 'message_start') {
+          model = ev.message.model
+          usage = toUsage(ev.message.usage)
+        } else if (ev.type === 'content_block_delta' && ev.delta.type === 'text_delta') {
+          text += ev.delta.text
+          yield { type: 'text', text: ev.delta.text }
+        } else if (ev.type === 'message_delta') {
+          stopReason = ev.delta.stop_reason ?? stopReason
+          usage.outputTokens = ev.usage.output_tokens ?? usage.outputTokens
+        }
+      }
+      if (signal?.aborted) return
+      if (stopReason === 'refusal') throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
+      yield { type: 'done', result: { text, usage, model, stopReason } }
+    },
+
+    async warmup(): Promise<void> {
+      try {
+        await getClient().models.list({ limit: 1 })
+      } catch (e) {
+        console.warn('[warmup] anthropic:', (e as Error).message)
+      }
+    }
+  }
 }

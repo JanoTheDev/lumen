@@ -38,14 +38,3 @@ export function computerUseModel(): string {
   const override = loadConfig().models.main?.trim()
   return override && override.startsWith('claude-') ? override : MODELS.anthropic.main
 }
-
-/** gpt-5* and o-series models take `reasoning_effort`; other chat models reject it. */
-export function isReasoningModel(model: string): boolean {
-  return /^(gpt-5|o\d)/i.test(model)
-}
-
-/** Lowest reasoning effort the model accepts, or nothing for non-reasoning models. */
-export function reasoningParams(model: string): { reasoning_effort?: 'minimal' | 'low' } {
-  if (!isReasoningModel(model)) return {}
-  return { reasoning_effort: /^gpt-5/i.test(model) ? 'minimal' : 'low' }
-}

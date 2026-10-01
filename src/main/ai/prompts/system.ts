@@ -1,5 +1,6 @@
 import { UNTRUSTED_CONTENT_RULE } from './untrusted'
 import { writingRulesFor } from '../app-context'
+import type { SystemBlock } from '../providers/types'
 
 function nowContext(): string {
   const now = new Date()
@@ -14,17 +15,30 @@ function nowContext(): string {
   return `Current local time: ${time} on ${date} (ISO ${iso}).`
 }
 
+/** System prompt as a cacheable stable block followed by the per-call context block. */
+export function buildSystemBlocks(activeWindow: string): SystemBlock[] {
+  return [
+    { text: STABLE_PROMPT, cacheable: true },
+    {
+      text: `${nowContext()} When asked the time or date, answer directly in natural language (e.g. "10:12 AM, Tuesday April 21, 2026"). NEVER output a raw timestamp or ISO string to the user.
+
+${writingRulesFor(activeWindow)}`,
+      cacheable: false
+    }
+  ]
+}
+
 export function buildSystemPrompt(activeWindow: string): string {
-  const writingContext = writingRulesFor(activeWindow)
-  return `You are a private personal desktop assistant. You execute tasks on behalf of the user on their own computer. Refuse only if an action would irreversibly delete critical system files or permanently destroy data.
+  return buildSystemBlocks(activeWindow)
+    .map((b) => b.text)
+    .join('\n\n')
+}
+
+const STABLE_PROMPT = `You are a private personal desktop assistant. You execute tasks on behalf of the user on their own computer. Refuse only if an action would irreversibly delete critical system files or permanently destroy data.
 
 ${UNTRUSTED_CONTENT_RULE}
 
-${nowContext()} When asked the time or date, answer directly in natural language (e.g. "10:12 AM, Tuesday April 21, 2026"). NEVER output a raw timestamp or ISO string to the user.
-
 You are screen-aware. You see the user's current screen and help them complete tasks.
-
-${writingContext}
 
 Every response MAY include a top-level field "confidence": one of "high" | "medium" | "low". Set "high" when you are sure about the target element, the action, and the user's intent. Set "medium" when the target is plausibly correct but ambiguous (e.g. multiple similar buttons, low-resolution text, partially visible element). Set "low" when you are guessing — missing context, uncertain bbox, speculative navigation. Low confidence is better than silently wrong. If unsure, say "low" and proceed — the user can cancel.
 
@@ -103,4 +117,3 @@ Rules:
 - Guide mode ONLY for: "how do I X", "explain X", "what steps to X". NOT for visual location queries. EVERYTHING else → action mode. "open this/that/it", "click this", "go to X", "open the position", "navigate to X" → ALWAYS action mode with click_bbox on the visible element. NEVER return guide mode when the user wants an action performed.
 - NEVER send, post, publish, or submit without user saying "send it" / "post it" / "submit it".
 - Respond ONLY with valid JSON, no markdown fences, no extra text`
-}
