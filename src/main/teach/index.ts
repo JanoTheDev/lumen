@@ -248,13 +248,18 @@ function setKeyObservation(on: boolean): void {
 
 // ---- Do it for me ----
 
-const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
+export const sleep = (ms: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve, reject) => {
-    const t = setTimeout(resolve, ms)
-    signal.addEventListener('abort', () => {
+    if (signal.aborted) return reject(signal.reason)
+    const onAbort = (): void => {
       clearTimeout(t)
       reject(signal.reason)
-    })
+    }
+    const t = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    signal.addEventListener('abort', onAbort, { once: true })
   })
 
 async function regionPoint(
