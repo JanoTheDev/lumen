@@ -105,11 +105,11 @@ All of them can be changed in Settings.
                │ NDJSON over stdio (protocol v2)
 ┌──────────────▼───────────────┐
 │ lumen-native (native/, Rust) │  hotkeys, SendInput, DXGI capture,
-│ or Python agent (agent/)     │  Windows OCR, UI Automation, dwell,
-└──────────────────────────────┘  wake word, screen reader output
+│                              │  Windows OCR, UI Automation, dwell,
+└──────────────────────────────┘  screen reader output
 ```
 
-The main process decides, the renderers draw, the agent touches the OS. The Rust sidecar is the default and ships in the installer; the Python agent is a development fallback, used automatically if the native helper is missing or keeps crashing. Shared types and IPC contracts live in `src/shared/`; app knowledge lives in `skills/`. See [CLAUDE.md](./CLAUDE.md) for the full module map.
+The main process decides, the renderers draw, the agent touches the OS. The Rust sidecar is the only OS helper and ships in the installer; it is restarted with backoff if it crashes. The wake word and local speech recognition run in the main process (sherpa-onnx). Shared types and IPC contracts live in `src/shared/`; app knowledge lives in `skills/`. See [CLAUDE.md](./CLAUDE.md) for the full module map.
 
 Default models: Claude Sonnet 5.5 for answers and planning and Claude Haiku 4.5 for quick checks; with only an OpenAI key, gpt-5-mini and gpt-5-nano. Override per role in Settings → Models.
 
@@ -117,16 +117,13 @@ Default models: Claude Sonnet 5.5 for answers and planning and Claude Haiku 4.5 
 
 ## Run from source
 
-Requirements: Windows 10 22H2+ or 11, Node.js 22, Rust (for the native helper) and/or Python 3.11+, and one API key.
+Requirements: Windows 10 22H2+ or 11, Node.js 22, Rust (https://rustup.rs) for the native helper, and one API key.
 
 ```bash
 git clone https://github.com/JanoTheDev/lumen.git
 cd lumen
 npm install
-npm run build:native        # Rust helper; skip it to use the Python agent
-
-python -m venv agent/.venv  # only needed for the Python agent
-agent\.venv\Scripts\pip install -r agent/requirements.txt
+npm run build:native        # Rust helper (native/target/release/lumen-native.exe)
 
 copy .env.example .env      # add ANTHROPIC_API_KEY or OPENAI_API_KEY
 npm run dev
@@ -146,11 +143,10 @@ npm run test:live        # tests that call real APIs (needs a key)
 npm run validate:skills  # check skill packs against their schema
 npm run eval:router      # intent router eval
 npm run eval:dictation   # dictation word-preservation eval
-agent\.venv\Scripts\python -m pytest agent/tests
 cd native && cargo test && cargo clippy --all-targets -- -D warnings
 ```
 
-CI runs typecheck, lint, Vitest, pytest and the Rust checks on Windows for every push.
+CI runs typecheck, lint, Vitest and the Rust checks on Windows for every push.
 
 ---
 
@@ -160,7 +156,7 @@ CI runs typecheck, lint, Vitest, pytest and the Rust checks on Windows for every
 
 - [x] Security hardening: sandboxed windows, link and shortcut policy, validated settings and IPC
 - [x] Reliable cancel, correct clicks at any scaling and on multiple monitors
-- [x] Rust native helper (no Python needed) with capture, OCR, UI Automation, input and wake word
+- [x] Rust native helper with capture, OCR, UI Automation, input, dwell and screen reader output
 - [x] AI intent router, structured planner, observe → act → verify loop
 - [x] Element-accurate pointing: UI Automation, numbered marks, zoom-in second look
 - [x] Local speech recognition, Windows voices, sentence-by-sentence answers, barge-in
