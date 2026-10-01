@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { rateFor, usageCost } from '../../src/main/ai/pricing'
+import { knownCost, rateFor, registerModelPrice, usageCost } from '../../src/main/ai/pricing'
 import {
   costTotals,
   noteAnswerModel,
@@ -46,9 +46,25 @@ describe('pricing', () => {
     expect(usageCost('gpt-5-mini', usage(4_000, 200, 1_000)).total).toBe(0.001425)
   })
 
-  it('gives unknown models no estimate ($0, flagged unknown)', () => {
+  it('shows unknown models as no estimate but counts them at the fallback rate for caps', () => {
     expect(rateFor('some-new-model')).toMatchObject({ input: 0, output: 0, known: false })
-    expect(usageCost('some-new-model', usage(1_000_000, 1_000_000)).total).toBe(0)
+    expect(knownCost('some-new-model', usage(1_000_000, 1_000_000)).total).toBe(0)
+    // Caps: Sonnet 5.5's $2 / $10.
+    expect(usageCost('deepseek-chat', usage(1_000_000, 1_000_000)).total).toBe(12)
+    recordUsage('deepseek-chat', usage(1_000_000, 1_000_000))
+    expect(costTotals().sessionUsd).toBe(0)
+  })
+
+  it('uses a price a service listed for its model', () => {
+    registerModelPrice('vendor/listed-model', {
+      input: 0.5,
+      output: 1.5,
+      cacheRead: 0.5,
+      cacheWrite: 0.5
+    })
+    expect(rateFor('vendor/listed-model').known).toBe(true)
+    expect(usageCost('vendor/listed-model', usage(1_000_000, 1_000_000)).total).toBe(2)
+    expect(knownCost('vendor/listed-model', usage(1_000_000, 1_000_000)).total).toBe(2)
   })
 
   it('prices the Gemini models at their paid rates', () => {

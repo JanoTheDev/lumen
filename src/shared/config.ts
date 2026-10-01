@@ -511,6 +511,8 @@ export const configV2Schema = z.object({
     localOnly: z.boolean().optional(),
     /** The user read the Gemini free-tier privacy note (data use, human review, 18+). */
     geminiAck: z.boolean().optional(),
+    /** The Gemini key has billing on: calls count at the paid rates, not as free tier. */
+    geminiPaid: z.boolean().optional(),
     /** The generic OpenAI-compatible service; its key lives in the key vault. */
     compatible: z
       .object({

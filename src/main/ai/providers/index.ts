@@ -91,8 +91,14 @@ function create(id: ProviderId): LlmProvider {
   throw new LlmError('E_NO_KEY', `Provider "${id}" is not available.`)
 }
 
-/** Calls through these cost nothing: local servers and the Gemini free tier. */
-const FREE_PROVIDERS: readonly ProviderId[] = ['local', 'gemini']
+/**
+ * Calls through these cost nothing: local servers, and Gemini unless the user said their key
+ * has billing on (`models.geminiPaid`; then the paid table rates apply).
+ */
+function isFreeProvider(id: ProviderId): boolean {
+  if (id === 'local') return true
+  return id === 'gemini' && loadConfig().models.geminiPaid !== true
+}
 
 let deterministic = false
 
@@ -133,7 +139,8 @@ export function prepareRequest<R extends ChatRequest>(req: R): R {
 
 function withUsage(inner: LlmProvider): LlmProvider {
   const usageListener: UsageListener = (model, usage, hasImage) => {
-    if (FREE_PROVIDERS.includes(inner.id)) markFreeModel(model)
+    if (inner.id === 'local' || inner.id === 'gemini')
+      markFreeModel(model, isFreeProvider(inner.id))
     listener(model, usage, hasImage)
   }
   return {

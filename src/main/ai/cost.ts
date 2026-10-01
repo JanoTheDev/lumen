@@ -2,7 +2,7 @@
 // and to the session and day totals.
 import { AsyncLocalStorage } from 'async_hooks'
 import { EMPTY_USAGE, type Usage } from './providers/types'
-import { formatUsage, rateFor, roundUsd as round, usageCost } from './pricing'
+import { formatUsage, knownCost, rateFor, roundUsd as round } from './pricing'
 import { addDayUsage, usageSummary, type UsageSummary } from './usage-log'
 
 export interface TurnCost {
@@ -31,7 +31,7 @@ export function recordUsage(model: string, usage: Usage, hasImage = false, now =
     cache.read += usage.cacheReadTokens
     if (usage.cacheReadTokens > 0) cache.hits++
   }
-  const cost = usageCost(model, usage).total
+  const cost = knownCost(model, usage).total
   addDayUsage(cost, usage, rateFor(model).known, now)
   sessionUsd = round(sessionUsd + cost)
   const key = dayKey(now)

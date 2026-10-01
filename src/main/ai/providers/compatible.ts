@@ -6,6 +6,7 @@ import OpenAI from 'openai'
 import type { CompatiblePreset } from '@shared/config'
 import { COMPATIBLE_PRESET_INFO } from '@shared/model-providers'
 import { loadConfig } from '../../config'
+import { registerModelPrice, type Rate } from '../pricing'
 import { createChatBackend, type ChatBackend } from './chat-completions'
 import { looksVision } from './local'
 import { LlmError } from './types'
@@ -48,12 +49,36 @@ export interface RemoteModel {
   id: string
   vision: boolean
   tools: boolean
+  /** USD per million tokens, when the service lists prices (OpenRouter). */
+  price?: Rate
 }
 
 interface OpenRouterModel {
   id?: string
   architecture?: { input_modalities?: string[] }
   supported_parameters?: string[]
+  /** USD per token, as decimal strings. */
+  pricing?: Record<string, unknown>
+}
+
+/** OpenRouter's per-token prices as a per-million rate, or undefined when not usable. */
+export function priceOf(pricing: Record<string, unknown> | undefined): Rate | undefined {
+  if (!pricing) return undefined
+  const perM = (key: string): number | undefined => {
+    const v = Number(pricing[key])
+    return pricing[key] !== undefined && pricing[key] !== '' && Number.isFinite(v) && v >= 0
+      ? Math.round(v * 1e6 * 1e6) / 1e6
+      : undefined
+  }
+  const input = perM('prompt')
+  const output = perM('completion')
+  if (input === undefined || output === undefined) return undefined
+  return {
+    input,
+    output,
+    cacheRead: perM('input_cache_read') ?? input,
+    cacheWrite: perM('input_cache_write') ?? input
+  }
 }
 
 /** Parses a /models reply; OpenRouter entries carry modalities and supported parameters. */
@@ -67,7 +92,8 @@ export function parseModelList(body: unknown): RemoteModel[] {
       vision: m.architecture?.input_modalities
         ? m.architecture.input_modalities.includes('image')
         : looksVisionRemote(m.id!),
-      tools: m.supported_parameters ? m.supported_parameters.includes('tools') : true
+      tools: m.supported_parameters ? m.supported_parameters.includes('tools') : true,
+      ...(priceOf(m.pricing) ? { price: priceOf(m.pricing) } : {})
     }))
 }
 
@@ -99,6 +125,7 @@ export async function listCompatibleModels(
     })
     if (!res.ok) return []
     const models = parseModelList(await res.json())
+    for (const m of models) if (m.price) registerModelPrice(m.id, m.price)
     cache = { key: cacheKey, at: Date.now(), models }
     return models
   } catch {

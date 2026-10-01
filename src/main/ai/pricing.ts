@@ -28,9 +28,18 @@ const PRICING: Record<string, Rate> = {
 const FREE: Rate = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
 // Models served by a local server or the Gemini free tier cost nothing.
 const freeModels = new Set<string>()
+// Prices a service listed for its models (OpenRouter /models), USD per million tokens.
+const listed = new Map<string, Rate>()
 
-export function markFreeModel(model: string): void {
-  freeModels.add(model)
+/** Marks a model as free (local, Gemini free tier) or, with `free: false`, as priced again. */
+export function markFreeModel(model: string, free = true): void {
+  if (free) freeModels.add(model)
+  else freeModels.delete(model)
+}
+
+/** A price a service reports for one of its models (e.g. OpenRouter's /models list). */
+export function registerModelPrice(model: string, rate: Rate): void {
+  listed.set(model, rate)
 }
 
 /**
@@ -39,10 +48,18 @@ export function markFreeModel(model: string): void {
  */
 export function rateFor(model: string): Rate & { known: boolean } {
   if (freeModels.has(model)) return { ...FREE, known: true }
+  const own = listed.get(model)
+  if (own) return { ...own, known: true }
   const alias = model.replace(/-\d{8}$|-\d{4}-\d{2}-\d{2}$/, '')
   const rate = PRICING[alias]
   return rate ? { ...rate, known: true } : { ...FREE, known: false }
 }
+
+/**
+ * Rate the task cost caps use for a model without a known price (Sonnet 5.5's), so a paid
+ * service the table does not know still runs into the agent and background caps.
+ */
+export const CAP_FALLBACK_RATE: Rate = PRICING['claude-sonnet-5-5']
 
 export interface Cost {
   input: number
@@ -58,8 +75,7 @@ const NANO = 1_000_000_000
 export const roundUsd = (n: number): number => Math.round(n * NANO) / NANO
 const usd = (tokens: number, perMTok: number): number => roundUsd((tokens * perMTok) / 1_000_000)
 
-export function usageCost(model: string, usage: Usage): Cost {
-  const r = rateFor(model)
+function costAt(r: Rate, usage: Usage): Cost {
   const input = usd(usage.inputTokens, r.input)
   const output = usd(usage.outputTokens, r.output)
   const cacheRead = usd(usage.cacheReadTokens, r.cacheRead)
@@ -68,8 +84,22 @@ export function usageCost(model: string, usage: Usage): Cost {
   return { input, output, cacheRead, cacheWrite, total }
 }
 
+/** What a call cost, for display and the usage log: $0 when the price is not known. */
+export function knownCost(model: string, usage: Usage): Cost {
+  return costAt(rateFor(model), usage)
+}
+
+/**
+ * What a call cost for the task caps (agent, background, how-to): a model without a known
+ * price counts at CAP_FALLBACK_RATE instead of $0.
+ */
+export function usageCost(model: string, usage: Usage): Cost {
+  const r = rateFor(model)
+  return costAt(r.known ? r : CAP_FALLBACK_RATE, usage)
+}
+
 export function formatUsage(model: string, usage: Usage, hasImage: boolean): string {
-  const cost = usageCost(model, usage)
+  const cost = knownCost(model, usage)
   const cache =
     usage.cacheReadTokens || usage.cacheWriteTokens
       ? ` cache r:${usage.cacheReadTokens} w:${usage.cacheWriteTokens}`

@@ -90,7 +90,7 @@ function CompatibleModel({
   return (
     <Card
       title={p.label}
-      description="The model this service uses when a job doesn’t name one. Prices of these models aren’t known to Lumen, so they’re left out of the cost estimate unless listed."
+      description="The model this service uses when a job doesn’t name one. OpenRouter lists its prices; other services’ prices aren’t known to Lumen, so they’re left out of the cost estimate, and the task spending caps count them at a typical cloud price."
     >
       {p.models.length ? (
         <Select
@@ -207,6 +207,14 @@ export function Models({ cfg, patch }: SectionProps): JSX.Element {
           geminiAck={cfg.models.geminiAck}
           onSaved={() => reload(true)}
         />
+        {cfg.models.geminiAck && (
+          <Switch
+            checked={cfg.models.geminiPaid === true}
+            onChange={(on) => void patch({ models: { geminiPaid: on } })}
+            label="My Gemini key has billing on"
+            hint="Gemini calls then count at Google’s paid prices in the cost estimate and the task spending caps, instead of as free tier."
+          />
+        )}
       </Card>
 
       {catalog && <CompatibleModel catalog={catalog} cfg={cfg} patch={patch} />}

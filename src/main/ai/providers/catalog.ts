@@ -10,6 +10,7 @@ import {
   resolveRole,
   type Role
 } from '../models'
+import { loadConfig } from '../../config'
 import { rateFor } from '../pricing'
 import { compatibleSettings, listCompatibleModels } from './compatible'
 import { GEMINI_ENV, GEMINI_MODELS } from './gemini'
@@ -49,6 +50,7 @@ export async function buildCatalog(refresh = false): Promise<ModelsCatalog> {
   // Settings asks on open: a fresh look for a local server even when a cloud key covers all.
   const server = await refreshLocalModels(refresh).catch(() => localServer())
   const compat = compatibleSettings()
+  const geminiPaid = loadConfig().models.geminiPaid === true
   const remote = await listCompatibleModels(refresh)
   const providers: CatalogProvider[] = [
     {
@@ -69,11 +71,13 @@ export async function buildCatalog(refresh = false): Promise<ModelsCatalog> {
     },
     {
       id: 'gemini',
-      label: 'Google Gemini (free tier)',
+      label: geminiPaid ? 'Google Gemini' : 'Google Gemini (free tier)',
       ready: providerReady('gemini'),
-      note: notReady('gemini') ?? 'Free tier: limited requests per minute and per day.',
-      free: true,
-      models: GEMINI_MODELS.map((m) => cloudModel(m, true))
+      note:
+        notReady('gemini') ??
+        (geminiPaid ? undefined : 'Free tier: limited requests per minute and per day.'),
+      free: !geminiPaid,
+      models: GEMINI_MODELS.map((m) => cloudModel(m, !geminiPaid))
     },
     {
       id: 'compatible',

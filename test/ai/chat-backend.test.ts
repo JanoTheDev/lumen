@@ -4,7 +4,11 @@ import type { AddressInfo } from 'net'
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { createGeminiProvider, GEMINI_RATE_LIMIT_MESSAGE } from '../../src/main/ai/providers/gemini'
-import { createCompatibleProvider, parseModelList } from '../../src/main/ai/providers/compatible'
+import {
+  createCompatibleProvider,
+  parseModelList,
+  priceOf
+} from '../../src/main/ai/providers/compatible'
 import { resetJsonLevels } from '../../src/main/ai/providers/chat-completions'
 import { LlmError, type AgentMessage, type ToolDef } from '../../src/main/ai/providers/types'
 
@@ -203,6 +207,21 @@ describe('OpenAI-compatible service', () => {
       { id: 'llama-3.3-70b-versatile', vision: false, tools: true }
     ])
     expect(parseModelList({ nope: 1 })).toEqual([])
+  })
+
+  it('reads OpenRouter per-token prices as a per-million rate', () => {
+    const [m, bad] = parseModelList({
+      data: [
+        {
+          id: 'vendor/priced',
+          pricing: { prompt: '0.000003', completion: '0.000015', input_cache_read: '0.0000003' }
+        },
+        { id: 'vendor/odd', pricing: { prompt: 'n/a' } }
+      ]
+    })
+    expect(m.price).toEqual({ input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3 })
+    expect(bad.price).toBeUndefined()
+    expect(priceOf(undefined)).toBeUndefined()
   })
 
   it('a 429 from the service is a spoken rate-limit error too', async () => {
