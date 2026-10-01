@@ -15,8 +15,10 @@ import {
   isStrongEditCommand,
   readSelection,
   rewriteSelection,
+  roundTrips,
   writeBack,
   writeBackAction,
+  writeBackPlan,
   type ClipboardIo,
   type CommandIo,
   type SavedClipboard
@@ -29,14 +31,24 @@ export const READ_ONLY_NOTICE = 'This text cannot be edited here, so the new ver
 /** The Undo button stays this long. */
 const UNDO_CHIP_MS = 30_000
 
+export const CLIPBOARD_NOTICE =
+  'Your clipboard holds files or app data, so the new version is shown to copy'
+
 export const electronClipboard: ClipboardIo = {
   save(): SavedClipboard {
     const img = clipboard.readImage()
+    let lossy = false
+    try {
+      lossy = clipboard.availableFormats().some((f) => !roundTrips(f))
+    } catch {
+      lossy = true
+    }
     return {
       text: clipboard.readText(),
       html: clipboard.readHTML(),
       rtf: clipboard.readRTF(),
-      image: img.isEmpty() ? null : img.toPNG()
+      image: img.isEmpty() ? null : img.toPNG(),
+      lossy
     }
   },
   restore(s: SavedClipboard): void {
@@ -152,6 +164,12 @@ export async function runEditCommand(
     // A reply goes where the user wants it: shown with Copy, the selection left alone.
     showAnswer(out)
     return { ok: true, notice: 'reply shown', text: out }
+  }
+  if (canWriteBack(target) && writeBackPlan(io, out) === 'show') {
+    log('skip', 'dictation command: clipboard holds other formats, rewrite shown')
+    showAnswer(out)
+    setStatus('answer', CLIPBOARD_NOTICE, undefined, 4000)
+    return { ok: true, notice: CLIPBOARD_NOTICE, text: out }
   }
   if (!canWriteBack(target)) {
     // Read-only or unknown element: typing would fire the page's shortcuts (M1).

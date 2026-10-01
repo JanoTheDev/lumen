@@ -86,6 +86,11 @@ export interface SavedClipboard {
   rtf: string
   /** PNG bytes of an image on the clipboard, if any. */
   image: Buffer | null
+  /**
+   * The clipboard also holds formats this cannot put back (copied files, app formats):
+   * neither the copy fallback nor a paste may touch it then (L2).
+   */
+  lossy?: boolean
 }
 
 export interface ClipboardIo {
@@ -121,9 +126,19 @@ export async function readUiaSelection(io: CommandIo): Promise<string> {
   }
 }
 
+/** Formats `save` / `restore` round-trip; anything else makes the saved clipboard lossy. */
+export function roundTrips(format: string): boolean {
+  const f = format.toLowerCase()
+  return (
+    f.startsWith('text/plain') || f === 'text/html' || f === 'text/rtf' || f.startsWith('image/')
+  )
+}
+
 /** Ctrl+C with the clipboard saved and put back; "" when nothing was copied. */
 export async function copySelection(io: CommandIo): Promise<string> {
   const saved = io.clipboard.save()
+  // Copied files or app data would be lost on restore: no Ctrl+C then.
+  if (saved.lossy) return ''
   try {
     io.clipboard.clear()
     await io.agent.execute({ type: 'hotkey', keys: ['ctrl', 'c'] })
@@ -206,6 +221,16 @@ export async function rewriteSelection(
 /** How the new text goes over the selection: typed, or pasted when long or multi-line. */
 export function writeBackAction(text: string): 'type' | 'paste' {
   return text.length > TYPE_LIMIT || /\n/.test(text) ? 'paste' : 'type'
+}
+
+/**
+ * How the rewrite goes back: typed, pasted, or only shown when a paste would lose what the
+ * clipboard holds (copied files, app formats).
+ */
+export function writeBackPlan(io: CommandIo, text: string): 'type' | 'paste' | 'show' {
+  const how = writeBackAction(text)
+  if (how === 'paste' && io.clipboard.save().lossy) return 'show'
+  return how
 }
 
 /** Replaces the (still selected) text. Returns the action the undo record should describe. */

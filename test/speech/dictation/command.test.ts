@@ -9,8 +9,10 @@ import {
   looksLikeEditCommand,
   readSelection,
   rewriteSelection,
+  roundTrips,
   writeBack,
   writeBackAction,
+  writeBackPlan,
   type CommandIo,
   type SavedClipboard
 } from '../../../src/main/speech/dictation/command'
@@ -28,7 +30,9 @@ const target = (over: Partial<FocusTarget> = {}): FocusTarget => ({
   ...over
 })
 
-function fakeIo(opts: { uia?: { source: string; text: string }; copied?: string } = {}): {
+function fakeIo(
+  opts: { uia?: { source: string; text: string }; copied?: string; lossy?: boolean } = {}
+): {
   io: CommandIo
   executed: unknown[]
   clip: { text: string }
@@ -44,7 +48,13 @@ function fakeIo(opts: { uia?: { source: string; text: string }; copied?: string 
       }) as never
     },
     clipboard: {
-      save: (): SavedClipboard => ({ text: clip.text, html: '', rtf: '', image: null }),
+      save: (): SavedClipboard => ({
+        text: clip.text,
+        html: '',
+        rtf: '',
+        image: null,
+        lossy: opts.lossy
+      }),
       restore: (s) => {
         clip.text = s.text
       },
@@ -179,6 +189,28 @@ describe('canWriteBack (M1)', () => {
     expect(canWriteBack(target({ editable: false }))).toBe(false)
     expect(canWriteBack(target({ uia: false }))).toBe(false)
     expect(canWriteBack(target({ password: true }))).toBe(false)
+  })
+})
+
+describe('clipboard formats (L2)', () => {
+  it('knows which formats survive a save and restore', () => {
+    expect(roundTrips('text/plain')).toBe(true)
+    expect(roundTrips('text/html')).toBe(true)
+    expect(roundTrips('image/png')).toBe(true)
+    expect(roundTrips('text/uri-list')).toBe(false)
+    expect(roundTrips('Art::GVML ClipFormat')).toBe(false)
+  })
+
+  it('never presses Ctrl+C over copied files', async () => {
+    const { io, executed } = fakeIo({ copied: 'x', lossy: true })
+    expect(await readSelection(io, 'make this shorter', target())).toEqual({ kind: 'none' })
+    expect(executed).toEqual([])
+  })
+
+  it('shows a long rewrite instead of pasting over copied files', () => {
+    expect(writeBackPlan(fakeIo({ lossy: true }).io, 'x'.repeat(400))).toBe('show')
+    expect(writeBackPlan(fakeIo({ lossy: true }).io, 'short')).toBe('type')
+    expect(writeBackPlan(fakeIo().io, 'x'.repeat(400))).toBe('paste')
   })
 })
 
