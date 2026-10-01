@@ -206,6 +206,8 @@ export interface TextFieldProps {
   announceSave?: boolean
   mono?: boolean
   spellCheck?: boolean
+  /** Save only on blur or Enter (for settings that restart something). */
+  commitOnBlurOnly?: boolean
 }
 
 /** Local draft; commits on blur, Enter or a 500ms pause. */
@@ -221,7 +223,8 @@ export function TextField({
   type = 'text',
   announceSave = true,
   mono,
-  spellCheck
+  spellCheck,
+  commitOnBlurOnly
 }: TextFieldProps): JSX.Element {
   const draft = useDraft(
     value,
@@ -229,7 +232,7 @@ export function TextField({
       onCommit(v)
       if (announceSave) announce('Saved')
     },
-    { accept }
+    { accept, delay: commitOnBlurOnly ? null : undefined }
   )
   const invalid = accept ? !accept(draft.value) : false
   return (

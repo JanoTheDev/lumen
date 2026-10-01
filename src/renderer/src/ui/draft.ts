@@ -30,7 +30,8 @@ export interface DraftCommitter<T> {
 }
 
 export interface DraftOptions<T> {
-  delay?: number
+  /** Debounce in ms; null commits only on flush (blur/Enter). */
+  delay?: number | null
   accept?: (v: T) => boolean
 }
 
@@ -41,7 +42,7 @@ export function createDraftCommitter<T>(
   commit: (v: T) => void,
   opts: DraftOptions<T> = {}
 ): DraftCommitter<T> {
-  const delay = opts.delay ?? DRAFT_DEBOUNCE_MS
+  const delay = opts.delay === undefined ? DRAFT_DEBOUNCE_MS : opts.delay
   let accept = opts.accept ?? ((): boolean => true)
   let draft = initial
   let committed = initial
@@ -64,7 +65,7 @@ export function createDraftCommitter<T>(
     set: (v) => {
       draft = v
       cancel()
-      timer = setTimeout(flush, delay)
+      if (delay !== null) timer = setTimeout(flush, delay)
     },
     flush,
     cancel,

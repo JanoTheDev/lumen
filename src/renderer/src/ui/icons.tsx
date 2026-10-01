@@ -16,6 +16,7 @@ import {
   Info,
   KeyRound,
   Mic,
+  Minus,
   MousePointer2,
   MousePointerClick,
   Palette,
@@ -26,6 +27,7 @@ import {
   Search,
   Settings,
   Shield,
+  Square,
   Trash2,
   X,
   XOctagon
@@ -60,6 +62,7 @@ export const icons = {
   info: make(Info),
   key: make(KeyRound),
   mic: make(Mic),
+  minus: make(Minus),
   pointer: make(MousePointer2),
   click: make(MousePointerClick),
   palette: make(Palette),
@@ -70,6 +73,7 @@ export const icons = {
   search: make(Search),
   settings: make(Settings),
   shield: make(Shield),
+  square: make(Square),
   trash: make(Trash2),
   close: make(X),
   error: make(XOctagon)

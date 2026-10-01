@@ -1,13 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { SettingsApp } from './SettingsApp'
-import { Gallery } from '../ui/Gallery'
-import './settings.css'
 import '../theme/theme.css'
 import '../ui/ui.css'
+import '../panel/panel.css'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { App } from '../panel/App'
+import { bootstrapTheme } from '../theme/apply'
 
-const showGallery = import.meta.env.DEV && location.hash.startsWith('#/gallery')
+// The settings window is not zoomed by main, so uiScale goes through the root font size.
+bootstrapTheme({ scaleText: true })
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{showGallery ? <Gallery /> : <SettingsApp />}</StrictMode>
+  <StrictMode>
+    <App />
+  </StrictMode>
 )
