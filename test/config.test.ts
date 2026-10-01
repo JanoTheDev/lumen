@@ -330,6 +330,16 @@ describe('config', () => {
     expect(cfg.voice.micDeviceId).toBe('abc')
   })
 
+  it('still loads a file with the retired ui.v2 switch', () => {
+    const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    old.ui = { v2: false, homeHotkey: 'F8' }
+    writeRaw(old)
+    const cfg = loadConfig()
+    expect(lastConfigWarning()).toBeNull()
+    expect(cfg.ui.homeHotkey).toBe('F8')
+    expect(DEFAULT_CONFIG.ui).not.toHaveProperty('v2')
+  })
+
   it('patch schema bounds wake sensitivity and mic device', () => {
     expect(configPatchSchema.safeParse({ wakeWord: { sensitivity: 0.3 } }).success).toBe(true)
     expect(configPatchSchema.safeParse({ wakeWord: { sensitivity: 1.5 } }).success).toBe(false)

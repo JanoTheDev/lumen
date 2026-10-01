@@ -346,9 +346,9 @@ export const configV2Schema = z.object({
     terminal: z.enum(['type-no-enter', 'block']),
     dictionary: z.array(shortText(60)).max(500)
   }),
-  /** v2 = assistant bar, per-display screen layer and panel window instead of the old windows. */
   ui: z.object({
-    v2: z.boolean(),
+    /** Retired switch for the old window set; still accepted in old files, ignored. */
+    v2: z.boolean().optional(),
     /** Opens the Home flyout from anywhere; "" = no shortcut. Optional so patches never reset it. */
     homeHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional()
   }),
@@ -433,7 +433,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     terminal: 'type-no-enter',
     dictionary: []
   },
-  ui: { v2: false, homeHotkey: 'Ctrl+Shift+H' },
+  ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
   system: { startAtLogin: false }
 }
