@@ -95,6 +95,9 @@ pub struct Node {
     pub patterns: Vec<&'static str>,
     #[serde(skip)]
     pub readonly: Option<bool>,
+    /// `Some(true)` on password fields (UIA IsPassword); absent otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<bool>,
 }
 
 pub fn truncate(s: &str, max: usize) -> String {
@@ -254,6 +257,7 @@ mod tests {
             focused: None,
             patterns: vec![],
             readonly: None,
+            password: None,
         }
     }
 

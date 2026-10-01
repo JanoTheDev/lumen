@@ -180,7 +180,7 @@ pub fn info(hwnd: isize) -> serde_json::Value {
     use serde_json::json;
     if hwnd == 0 {
         return json!({"hwnd": 0, "title": "", "process": "", "exe": "", "pid": 0,
-            "rect": Rect::default().to_json(), "monitor": 0, "isBrowser": false});
+            "rect": Rect::default().to_json(), "monitor": 0, "isBrowser": false, "className": ""});
     }
     let pid = pid_of(hwnd);
     let exe = exe_path(pid);
@@ -196,6 +196,7 @@ pub fn info(hwnd: isize) -> serde_json::Value {
         "rect": rect(hwnd).to_json(),
         "monitor": monitor,
         "isBrowser": is_browser_process(&process),
+        "className": class_name(hwnd),
     })
 }
 

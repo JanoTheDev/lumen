@@ -5,7 +5,8 @@
 //! - Key combos: no Run/terminal/settings/security shortcuts.
 //! - No typing or key combos into terminals or the Run dialog unless the
 //!   request carries `allowTerminal: true` (main sets it only after the user
-//!   explicitly confirmed).
+//!   explicitly confirmed). An IDE counts as a terminal while its integrated
+//!   terminal has the focus (UIA ClassName / Name of the focused element).
 
 use crate::proto::AgentError;
 
@@ -22,6 +23,14 @@ pub const TERMINALS: &[&str] = &[
     "bash.exe",
     "mintty.exe",
 ];
+
+/// Editors with an integrated terminal: the focused element decides (`denied_focus_reason`).
+pub const IDES: &[&str] =
+    &["code.exe", "code - insiders.exe", "vscodium.exe", "cursor.exe", "windsurf.exe", "devenv.exe"];
+
+/// UIA ClassName of a focused terminal: xterm.js (VS Code and its forks), Windows Terminal's
+/// control (Visual Studio).
+const TERMINAL_FOCUS_CLASSES: &[&str] = &["xterm-helper-textarea", "termcontrol"];
 
 const WIN_ALLOWED: &[&str] = &["d", "tab", "left", "right", "up", "down"];
 
@@ -124,6 +133,28 @@ pub fn denied_target_reason(exe: &str, cls: &str, children: &[String]) -> Option
     None
 }
 
+/// VS Code names its terminal textarea "Terminal 1, pwsh"; Visual Studio "Terminal".
+fn is_terminal_name(name: &str) -> bool {
+    let n = name.trim().to_lowercase();
+    let starts =
+        n.strip_prefix("terminal").is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphanumeric()));
+    starts
+        || n.match_indices("terminal ")
+            .any(|(i, m)| n[i + m.len()..].starts_with(|c: char| c.is_ascii_digit()))
+}
+
+/// Typing into an IDE's integrated terminal (by the focused element's class or name).
+pub fn denied_focus_reason(exe: &str, focus_class: &str, focus_name: &str) -> Option<String> {
+    if !IDES.contains(&exe) {
+        return None;
+    }
+    let class = focus_class.trim().to_lowercase();
+    if TERMINAL_FOCUS_CLASSES.contains(&class.as_str()) || is_terminal_name(focus_name) {
+        return Some(format!("target is the integrated terminal of {exe}"));
+    }
+    None
+}
+
 /// (exe, class, child classes) of a top-level window.
 #[cfg(windows)]
 pub fn window_target(hwnd: isize) -> (String, String, Vec<String>) {
@@ -152,7 +183,16 @@ pub fn check_input_target(allow_terminal: bool, what: &str) -> Result<(), AgentE
     if allow_terminal {
         return Ok(());
     }
-    match window_target_reason(crate::window::foreground()) {
+    let (exe, cls, kids) = window_target(crate::window::foreground());
+    let reason = denied_target_reason(&exe, &cls, &kids).or_else(|| {
+        if !IDES.contains(&exe.as_str()) {
+            return None;
+        }
+        // Only IDEs pay for the UIA read; the client's timeouts bound it.
+        let (class, name) = crate::uia::focused_class_and_name()?;
+        denied_focus_reason(&exe, &class, &name)
+    });
+    match reason {
         Some(reason) => Err(AgentError::denied(format!("{what} denied: {reason}"))),
         None => Ok(()),
     }
@@ -194,6 +234,21 @@ mod tests {
             let r = denied_target_reason(v["exe"].as_str().unwrap(), v["cls"].as_str().unwrap(), &kids);
             assert_eq!(r.is_some(), v["denied"].as_bool().unwrap(), "{v}");
         }
+    }
+
+    #[test]
+    fn ide_terminal_focus() {
+        let d = |exe, class, name| denied_focus_reason(exe, class, name).is_some();
+        assert!(d("code.exe", "xterm-helper-textarea", ""));
+        assert!(d("code.exe", "", "Terminal 1, pwsh"));
+        assert!(d("cursor.exe", "", "terminal 2, bash"));
+        assert!(d("devenv.exe", "TermControl", ""));
+        assert!(d("devenv.exe", "", "Terminal"));
+        assert!(!d("code.exe", "inputarea", "Editor content"));
+        assert!(!d("code.exe", "", "terminals.ts"));
+        assert!(!d("code.exe", "", "The editor is not accessible. Terminal settings"));
+        assert!(!d("notepad.exe", "xterm-helper-textarea", "Terminal 1"));
+        assert!(!d("code.exe", "", ""));
     }
 
     #[test]

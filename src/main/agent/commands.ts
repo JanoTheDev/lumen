@@ -40,6 +40,8 @@ export interface ActiveWindowInfo {
   rect: Rect
   monitor: number
   isBrowser: boolean
+  /** Win32 class of the window (newer agents only). */
+  className?: string
 }
 
 export interface OcrWord {
@@ -133,6 +135,8 @@ export interface FocusInfoResult {
   valueTail: string
   /** UIA ClassName of the focused element (newer agents only). */
   className?: string
+  /** Win32 class of the foreground window (newer agents only). */
+  windowClass?: string
 }
 
 export function focusInfo(bridge: AgentBridge, opts?: RequestOptions): Promise<FocusInfoResult> {

@@ -191,6 +191,7 @@ pub fn node_of(el: &IUIAutomationElement, mons: &[MonitorInfo]) -> Node {
         focused: focused.then_some(true),
         patterns,
         readonly: None,
+        password: cached_bool(el, UIA_IsPasswordPropertyId).then_some(true),
     };
     if node.patterns.contains(&"value") {
         let value = cached_string(el, UIA_ValueValuePropertyId);
@@ -460,6 +461,16 @@ pub fn cmd_act(args: &Args, token: &CancelToken) -> CmdResult {
         if !allow_terminal && let Some(reason) = safety::window_target_reason(snap_hwnd) {
             return Err(AgentError::denied(format!("set_value denied: {reason}")));
         }
+        let text = |pid| current_string(&el, pid);
+        if !allow_terminal
+            && let Some(reason) = safety::denied_focus_reason(
+                &window::process_name(snap_hwnd),
+                &text(UIA_ClassNamePropertyId),
+                &text(UIA_NamePropertyId),
+            )
+        {
+            return Err(AgentError::denied(format!("set_value denied: {reason}")));
+        }
     }
     token.check()?;
     if call_pattern(&el, action, value)? {
@@ -549,12 +560,31 @@ pub fn is_editable(
     has_value && readonly == Some(false) && FREE_TEXT_ROLES.contains(&role)
 }
 
+/// A current (uncached) string property; empty when it cannot be read.
+fn current_string(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> String {
+    // SAFETY: current-property read on a live element.
+    unsafe { el.GetCurrentPropertyValue(pid) }
+        .ok()
+        .and_then(|v| BSTR::try_from(&v).ok())
+        .map(|b| b.to_string())
+        .unwrap_or_default()
+}
+
+/// ClassName and Name of the keyboard-focused element (for the input target guard).
+pub fn focused_class_and_name() -> Option<(String, String)> {
+    let client = Client::get().ok()?;
+    // SAFETY: COM call on this thread's client.
+    let el = unsafe { client.u.GetFocusedElement() }.ok()?;
+    Some((current_string(&el, UIA_ClassNamePropertyId), current_string(&el, UIA_NamePropertyId)))
+}
+
 /// `focus_info`: foreground process plus the keyboard-focused element.
 pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
     let info = window::info(window::foreground());
     let mut out = json!({
         "process": info["process"], "title": info["title"], "uia": false, "role": "", "name": "",
-        "editable": false, "password": false, "valueTail": "",
+        "editable": false, "password": false, "valueTail": "", "className": "",
+        "windowClass": info["className"],
     });
     let client = Client::get()?;
     // SAFETY: COM call on this thread's client.
@@ -584,6 +614,7 @@ pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
     out["editable"] = json!(is_editable(role, has_value, readonly, has_text_edit, password));
     out["password"] = json!(password);
     out["valueTail"] = json!(tail);
+    out["className"] = json!(tree::truncate(&text(UIA_ClassNamePropertyId), tree::NAME_MAX));
     // Where to show the dictation pill: the text caret, else the focused element.
     // SAFETY: current-property read on a live element.
     let rect = unsafe { el.CurrentBoundingRectangle() }.ok().map(Rect::from).filter(|r| !r.is_empty());
