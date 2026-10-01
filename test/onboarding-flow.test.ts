@@ -22,6 +22,16 @@ describe('onboarding flow', () => {
     expect(steps.filter((s) => s === 'key')).toHaveLength(1)
   })
 
+  it('adds the practice steps before the summary, the lesson only when flagged', () => {
+    expect(buildSteps({ practice: true, lesson: false }).slice(-3)).toEqual([
+      'point',
+      'numbers',
+      'done'
+    ])
+    expect(buildSteps({ practice: false, lesson: false })).not.toContain('point')
+    expect(buildSteps({ practice: true, lesson: true })).toContain('lesson')
+  })
+
   it('moves forward and back without leaving the list', () => {
     expect(nextStep(steps, 'profile')).toBe('key')
     expect(nextStep(steps, 'done')).toBe('done')

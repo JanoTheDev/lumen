@@ -309,3 +309,64 @@
     padding-right: var(--space-4);
   }
 }
+
+/* Practice board for "watch me point" and "show numbers". */
+.ob-practice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.ob-practice__board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.ob-practice__btn {
+  min-width: 7rem;
+  min-height: 2.75rem;
+  padding: 0 var(--space-4);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  font-weight: var(--weight-strong);
+  color: #fff;
+  transition: transform var(--dur-instant) var(--ease-out);
+}
+
+.ob-practice__btn:active {
+  transform: scale(0.97);
+}
+
+.ob-practice__btn.is-blue {
+  background: #1f5fd6;
+}
+
+.ob-practice__btn.is-green {
+  background: #1a7f37;
+}
+
+.ob-practice__btn.is-red {
+  background: #c62828;
+}
+
+.ob-practice__btn.is-grey {
+  background: #59606b;
+}
+
+.ob-practice__result {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+}
+
+@media (forced-colors: active) {
+  .ob-practice__btn {
+    border-color: ButtonText;
+    forced-color-adjust: auto;
+  }
+}

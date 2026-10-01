@@ -1,14 +1,25 @@
 // Onboarding step order. Every step can be skipped; steps that need features which are not
 // built yet stay behind flags.
 
-export type StepId = 'profile' | 'key' | 'voice' | 'memory' | 'try' | 'done'
+export type StepId =
+  | 'profile'
+  | 'key'
+  | 'voice'
+  | 'memory'
+  | 'try'
+  | 'point'
+  | 'numbers'
+  | 'lesson'
+  | 'done'
 
 export interface FlowFlags {
-  /** Practice page with the pointing buddy, "show numbers" and the mini lesson. */
+  /** Practice board: "watch me point" and "show numbers". */
   practice: boolean
+  /** Mini lesson on the practice board (needs the lesson engine). */
+  lesson: boolean
 }
 
-export const FLOW_FLAGS: FlowFlags = { practice: false }
+export const FLOW_FLAGS: FlowFlags = { practice: true, lesson: false }
 
 export const STEP_TITLES: Record<StepId, string> = {
   profile: 'How you use your PC',
@@ -16,11 +27,24 @@ export const STEP_TITLES: Record<StepId, string> = {
   voice: 'Your voice',
   memory: 'Remembering',
   try: 'Try it',
+  point: 'Watch me point',
+  numbers: 'Show numbers',
+  lesson: 'Mini lesson',
   done: 'All set'
 }
 
-export function buildSteps(): StepId[] {
-  return ['profile', 'key', 'voice', 'memory', 'try', 'done']
+export function buildSteps(flags: FlowFlags = FLOW_FLAGS): StepId[] {
+  const practice: StepId[] = flags.practice ? ['point', 'numbers'] : []
+  return [
+    'profile',
+    'key',
+    'voice',
+    'memory',
+    'try',
+    ...practice,
+    ...(flags.lesson ? (['lesson'] as StepId[]) : []),
+    'done'
+  ]
 }
 
 export function nextStep(steps: StepId[], cur: StepId): StepId {
