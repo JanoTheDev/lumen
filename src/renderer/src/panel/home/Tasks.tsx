@@ -1,5 +1,6 @@
-// Home flyout Tasks list (08 T29): background tasks with their progress line, cancel, open
-// result, run again, and answers to queued questions.
+// Home flyout Tasks list (08 T29): background tasks with their progress line, cancel, run
+// again, and answers to queued questions. A row opens the task's chat view (08 T41) in the
+// panel window; "All tasks" opens the view's list.
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { BackgroundTask } from '@shared/types'
 import { Button, IconButton, icons } from '../../ui'
@@ -70,9 +71,14 @@ export function Tasks(): JSX.Element | null {
   if (!rows.length) return null
   return (
     <section className="home-section" aria-labelledby="home-tasks">
-      <h2 id="home-tasks" className="home-label">
-        Tasks
-      </h2>
+      <div className="home-tasks__head">
+        <h2 id="home-tasks" className="home-label">
+          Tasks
+        </h2>
+        <Button variant="quiet" onClick={() => void invoke('tasks:open', 'all').catch(() => {})}>
+          All tasks
+        </Button>
+      </div>
       <ul className="home-tasks">
         {rows.map((r) => (
           <li key={r.id} className={`home-task is-${r.phase}${r.unseen ? ' is-unseen' : ''}`}>

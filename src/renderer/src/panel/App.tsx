@@ -7,6 +7,8 @@ import { Home } from './home/Home'
 import './home/home.css'
 import { Onboarding } from './onboarding/Onboarding'
 import './onboarding/onboarding.css'
+import { TasksPage } from './tasks/TasksPage'
+import './tasks/tasks.css'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
 
@@ -38,6 +40,8 @@ export function App(): JSX.Element {
         <Home />
       ) : route.name === 'onboarding' ? (
         <Onboarding />
+      ) : route.name === 'tasks' ? (
+        <TasksPage id={route.id} />
       ) : (
         <SettingsPage section={section} onNavigate={(id) => go(`#/settings/${id}`)} />
       )}

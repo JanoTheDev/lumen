@@ -13,7 +13,7 @@ export interface TaskRow {
   canOpen: boolean
   question?: { text: string; choices: string[] }
   unseen: boolean
-  /** A Claude Code session: Stop instead of Cancel, Open shows it on the bar. */
+  /** A Claude Code session: Stop instead of Cancel, Open shows the session's chat. */
   claude: boolean
 }
 
@@ -76,7 +76,8 @@ export function taskRow(t: BackgroundTask): TaskRow {
     canCancel: open,
     canRunAgain:
       !t.claude && (t.phase === 'interrupted' || t.phase === 'failed' || t.phase === 'cancelled'),
-    canOpen: !!t.result || t.phase === 'running' || (!!t.claude && open),
+    // Every task has a chat (08 T41): its transcript, or the session's for Claude.
+    canOpen: true,
     ...(t.question && (t.phase === 'asking' || t.phase === 'needs-foreground')
       ? { question: { text: t.question.text, choices: t.question.choices ?? [] } }
       : {}),
