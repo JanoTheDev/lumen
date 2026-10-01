@@ -1,0 +1,346 @@
+{
+  "id": "windows-basics-02-accessibility-features",
+  "app": "windows",
+  "title": "Try Magnifier, Narrator and voice access",
+  "level": "beginner",
+  "minutes": 8,
+  "prereqs": ["windows-basics-01-display-scaling"],
+  "appVersion": ">=10.0.26100",
+  "summary": "Find the Accessibility settings and switch Magnifier, Narrator and voice access on and off.",
+  "tags": ["settings", "accessibility"],
+  "steps": [
+    {
+      "id": "open-settings",
+      "say": "Press the Windows key and I together to open Settings.",
+      "target": {
+        "shortcut": "Win+I"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Settings$"
+            },
+            {
+              "type": "keypress",
+              "combo": "Win+I"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold the Windows logo key, then tap the letter I.",
+        "You can also open Start, type Settings, and press Enter."
+      ],
+      "why": "Settings is where Windows keeps almost every option.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+I"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-accessibility",
+      "say": "Click Accessibility in the list on the left.",
+      "target": {
+        "element": {
+          "name": "Accessibility",
+          "role": "ListItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "Accessibility"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Settings page header now read Accessibility?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Accessibility is near the bottom of the left column, above Privacy and security.",
+        "Press the Windows key and U to open this page from anywhere."
+      ],
+      "why": "All the built-in helpers for seeing, hearing and interacting are grouped here.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+U"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-magnifier",
+      "say": "Under Vision, click Magnifier.",
+      "target": {
+        "element": {
+          "name": "Magnifier"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Magnifier"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Settings page header now read Magnifier?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Magnifier is in the Vision group, a few rows down.",
+        "Type magnifier in the Find a setting box at the top left."
+      ],
+      "why": "Magnifier enlarges the screen around your pointer.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "open_url",
+            "url": "ms-settings:easeofaccess-magnifier"
+          }
+        ]
+      }
+    },
+    {
+      "id": "magnifier-on",
+      "say": "Turn on the Magnifier switch at the top of the page.",
+      "target": {
+        "element": {
+          "name": "Magnifier",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+Plus"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the screen now zoomed in, or is the Magnifier toolbar visible?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The switch says Off next to it before you turn it on.",
+        "Press the Windows key and the plus key to start Magnifier instantly."
+      ],
+      "why": "Seeing it once helps you decide whether it suits you.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+Plus"
+          }
+        ]
+      }
+    },
+    {
+      "id": "magnifier-off",
+      "say": "Turn Magnifier off by pressing the Windows key and Escape.",
+      "target": {
+        "shortcut": "Win+Esc"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+Esc"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the screen back to normal size with no Magnifier toolbar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold the Windows key, then tap Escape at the top left of the keyboard.",
+        "Click the close button on the Magnifier toolbar instead."
+      ],
+      "why": "Knowing the off switch makes it safe to experiment.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+Esc"
+          }
+        ]
+      }
+    },
+    {
+      "id": "narrator-try",
+      "say": "Press Control, the Windows key and Enter together to start Narrator. Press them again to stop it.",
+      "target": {
+        "shortcut": "Win+Ctrl+Enter"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+Ctrl+Enter"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Narrator will start speaking. The same three keys turn it off.",
+        "You can also find Narrator under Vision on the Accessibility page and use its switch."
+      ],
+      "why": "Narrator reads the screen aloud for people who can't see it well.",
+      "timeoutSec": 120
+    },
+    {
+      "id": "open-speech",
+      "say": "Go back to Accessibility, then click Speech under Interaction.",
+      "target": {
+        "element": {
+          "name": "Speech"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Speech"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Settings page header now read Speech, with a Voice access option?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click Accessibility in the breadcrumb at the top, then scroll to the Interaction group.",
+        "Type voice access in the Find a setting box."
+      ],
+      "why": "Voice access lives with the other speech options.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "open_url",
+            "url": "ms-settings:easeofaccess-speechrecognition"
+          }
+        ]
+      }
+    },
+    {
+      "id": "voice-access-on",
+      "say": "Turn on the Voice access switch. The first time, Windows downloads a speech model.",
+      "target": {
+        "element": {
+          "name": "Voice access",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "Voice access",
+                "value": "On"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the voice access bar now visible at the top of the screen?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The voice access bar appears across the top of the screen when it is running.",
+        "On recent builds, press Control, the Windows key and S to toggle it."
+      ],
+      "why": "Voice access lets you control the whole PC by speaking, without the internet.",
+      "timeoutSec": 180
+    },
+    {
+      "id": "voice-access-off",
+      "say": "Turn the Voice access switch off again, unless you want to keep it.",
+      "target": {
+        "element": {
+          "name": "Voice access",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "Voice access",
+                "value": "Off"
+              }
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use the same switch on the Speech page.",
+        "You can also close the voice access bar with its settings menu."
+      ],
+      "why": "You now know where every helper lives, so you can switch them on when needed."
+    }
+  ]
+}

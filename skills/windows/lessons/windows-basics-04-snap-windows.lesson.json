@@ -1,0 +1,150 @@
+{
+  "id": "windows-basics-04-snap-windows",
+  "app": "windows",
+  "title": "Put two windows side by side",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": [],
+  "appVersion": ">=10.0.26100",
+  "summary": "Use the Windows key with the arrow keys and Snap Assist to arrange two windows.",
+  "tags": ["windows", "multitasking"],
+  "steps": [
+    {
+      "id": "two-apps",
+      "say": "Open two apps you use, for example a browser and File Explorer. Say done when both are open.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "Press the Windows key and E to open File Explorer as one of them.",
+        "Open apps from Start by typing their name and pressing Enter."
+      ],
+      "why": "Snapping needs at least two windows to fill both halves."
+    },
+    {
+      "id": "focus-first",
+      "say": "Click the title bar of the window you want on the left.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "The title bar is the strip at the very top of the window.",
+        "Press Alt and Tab to bring the window you want to the front."
+      ],
+      "why": "Snap shortcuts act on the window in front."
+    },
+    {
+      "id": "snap-left",
+      "say": "Hold the Windows key and press the left arrow.",
+      "target": {
+        "shortcut": "Win+Left"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+Left"
+            },
+            {
+              "type": "vision",
+              "prompt": "Does one window now fill the left half of the screen?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The window jumps to the left half and thumbnails of other windows appear on the right.",
+        "Drag the window by its title bar to the left edge of the screen until an outline appears."
+      ],
+      "why": "Half-screen windows let you read one thing while working in another.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+Left"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fill-right",
+      "say": "Click the other window in the thumbnails on the right side.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are two windows now side by side, each filling one half of the screen?"
+        }
+      },
+      "hints": [
+        "These thumbnails are Snap Assist. Pick the window you want on the right.",
+        "If the thumbnails went away, click the other window and press the Windows key and the right arrow."
+      ],
+      "why": "Snap Assist fills the empty half in one click."
+    },
+    {
+      "id": "snap-layouts",
+      "say": "Hover over the maximize button of either window to see more layouts.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "The maximize button is the square, second from the right at the top right corner.",
+        "Press the Windows key and Z to open the same layouts with the keyboard."
+      ],
+      "why": "Snap layouts offer thirds and quarters for bigger screens."
+    },
+    {
+      "id": "restore",
+      "say": "To make a window full screen again, click it and press the Windows key and the up arrow.",
+      "target": {
+        "shortcut": "Win+Up"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+Up"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is one window now maximized to fill the whole screen?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The up arrow maximizes, the down arrow restores the previous size.",
+        "Double-click the window's title bar to maximize it."
+      ],
+      "why": "Knowing how to undo a layout makes snapping stress free.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+Up"
+          }
+        ]
+      }
+    }
+  ]
+}

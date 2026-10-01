@@ -1,0 +1,274 @@
+{
+  "id": "windows-basics-03-explorer-folders",
+  "app": "windows",
+  "title": "Make a folder and move a file into it",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": ">=10.0.26100",
+  "summary": "Create a folder in Documents, name it, and move a file into it with cut and paste.",
+  "tags": ["file-explorer", "files"],
+  "steps": [
+    {
+      "id": "open-explorer",
+      "say": "Press the Windows key and E to open File Explorer.",
+      "target": {
+        "shortcut": "Win+E"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Win+E"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a File Explorer window open in front?"
+            }
+          ]
+        }
+      },
+      "hints": ["Hold the Windows key and tap E.", "Click the folder icon on the taskbar instead."],
+      "why": "File Explorer is where you organise everything you save.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+E"
+          }
+        ]
+      }
+    },
+    {
+      "id": "go-documents",
+      "say": "Click Documents in the navigation pane on the left.",
+      "target": {
+        "element": {
+          "name": "Documents",
+          "role": "TreeItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Documents"
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the address bar at the top now show Documents?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Documents has a page icon. It may be under Home or This PC.",
+        "Click the address bar, type Documents, and press Enter."
+      ],
+      "why": "Documents is a safe place to practice that is backed up with your other files."
+    },
+    {
+      "id": "new-folder",
+      "say": "Press Control Shift N to make a new folder.",
+      "target": {
+        "shortcut": "Ctrl+Shift+N"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+Shift+N"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new folder in the file list with its name highlighted for typing?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A folder called New folder appears with its name ready to edit.",
+        "Click New at the top left of the command bar, then Folder."
+      ],
+      "why": "Folders keep related files together so you can find them later.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Shift+N"
+          }
+        ]
+      }
+    },
+    {
+      "id": "name-folder",
+      "say": "Type Practice, then press Enter.",
+      "target": {
+        "region": "explorer-file-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "Practice"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a folder named Practice in the file list?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "If the name is no longer highlighted, select the folder and press F2.",
+        "Right-click the folder, choose Rename, then type Practice."
+      ],
+      "why": "A clear name tells you what is inside without opening it.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "type",
+            "text": "Practice"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pick-file",
+      "say": "Click once on any file in Documents that you want to move into Practice.",
+      "target": {
+        "region": "explorer-file-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "Pick a file, not a folder. One click selects it without opening it.",
+        "If Documents is empty, save any file there first, or open Downloads instead."
+      ],
+      "why": "Moving starts with telling Windows which file you mean."
+    },
+    {
+      "id": "cut-file",
+      "say": "Press Control X to cut the file.",
+      "target": {
+        "shortcut": "Ctrl+X"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+X"
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the selected file now look faded, showing it has been cut?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Cut marks the file to move. Nothing is lost yet.",
+        "Click the scissors icon on the command bar instead."
+      ],
+      "why": "Cut and paste moves a file instead of making a copy.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+X"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-practice",
+      "say": "Double-click the Practice folder to open it.",
+      "target": {
+        "element": {
+          "name": "Practice",
+          "role": "ListItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Practice"
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the address bar now end with Practice?"
+            }
+          ]
+        }
+      },
+      "hints": ["Click twice quickly on the folder icon.", "Select the folder and press Enter."],
+      "why": "You paste inside the folder where the file should end up."
+    },
+    {
+      "id": "paste-file",
+      "say": "Press Control V to paste the file here. Control Z undoes the move.",
+      "target": {
+        "shortcut": "Ctrl+V"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+V"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a file now listed inside the Practice folder, which was empty before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The file should appear in the empty file list.",
+        "Right-click an empty spot in the file list and choose Paste."
+      ],
+      "why": "The file now lives in Practice and no longer in Documents.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+V"
+          }
+        ]
+      }
+    }
+  ]
+}

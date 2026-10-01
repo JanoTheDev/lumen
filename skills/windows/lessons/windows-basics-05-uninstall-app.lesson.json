@@ -1,0 +1,214 @@
+{
+  "id": "windows-basics-05-uninstall-app",
+  "app": "windows",
+  "title": "Uninstall an app you no longer need",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["windows-basics-01-display-scaling"],
+  "appVersion": ">=10.0.26100",
+  "summary": "Remove an app from Settings, Installed apps, and answer the security prompt yourself.",
+  "tags": ["settings", "apps"],
+  "steps": [
+    {
+      "id": "open-installed-apps",
+      "say": "Open Settings, click Apps on the left, then click Installed apps.",
+      "target": {
+        "element": {
+          "name": "Installed apps"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Installed apps"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Settings page header read Installed apps, with a list of apps?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Press the Windows key and I for Settings. Apps is in the left column.",
+        "Right-click the Start button and choose Installed apps."
+      ],
+      "why": "Installed apps lists everything on the PC in one place.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "open_url",
+            "url": "ms-settings:appsfeatures"
+          }
+        ]
+      }
+    },
+    {
+      "id": "search-app",
+      "say": "Click Search apps above the list and type part of the app's name.",
+      "target": {
+        "element": {
+          "name": "Search apps",
+          "role": "Edit"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "Search apps",
+                "value": {
+                  "regex": ".+"
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the app list been filtered by a search term?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The search box is at the top of the list, under the page title.",
+        "Scroll the list instead. It is sorted by name by default."
+      ],
+      "why": "Searching saves scrolling through a long list.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Search apps",
+              "role": "Edit"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "more-options",
+      "say": "Click the three dots at the right end of the app's row.",
+      "target": {
+        "element": {
+          "name": "More options",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "More options"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a small menu open with Uninstall in it?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The three dots sit next to the app's size and date.",
+        "Press Tab to reach the row's button, then press Enter."
+      ],
+      "why": "The three dots menu holds Modify, Move and Uninstall."
+    },
+    {
+      "id": "uninstall-confirm",
+      "say": "Click Uninstall, then Uninstall again to confirm. This can't be undone; you would need to install it again.",
+      "target": {
+        "element": {
+          "name": "Uninstall",
+          "role": "MenuItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Uninstall"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has an uninstall started, or has the app gone from the list?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Check the app name first. Press Escape if you change your mind.",
+        "Some programs open their own uninstaller window. Follow its steps."
+      ],
+      "why": "Removing apps you don't use frees space and declutters Start.",
+      "timeoutSec": 180
+    },
+    {
+      "id": "security-prompt",
+      "say": "If a Windows security prompt asks to allow changes, read it and click Yes yourself.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "The screen dims when this prompt appears. Only you can answer it.",
+        "If no prompt appears, say done and continue."
+      ],
+      "why": "Windows asks you directly before a program changes the system.",
+      "timeoutSec": 180
+    },
+    {
+      "id": "check-gone",
+      "say": "Wait for the uninstall to finish and check the app is gone from the list. Say done when it is.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is the app no longer listed in Installed apps?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Some apps take a minute. The list updates when they finish.",
+        "Search for the name again to confirm nothing is left."
+      ],
+      "why": "Checking the list confirms the app is fully removed.",
+      "timeoutSec": 300
+    }
+  ]
+}

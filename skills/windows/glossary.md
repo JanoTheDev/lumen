@@ -1,0 +1,28 @@
+# Windows glossary
+
+- **Start menu** — the menu that opens from the Windows key or the Start button; search and pinned apps live here.
+- **Taskbar** — the bar at the bottom of the screen showing pinned and running apps.
+- **System tray** — the icons at the right end of the taskbar: network, volume, battery, clock.
+- **Settings** — the app that holds almost every system option, organised into categories.
+- **Category** — one entry in the Settings list on the left, such as System or Accessibility.
+- **Toggle** — an On/Off switch; it takes effect as soon as you flip it.
+- **Scale** — how large text, apps and other items are drawn, as a percentage. 100% is the smallest.
+- **Display resolution** — how many pixels the screen shows; usually best left at "Recommended".
+- **File Explorer** — the app for browsing, moving and organising files and folders.
+- **Folder** — a container that holds files and other folders.
+- **Address bar** — the path at the top of File Explorer showing which folder you are in.
+- **Navigation pane** — the list of places on the left of File Explorer or Settings.
+- **Recycle Bin** — where deleted files wait until you empty it; you can restore them from here.
+- **Snap** — placing a window so it fills exactly half or a quarter of the screen.
+- **Snap Assist** — the thumbnails that appear after you snap a window, so you can fill the other side.
+- **Snap layouts** — the grid of layouts shown when you hover over a window's maximize button.
+- **Task View** — a view of every open window and virtual desktop.
+- **Narrator** — the built-in screen reader that reads the screen aloud.
+- **Magnifier** — enlarges part or all of the screen.
+- **Voice access** — controls the PC and dictates text using your voice, offline.
+- **On-screen keyboard** — a keyboard drawn on screen that you click or tap.
+- **Installed apps** — the Settings page listing every app, where you can uninstall them.
+- **Uninstall** — remove an app from the PC.
+- **UAC prompt** — the "allow this app to make changes" security question; only you can answer it.
+- **Deep link** — an ms-settings address that opens one Settings page directly.
+- **Context menu** — the menu that appears when you right-click something.

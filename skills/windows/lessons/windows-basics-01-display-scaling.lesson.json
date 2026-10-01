@@ -1,0 +1,226 @@
+{
+  "id": "windows-basics-01-display-scaling",
+  "app": "windows",
+  "title": "Make text and apps bigger",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": [],
+  "appVersion": ">=10.0.26100",
+  "summary": "Change the display scale in Settings so text and apps are larger.",
+  "tags": ["settings", "display", "accessibility"],
+  "steps": [
+    {
+      "id": "open-settings",
+      "say": "Press the Windows key and I together to open Settings.",
+      "target": {
+        "shortcut": "Win+I"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Settings$"
+            },
+            {
+              "type": "keypress",
+              "combo": "Win+I"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold the Windows logo key, then tap the letter I.",
+        "You can also open Start, type Settings, and press Enter."
+      ],
+      "why": "Settings is where Windows keeps almost every option.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Win+I"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-system",
+      "say": "Click System, at the top of the list on the left.",
+      "target": {
+        "element": {
+          "name": "System",
+          "role": "ListItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "uia-event",
+          "event": "selected",
+          "match": {
+            "name": "System"
+          }
+        }
+      },
+      "hints": [
+        "System is the first category in the left column.",
+        "Type display in the Find a setting box and pick Display from the results."
+      ],
+      "why": "Screen, sound and power options all live under System.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "System",
+              "role": "ListItem"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-display",
+      "say": "Click Display, the first row on the right.",
+      "target": {
+        "element": {
+          "name": "Display"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Display"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Settings page header now read Display, with a Scale option visible?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Display is at the top of the System page, with a monitor icon.",
+        "Open the Display page directly from the Find a setting box by typing display."
+      ],
+      "why": "Text size and screen layout are set on the Display page.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "open_url",
+            "url": "ms-settings:display"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-scale",
+      "say": "Under Scale and layout, click the box next to Scale.",
+      "target": {
+        "element": {
+          "name": "Scale",
+          "role": "ComboBox"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "focused",
+              "match": {
+                "name": "Scale",
+                "role": "ComboBox"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Scale dropdown open, showing a list of percentages?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Scroll down a little if you can't see the Scale and layout section.",
+        "Press Tab until the Scale box is highlighted, then press Space to open it."
+      ],
+      "why": "Scale changes the size of everything at once, not only text.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Scale",
+              "role": "ComboBox"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "pick-scale",
+      "say": "Pick a larger percentage, such as 125 percent.",
+      "target": {
+        "element": {
+          "name": "Scale",
+          "role": "ComboBox"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "Scale",
+                "value": {
+                  "regex": "^(1[2-9]\\d|[2-9]\\d\\d)%"
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Did the Scale value change to a larger percentage, with text on screen looking bigger?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Higher numbers make things larger. The option marked Recommended is the default.",
+        "Use the up and down arrow keys in the open list, then press Enter."
+      ],
+      "why": "A bigger scale makes small text easier to read without changing resolution.",
+      "timeoutSec": 120
+    },
+    {
+      "id": "confirm-size",
+      "say": "Look around the screen. If it feels too big, pick a smaller value. Say done when you are happy.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "To go back, choose the value marked Recommended in the same box.",
+        "Some older apps only resize after you sign out and back in."
+      ],
+      "why": "The right size depends on your screen and your eyes, so try a few."
+    }
+  ]
+}

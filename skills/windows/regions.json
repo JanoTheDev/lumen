@@ -1,0 +1,79 @@
+{
+  "window": "main",
+  "layout": "Windows 11 default: Settings and File Explorer maximized on a 1920x1080 display at 100% scale, taskbar at the bottom",
+  "notes": "Estimated from the default layouts, not measured. Regions with page \"desktop\" are fractions of the whole primary screen, not of a window.",
+  "regions": {
+    "settings-search": {
+      "x": 0.0,
+      "y": 0.1,
+      "w": 0.18,
+      "h": 0.06,
+      "desc": "Find a setting search box, top left of Settings",
+      "page": "settings"
+    },
+    "settings-nav": {
+      "x": 0.0,
+      "y": 0.16,
+      "w": 0.18,
+      "h": 0.8,
+      "desc": "Settings category list on the left",
+      "page": "settings"
+    },
+    "settings-content": {
+      "x": 0.19,
+      "y": 0.06,
+      "w": 0.8,
+      "h": 0.92,
+      "desc": "Selected Settings page, right of the category list",
+      "page": "settings"
+    },
+    "explorer-address-bar": {
+      "x": 0.08,
+      "y": 0.06,
+      "w": 0.7,
+      "h": 0.04,
+      "desc": "Folder path bar near the top of File Explorer",
+      "page": "explorer"
+    },
+    "explorer-command-bar": {
+      "x": 0.0,
+      "y": 0.11,
+      "w": 1.0,
+      "h": 0.05,
+      "desc": "New, Cut, Copy, Paste, Rename, Delete, Sort and View buttons",
+      "page": "explorer"
+    },
+    "explorer-nav-pane": {
+      "x": 0.0,
+      "y": 0.17,
+      "w": 0.16,
+      "h": 0.78,
+      "desc": "Navigation pane with Home, Gallery and folders, on the left",
+      "page": "explorer"
+    },
+    "explorer-file-list": {
+      "x": 0.17,
+      "y": 0.17,
+      "w": 0.82,
+      "h": 0.78,
+      "desc": "Files and folders of the current folder",
+      "page": "explorer"
+    },
+    "taskbar": {
+      "x": 0.0,
+      "y": 0.955,
+      "w": 1.0,
+      "h": 0.045,
+      "desc": "Taskbar along the bottom of the screen",
+      "page": "desktop"
+    },
+    "start-button": {
+      "x": 0.38,
+      "y": 0.955,
+      "w": 0.04,
+      "h": 0.045,
+      "desc": "Start button, left end of the centered taskbar icons",
+      "page": "desktop"
+    }
+  }
+}

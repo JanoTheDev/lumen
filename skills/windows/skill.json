@@ -1,0 +1,22 @@
+{
+  "id": "windows",
+  "name": "Windows 11",
+  "version": "1.0.0",
+  "description": "Everyday Windows 11 skills: Settings, accessibility features, File Explorer, window snapping and removing apps.",
+  "match": {
+    "process": [
+      "explorer.exe",
+      "SystemSettings.exe",
+      "ApplicationFrameHost.exe",
+      "Taskmgr.exe",
+      "control.exe"
+    ],
+    "title": ["^Settings$", "File Explorer$", "^Task Manager$"]
+  },
+  "uiaQuality": "good",
+  "appVersion": ">=10.0.26100",
+  "appVersionTested": "Windows 11 24H2 (build 26100); page names also match 25H2 (build 26200)",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Settings automation ids change between builds, so targets use name and role only. UIA roles and the Explorer window title format are taken from documentation and earlier builds, not measured on this exact build."
+}
