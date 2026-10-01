@@ -7,6 +7,7 @@ import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { answerStyle } from '../a11y/phrases'
 import { replyLanguageLine } from '../speech/language'
+import { skillIndex } from '../skills'
 import { currentFrame } from '../actions/coords'
 import { screenNames } from '../query/screens'
 import { historyMessages } from './history'
@@ -96,7 +97,7 @@ export async function callModel(
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
     model,
-    system: systemBlocks(),
+    system: systemBlocks(skillIndex()),
     messages: [
       ...(withConversation ? historyMessages() : []),
       {

@@ -7,7 +7,8 @@
 import { z } from 'zod'
 import { appUrl } from '../ai/app-context'
 import { parseJsonAs } from '../ai/json'
-import { ROUTER_PROMPT, routerTurn, type RouterInput } from '../ai/prompts/router'
+import { routerSystem, routerTurn, type RouterInput } from '../ai/prompts/router'
+import { skillIndex } from '../skills'
 import { getProvider } from '../ai/providers'
 import {
   isReplayRequest,
@@ -153,6 +154,13 @@ export const routeSchema = z.object({
     .optional(),
   appSwitch: z.boolean(),
   parallelSplit: z.array(z.string()).optional(),
+  /** An installed skill that does the request (from the skills index in the router prompt). */
+  skill: z
+    .object({
+      name: z.string(),
+      args: z.array(z.object({ name: z.string(), value: z.string() })).optional()
+    })
+    .optional(),
   confidence: z.number()
 })
 
@@ -200,6 +208,9 @@ export function normalizeRoute(raw: Route): Route {
     delete route.targetApp
   }
   route.appSwitch = raw.appSwitch && !!route.targetApp
+  const skill = raw.skill?.name.trim()
+  if (skill) route.skill = { ...raw.skill, name: skill }
+  else delete route.skill
   return route
 }
 
@@ -223,7 +234,7 @@ export async function routeWithLlm(
     const res = await llm.complete(
       {
         model,
-        system: [{ text: ROUTER_PROMPT, cacheable: true }],
+        system: routerSystem(skillIndex()),
         messages: [{ role: 'user', content: routerTurn(input) }],
         maxTokens: ROUTER_MAX_TOKENS,
         effort,
@@ -257,6 +268,7 @@ export function describeRoute(r: Route): string {
   if (r.needsAllScreens) parts.push('all-screens')
   if (r.targetApp) parts.push(`app=${r.targetApp.name}${r.appSwitch ? ' (switch)' : ''}`)
   if (r.parallelSplit) parts.push(`split=${r.parallelSplit.length}`)
+  if (r.skill) parts.push(`skill=${r.skill.name}`)
   return parts.join(', ')
 }
 

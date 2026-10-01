@@ -1,5 +1,7 @@
 // Router prompt for the fast model: a stable, cacheable prefix of its own (the main model's
-// prefix is separate). Input is text only; the router never sees the screen.
+// prefix is separate), plus the installed-skills index as a second cacheable block. Input is
+// text only; the router never sees the screen.
+import type { SystemBlock } from '../providers/types'
 
 export const ROUTER_PROMPT = `You route one spoken or typed request for Lumen, a screen assistant on Windows. You do not answer it. Fill the schema:
 
@@ -20,6 +22,7 @@ needsAllScreens: true only when the request is about another monitor or every mo
 targetApp: the app or site the request names, when it is not the foreground one ({name, url when it is a web app, process when it is a desktop program}). Omit when none is named or it is already in front.
 appSwitch: true when the user wants to go to that other app first ("go back to gmail", "open slack and…").
 parallelSplit: only for 2–4 independent questions that can each be answered alone, in words ("what's the weather and what time is it in Tokyo"). Copy each question as a full sentence. Never split actions, guides or steps that depend on each other. Omit otherwise.
+skill: only when a Skills list follows and one listed skill clearly does what the user asks ("clean up my downloads" and a clean-downloads skill): {name exactly as listed, args [{name, value}] for values the user said}, with mode plan. Omit otherwise, and always when no Skills list is given.
 confidence: 0 to 1, how sure you are of the mode.
 
 guide_active true means step-by-step help is on screen; requests that are not about the guide (weather, other apps, new questions) are routed normally.
@@ -60,4 +63,11 @@ export function routerTurn(input: RouterInput): string {
   if (input.guideActive) lines.push('guide_active: true')
   if (input.lastMode) lines.push(`last_mode: ${input.lastMode}`)
   return `<context>\n${lines.join('\n')}\n</context>\n<utterance>${input.utterance}</utterance>`
+}
+
+/** The router's system blocks: the fixed prompt, then the skills index when skills are enabled. */
+export function routerSystem(skillIndex = ''): SystemBlock[] {
+  const blocks = [{ text: ROUTER_PROMPT, cacheable: true }]
+  if (skillIndex.trim()) blocks.push({ text: skillIndex.trim(), cacheable: true })
+  return blocks
 }

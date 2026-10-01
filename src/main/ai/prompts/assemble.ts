@@ -10,10 +10,25 @@ import { MODES } from './modes'
 
 export const SYSTEM_PREFIX = [CORE, GROUNDING, `Modes:\n\n${MODES}`].join('\n\n')
 
-/** The system prompt: one cacheable block. */
-export function systemBlocks(): SystemBlock[] {
-  return [{ text: SYSTEM_PREFIX, cacheable: true }]
+/**
+ * The system prompt: the fixed prefix, then the installed-skills index (skills/ `skillIndex()`)
+ * as a second cacheable block. The index is alphabetical and only changes when skills are
+ * added, removed or toggled, so both blocks stay cached between calls.
+ */
+export function systemBlocks(skillIndex = ''): SystemBlock[] {
+  const blocks = [{ text: SYSTEM_PREFIX, cacheable: true }]
+  if (skillIndex.trim())
+    blocks.push({
+      text: `${skillIndex.trim()}
+${SKILLS_NOTE}`,
+      cacheable: true
+    })
+  return blocks
 }
+
+/** The main reply is one JSON object without tools, so skills are known but not loaded here. */
+export const SKILLS_NOTE =
+  'No tools are available in this reply, so never write use_skill. When a listed skill fits the request, say in one short sentence that the "<name>" skill can do it, then help as well as you can without it.'
 
 export interface TurnContext {
   prompt: string
