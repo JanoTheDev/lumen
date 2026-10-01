@@ -3,7 +3,7 @@ import type { ModelResponse } from '@shared/types'
 import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
-import { buildSystemBlocks } from './prompts/system'
+import { logPrefixSize, systemBlocks, userTurn } from './prompts/assemble'
 import { parseReplyText, replySchema, toModelResponse } from './schema'
 import { LlmError, REFUSAL_MESSAGE, getProvider, onUsage, warmupProviders } from './providers'
 import { noteAnswerModel, recordUsage } from './cost'
@@ -28,16 +28,21 @@ export async function callModel(
 ): Promise<ModelResponse> {
   const { imgW, imgH } = currentFrame()
   const { llm, model, effort } = getProvider('main')
+  logPrefixSize()
   try {
     const res = await llm.complete(
       {
         model,
-        system: buildSystemBlocks(activeWindow),
+        system: systemBlocks(),
         messages: [
           ...historyMessages(),
           {
             role: 'user',
-            content: `Active window: ${activeWindow}\n${screenshotBase64 ? `Screenshot: frame "1", ${imgW}x${imgH} pixels` : 'No screenshot'}\n\nUser request: ${prompt}`
+            content: userTurn({
+              prompt,
+              activeWindow,
+              frame: screenshotBase64 ? { w: imgW, h: imgH } : null
+            })
           }
         ],
         images: screenshotBase64

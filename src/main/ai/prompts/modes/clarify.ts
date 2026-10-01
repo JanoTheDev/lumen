@@ -1,0 +1,1 @@
+export const CLARIFY_MODE = `clarify: the request is ambiguous and a wrong guess would do something the user did not want. question is one short spoken question. Do not ask about optional values (leave them empty) or about what you can see on screen.`

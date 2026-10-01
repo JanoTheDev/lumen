@@ -15,6 +15,8 @@ export interface TurnCost {
 const turns = new AsyncLocalStorage<TurnCost>()
 let sessionUsd = 0
 let day = { key: '', usd: 0 }
+// Calls after the first one: how many read the prompt cache, and the input token share read.
+const cache = { calls: 0, hits: 0, input: 0, read: 0 }
 
 function dayKey(now: Date): string {
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`
@@ -23,6 +25,11 @@ function dayKey(now: Date): string {
 /** Records one call's usage: logs it, adds it to the current turn and the running totals. */
 export function recordUsage(model: string, usage: Usage, hasImage = false, now = new Date()): void {
   console.log(formatUsage(model, usage, hasImage))
+  if (cache.calls++ > 0) {
+    cache.input += usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+    cache.read += usage.cacheReadTokens
+    if (usage.cacheReadTokens > 0) cache.hits++
+  }
   const cost = usageCost(model, usage).total
   sessionUsd = round(sessionUsd + cost)
   const key = dayKey(now)
@@ -45,6 +52,12 @@ export function noteAnswerModel(model: string): void {
   if (turn) turn.model = model
 }
 
+/** Prompt-cache use over every call after the first: share of calls and of input tokens. */
+export function cacheStats(): { callRate: number; tokenRate: number } | null {
+  if (cache.calls < 2 || cache.input === 0) return null
+  return { callRate: cache.hits / (cache.calls - 1), tokenRate: cache.read / cache.input }
+}
+
 export function costTotals(): { sessionUsd: number; dayUsd: number } {
   return { sessionUsd, dayUsd: day.key === dayKey(new Date()) ? day.usd : 0 }
 }
@@ -59,8 +72,13 @@ export async function withTurnCost<T>(
     return await turns.run(turn, fn)
   } finally {
     const { sessionUsd: session, dayUsd } = costTotals()
+    const c = cacheStats()
+    const pct = (n: number): string => `${Math.round(n * 100)}%`
+    const cacheText = c
+      ? ` | cache hits ${pct(c.callRate)} of calls, ${pct(c.tokenRate)} of input`
+      : ''
     console.log(
-      `[cost] turn $${turn.usd.toFixed(4)} (${turn.calls} calls) | session $${session.toFixed(4)} | today $${dayUsd.toFixed(4)}`
+      `[cost] turn $${turn.usd.toFixed(4)} (${turn.calls} calls) | session $${session.toFixed(4)} | today $${dayUsd.toFixed(4)}${cacheText}`
     )
     onDone?.(turn)
   }
@@ -68,6 +86,7 @@ export async function withTurnCost<T>(
 
 /** Test hook. */
 export function resetCostTotals(): void {
+  Object.assign(cache, { calls: 0, hits: 0, input: 0, read: 0 })
   sessionUsd = 0
   day = { key: '', usd: 0 }
 }

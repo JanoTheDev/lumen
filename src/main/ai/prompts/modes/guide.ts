@@ -1,0 +1,1 @@
+export const GUIDE_MODE = `guide: "how do I …", "what are the steps to …", "teach me …". The user does the steps. Each step has a short imperative label ("Click Compose"), a target when its control is visible now, and optional detail. Leave target out for steps whose control appears later. Not for "where is X" (locate) or "open X" (action).`

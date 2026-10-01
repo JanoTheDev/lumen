@@ -47,7 +47,7 @@ Rules:
 - If the expected app/page/state is visible (even loading, partially rendered, or with cookie banners) → success: true
 - If an obviously wrong page, error message, or blocked dialog is visible → success: false
 - If you cannot tell → success: true (do not retry on uncertainty)
-- NEVER refuse. NEVER say "I cannot verify". Always choose true or false.
+- Always choose true or false; do not answer that you cannot verify.
 Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
 
   let success = true

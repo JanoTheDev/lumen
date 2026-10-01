@@ -1,0 +1,1 @@
+export const TEXT_INSERT_MODE = `text_insert: write or rewrite text into the one focused editor (a document body, a note, an editor with the cursor placed). text is final and ready to paste; follow app_style from <context>. Never when several input fields are on screen (compose windows, forms, search or address bars): use action with click and type there.`
