@@ -13,12 +13,38 @@ import { unwrapReply } from './cleanup'
 import { appKindOf } from './styles'
 import type { FocusTarget } from './terminal-guard'
 
-/** Edit verbs a dictation with a UIA selection is read as a command for. */
-const EDIT_COMMAND_RE =
-  /^(?:(?:please|can you|could you|now)\s+)*(?:make|rewrite|rephrase|reword|turn|convert|translate|fix|correct|shorten|summari[sz]e|expand|simplify|reply|respond|change|format|polish|clean up|proofread|improve|capitali[sz]e|uppercase|lowercase|put)\b/i
-/** Without a UIA selection: only commands that name the selection ("this", "it", "that"). */
-const STRONG_EDIT_RE =
-  /^(?:(?:please|can you|could you|now)\s+)*(?:(?:make|rewrite|rephrase|reword|turn|convert|translate|shorten|summari[sz]e|expand|simplify|polish|proofread|improve)\s+(?:this|it|that|the selection|the selected text)\b|(?:fix|correct)\s+(?:the\s+)?(?:grammar|spelling|typos?|this|it|that)\b|(?:reply|respond)\s+to\s+(?:this|it|that)\b|translate\s+(?:this\s+|it\s+)?(?:to|into)\s+\w+)/i
+// An edit command must name the selection ("make this shorter") or be a bare style
+// ("shorter", "more formal", "into bullets"); "Make sure everyone brings their laptop" and
+// "Change of plans, we meet at noon" are dictation that replaces the selection.
+const LEAD = String.raw`^(?:(?:please|can you|could you|now)\s+)*`
+const OBJ = String.raw`(?:this|it|that|the selection|the selected text|the text|the paragraph|the message)`
+const END = String.raw`\s*[.!]?$`
+const ADJ = String.raw`(?:formal|informal|casual|professional|polite|friendly|concise|direct|detailed|polished|confident|positive|neutral|persuasive|enthusiastic|specific|natural|clear|simple|serious|playful|technical|readable|assertive|warm|empathetic|diplomatic)`
+const NAMED = String.raw`(?:shorter|longer|friendlier|nicer|simpler|clearer|warmer|kinder|softer|stronger|punchier|tighter|crisper|briefer|${ADJ}|bold(?:er)?)`
+const FORM = String.raw`(?:bullets?|bullet(?:ed)? (?:points|list)|(?:a )?(?:numbered |bulleted )?list|(?:a )?table|(?:one |a single |a )?paragraphs?|(?:an )?email|title case|upper ?case|lower ?case|sentence case|all caps)`
+const DEGREE = String.raw`(?:(?:a (?:bit|little|lot) |much |slightly |way |even )?)`
+const NOT_COMPARATIVE = String.raw`(?!(?:later|earlier|never|ever|over|after|under|together|other|either|neither|whether|her|forever|number|water|matter|order|paper|enter|answer)\b)`
+/** After "make this" / "turn it": any comparative or more/less word, a form, or "sound …". */
+const OBJ_STYLE = String.raw`(?:${DEGREE}(?:(?:more|less) [a-z]+|${NOT_COMPARATIVE}[a-z]+er|${NAMED})|sound (?:more |less )?[a-z]+|(?:in)?to ${FORM}|(?:a |an )?(?:bulleted|numbered) list|in ${FORM})`
+/** With no object: only named styles and forms, never a bare word that is also prose. */
+const BARE_STYLE = String.raw`(?:(?:make|turn|convert|change|put|format|rewrite|rephrase|reword)(?: it| this)? )?(?:${DEGREE}(?:(?:more|less) ${ADJ}|${NAMED})|(?:in)?to ${FORM}|in ${FORM})`
+
+const STRONG_EDIT_RE = new RegExp(
+  LEAD +
+    '(?:' +
+    [
+      String.raw`(?:make|turn|convert|change|put|format)\s+${OBJ}\s+${OBJ_STYLE}${END}`,
+      String.raw`(?:rewrite|rephrase|reword|shorten|summari[sz]e|expand|simplify|polish|proofread|improve|tidy up|clean up)\s+${OBJ}\b`,
+      String.raw`(?:fix|correct)\s+(?:the\s+)?(?:grammar|spelling|typos?|punctuation)\b`,
+      String.raw`(?:fix|correct)\s+(?:this|it|that)(?:\s+(?:up|please))?${END}`,
+      String.raw`(?:reply|respond)\s+to\s+(?:this|it|that)\b`,
+      String.raw`translate\s+(?:this\s+|it\s+|that\s+)?(?:to|into)\s+\w+`,
+      String.raw`(?:summari[sz]e|shorten|simplify|proofread|polish|rephrase|reword|rewrite|capitali[sz]e|uppercase|lowercase)${END}`,
+      BARE_STYLE + END
+    ].join('|') +
+    ')',
+  'i'
+)
 const REPLY_RE = /^(?:(?:please|can you|could you)\s+)*(?:reply|respond|answer)\b/i
 
 const MAX_COMMAND_WORDS = 30
@@ -26,14 +52,23 @@ export const MAX_SELECTION = 8000
 /** Longer results are pasted (one undo step, fast) instead of typed. */
 export const TYPE_LIMIT = 300
 
+/** A dictation with a selection read as an edit command (M2: the strong shape only). */
 export function looksLikeEditCommand(text: string): boolean {
-  const t = text.trim()
-  return t.split(/\s+/).length <= MAX_COMMAND_WORDS && EDIT_COMMAND_RE.test(t)
+  return isStrongEditCommand(text)
 }
 
 export function isStrongEditCommand(text: string): boolean {
-  const t = text.trim()
-  return t.split(/\s+/).length <= MAX_COMMAND_WORDS && STRONG_EDIT_RE.test(t)
+  const t = text.trim().replace(/\s+/g, ' ')
+  return t.split(' ').length <= MAX_COMMAND_WORDS && STRONG_EDIT_RE.test(t)
+}
+
+/**
+ * The rewrite may go back over the selection only in an element UI Automation calls
+ * editable; in a read-only view (a web page, a received mail) typed letters would fire the
+ * page's shortcuts, so the rewrite is shown with Copy instead.
+ */
+export function canWriteBack(target: FocusTarget): boolean {
+  return target.uia && target.editable && !target.password
 }
 
 export function isReplyCommand(text: string): boolean {

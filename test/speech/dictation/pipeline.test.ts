@@ -13,7 +13,12 @@ const h = vi.hoisted(() => ({
   snippets: [] as unknown[],
   dictation: {} as Record<string, unknown>,
   claude: [] as string[],
-  session: true
+  session: true,
+  selection: ''
+}))
+
+vi.mock('../../../src/main/ai/providers', () => ({
+  getProvider: () => ({ llm: { complete: async () => ({ text: 'Short.' }) }, model: 'm' })
 }))
 
 vi.mock('../../../src/main/claude-code', () => ({
@@ -58,7 +63,12 @@ vi.mock('../../../src/main/speech/dictation/snippets', async (orig) => ({
 }))
 vi.mock('../../../src/main/agent/instance', () => ({
   getAgent: () => ({
-    request: async (cmd: string) => (cmd === 'focus_info' ? h.focus : { source: 'none', text: '' }),
+    request: async (cmd: string) =>
+      cmd === 'focus_info'
+        ? h.focus
+        : h.selection
+          ? { source: 'selection', text: h.selection }
+          : { source: 'none', text: '' },
     execute: async (a: unknown) => {
       h.executed.push(a)
     },
@@ -77,6 +87,7 @@ vi.mock('../../../src/main/config', async (orig) => {
 })
 
 import { bus } from '../../../src/main/bus'
+import { showAnswer } from '../../../src/main/windows/assistant'
 import {
   dictate,
   setDictationRecorder,
@@ -101,6 +112,8 @@ beforeEach(() => {
   h.dictation = {}
   h.claude.length = 0
   h.session = true
+  h.selection = ''
+  vi.mocked(showAnswer).mockClear()
   reports.length = 0
   setDictationRecorder((r) => reports.push(r))
 })
@@ -191,5 +204,30 @@ describe('dictate', () => {
     const res = await dictate('dictate to Claude add a test')
     expect(res.ok).toBe(false)
     expect(h.executed).toEqual([])
+  })
+
+  it('edits the selection in an editable field', async () => {
+    h.selection = 'A long sentence that rambles on.'
+    const res = await dictate('make this shorter')
+    expect(res.ok).toBe(true)
+    expect(h.executed).toEqual([{ type: 'type', text: 'Short.' }])
+  })
+
+  it('shows the rewrite instead of typing into read-only content (M1)', async () => {
+    h.focus = { ...h.focus, process: 'chrome.exe', role: 'Document', editable: false }
+    h.selection = 'A received message.'
+    const res = await dictate('make this shorter')
+    expect(res.ok).toBe(true)
+    expect(h.executed).toEqual([])
+    expect(showAnswer).toHaveBeenCalledWith('Short.')
+  })
+
+  it('types a plain sentence over the selection instead of running it as a command (M2)', async () => {
+    h.selection = 'old words'
+    await dictate('Make sure everyone brings their laptop.')
+    expect(h.executed).toEqual([
+      { type: 'type', text: 'Make sure everyone brings their laptop.', allowTerminal: false }
+    ])
+    expect(reports[0]).toMatchObject({ source: 'hotkey' })
   })
 })

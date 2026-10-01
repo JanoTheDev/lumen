@@ -9,6 +9,7 @@ import { CancelledError } from '../../query/cancel'
 import { recentlyActed, recordUndo, undoLast } from '../../undo'
 import { setNotice, setStatus, setUndoHandler, settle, showAnswer } from '../../windows/assistant'
 import {
+  canWriteBack,
   editSummary,
   isReplyCommand,
   isStrongEditCommand,
@@ -24,6 +25,7 @@ import { readFocus } from './insert'
 import type { FocusTarget } from './terminal-guard'
 
 export const NO_SELECTION = 'Select the text first, then say the edit.'
+export const READ_ONLY_NOTICE = 'This text cannot be edited here, so the new version is shown'
 /** The Undo button stays this long. */
 const UNDO_CHIP_MS = 30_000
 
@@ -150,6 +152,13 @@ export async function runEditCommand(
     // A reply goes where the user wants it: shown with Copy, the selection left alone.
     showAnswer(out)
     return { ok: true, notice: 'reply shown', text: out }
+  }
+  if (!canWriteBack(target)) {
+    // Read-only or unknown element: typing would fire the page's shortcuts (M1).
+    log('skip', 'dictation command: focus is not editable, rewrite shown')
+    showAnswer(out)
+    setStatus('answer', READ_ONLY_NOTICE, undefined, 4000)
+    return { ok: true, notice: READ_ONLY_NOTICE, text: out }
   }
   const action: Action =
     writeBackAction(out) === 'type'

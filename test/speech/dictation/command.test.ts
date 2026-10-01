@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  canWriteBack,
   copyFallbackAllowed,
   editSummary,
   EDIT_PROMPT,
@@ -77,6 +78,55 @@ describe('edit command phrases', () => {
     expect(isStrongEditCommand('change of plans we leave at six')).toBe(false)
   })
 
+  it('reads ordinary sentences that start with an edit verb as dictation (M2)', () => {
+    for (const t of [
+      'Make sure everyone brings their laptop.',
+      'Change of plans, we meet at noon.',
+      'Make it to the station by six.',
+      'Turn it off before you leave.',
+      'Fix it tomorrow if you can.',
+      'Put the box on the table.',
+      'Format the drive before you install.',
+      'Make that three tickets please.',
+      'Correct me if I am wrong.',
+      'Reply when you can.',
+      'Expand your search.',
+      'Make it happen.',
+      'Make it later.',
+      'Turn left at the light.',
+      'More coffee.',
+      'Better late than never.',
+      'Improve the onboarding flow next quarter.',
+      'Convert the guests into fans.',
+      'Polish silver every month.'
+    ]) {
+      expect(looksLikeEditCommand(t), t).toBe(false)
+      expect(isStrongEditCommand(t), t).toBe(false)
+    }
+  })
+
+  it('still spots edits that name the selection or a style (M2)', () => {
+    for (const t of [
+      'make this shorter',
+      'Make it a bit more formal.',
+      'make this sound friendlier',
+      'turn this into bullet points',
+      'turn it into a numbered list',
+      'make it a bulleted list',
+      'shorter',
+      'more formal',
+      'into bullets',
+      'turn into bullets',
+      'fix the grammar',
+      'fix this',
+      'rewrite this for a customer',
+      'summarize',
+      'translate it to French',
+      'can you make it friendlier'
+    ])
+      expect(looksLikeEditCommand(t), t).toBe(true)
+  })
+
   it('knows a reply', () => {
     expect(isReplyCommand('reply to this saying yes')).toBe(true)
     expect(isReplyCommand('make it shorter')).toBe(false)
@@ -120,6 +170,15 @@ describe('readSelection', () => {
     const { io, clip } = fakeIo({ copied: '' })
     expect(await readSelection(io, 'make this shorter', target())).toEqual({ kind: 'none' })
     expect(clip.text).toBe('ORIGINAL')
+  })
+})
+
+describe('canWriteBack (M1)', () => {
+  it('writes back only into an element UI Automation calls editable', () => {
+    expect(canWriteBack(target())).toBe(true)
+    expect(canWriteBack(target({ editable: false }))).toBe(false)
+    expect(canWriteBack(target({ uia: false }))).toBe(false)
+    expect(canWriteBack(target({ password: true }))).toBe(false)
   })
 })
 
