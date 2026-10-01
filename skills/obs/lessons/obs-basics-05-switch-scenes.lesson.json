@@ -1,0 +1,135 @@
+{
+  "id": "obs-basics-05-switch-scenes",
+  "app": "obs",
+  "title": "Make a second scene and switch to it",
+  "summary": "Add a scene, give it a source, and switch between scenes.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["obs-basics-01-display-capture"],
+  "appVersion": ">=30",
+  "tags": ["scenes"],
+  "steps": [
+    {
+      "id": "check-normal-mode",
+      "say": "Make sure the preview is one single picture, not split in two. Say next when it is.",
+      "target": { "region": "preview" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "If you see two pictures side by side, Studio Mode is on.",
+        "Click Studio Mode in the Controls panel to turn it off."
+      ],
+      "why": "In normal mode, clicking a scene switches the output straight away."
+    },
+    {
+      "id": "add-scene",
+      "say": "Click the plus button at the bottom left of the Scenes panel.",
+      "target": { "region": "scenes-add-button" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "window-opened", "match": { "name": "Add Scene" } },
+            { "type": "vision", "prompt": "Is a small window open asking for a scene name?" }
+          ]
+        }
+      },
+      "hints": [
+        "Scenes is the panel at the far left of the bottom row.",
+        "You can also right click empty space in the Scenes panel and choose Add."
+      ],
+      "why": "Each scene is a separate layout you can jump to.",
+      "doItForMe": { "actions": [{ "t": "click", "region": "scenes-add-button" }] }
+    },
+    {
+      "id": "name-scene",
+      "say": "Type Be right back as the name, then press Enter.",
+      "target": { "element": { "role": "Edit" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetSceneList", "hasScene": "Be right back" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Scenes panel list a scene called Be right back?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Any name works; pick one that tells you what the scene is for.",
+        "Click OK if pressing Enter does nothing."
+      ],
+      "why": "Clear scene names make switching quick during a recording or stream.",
+      "doItForMe": {
+        "actions": [
+          { "t": "type", "text": "Be right back" },
+          { "t": "keys", "combo": "Enter" }
+        ]
+      }
+    },
+    {
+      "id": "switch-to-new",
+      "say": "Click Be right back in the Scenes panel. The preview goes empty because the scene has no sources yet.",
+      "target": { "element": { "name": "Be right back", "role": "ListItem" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetCurrentProgramScene", "sceneName": "Be right back" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the scene called Be right back highlighted, with an empty or black preview?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "New scenes start empty; that is expected.",
+        "Use the arrow keys in the Scenes list to move the highlight."
+      ],
+      "why": "An empty scene shows that sources belong to one scene, not to OBS as a whole.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Be right back", "role": "ListItem" } }]
+      }
+    },
+    {
+      "id": "switch-back",
+      "say": "Now click your first scene, usually called Scene, to switch back.",
+      "target": { "element": { "name": "Scene", "role": "ListItem" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetCurrentProgramScene", "sceneNameChanged": true }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the preview show the screen capture again, with the first scene highlighted?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is the scene above Be right back in the list.",
+        "If you renamed it, pick the scene that holds your Display Capture."
+      ],
+      "why": "Switching scenes is how you change what viewers see without stopping."
+    }
+  ]
+}

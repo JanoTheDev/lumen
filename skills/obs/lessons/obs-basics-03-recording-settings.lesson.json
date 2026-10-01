@@ -1,0 +1,162 @@
+{
+  "id": "obs-basics-03-recording-settings",
+  "app": "obs",
+  "title": "Choose where and how OBS records",
+  "summary": "Set the Recording Path and Recording Format in Settings, Output.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": [],
+  "appVersion": ">=30",
+  "tags": ["recording", "settings"],
+  "steps": [
+    {
+      "id": "check-not-recording",
+      "say": "Make sure the Controls panel says Start Recording, not Stop Recording. Say next when it does.",
+      "target": { "region": "controls-dock" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetRecordStatus", "outputActive": false }
+            },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "If it says Stop Recording, click it first.",
+        "Recording settings are locked while a recording is running."
+      ],
+      "why": "OBS greys out output settings during a recording."
+    },
+    {
+      "id": "open-settings",
+      "say": "Click Settings in the Controls panel.",
+      "target": { "element": { "name": "Settings", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "window-opened", "match": { "name": "Settings" } },
+            { "type": "window-title", "regex": "^Settings$" }
+          ]
+        }
+      },
+      "hints": [
+        "It is above the Exit button at the bottom right.",
+        "Or open the File menu and choose Settings."
+      ],
+      "why": "Recording options live in the Settings window.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Settings", "role": "Button" } }]
+      }
+    },
+    {
+      "id": "output-page",
+      "say": "Click Output in the list on the left.",
+      "target": { "element": { "name": "Output", "role": "ListItem" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "selected", "match": { "name": "Output" } },
+            {
+              "type": "vision",
+              "prompt": "Is the Output page of OBS Settings showing, with a Recording section?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Output is the third item, under General and Stream.",
+        "Press the Down arrow in the left list until Output is selected."
+      ],
+      "why": "The Output page controls file location, format and quality.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Output", "role": "ListItem" } }]
+      }
+    },
+    {
+      "id": "browse-path",
+      "say": "In the Recording section, click Browse next to Recording Path and pick a folder.",
+      "target": { "element": { "name": "Browse", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetRecordDirectory", "recordDirectoryChanged": true }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Recording Path box show a different folder than before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Your Videos folder is a good choice because you can find it again from any app.",
+        "You can also click inside the Recording Path box and type a folder path."
+      ],
+      "why": "Knowing the folder means you can always find your recordings."
+    },
+    {
+      "id": "pick-format",
+      "say": "Open the Recording Format dropdown and choose Hybrid MP4, or MKV if Hybrid MP4 is not listed.",
+      "target": { "text": "Recording Format" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": { "role": "ComboBox", "value": { "regex": "Hybrid MP4|MKV" } }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Recording Format dropdown set to Hybrid MP4 or MKV?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hybrid MP4 survives a crash and plays almost everywhere.",
+        "Plain MP4 can be lost entirely if OBS crashes, so avoid it for long recordings."
+      ],
+      "why": "A crash-safe format protects hours of recording from a sudden power cut."
+    },
+    {
+      "id": "save",
+      "say": "Click OK to save your recording settings.",
+      "target": { "element": { "name": "OK", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": { "name": "OK", "role": "Button" }
+            },
+            { "type": "window-title", "regex": "^OBS \\d" }
+          ]
+        }
+      },
+      "hints": ["OK is at the bottom right of the Settings window.", "Press Enter to choose OK."],
+      "why": "Settings are not kept until you confirm them.",
+      "doItForMe": { "actions": [{ "t": "invoke", "element": { "name": "OK", "role": "Button" } }] }
+    }
+  ]
+}

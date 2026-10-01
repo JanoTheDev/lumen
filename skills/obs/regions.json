@@ -1,0 +1,77 @@
+{
+  "window": "main",
+  "layout": "default",
+  "notes": "OBS 30+ default dock layout after Docks, Reset Docks, on a 1920x1080 window. Studio Mode splits the preview in two.",
+  "regions": {
+    "menu-bar": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.03,
+      "desc": "Menu bar along the top: File, Edit, View, Docks, Tools"
+    },
+    "preview": {
+      "x": 0.0,
+      "y": 0.03,
+      "w": 1.0,
+      "h": 0.67,
+      "desc": "Large preview of the current scene"
+    },
+    "scenes-dock": {
+      "x": 0.0,
+      "y": 0.7,
+      "w": 0.17,
+      "h": 0.27,
+      "desc": "Scenes list, bottom row far left"
+    },
+    "sources-dock": {
+      "x": 0.17,
+      "y": 0.7,
+      "w": 0.2,
+      "h": 0.27,
+      "desc": "Sources list, bottom row second from left"
+    },
+    "sources-add-button": {
+      "x": 0.17,
+      "y": 0.94,
+      "w": 0.03,
+      "h": 0.03,
+      "desc": "Plus button at the bottom left of the Sources dock"
+    },
+    "scenes-add-button": {
+      "x": 0.0,
+      "y": 0.94,
+      "w": 0.03,
+      "h": 0.03,
+      "desc": "Plus button at the bottom left of the Scenes dock"
+    },
+    "audio-mixer": {
+      "x": 0.37,
+      "y": 0.7,
+      "w": 0.33,
+      "h": 0.27,
+      "desc": "Audio Mixer meters and faders, bottom row middle"
+    },
+    "scene-transitions": {
+      "x": 0.7,
+      "y": 0.7,
+      "w": 0.13,
+      "h": 0.27,
+      "desc": "Scene Transitions dock, right of the mixer"
+    },
+    "controls-dock": {
+      "x": 0.83,
+      "y": 0.7,
+      "w": 0.17,
+      "h": 0.27,
+      "desc": "Controls dock with Start Recording and Settings, bottom right"
+    },
+    "status-bar": {
+      "x": 0.0,
+      "y": 0.97,
+      "w": 1.0,
+      "h": 0.03,
+      "desc": "Status bar with recording timer and CPU use"
+    }
+  }
+}

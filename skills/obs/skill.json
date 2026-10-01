@@ -1,0 +1,17 @@
+{
+  "id": "obs",
+  "name": "OBS Studio",
+  "version": "1.0.0",
+  "description": "Record and stream with OBS Studio: sources, audio, recording settings, scenes and the Controls dock.",
+  "match": {
+    "process": ["obs64.exe"],
+    "title": ["^OBS \\d+\\.\\d+"]
+  },
+  "uiaQuality": "partial",
+  "bridge": "obs-websocket",
+  "appVersion": ">=30",
+  "appVersionTested": "OBS Studio 32.2 (August 2026 stable)",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Qt accessibility exposes the menu bar, dock buttons, dialogs and most settings controls; the preview is a video surface with no tree. The Sources and Scenes add buttons show only a plus icon, so their accessible names are unverified and lessons fall back to the dock region. Bridge checks map to obs-websocket v5 requests (GetRecordStatus, GetInputList, GetCurrentProgramScene, GetRecordDirectory) and need the WebSocket server switched on under Tools."
+}

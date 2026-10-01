@@ -1,0 +1,33 @@
+# OBS Studio glossary
+
+- **Scene** — a saved arrangement of sources you can switch to, like a camera angle.
+- **Source** — one input inside a scene: a screen, a window, a webcam, an image, a microphone.
+- **Display Capture** — a source that shows a whole monitor.
+- **Window Capture** — a source that shows one app window, even when other windows cover it.
+- **Game Capture** — a source that hooks into a full-screen game for the smoothest picture.
+- **Video Capture Device** — a webcam or capture card.
+- **Audio Input Capture** — a microphone or line-in added as a source in one scene.
+- **Desktop Audio** — the sound your computer plays, captured for every scene.
+- **Mic/Aux** — the default microphone, captured for every scene.
+- **Audio Mixer** — the dock with one level meter and volume slider per audio source.
+- **Preview** — the large picture showing what will be recorded or streamed.
+- **Program** — the live output; in Studio Mode it is the right-hand picture.
+- **Studio Mode** — a two-picture mode for preparing a scene before sending it live.
+- **Transition** — the effect used when switching scenes, such as Fade or Cut.
+- **Controls dock** — the panel with Start Recording, Start Streaming and Settings.
+- **Dock** — any panel in the main window; docks can be moved, closed and reset.
+- **Recording Path** — the folder where finished recordings are saved.
+- **Recording Format** — the file container, such as Hybrid MP4, MP4, MKV or MOV.
+- **Hybrid MP4** — an MP4 written so that a crash does not ruin the file; the default for new profiles in OBS 32.
+- **Remux** — rewrap a recording into another container without re-encoding, such as MKV to MP4.
+- **Encoder** — the component that compresses the video; hardware encoders use the graphics card.
+- **Bitrate** — how much data per second the video uses; higher looks better and makes bigger files.
+- **Canvas (Base) Resolution** — the size of the scene you lay out.
+- **Output (Scaled) Resolution** — the size of the video that is recorded or streamed.
+- **FPS** — frames per second of the output video.
+- **Filter** — an effect attached to a source, such as Noise Suppression or Chroma Key.
+- **Profile** — a named set of output, stream and hotkey settings.
+- **Scene Collection** — a named set of scenes and sources.
+- **Hotkey** — a key you assign in Settings to start recording, switch scenes or mute.
+- **Virtual Camera** — sends the OBS picture to video-call apps as if it were a webcam.
+- **WebSocket server** — a built-in connection that lets other programs read and control OBS.

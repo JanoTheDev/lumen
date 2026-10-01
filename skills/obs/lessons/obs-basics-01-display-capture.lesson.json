@@ -1,0 +1,157 @@
+{
+  "id": "obs-basics-01-display-capture",
+  "app": "obs",
+  "title": "Show your screen with Display Capture",
+  "summary": "Add a Display Capture source so the preview shows your monitor.",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": [],
+  "appVersion": ">=30",
+  "tags": ["sources", "capture"],
+  "steps": [
+    {
+      "id": "find-sources-dock",
+      "say": "Look at the bottom row of OBS. The second panel from the left is Sources. Say next when you see it.",
+      "target": { "region": "sources-dock" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "The Sources panel sits right of Scenes and left of the Audio Mixer.",
+        "If the panels are missing, open the Docks menu at the top and choose Reset Docks."
+      ],
+      "why": "Everything that appears in your video is added as a source in this panel."
+    },
+    {
+      "id": "open-add-menu",
+      "say": "Click the plus button at the bottom left of the Sources panel.",
+      "target": { "region": "sources-add-button" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "window-opened", "match": { "role": "Menu" } },
+            {
+              "type": "vision",
+              "prompt": "Is a pop-up list of source types, including Display Capture, now open?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The plus sign is a small icon under the list of sources, at its left edge.",
+        "You can also right click empty space inside the Sources panel and choose Add."
+      ],
+      "why": "The plus button lists every kind of source OBS can capture.",
+      "doItForMe": { "actions": [{ "t": "click", "region": "sources-add-button" }] }
+    },
+    {
+      "id": "pick-display-capture",
+      "say": "Choose Display Capture from the list.",
+      "target": { "element": { "name": "Display Capture", "role": "MenuItem" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Display Capture" } },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": { "name": "Create/Select Source" }
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Display Capture is near the top of the list, with a monitor icon.",
+        "Window Capture is a different item; pick the one that says Display."
+      ],
+      "why": "Display Capture records a whole monitor, which suits tutorials and screen recordings.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Display Capture", "role": "MenuItem" } }]
+      }
+    },
+    {
+      "id": "confirm-name",
+      "say": "Keep Create new selected and click OK to name the source.",
+      "target": { "element": { "name": "OK", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": { "name": "OK", "role": "Button" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a properties window for Display Capture open, with a Display dropdown?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You can type a clearer name such as Main screen before clicking OK.",
+        "Press Enter to confirm the dialog."
+      ],
+      "why": "Naming sources helps you tell them apart once a scene has several.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Enter" }] }
+    },
+    {
+      "id": "choose-display",
+      "say": "In the Display dropdown, pick the monitor you want to show, then click OK.",
+      "target": { "element": { "name": "OK", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetInputList", "hasInputKind": "monitor_capture" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the large preview now show a picture of a computer desktop that was not there before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Displays are listed by number and resolution; your main screen is usually the first.",
+        "If the preview stays black on a laptop, try the other Capture Method in the same window."
+      ],
+      "why": "With several monitors, OBS needs to know which one to record."
+    },
+    {
+      "id": "check-preview",
+      "say": "Look at the preview. You should see your screen inside OBS. Say done when it shows.",
+      "target": { "region": "preview" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetInputList", "hasInputKind": "monitor_capture" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the OBS preview show a copy of the desktop, often repeating into itself like a hall of mirrors?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A picture that repeats inside itself is normal; it is OBS showing its own window.",
+        "If the source is listed but the preview is empty, check that its eye icon in the Sources panel is on."
+      ],
+      "why": "The preview is exactly what your recording will contain."
+    }
+  ]
+}

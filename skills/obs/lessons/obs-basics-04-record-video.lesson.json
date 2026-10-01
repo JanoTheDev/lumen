@@ -1,0 +1,120 @@
+{
+  "id": "obs-basics-04-record-video",
+  "app": "obs",
+  "title": "Start and stop a recording",
+  "summary": "Record a short clip, stop it and open the saved file.",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": ["obs-basics-01-display-capture", "obs-basics-03-recording-settings"],
+  "appVersion": ">=30",
+  "tags": ["recording"],
+  "steps": [
+    {
+      "id": "check-preview",
+      "say": "Check the preview shows what you want to record. Say next when it looks right.",
+      "target": { "region": "preview" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "If the preview is black, add a Display Capture source first.",
+        "The lesson called Show your screen with Display Capture walks through it."
+      ],
+      "why": "Whatever is in the preview is what ends up in the file."
+    },
+    {
+      "id": "start",
+      "say": "Click Start Recording in the Controls panel at the bottom right.",
+      "target": { "element": { "name": "Start Recording", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetRecordStatus", "outputActive": true }
+            },
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Start Recording" } },
+            {
+              "type": "vision",
+              "prompt": "Does the Controls panel now show Stop Recording, with a running timer in the status bar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is the second button in the Controls panel, under Start Streaming.",
+        "Press Tab until Start Recording is focused, then press Space."
+      ],
+      "why": "Recording only starts when you press this button or a hotkey you set.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Start Recording", "role": "Button" } }]
+      }
+    },
+    {
+      "id": "wait",
+      "say": "Let it run for about five seconds. Watch the timer count up in the bottom bar.",
+      "target": { "region": "status-bar" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "The red dot and timer at the bottom show a recording is in progress.",
+        "Say next when a few seconds have passed."
+      ],
+      "why": "A short test clip checks picture and sound before a real session."
+    },
+    {
+      "id": "stop",
+      "say": "Click Stop Recording in the same place.",
+      "target": { "element": { "name": "Stop Recording", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "obs",
+              "expect": { "request": "GetRecordStatus", "outputActive": false }
+            },
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Stop Recording" } },
+            {
+              "type": "vision",
+              "prompt": "Does the Controls panel show Start Recording again, with the recording timer stopped?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The button changed its text when recording began.",
+        "OBS may show a short message with the saved file name."
+      ],
+      "why": "Stopping cleanly finishes the file so every player can open it.",
+      "doItForMe": {
+        "actions": [{ "t": "invoke", "element": { "name": "Stop Recording", "role": "Button" } }]
+      }
+    },
+    {
+      "id": "show-recordings",
+      "say": "Open the File menu and choose Show Recordings to see your new file.",
+      "target": { "element": { "name": "File", "role": "MenuItem" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Show Recordings" } },
+            {
+              "type": "vision",
+              "prompt": "Is a File Explorer window open showing a folder with a recent video file?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "File is the first item in the menu bar at the top left.",
+        "Press Alt then F to open the File menu."
+      ],
+      "why": "OBS opens the Recording Path folder so you can play or share the clip."
+    }
+  ]
+}
