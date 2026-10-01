@@ -68,7 +68,7 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 - `agent/` — `bridge` (protocol v2 client: `ready` handshake with timeout, `init` from config resent after every restart, restart backoff, per-command timeouts, per-launch generation), `commands` (typed v2 wrappers), `state` (`buildAgentInitState`: hotkeys, dwell, log level, `mouse-moved` / `focus-changed` subscriptions), `impl` (exe path + `REQUIRED_NATIVE_CAPABILITIES`), `events` (hotkey/dwell/cancel wiring), `escape` (ref-counted global Escape).
 - `guides/` — `store` (saved guides, id validation), `voice-nav` (whole-utterance next/back/repeat/done), `session`.
 - `teach/bridges/` — lesson `bridge` checks: Blender add-on client (`bridges/blender/lumen_bridge`, TCP 127.0.0.1:47651, token in `%APPDATA%/Lumen/blender-bridge.token`, read-only), obs-websocket v5 client on the global WebSocket (password DPAPI-encrypted in `~/.ai-overlay/bridges.dat`), `expect` DSL (`expect.ts`, keys listed in `skills/schema/bridge-keys.json`). Settings → App helpers. Add-on tests: `python -m unittest discover -s bridges/blender/tests`.
-- `speech/` — `stt` (local sherpa-onnx or cloud Whisper), `tts`, `wake/` (sherpa-onnx keyword spotter in main), `dictation/`.
+- `speech/` — `stt` (local sherpa-onnx or cloud Whisper), `tts`, `wake/` (sherpa-onnx keyword spotter), `dictation/`. The spotter and the offline recognizer run in one worker thread (`sherpa-worker.ts` → `sherpa-engine.ts`); `sherpa.ts` is main's message API (request/reply by id, crash → new worker). `node scripts/bench-sherpa.mjs` measures their main-thread cost.
 - `config.ts` — load/migrate/save `~/.ai-overlay/config.json`; `logger.ts`.
 
 ### Native agent (`native/`)
