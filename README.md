@@ -66,6 +66,8 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 
 ## Install
 
+Step-by-step guide with the SmartScreen warning, updates and uninstall: [docs/INSTALL.md](./docs/INSTALL.md).
+
 Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and an Anthropic or OpenAI API key. No Python, no Admin rights.
 
 1. Download `Lumen-Setup-<version>.exe` from [Releases](https://github.com/JanoTheDev/lumen/releases), or `Lumen-<version>-portable.exe` to run without installing. Optionally check it against `SHA256SUMS.txt` from the same release: `Get-FileHash .\Lumen-Setup-<version>.exe`.
@@ -74,6 +76,8 @@ Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and an Anthrop
 4. Hold **Ctrl+Shift+Space**, speak, release.
 
 Speech recognition and wake-word models (about 100 MB and 18 MB) download on first use and are checked against pinned SHA-256 hashes.
+
+The installed version checks for updates once a day, downloads them in the background and installs them when you quit (Settings → About to turn this off); the portable one shows a link instead.
 
 Settings, keys and models live in `%USERPROFILE%\.ai-overlay`; logs in `%APPDATA%\Lumen\logs` (Settings → About → Open logs folder, or Export diagnostics for a zip without keys). Uninstall from Windows Settings → Apps; it asks whether to remove your settings, keys and models too. The portable build never adds start-at-login entries and uses the same settings folder.
 
