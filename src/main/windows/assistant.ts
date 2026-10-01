@@ -39,8 +39,13 @@ const captionTimer = new PausableTimer()
 /** "Longer" multiplier for the answer auto-close; back to 1 on every new turn. */
 let closeFactor = 1
 let inFlight: string | null = null
-let pendingConfirm: { actionId: string; resolve: (ok: boolean) => void } | null = null
-let denyNextExecute = false
+let pendingConfirm: {
+  actionId: string
+  gatesExecute: boolean
+  resolve: (ok: boolean) => void
+} | null = null
+/** Set when the user stopped an explain-before-do confirm; skips that turn's execute. */
+let deniedExecute = false
 let turnSeq = 0
 
 const empty = (): AssistantView => ({
@@ -186,16 +191,24 @@ export function showAnswer(text: string): void {
   })
 }
 
-/** Shows a confirm card; resolves true on confirm (or countdown end), false on deny/close. */
-export function requestConfirm(c: {
-  summary: string
-  risk: 'low' | 'medium' | 'high'
-  countdownMs?: number
-}): Promise<boolean> {
+/**
+ * Shows a confirm card; resolves true on confirm (or countdown end), false on deny/close.
+ * `gatesExecute`: a deny also skips the execute that follows in this turn (explain-before-do).
+ */
+export function requestConfirm(
+  c: {
+    summary: string
+    risk: 'low' | 'medium' | 'high'
+    countdownMs?: number
+  },
+  opts: { gatesExecute?: boolean } = {}
+): Promise<boolean> {
   if (pendingConfirm) resolveConfirm(false)
+  const gatesExecute = !!opts.gatesExecute
+  if (gatesExecute) deniedExecute = false
   const actionId = `a${Date.now().toString(36)}`
   return new Promise<boolean>((resolve) => {
-    pendingConfirm = { actionId, resolve }
+    pendingConfirm = { actionId, gatesExecute, resolve }
     patch({ phase: 'confirm', confirm: { actionId, ...c } })
   })
 }
@@ -204,15 +217,15 @@ function resolveConfirm(ok: boolean): void {
   const p = pendingConfirm
   if (!p) return
   pendingConfirm = null
-  if (!ok) denyNextExecute = true
+  if (!ok && p.gatesExecute) deniedExecute = true
   view = { ...view, confirm: undefined, phase: ok ? 'acting' : 'idle' }
   p.resolve(ok)
 }
 
-/** True once after the user stopped a confirm, so the following execute is skipped. */
+/** True once after the user stopped this turn's explain-before-do confirm. */
 export function consumeDenied(): boolean {
-  const d = denyNextExecute
-  denyNextExecute = false
+  const d = deniedExecute
+  deniedExecute = false
   return d
 }
 
@@ -377,6 +390,8 @@ registerWindow(get, { zoom: true, interactive: true, hitRect })
 
 bus.on('query.started', (e) => {
   inFlight = e.turnId
+  // A deny belongs to the turn it was given in; never skip a later turn's execute.
+  deniedExecute = false
   if (!view.visible) return
   if (view.caption) return
   patch({ caption: e.prompt })

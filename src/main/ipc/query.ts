@@ -90,14 +90,17 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
       if (uiV2() && cfg.explainBeforeDo) {
         // The bar asks with a countdown; Stop skips the execute that follows.
-        await assistant.requestConfirm({
-          summary: summary.trim(),
-          risk: conf === 'low' ? 'medium' : 'low',
-          countdownMs: confirmCountdownMs(
-            cfg,
-            conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
-          )
-        })
+        await assistant.requestConfirm(
+          {
+            summary: summary.trim(),
+            risk: conf === 'low' ? 'medium' : 'low',
+            countdownMs: confirmCountdownMs(
+              cfg,
+              conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
+            )
+          },
+          { gatesExecute: true }
+        )
         return { delayMs: 0 }
       }
       const baseText = `About to: ${summary.trim()}`
