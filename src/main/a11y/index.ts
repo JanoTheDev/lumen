@@ -233,7 +233,7 @@ async function refreshAtState(): Promise<void> {
   try {
     if (setAtState(await agent.request('a11y_state', {}, { timeoutMs: 2000 }))) narrator?.sync()
   } catch {
-    /* E_UNSUPPORTED on the native agent until 02 adds it */
+    /* keep the last state */
   }
 }
 
@@ -284,20 +284,15 @@ export function installA11y(): void {
   const sw = installSwitch({
     commands: () => a11y,
     announce: (text) => announce(text, { kind: 'scan' }),
-    feedback: (text, ok) => {
-      setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
-      announce(text, { kind: ok ? 'command' : 'error' })
-    }
+    feedback
   })
   switchCtl = sw
   const shortcuts = installShortcuts({
     commands: () => a11y,
     toggleKeyboard: () => sw.toggleKeyboard(),
-    feedback: (text, ok) => {
-      setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
-      announce(text, { kind: ok ? 'command' : 'error' })
-    }
+    feedback
   })
+
   registerA11yIpc({
     commands: () => commandSheetData(commandsImpl.context(), helpShortcut()),
     closeSheet: () => commandSheet.hide(),
