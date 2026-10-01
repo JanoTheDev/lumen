@@ -350,10 +350,23 @@ function useWindowsVoices(): SpeechSynthesisVoice[] {
   return voices
 }
 
+/** True while a screen reader runs (checked once when the section opens). */
+function useScreenReader(): boolean {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    window.lumen
+      .invoke('onboarding:info')
+      .then((info) => setOn(info.screenReader))
+      .catch(() => {})
+  }, [])
+  return on
+}
+
 export function Voice({ cfg, patch }: SectionProps): JSX.Element {
   const speaking = cfg.voice.tts !== 'off'
   const cloud = cfg.voice.tts === 'cloud'
   const winVoices = useWindowsVoices()
+  const screenReader = useScreenReader()
   const voiceOptions = cloud
     ? OPENAI_VOICES.map((v) => ({ value: v as string, label: v[0].toUpperCase() + v.slice(1) }))
     : winVoices.map((v) => ({ value: v.name, label: v.name.replace(/^Microsoft /, '') }))
@@ -465,6 +478,30 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
             Preview voice
           </Button>
         </div>
+        <Switch
+          checked={cfg.voice.bargeIn}
+          disabled={!speaking}
+          onChange={(bargeIn) => patch({ voice: { bargeIn } })}
+          label="Stop talking when I talk"
+          hint="Speak over an answer to interrupt it and ask something new. The microphone is on while Lumen speaks. Use headphones for barge-in if Lumen interrupts itself."
+        />
+        <Switch
+          checked={cfg.voice.copyWhenMuted}
+          disabled={!speaking}
+          onChange={(copyWhenMuted) => patch({ voice: { copyWhenMuted } })}
+          label="Copy the answer when sound is muted"
+          hint="When your sound is muted, Lumen shows the answer with an Unmute button instead of speaking."
+        />
+        <Switch
+          checked={cfg.voice.ttsWithScreenReader}
+          disabled={!speaking}
+          onChange={(ttsWithScreenReader) => patch({ voice: { ttsWithScreenReader } })}
+          label="Speak even when a screen reader is running"
+          hint={
+            (screenReader ? 'A screen reader is running now. ' : '') +
+            'When this is off, answers go to your screen reader so you don’t hear two voices at once.'
+          }
+        />
       </Card>
     </>
   )
