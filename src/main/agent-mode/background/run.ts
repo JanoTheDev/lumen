@@ -1,6 +1,8 @@
 // One background run on the shared agent-loop runner: background tool set (plus skills), no
 // plan, no countdown, no input lane, nothing spoken by the runner. A cap (calls, cost, wall
-// time) pauses the task with a queued "Keep going?" question.
+// time) pauses the task with a queued "Keep going?" question. In a skill run, file changes
+// (create / rename / move) ask first in the Tasks list unless the skill is trusted and not risky.
+import type { SkillManifest, SkillTrust } from '@shared/types'
 import type {
   AgentMessage,
   SystemBlock,
@@ -8,6 +10,7 @@ import type {
   ToolTurnResult,
   Usage
 } from '../../ai/providers/types'
+import { confirmsEveryAction } from '../../skills/permissions'
 import { runAgent, type Caps, type RunnerDeps, type ToolHandler } from '../runner'
 import type { ToolGuard } from '../skill-run'
 import { createBackgroundHandlers, type BgPorts } from './handlers'
@@ -48,6 +51,78 @@ export interface BgRunEnv {
   toolGuard?: ToolGuard
   /** Whether a tool is offered to the model at all (a skill run offers only what it may use). */
   offers?(tool: string): boolean
+  /** The installed skill by name, with its trust (default: the skill registry). */
+  skillInfo?(name: string): Promise<RunSkillInfo | null>
+}
+
+/** Tools that change the user's files. */
+export const FILE_WRITE_TOOLS = new Set(['create_file', 'rename_file', 'move_file'])
+
+export interface RunSkillInfo {
+  name: string
+  manifest: SkillManifest
+  trust: SkillTrust
+}
+
+/**
+ * Whether a file change in this run asks the user first: in a skill run, unless the skill is
+ * known, trusted and not risky (a community skill that left out `tools:` must not rename or
+ * move files unasked). Pure.
+ */
+export function fileWriteNeedsConfirm(skillRun: boolean, skill: RunSkillInfo | null): boolean {
+  if (!skillRun) return false
+  return !skill || confirmsEveryAction(skill.manifest, skill.trust)
+}
+
+/** What the file change is, for the question. */
+export function fileWriteText(tool: string, input: Record<string, unknown>): string {
+  const str = (k: string): string => String(input[k] ?? '').slice(0, 120)
+  const base = (p: string): string => p.split(/[\\/]/).pop() ?? p
+  if (tool === 'rename_file') return `rename ${base(str('path'))} to ${str('newName')}`
+  if (tool === 'move_file') return `move ${base(str('path'))} to ${str('toFolder')}`
+  return `save a file "${str('name') || str('title')}"`
+}
+
+async function registrySkill(name: string): Promise<RunSkillInfo | null> {
+  try {
+    const { getSkillRegistry } = await import('../../skills')
+    const reg = getSkillRegistry()
+    const s = reg?.get(name)
+    return reg && s ? { name, manifest: s.manifest, trust: reg.trustOf(s) } : null
+  } catch {
+    return null
+  }
+}
+
+/** The file-changing handlers behind a queued "Allow it?" when the run's skill needs it. */
+export function fileWriteGuarded(
+  handlers: Record<string, ToolHandler>,
+  needs: () => Promise<{ confirm: boolean; skill: string }>,
+  ask: (text: string) => Promise<boolean>,
+  audit: BgPorts['audit']
+): Record<string, ToolHandler> {
+  const out: Record<string, ToolHandler> = { ...handlers }
+  for (const name of FILE_WRITE_TOOLS) {
+    const h = handlers[name]
+    if (!h) continue
+    out[name] = async (input, ctx) => {
+      const n = await needs()
+      if (n.confirm && !(await ask(`${n.skill}: ${fileWriteText(name, input)}. Allow it?`))) {
+        audit({ type: name }, 'denied', 'the user said no')
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'E_DENIED: the user said no to this file change. Do not retry it.'
+            }
+          ],
+          isError: true
+        }
+      }
+      return h(input, ctx)
+    }
+  }
+  return out
 }
 
 /** Every handler behind a skill guard (async; it may ask the user first). */
@@ -101,7 +176,29 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
   const more = env.moreTools
     ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
     : { defs: [] as ToolDef[], handlers: {} }
-  const all = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
+  const base = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
+  const skillRun = !!task.skill || !!env.toolGuard
+  let need: Promise<{ confirm: boolean; skill: string }> | null = null
+  const all = skillRun
+    ? fileWriteGuarded(
+        base,
+        () =>
+          (need ??= (async () => {
+            const info = task.skill
+              ? await (env.skillInfo ?? registrySkill)(task.skill).catch(() => null)
+              : null
+            return {
+              confirm: fileWriteNeedsConfirm(true, info),
+              skill: task.skill ? `Skill “${task.skill}”` : 'This skill task'
+            }
+          })()),
+        async (text) => {
+          const a = await ctl.ask(text, ['Allow', 'Deny'])
+          return !ctl.signal.aborted && /^(allow|yes|ok|okay|sure)\b/i.test(a.trim())
+        },
+        env.ports.audit
+      )
+    : base
   const inner = env.toolGuard ? skillGuarded(all, env.toolGuard) : all
   const handlers = env.guard ? guarded(inner, env.guard, env.ports.audit) : inner
   const offered = (d: ToolDef): boolean => !env.offers || env.offers(d.name)
