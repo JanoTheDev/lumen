@@ -227,6 +227,19 @@ describe('offers to save a task as a skill', () => {
     expect(await t.text('yes')).toMatch(/^Draft skill/)
   })
 
+  it('"yes" drafts the offered run even when another task ended since', async () => {
+    const t = setup()
+    t.c.rememberRun(trace('export the image as png'))
+    t.c.rememberRun(trace('export the image as png'))
+    expect(t.said[0]).toMatch(/Want me to save it as a skill\?/)
+    t.tick(30_000)
+    t.c.rememberRun(trace('crop the photo', 1_030_000))
+    expect(await t.text('yes')).toMatch(/^Draft skill/)
+    const turn = vi.mocked(t.deps.words).mock.calls.at(-1)![0]
+    expect(turn).toContain('export the image as png')
+    expect(turn).not.toContain('crop the photo')
+  })
+
   it('remembers a no and stays quiet when the user is away', async () => {
     const t = setup()
     t.c.rememberRun(trace('export the image as png'))

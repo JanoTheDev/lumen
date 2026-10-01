@@ -191,7 +191,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
   let lastRun: AgentRunTrace | null = null
   let pending: Pending | null = null
   /** The offer to save the last run as a skill, waiting for yes / no. */
-  let offered: { sig: RunSignature; at: number } | null = null
+  let offered: { sig: RunSignature; run: AgentRunTrace; at: number } | null = null
   /** A needs-update notice, for "update it". */
   let stale: { name: string; at: number } | null = null
   /** The latest run that worked, per skill (memory only), for "update the X skill". */
@@ -212,8 +212,8 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
     return `Draft skill “${sayable(draft.name)}”: ${draft.description}${may} Say “save it”, “call it” and a name, “read it back”, or “discard it”.`
   }
 
-  async function fromLastRun(name?: string): Promise<ModelResponse> {
-    const run = lastRun
+  /** `run`: the offered one ("yes" saves what was offered, not a later run). */
+  async function fromLastRun(name?: string, run = lastRun): Promise<ModelResponse> {
     if (!run || deps.now() - run.at > LAST_RUN_MS)
       return answer('There is no finished task to save yet. Ask me to do something first.')
     const text = await deps
@@ -354,7 +354,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       now: deps.now()
     })
     if (!verdict || pending || (deps.canSpeakUp && !deps.canSpeakUp())) return
-    offered = { sig: verdict.sig, at: deps.now() }
+    offered = { sig: verdict.sig, run, at: deps.now() }
     store.answered(verdict.sig, 'offered', deps.now())
     deps.log(`offering to save a ${verdict.reason} task as a skill`)
     ;(deps.notice ?? deps.say)(offerLine(verdict.reason as ProposalReason))
@@ -372,7 +372,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
     offered = null
     if (a === 'yes') {
       deps.proposals?.answered(o.sig, 'yes', deps.now())
-      return fromLastRun()
+      return fromLastRun(undefined, o.run)
     }
     deps.proposals?.answered(o.sig, 'no', deps.now())
     if (a === 'never') {
