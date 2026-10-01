@@ -32,6 +32,7 @@ import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
 import { dwellController } from './dwell'
 import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
 import { installDwell } from './install-dwell'
+import { installShortcuts } from './install-shortcuts'
 import { installSwitch, type SwitchControl } from './install-switch'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
@@ -289,6 +290,14 @@ export function installA11y(): void {
     }
   })
   switchCtl = sw
+  const shortcuts = installShortcuts({
+    commands: () => a11y,
+    toggleKeyboard: () => sw.toggleKeyboard(),
+    feedback: (text, ok) => {
+      setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
+      announce(text, { kind: ok ? 'command' : 'error' })
+    }
+  })
   registerA11yIpc({
     commands: () => commandSheetData(commandsImpl.context(), helpShortcut()),
     closeSheet: () => commandSheet.hide(),
@@ -296,6 +305,7 @@ export function installA11y(): void {
     dwellPick: (pick) => dwell.choose(pick),
     keyboardState: () => sw.keyboardState(),
     keyboardKey: (id) => sw.keyboardKey(id),
-    toggleKeyboard: () => sw.toggleKeyboard()
+    toggleKeyboard: () => sw.toggleKeyboard(),
+    shortcuts: () => shortcuts.status()
   })
 }

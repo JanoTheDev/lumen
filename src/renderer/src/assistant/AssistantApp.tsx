@@ -81,6 +81,13 @@ export function AssistantApp(): JSX.Element {
   const wasShown = useRef(false)
 
   useIpc('assistant:state', setView)
+  // Focus shortcut (06 T17): main made the window focusable; land on the first control.
+  useIpc('assistant:focus', () => {
+    const el = cardRef.current?.querySelector<HTMLElement>(
+      'button, [href], [tabindex]:not([tabindex="-1"])'
+    )
+    el?.focus()
+  })
   if (view.visible && shown !== view) setShown(view)
   const hasCard = shown !== null
 
@@ -183,6 +190,21 @@ export function AssistantApp(): JSX.Element {
   const openLink = (url: string): void => send('assistant:open-link', url)
   const command = (type: 'repeat' | 'copy' | 'pin' | 'close'): void =>
     send('assistant:command', { type, turnId: v.answer?.turnId })
+  // Keyboard in the bar: Esc closes (or says no to a confirm), arrows scroll the answer.
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      send('assistant:command', { type: v.confirm ? 'deny' : 'close' })
+      return
+    }
+    const scroll = answerRef.current
+    if (!scroll || e.target === scroll) return
+    const step = { ArrowDown: 40, ArrowUp: -40, PageDown: 0.9, PageUp: -0.9 }[e.key]
+    if (step === undefined) return
+    e.preventDefault()
+    const by = Math.abs(step) < 1 ? step * scroll.clientHeight : step
+    scroll.scrollBy({ top: by, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+  }
 
   return (
     <>
@@ -205,6 +227,7 @@ export function AssistantApp(): JSX.Element {
                   setHover(false)
                   send('assistant:interactive', false)
                 }}
+                onKeyDown={onKeyDown}
                 onFocus={() => setFocusWithin(true)}
                 onBlur={(e) => {
                   if (!e.currentTarget.contains(e.relatedTarget as Node | null))

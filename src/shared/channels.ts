@@ -53,6 +53,8 @@ export interface InvokeChannels {
   /** Dwell click-type palette: current pick, pause and drag/scroll state. */
   'a11y:dwell-state': { args: []; result: DwellPaletteState }
   'a11y:keyboard-state': { args: []; result: ScanKeyboardState }
+  /** Global a11y shortcuts and whether each is bound, off, waiting or in conflict. */
+  'a11y:shortcuts': { args: []; result: ShortcutStatus[] }
   /** Applies accessibility profiles (shared/profiles ids) on top of the config; returns it. */
   'a11y:apply-profile': { args: [ids: string[]]; result: Record<string, unknown> }
   'onboarding:info': { args: []; result: OnboardingInfo }
@@ -125,6 +127,18 @@ export interface SendChannels {
   'a11y:dwell-pick': [pick: DwellPaletteButton | 'keyboard']
   /** Scan keyboard key clicked or dwelled on (ScanKeyboardKey id). */
   'a11y:keyboard-key': [id: string]
+}
+
+/**
+ * One a11y shortcut: bound, off (""), inactive (only held while dwell / a lesson runs),
+ * conflict (same key as another Lumen shortcut, `with` says which) or taken by another app.
+ */
+export interface ShortcutStatus {
+  action: string
+  label: string
+  accelerator: string
+  state: 'bound' | 'off' | 'inactive' | 'conflict' | 'taken'
+  with?: string
 }
 
 /** One scan keyboard key; `on` = a latched modifier (Shift, Caps). */
@@ -460,6 +474,8 @@ export interface EventChannels {
   'a11y:sheet-refresh': []
   'a11y:dwell-state': [state: DwellPaletteState]
   'a11y:keyboard-state': [state: ScanKeyboardState]
+  /** Assistant bar got keyboard focus from the shortcut: focus its first control. */
+  'assistant:focus': []
   'voice:tts': [msg: TtsMessage]
   /** Start or stop streaming mic audio to the wake-word spotter. */
   'voice:wake-listen': [on: boolean]
@@ -496,6 +512,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'a11y:commands',
   'a11y:dwell-state',
   'a11y:keyboard-state',
+  'a11y:shortcuts',
   'a11y:apply-profile',
   'onboarding:info',
   'memory:get',
@@ -576,7 +593,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'memory:changed',
   'a11y:sheet-refresh',
   'a11y:dwell-state',
-  'a11y:keyboard-state'
+  'a11y:keyboard-state',
+  'assistant:focus'
 ]
 
 /** Typed surface exposed to renderers as `window.lumen`. */

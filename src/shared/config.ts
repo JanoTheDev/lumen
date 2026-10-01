@@ -167,6 +167,31 @@ const a11yMarksSchema = z.object({
   badgeSize: z.enum(['s', 'm', 'l']).default('m')
 })
 
+const shortcut = z.union([z.literal(''), z.string().regex(HOTKEY_RE)])
+
+/**
+ * Global shortcuts (06 T17); "" = none. Answer keys are bound only while an answer shows,
+ * dwell pause only while dwell is on, lesson keys only while a lesson runs.
+ */
+const a11yShortcutsSchema = z.object({
+  focusBar: shortcut.default('Ctrl+Shift+F2'),
+  repeat: shortcut.default('Ctrl+Shift+F3'),
+  pin: shortcut.default('Ctrl+Shift+F4'),
+  close: shortcut.default('Ctrl+Shift+F5'),
+  numbers: shortcut.default('Ctrl+Shift+F6'),
+  grid: shortcut.default('Ctrl+Shift+F7'),
+  dwellPause: shortcut.default('Ctrl+Shift+F8'),
+  cancel: shortcut.default('Ctrl+Shift+F9'),
+  keyboard: shortcut.default('Ctrl+Shift+F10'),
+  lessonNext: shortcut.default('Ctrl+Alt+Right'),
+  lessonBack: shortcut.default('Ctrl+Alt+Left'),
+  lessonHelp: shortcut.default('Ctrl+Alt+H'),
+  lessonDoIt: shortcut.default('Ctrl+Alt+D')
+})
+
+export type A11yShortcuts = z.infer<typeof a11yShortcutsSchema>
+export type A11yShortcutAction = keyof A11yShortcuts
+
 export const A11Y_DEFAULTS = {
   timings: { statusHoldMs: 4000, captionHoldMs: 0 },
   dwell: {
@@ -182,12 +207,28 @@ export const A11Y_DEFAULTS = {
     palette: false
   },
   marks: { keep: false, badgeSize: 'm' },
-  switch: { enabled: false, mode: 'auto', scanIntervalMs: 1500, loops: 3, keys: ['Space'] }
+  switch: { enabled: false, mode: 'auto', scanIntervalMs: 1500, loops: 3, keys: ['Space'] },
+  shortcuts: {
+    focusBar: 'Ctrl+Shift+F2',
+    repeat: 'Ctrl+Shift+F3',
+    pin: 'Ctrl+Shift+F4',
+    close: 'Ctrl+Shift+F5',
+    numbers: 'Ctrl+Shift+F6',
+    grid: 'Ctrl+Shift+F7',
+    dwellPause: 'Ctrl+Shift+F8',
+    cancel: 'Ctrl+Shift+F9',
+    keyboard: 'Ctrl+Shift+F10',
+    lessonNext: 'Ctrl+Alt+Right',
+    lessonBack: 'Ctrl+Alt+Left',
+    lessonHelp: 'Ctrl+Alt+H',
+    lessonDoIt: 'Ctrl+Alt+D'
+  }
 } as const satisfies {
   timings: z.infer<typeof a11yTimingsSchema>
   dwell: z.infer<typeof a11yDwellSchema>
   marks: z.infer<typeof a11yMarksSchema>
   switch: z.infer<typeof a11ySwitchSchema>
+  shortcuts: A11yShortcuts
 }
 
 export const configV2Schema = z.object({
@@ -263,7 +304,8 @@ export const configV2Schema = z.object({
     /** Profiles picked in onboarding / Settings (06 profiles.md ids). */
     profiles: z.array(z.string().max(30)).max(12).default([]),
     /** Opens the "what can I say" sheet; "" = no shortcut. Filled from the defaults on load. */
-    helpHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional()
+    helpHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional(),
+    shortcuts: a11yShortcutsSchema.default(A11Y_DEFAULTS.shortcuts)
   }),
   buddy: z.object({
     enabled: z.boolean(),
@@ -368,7 +410,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     confirmTranscript: 'risky',
     simpleMode: false,
     profiles: [],
-    helpHotkey: 'Ctrl+Shift+F1'
+    helpHotkey: 'Ctrl+Shift+F1',
+    shortcuts: { ...A11Y_DEFAULTS.shortcuts }
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },

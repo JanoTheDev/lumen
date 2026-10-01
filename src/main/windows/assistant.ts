@@ -325,6 +325,25 @@ export function setInteractive(on: boolean): void {
   else w.setIgnoreMouseEvents(true, { forward: true })
 }
 
+/**
+ * Keyboard focus into the bar (06 T17 shortcut): the window is made focusable until it loses
+ * focus again, so it never steals focus otherwise. False when the bar is not showing.
+ */
+export function focusBar(): boolean {
+  const w = get()
+  if (!w || !view.visible) return false
+  w.setFocusable(true)
+  w.setIgnoreMouseEvents(false)
+  w.focus()
+  send('assistant:focus')
+  w.once('blur', () => {
+    if (w.isDestroyed()) return
+    w.setFocusable(false)
+    w.setIgnoreMouseEvents(true, { forward: true })
+  })
+  return true
+}
+
 /** Screen rect of the visible card, for dwell suppression. */
 function hitRect(): Rectangle | null {
   const w = get()

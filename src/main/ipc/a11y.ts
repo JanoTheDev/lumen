@@ -4,7 +4,8 @@ import type {
   CommandSheetData,
   DwellPaletteButton,
   DwellPaletteState,
-  ScanKeyboardState
+  ScanKeyboardState,
+  ShortcutStatus
 } from '@shared/channels'
 import { dwellPickSchema, keyboardKeySchema } from '@shared/ipc'
 import { safeParse } from './validate'
@@ -17,6 +18,7 @@ export interface A11yIpcDeps {
   keyboardState: () => ScanKeyboardState
   keyboardKey: (id: string) => void
   toggleKeyboard: () => void
+  shortcuts: () => ShortcutStatus[]
 }
 
 export function registerA11yIpc(deps: A11yIpcDeps): void {
@@ -29,6 +31,7 @@ export function registerA11yIpc(deps: A11yIpcDeps): void {
     else if (pick) deps.dwellPick(pick)
   })
   ipcMain.handle('a11y:keyboard-state', () => deps.keyboardState())
+  ipcMain.handle('a11y:shortcuts', () => deps.shortcuts())
   ipcMain.on('a11y:keyboard-key', (_e, raw: unknown) => {
     const id = safeParse('a11y:keyboard-key', keyboardKeySchema, raw)
     if (id) deps.keyboardKey(id)
