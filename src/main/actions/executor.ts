@@ -2,7 +2,7 @@
 // turn's screen context (resolveTarget), refinement of low-confidence clicks, on-screen
 // preview, safety policy and cancellation.
 import { shell } from 'electron'
-import type { Action, Target } from '@shared/types'
+import type { Action, Rect, Target } from '@shared/types'
 import { currentFrame, physToLogical, rectCenter } from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
 import { assertSafeUrl } from './safety'
@@ -23,6 +23,7 @@ import { log } from '../logger'
 import * as highlight from '../windows/highlight'
 import { setStatus } from '../windows/status'
 import { sleep } from '../util'
+import { waitForSettle } from '../ai/observe'
 
 // How long an uncertain target stays on screen before the click (cancel window).
 const CONFIRM_MS = 2500
@@ -30,6 +31,8 @@ const CONFIRM_MS = 2500
 export interface ExecuteOptions {
   /** Zoom-crop refine for low-confidence and point click targets (T14). Default true. */
   refine?: boolean
+  /** Refine every click target, whatever its confidence (the loop's retry). */
+  forceRefine?: boolean
   /** Show the target highlight / pointer before clicking. Default true. */
   preview?: boolean
   signal?: AbortSignal
@@ -43,6 +46,8 @@ export interface ExecuteResult {
   blocked: boolean
   /** A scroll hit the bottom of the page; the rest of the batch was skipped. */
   reachedBottom: boolean
+  /** Physical rects of the click targets, in order (the verifier diffs around them). */
+  targets: Rect[]
 }
 
 // Only a v2 agent that advertises dwell understands dwell_pause/dwell_resume.
@@ -127,7 +132,10 @@ async function resolveClick(
 // Resolves one model action into what the agent runs, refining and previewing clicks.
 async function resolve(
   action: Action,
-  opts: Required<Pick<ExecuteOptions, 'refine' | 'preview'>> & { signal?: AbortSignal }
+  opts: Required<Pick<ExecuteOptions, 'refine' | 'preview' | 'forceRefine'>> & {
+    signal?: AbortSignal
+    targets: Rect[]
+  }
 ): Promise<AgentAction | null> {
   const plan = clickPlan(action)
   if (!plan) return toAgentAction(action, currentFrame())
@@ -143,7 +151,7 @@ async function resolve(
   }
   log('step', `${action.type} "${(plan.label ?? '').slice(0, 40)}": ${describeResolved(r)}`)
   let resolved = r
-  if (opts.refine && plan.label && needsRefine(r) && canRefine()) {
+  if (opts.refine && plan.label && (opts.forceRefine || needsRefine(r)) && canRefine()) {
     const out = await refineTarget(r, plan.label, opts.signal)
     resolved = out.target
     log('step', `refine ${out.outcome} in ${out.ms}ms: ${describeResolved(resolved)}`)
@@ -154,6 +162,7 @@ async function resolve(
     }
   }
   const target = rectCenter(resolved.physRect)
+  opts.targets.push(resolved.physRect)
   if (opts.preview) {
     highlight.send('screen:highlights', [
       { label: 'Clicking here', target_hint: '', bbox: resolved.logicalRect }
@@ -171,6 +180,17 @@ async function resolve(
   }
 }
 
+/** Waits for the screen to react (see waitForSettle); a cancel just ends the wait. */
+async function settle(title: string, signal?: AbortSignal): Promise<void> {
+  await waitForSettle({ title }, signal).catch((e) => {
+    if (!signal?.aborted) log('fail', `settle wait failed: ${(e as Error).message}`)
+  })
+}
+
+async function titleNow(agent: AgentBridge): Promise<string> {
+  return agent.activeWindow().catch(() => '')
+}
+
 export async function executeActions(
   actions: Action[],
   opts: ExecuteOptions = {}
@@ -178,12 +198,14 @@ export async function executeActions(
   const agent = requireAgent()
   const refine = opts.refine ?? true
   const preview = opts.preview ?? true
+  const forceRefine = opts.forceRefine ?? false
   const { signal } = opts
   const result: ExecuteResult = {
     executed: 0,
     cancelled: false,
     blocked: false,
-    reachedBottom: false
+    reachedBottom: false,
+    targets: []
   }
   const frame = currentFrame()
   log(
@@ -201,7 +223,13 @@ export async function executeActions(
       if (signal?.aborted) break
       let scaled: AgentAction | null
       try {
-        scaled = await resolve(action, { refine, preview, signal })
+        scaled = await resolve(action, {
+          refine,
+          preview,
+          forceRefine,
+          signal,
+          targets: result.targets
+        })
       } catch (e) {
         if (signal?.aborted) break
         throw e
@@ -222,12 +250,14 @@ export async function executeActions(
 
       if (scaled.type === 'open_url' && scaled.url) {
         console.log('[execute] opening URL:', scaled.url)
+        const before = await titleNow(agent)
         await shell.openExternal(assertSafeUrl(scaled.url))
         result.executed++
-        await sleep(400)
+        await settle(before, signal)
         await agent.execute({ type: 'focus_browser' })
       } else if (scaled.type === 'navigate_url' && scaled.url) {
         console.log('[execute] navigate_url:', scaled.url)
+        const before = await titleNow(agent)
         try {
           await agent.execute(scaled)
         } catch (e) {
@@ -236,7 +266,8 @@ export async function executeActions(
           await shell.openExternal(assertSafeUrl(scaled.url))
         }
         result.executed++
-        await sleep(1500) // wait for page to finish loading before next action
+        // The page has loaded when its title changes or the frames stop moving (max 1.5 s).
+        await settle(before, signal)
       } else {
         // Show pointer preview before first click
         if (

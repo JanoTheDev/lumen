@@ -174,8 +174,15 @@ export const configV2Schema = z.object({
     maxInjectTokens: z.number().int().min(0).max(8000),
     privateMode: z.boolean()
   }),
-  /** router "legacy" = the old regex classifier + prompt overrides (rollback switch). */
-  ai: z.object({ router: z.enum(['llm', 'legacy']) }),
+  /**
+   * router "legacy" = the old regex classifier + prompt overrides (rollback switch).
+   * maxSteps caps plan/research steps (default 8), maxFollowUps a follow-up chain (default 6).
+   */
+  ai: z.object({
+    router: z.enum(['llm', 'legacy']),
+    maxSteps: z.number().int().min(1).max(20).optional(),
+    maxFollowUps: z.number().int().min(0).max(12).optional()
+  }),
   /** Speak-to-type. hotkey "" = no dedicated hotkey; autoDetect = dictate from the main hotkey. */
   dictation: z.object({
     enabled: z.boolean(),

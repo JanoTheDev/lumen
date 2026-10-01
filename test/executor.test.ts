@@ -11,6 +11,9 @@ vi.mock('electron', () => ({
   }
 }))
 vi.mock('../src/main/util', () => ({ sleep: async () => {} }))
+vi.mock('../src/main/ai/observe', () => ({
+  waitForSettle: async () => ({ reason: 'timeout', ms: 0 })
+}))
 vi.mock('../src/main/windows/highlight', () => ({ send: vi.fn(), show: vi.fn(), hide: vi.fn() }))
 vi.mock('../src/main/windows/status', () => ({ setStatus: vi.fn() }))
 type Refine = typeof import('../src/main/query/refine')
@@ -88,7 +91,13 @@ describe('executeActions', () => {
       { type: 'open_url', url: 'https://example.com/' }
     ]
     const r = await executeActions(actions)
-    expect(r).toEqual({ executed: 4, cancelled: false, blocked: false, reachedBottom: false })
+    expect(r).toEqual({
+      executed: 4,
+      cancelled: false,
+      blocked: false,
+      reachedBottom: false,
+      targets: []
+    })
     expect(executed(m)).toEqual([
       { type: 'click', x: 100, y: 50 },
       { type: 'type', text: 'hello' },

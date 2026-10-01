@@ -8,7 +8,7 @@ import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext 
 import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
 import { isResearchIntent } from './legacy/classifier'
-import { runPlanned, runResearch } from './research'
+import { runFollowUps, runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
 import { mergeSplit, recordSplitHistory, runParallelSplit, type SubResult } from './parallel'
 import {
@@ -255,10 +255,10 @@ async function runTurn(
     result = mergeSplit(split)
     timer.split(`parallel split (${split.length}) done`)
   } else if (plan.path === 'research') {
-    result = await runResearch(plan.prompt, activeWindow, opts, scope)
+    result = await runResearch(plan.prompt, ctx, opts, scope)
     timer.split('research agent done')
   } else if (plan.path === 'plan') {
-    result = await runPlanned(plan.prompt, activeWindow, opts, scope, timer)
+    result = await runPlanned(plan.prompt, ctx, opts, scope, timer)
   } else {
     const callOpts = { ...opts, ...plan.routing, context: ctx }
     result = await callModel(plan.prompt, screenshot, activeWindow, callOpts)
@@ -278,6 +278,15 @@ async function runTurn(
     log('plan', 'locate chain: follow-up replaced with a locate step')
   }
 
+  // Navigate-then-act replies run their follow-ups here, on the shared loop.
+  let shown: QueryContext | undefined = ctx.frames.length ? ctx : undefined
+  if (!opts.lowDetail && result.mode === 'action' && result.follow_up && result.actions?.length) {
+    const chain = await runFollowUps(result, prompt, ctx, opts, scope)
+    result = chain.response
+    shown = chain.ctx ?? shown
+    timer.split('follow-up chain done')
+  }
+
   // Start TTS synth early — parallel to renderer showing the answer card
   const spoken = result.mode === 'answer' ? (result.spoken ?? result.text)?.trim() : ''
   if (spoken) {
@@ -289,7 +298,7 @@ async function runTurn(
     }
   }
 
-  await present(result, prompt, deps.onGuide, ctx.frames.length ? ctx : undefined, scope.signal)
+  await present(result, prompt, deps.onGuide, shown, scope.signal)
   scope.throwIfCancelled()
 
   if (split) recordSplitHistory(split, historySummary)

@@ -6,7 +6,13 @@ import type { ModelResponse } from '@shared/types'
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
 const ui = vi.hoisted(() => ({
-  highlight: { send: vi.fn(), show: vi.fn(), hide: vi.fn(), clear: vi.fn(), isVisible: () => false },
+  highlight: {
+    send: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+    clear: vi.fn(),
+    isVisible: () => false
+  },
   answer: { showText: vi.fn(), send: vi.fn(), hide: vi.fn() },
   status: { setStatus: vi.fn() }
 }))
@@ -68,11 +74,17 @@ vi.mock('../../src/main/query/capture', async () => {
     captureScreenshot: async () => 'img'
   }
 })
+const calls = vi.hoisted(() => ({ model: 0 }))
 vi.mock('../../src/main/ai', () => ({
   callModel: async (): Promise<ModelResponse> => {
+    calls.model++
     if (hooks.scope) hooks.model?.(hooks.scope)
     return hooks.reply ?? { mode: 'answer', text: 'Hi', spoken: 'Hi' }
   }
+}))
+vi.mock('../../src/main/ai/observe', async (orig) => ({
+  ...(await orig<typeof import('../../src/main/ai/observe')>()),
+  waitForSettle: async () => ({ reason: 'frames', ms: 0 })
 }))
 
 import { CancelScope, CancelledError } from '../../src/main/query/cancel'
@@ -96,7 +108,7 @@ function sideEffects(): number {
     ui.highlight.send.mock.calls.length +
     ui.highlight.show.mock.calls.length +
     ui.answer.showText.mock.calls.length +
-    agentCalls.filter((c) => c !== 'active_window').length +
+    agentCalls.filter((c) => c !== 'active_window' && c !== 'focus_info').length +
     historyMessages().length
   )
 }
@@ -116,6 +128,7 @@ describe('cancelling a turn (T17)', () => {
     agentCalls.length = 0
     events.length = 0
     Object.assign(hooks, { route: null, capture: null, model: null, reply: null, scope: null })
+    calls.model = 0
     setAgent({
       protocol: 2,
       hasCapability: () => true,
@@ -160,6 +173,25 @@ describe('cancelling a turn (T17)', () => {
     } as ModelResponse
     await runCancelled()
     expect(sideEffects()).toBe(0)
+    expect(events).toEqual(['cancelled'])
+  })
+
+  it('cancelled inside a follow-up chain: no further input, nothing drawn', async () => {
+    hooks.reply = {
+      mode: 'action',
+      actions: [{ type: 'hotkey', keys: ['ctrl', 'l'] }],
+      follow_up: { query: 'Click the first result', delay_ms: 2000 }
+    }
+    // The first reply is the turn's own call; the chain's next call is cancelled.
+    hooks.model = (s) => {
+      if (calls.model > 1) s.cancel()
+    }
+    await runCancelled()
+    expect(calls.model).toBe(2)
+    expect(agentCalls.filter((c) => c === 'execute')).toHaveLength(1)
+    expect(ui.highlight.show).not.toHaveBeenCalled()
+    expect(speak).not.toHaveBeenCalled()
+    expect(historyMessages()).toHaveLength(0)
     expect(events).toEqual(['cancelled'])
   })
 
