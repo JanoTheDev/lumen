@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "title": "Typography in Windows apps",
+      "url": "https://learn.microsoft.com/en-us/windows/apps/design/signature-experiences/typography",
+      "description": "Typography guidance for app developers.",
+      "lastUpdatedDate": "2025-01-10T00:00:00+00:00"
+    },
+    {
+      "title": "Change the default font in Notepad",
+      "url": "https://learn.microsoft.com/en-us/windows/notepad/change-default-font",
+      "description": "How to change the font Notepad uses by default.",
+      "lastUpdatedDate": "2026-03-02T00:00:00+00:00"
+    },
+    {
+      "title": "Not a Microsoft page",
+      "url": "http://example.com/notepad-font",
+      "description": "change default font notepad"
+    }
+  ],
+  "count": 3
+}

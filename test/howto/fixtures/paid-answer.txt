@@ -1,0 +1,5 @@
+Here is how:
+1. Open the **Edit** menu and choose Preferences [UI: Edit; Preferences]
+2. Go to Interface > Display [UI: Interface; Display]
+3. Set Resolution Scale to 1.5 [UI: Resolution Scale]
+4. Save with the menu at the bottom left [UI: Save Preferences] [keys: Ctrl+S]

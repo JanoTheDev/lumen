@@ -610,6 +610,11 @@ export const configV2Schema = z.object({
      * waits for an explicit yes. On: it is medium, so the cancel-window countdown runs instead.
      */
     allowSendWithoutReview: z.boolean().default(false),
+    /**
+     * lookup_howto (05 T36): auto = learned notes, free docs, then the provider's paid web search
+     * when `web.paidSearch` is on (2 searches a task, 10 a day); free-only; off.
+     */
+    howtoLookup: z.enum(['auto', 'free-only', 'off']).default('auto'),
     /** Background tasks (08 T26–T29): concurrency, per-task caps, granted folders, quiet. */
     background: z
       .object({
@@ -842,6 +847,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     confirm: 'risky',
     cancelWindowMs: 3000,
     allowSendWithoutReview: false,
+    howtoLookup: 'auto',
     background: {
       max: 3,
       maxModelCalls: 30,

@@ -50,6 +50,8 @@ export interface ToolOutcome {
   noAnswer?: boolean
   /** Short line for the step's detail list. */
   label?: string
+  /** Money the tool spent itself (a paid web search), added to the task's cost. */
+  costUsd?: number
 }
 
 export interface ToolCtx {
@@ -436,6 +438,8 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     deps.observe?.({ type: 'result', call, outcome })
     if (outcome.actions)
       task.counters = { ...task.counters, actions: task.counters.actions + outcome.actions }
+    if (outcome.costUsd)
+      task.counters = { ...task.counters, costUsd: task.counters.costUsd + outcome.costUsd }
     if (outcome.verifyFailed && step !== undefined) {
       verifyFails[step] = fails + 1
       if (fails + 1 >= 2) {
