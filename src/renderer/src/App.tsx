@@ -44,10 +44,16 @@ export default function App(): JSX.Element {
   const vadRef = useRef<VadConfig | null>(null)
   const barsRef = useRef<Array<HTMLDivElement | null>>([])
 
+  // A newer session (or a cancel) took over: the older turn must not act any further.
+  const stale = (session: number): boolean =>
+    session !== voiceSessionRef.current || cancelledRef.current
+
   const applyResponse = async (
     r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } },
+    session: number,
     depth = 0
   ): Promise<void> => {
+    if (stale(session)) return
     if (r.mode === 'answer' && depth > 0) {
       // AI returned answer in a follow_up chain — means it's done (or confused). Stop chain.
       // System prompt forbids answer mode in follow_up; if it slips through, don't auto-scroll.
@@ -62,10 +68,13 @@ export default function App(): JSX.Element {
           (r as { summary?: string }).summary ?? r.actions.map((a) => a.type).join(', ')
         const confidence = (r as { confidence?: string }).confidence
         const { delayMs } = await window.api.announceAction(summary, confidence)
+        if (stale(session)) return
         if (delayMs > 0) await new Promise((res) => setTimeout(res, delayMs))
+        if (stale(session)) return
         const execResult = (await window.api.executeAction(r.actions)) as
           | { done: boolean; reached_bottom?: boolean }
           | undefined
+        if (stale(session)) return
         if (execResult?.reached_bottom) {
           console.log('[follow_up] reached_bottom — stopping chain')
           return
@@ -74,12 +83,13 @@ export default function App(): JSX.Element {
           const { query, delay_ms } = r.follow_up
           console.log('[follow_up] depth', depth, 'auto-querying in', delay_ms, 'ms:', query)
           await new Promise((res) => setTimeout(res, delay_ms))
+          if (stale(session)) return
           const fuQuery = query.startsWith('The page is loaded')
             ? query
             : `The page is loaded. ${query}`
           const fu = await window.api.query(fuQuery, { lowDetail: true })
           if ((fu as { cancelled?: boolean } | null)?.cancelled) return
-          await applyResponse(fu as ClaudeResponse & { url?: string }, depth + 1)
+          await applyResponse(fu as ClaudeResponse & { url?: string }, session, depth + 1)
         } else if (r.follow_up) {
           console.warn('[follow_up] depth limit (6) reached, stopping')
         }
@@ -141,11 +151,14 @@ export default function App(): JSX.Element {
       return
     }
     // Main-process TaskQueue handles serialization; fire every valid transcript.
+    const session = voiceSessionRef.current
     queryFiredRef.current = true
     setPhase('processing')
     // Safety net: if processing stalls >60s, auto-reset
     if (processingTimerRef.current) clearTimeout(processingTimerRef.current)
     processingTimerRef.current = setTimeout(() => {
+      processingTimerRef.current = null
+      if (session !== voiceSessionRef.current) return
       console.warn('[safety] processing timeout — resetting HUD')
       queryFiredRef.current = false
       resetHud()
@@ -153,20 +166,21 @@ export default function App(): JSX.Element {
     try {
       console.log('[query] sending:', text)
       const result = await window.api.query(text.trim())
-      if (cancelledRef.current || (result as { cancelled?: boolean } | null)?.cancelled) return
+      if (stale(session) || (result as { cancelled?: boolean } | null)?.cancelled) return
       // Auto-detected dictation: main already typed it.
       if ((result as { dictated?: boolean } | null)?.dictated) return
       const r = result as ClaudeResponse & { url?: string }
       console.log('[query] response:', JSON.stringify(r))
-      await applyResponse(r)
+      await applyResponse(r, session)
     } catch (err) {
       console.error('[query] error:', err)
     } finally {
-      if (processingTimerRef.current) {
+      // A newer session owns the HUD and its timers now.
+      if (session === voiceSessionRef.current && processingTimerRef.current) {
         clearTimeout(processingTimerRef.current)
         processingTimerRef.current = null
       }
-      resetHud()
+      if (session === voiceSessionRef.current) resetHud()
     }
   }
 
@@ -259,8 +273,13 @@ export default function App(): JSX.Element {
   useEffect(() => startMicDeviceSync(), [])
   useEffect(() => setWakeFeedPaused(listening), [listening])
 
+  const beginSessionRef = useRef<() => number>(() => 0)
+  const resetHudRef = useRef(resetHud)
+
   useEffect(() => {
     return window.api.onRunQuery((text) => {
+      // A typed query is a new turn: clear an earlier cancel and any stale session state.
+      beginSessionRef.current()
       window.api.showHUD()
       handleResultRef.current(text)
     })
@@ -285,11 +304,13 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  const beginSessionRef = useRef<() => number>(() => 0)
-  const resetHudRef = useRef(resetHud)
   useEffect(() => {
     beginSessionRef.current = (): number => {
       clearSessionTimers()
+      if (processingTimerRef.current) {
+        clearTimeout(processingTimerRef.current)
+        processingTimerRef.current = null
+      }
       queryFiredRef.current = false
       cancelledRef.current = false
       dictationRef.current = false
