@@ -102,10 +102,21 @@ function diff(a: Frame, b: Frame): number | null {
 
 // ---- Foreground window, UIA, OCR ----
 
-async function foreground(): Promise<commands.ActiveWindowResult | null> {
+/** The last foreground window any lesson code asked for (checks poll it at 2 Hz). */
+let lastForeground: { at: number; w: commands.ActiveWindowResult } | null = null
+
+async function foreground(signal?: AbortSignal): Promise<commands.ActiveWindowResult | null> {
   const agent = getAgent()
-  if (!agent) return null
-  return commands.activeWindow(agent, { timeoutMs: 1500 }).catch(() => null)
+  if (!agent || signal?.aborted) return null
+  const w = await commands.activeWindow(agent, { timeoutMs: 1500, signal }).catch(() => null)
+  if (w) lastForeground = { at: Date.now(), w }
+  return w
+}
+
+/** The foreground window, reusing one seen within `maxAgeMs` (no second poller). */
+function recentForeground(maxAgeMs: number): Promise<commands.ActiveWindowResult | null> {
+  const last = lastForeground
+  return last && Date.now() - last.at < maxAgeMs ? Promise.resolve(last.w) : foreground()
 }
 
 const norm = (s: string | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
@@ -122,15 +133,16 @@ function elementHits(nodes: ElementNode[], q: ElementMatch): ElementNode[] {
 }
 
 /** Elements of the foreground window matching the query, interactive ones first. */
-async function findElements(q: ElementMatch): Promise<ElementNode[]> {
+async function findElements(q: ElementMatch, signal?: AbortSignal): Promise<ElementNode[]> {
   const agent = getAgent()
   if (!agent) return []
   for (const interactiveOnly of [true, false]) {
+    if (signal?.aborted) return []
     const snap = await commands
       .uiaSnapshot(
         agent,
         { scope: 'foreground', maxNodes: 600, interactiveOnly },
-        { timeoutMs: UIA_TIMEOUT_MS }
+        { timeoutMs: UIA_TIMEOUT_MS, signal }
       )
       .catch(() => null)
     if (!snap) return []
@@ -162,13 +174,14 @@ function fromPhys(
 
 async function resolveTarget(
   t: LessonTarget,
-  skill: Skill | null | undefined
+  skill: Skill | null | undefined,
+  signal?: AbortSignal
 ): Promise<ResolvedTarget | null> {
   if ('element' in t) {
-    const el = pickNth(await findElements(t.element), t.element.nth)
+    const el = pickNth(await findElements(t.element, signal), t.element.nth)
     return el ? fromPhys(el.rect, 'element', el.id) : null
   }
-  const fg = await foreground()
+  const fg = await foreground(signal)
   const win = fg?.rect
   if ('shortcut' in t) {
     if (!win) return null
@@ -180,9 +193,9 @@ async function resolveTarget(
   }
   if ('text' in t) {
     const agent = getAgent()
-    if (!agent || !win) return null
+    if (!agent || !win || signal?.aborted) return null
     const ocr = await commands
-      .ocr(agent, { region: win }, { timeoutMs: CAPTURE_TIMEOUT_MS })
+      .ocr(agent, { region: win }, { timeoutMs: CAPTURE_TIMEOUT_MS, signal })
       .catch(() => null)
     const lines = (ocr?.lines ?? []).filter((l) => norm(l.text).includes(norm(t.text)))
     const hit = pickNth(lines, t.nth)
@@ -389,7 +402,9 @@ function realPorts(): Ports {
       emitScene: (scene) => bus.emit({ type: 'lesson.scene', scene }),
       emitState: (state) => bus.emit({ type: 'lesson.state', state })
     },
-    target: { resolveTarget: (t, ctx) => resolveTarget(t, ctx.skill).catch(() => null) },
+    target: {
+      resolveTarget: (t, ctx) => resolveTarget(t, ctx.skill, ctx.signal).catch(() => null)
+    },
     verify: {
       vision: async (prompt, beforeId, afterId, signal) => {
         const before = frames.get(beforeId)
@@ -697,28 +712,37 @@ export function interceptLesson(utterance: string): unknown | undefined {
 
 /** Pauses the lesson when its app has been out of focus for a minute (not for Windows itself). */
 function watchFocus(): void {
-  let awaySince: number | null = null
+  let away: { step: string; since: number } | null = null
   setInterval(() => {
     const r = runner
-    const skill = registry?.get(r?.state.skillId ?? '')
-    // Windows lessons span many apps; lessons-only skills cannot tell their app.
-    const watched = !!skill && skill.id !== 'windows' && hasMatchRules(skill)
-    if (!r?.running() || r.state.phase !== 'step.waiting' || !watched) {
-      awaySince = null
+    const step = r ? watchedStep(r) : null
+    if (!r || !step) {
+      away = null
       return
     }
-    void foreground().then((w) => {
-      if (!w || !registry) return
+    void recentForeground(BLUR_POLL_MS).then((w) => {
+      // The lesson or step may have moved on while the agent answered.
+      if (!w || !registry || watchedStep(r) !== step) return
+      if (away?.step !== step) away = null
       const here = registry.matchApp({ process: w.process || w.exe, title: w.title })?.id
       const lumen = /\blumen\b/i.test(w.title)
-      if (here === r.state.skillId || lumen) awaySince = null
-      else if (awaySince === null) awaySince = Date.now()
-      else if (Date.now() - awaySince >= BLUR_PAUSE_MS) {
-        awaySince = null
+      if (here === r.state.skillId || lumen) away = null
+      else if (!away) away = { step, since: Date.now() }
+      else if (Date.now() - away.since >= BLUR_PAUSE_MS) {
+        away = null
         r.appBlurred()
       }
     })
   }, BLUR_POLL_MS).unref?.()
+}
+
+/** The waiting step whose app focus is watched ("lesson#index"), else null. */
+function watchedStep(r: LessonRunner): string | null {
+  const skill = registry?.get(r.state.skillId ?? '')
+  // Windows lessons span many apps; lessons-only skills cannot tell their app.
+  const watched = !!skill && skill.id !== 'windows' && hasMatchRules(skill)
+  if (!r.running() || r.state.phase !== 'step.waiting' || !watched) return null
+  return `${r.state.lesson?.id}#${r.state.index}`
 }
 
 export function installTeach(): void {
