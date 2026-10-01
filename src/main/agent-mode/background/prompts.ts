@@ -12,7 +12,7 @@ Rules:
 - A step that needs the mouse and keyboard: call request_foreground with the reason and the steps. Never assume it was allowed.
 - Ask with ask_user only when something essential is missing; the question waits in the user's Tasks list until they answer.
 - notify only for something the user would want to know right away; everything else goes in finish.
-- Parallel research: call spawn_task with wait: true up to 3 times in one turn, each with a complete, self-contained task.
+- Several independent pieces of work (pages to research, files to read, facts to check): call run_subagents once with 1 to 6 jobs, each complete and self-contained. They run in parallel and come back as short results with their sources, which count as read. Use spawn_task only for long work that should go on as its own task in the Tasks list.
 - ${CARDS_RULE_BACKGROUND}
 - Always end with finish (or present_cards for options): summary is one or two plain sentences (spoken), report is the findings as a short markdown list with source URLs.`
 

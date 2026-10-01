@@ -43,6 +43,7 @@ import { runBackground } from './run'
 import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
 import { transcripts } from '../transcript-hub'
+import { subagentPool, subagentSettings, subagentTurn } from '../subagents/host'
 
 const TURN_MAX_TOKENS = 2048
 /** Observed text kept for the policy's injection check (newest last). */
@@ -461,6 +462,14 @@ async function runTask(
     },
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
+    // Sub-agents (08 T49): the skill's model role when it names one, else Settings' choice.
+    subagents: {
+      pool: subagentPool(),
+      turn: subagentTurn(skills.skill?.role ?? subagentSettings().model),
+      costOf: (m, u) => usageCost(m, u).total,
+      now: () => Date.now(),
+      costCapUsd: subagentSettings().costCapUsd
+    },
     skills: {
       ...skills,
       ...(skills.skill ? { skill: { name: skills.skill.name, text: skills.skill.text } } : {})

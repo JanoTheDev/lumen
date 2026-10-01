@@ -45,7 +45,9 @@ export function taskRow(t: BackgroundTask): TaskRow {
       status = 'Waiting to start'
       break
     case 'running':
-      status = last ?? 'Working…'
+      status = t.helpers
+        ? `${t.helpers} ${t.helpers === 1 ? 'helper' : 'helpers'} working`
+        : (last ?? 'Working…')
       break
     case 'asking':
       status = 'Needs your answer'

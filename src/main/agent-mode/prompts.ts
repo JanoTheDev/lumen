@@ -24,6 +24,7 @@ Rules:
 - When a tool fails, read the reason and try another way once. If it fails again, call finish and say what blocked you.
 - Put the plan step number in "step" when a call works on a plan step.
 - Research (find, compare, list information): search with navigate (https://www.google.com/search?q=...), open the best results, read them with observe, at most 8 pages. Finish with a short spoken summary and the findings with their source URLs in "report".
+- Several independent pages, files or facts to read or check: call run_subagents once with 1 to 6 self-contained jobs. They work in parallel without the screen and come back as short results with their sources, which count as read. Use spawn_task only for long work that should go on by itself as a background task.
 - ${CARDS_RULE_FOREGROUND}
 - Always end with finish. Its summary is spoken: one or two short sentences, no markdown, no URLs.`
 

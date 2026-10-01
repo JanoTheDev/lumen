@@ -18,6 +18,8 @@ import type { RunOutcome, TaskControl } from './manager'
 import { BACKGROUND_SYSTEM, backgroundTurn } from './prompts'
 import { backgroundToolDefs } from './tools'
 import { presentCardsHandler } from '../../cards/present-tool'
+import { runSubagentsHandler, type SubagentEnv } from '../subagents/run'
+import { RUN_SUBAGENTS_TOOL } from '../subagents/tool'
 
 export interface BackgroundCaps {
   maxModelCalls: number
@@ -61,10 +63,21 @@ export interface BgRunEnv {
   fileSkills?: string[]
   /** Text the task read (pages, files, how-to steps): the policy's injection check. */
   observe?(text: string): void
+  /**
+   * Sub-agents (08 T49): run_subagents for a top-level task. Its jobs use this run's own
+   * offered tools and guarded handlers; absent = not offered.
+   */
+  subagents?: Pick<SubagentEnv, 'pool' | 'turn' | 'costOf' | 'now' | 'costCapUsd'>
 }
 
 /** Tools whose results are text the task observed (not the user's words). */
-export const OBSERVED_TOOLS = new Set(['fetch_url', 'read_file', 'read_document', 'lookup_howto'])
+export const OBSERVED_TOOLS = new Set([
+  'fetch_url',
+  'read_file',
+  'read_document',
+  'lookup_howto',
+  'run_subagents'
+])
 
 /** The observed tools' successful results go to `observe` (the policy's observedText). */
 export function observing(
@@ -208,8 +221,25 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
   const more = env.moreTools
     ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
     : { defs: [] as ToolDef[], handlers: {} }
+  // Filled below once the handlers are wrapped: sub-agents use exactly what this run offers.
+  let subTools: { defs: ToolDef[]; handlers: Record<string, ToolHandler> } = {
+    defs: [],
+    handlers: {}
+  }
+  const sub = env.subagents && !task.parentId ? env.subagents : null
   const own = {
     ...createBackgroundHandlers(env.ports),
+    ...(sub
+      ? {
+          run_subagents: runSubagentsHandler({
+            ...sub,
+            tools: async () => subTools,
+            ...(ctl.hold ? { hold: ctl.hold } : {}),
+            onActive: (n) => ctl.update({ helpers: n > 0 ? n : undefined }),
+            ...(env.log ? { log: env.log } : {})
+          })
+        }
+      : {}),
     // Research → cards (05 T39): the results wait for "View results" in the Tasks list.
     ...(task.parentId ? {} : { present_cards: presentCardsHandler({ background: true }) }),
     ...skills?.handlers,
@@ -277,16 +307,19 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     ...(ctl.between ? { between: ctl.between } : {})
   }
 
+  const extraTools = [
+    ...backgroundToolDefs({ child: !!task.parentId }),
+    ...(sub ? [RUN_SUBAGENTS_TOOL] : []),
+    ...(skills?.defs ?? []),
+    ...more.defs
+  ].filter(offered)
+  subTools = { defs: extraTools, handlers }
   const r = await runAgent(
     {
       prompt: task.prompt,
       context: {},
       tools: ['ask_user', 'finish'],
-      extraTools: [
-        ...backgroundToolDefs({ child: !!task.parentId }),
-        ...(skills?.defs ?? []),
-        ...more.defs
-      ].filter(offered),
+      extraTools,
       parallelTools: ['spawn_task'],
       cancelWindowMs: 0,
       skipPlan: true,

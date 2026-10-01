@@ -11,6 +11,9 @@ import { CREATE_FILE_TOOL } from '../../src/main/docs-out/tool'
 import { GRANTED_FILE_TOOLS } from '../../src/main/files/granted'
 import type { McpTool } from '../../src/main/connectors/mcp'
 import { mcpToolDefs } from '../../src/main/connectors/tools'
+import { RUN_SUBAGENTS_TOOL } from '../../src/main/agent-mode/subagents/tool'
+import { PRESENT_CARDS_TOOL } from '../../src/main/cards/research'
+import { FETCH_URL_TOOL } from '../../src/main/cards/fetch-tool'
 
 const server = (id: string): ConnectorServer => ({
   id,
@@ -88,7 +91,7 @@ describe('Anthropic request-wide strict budget', () => {
       ...toolSet([...FOREGROUND_TOOLS, 'read_file']),
       MEMORY_SEARCH_TOOL,
       ...skillToolDefs({ truncated: true }),
-      BG_TOOLS.spawn_task
+      RUN_SUBAGENTS_TOOL
     ]
     const mcp = connectorDefs()
     const r = check([...builtIn, ...mcp])
@@ -96,10 +99,26 @@ describe('Anthropic request-wide strict budget', () => {
     for (const t of mcp) expect(r.loose).toContain(t.name)
   })
 
+  it('the session order: past 20 strict tools the last built-ins go non-strict, still sent', () => {
+    // session.ts order: the agent tools, then memory, skills, connectors, run_subagents,
+    // spawn_task, present_cards, fetch_url.
+    const first = [
+      ...toolSet([...FOREGROUND_TOOLS, 'read_file']),
+      MEMORY_SEARCH_TOOL,
+      ...skillToolDefs({ truncated: true }),
+      RUN_SUBAGENTS_TOOL
+    ]
+    const rest = [BG_TOOLS.spawn_task, PRESENT_CARDS_TOOL, FETCH_URL_TOOL]
+    const r = check([...first, ...connectorDefs(), ...rest])
+    for (const t of first) expect(r.strict).toContain(t.name)
+    for (const t of rest) expect(r.loose).toContain(t.name)
+  })
+
   it('fullest background set + connector tools: some connector tools stay strict, rest loose', () => {
     const builtIn = [
       ...toolSet(['ask_user', 'finish']),
       ...backgroundToolDefs({ child: false }),
+      RUN_SUBAGENTS_TOOL,
       ...skillToolDefs({ truncated: true }),
       CREATE_FILE_TOOL,
       ...Object.values(GRANTED_FILE_TOOLS)

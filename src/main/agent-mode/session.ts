@@ -30,7 +30,7 @@ import {
   type SavedRun,
   type ToolHandler
 } from './runner'
-import { FOREGROUND_TOOLS } from './tools'
+import { FOREGROUND_TOOLS, toolSet } from './tools'
 import { foregroundSpawnHandler } from './background'
 import { BG_TOOLS } from './background/tools'
 import { enabledSkill, preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
@@ -63,6 +63,10 @@ import { presentCardsHandler } from '../cards/present-tool'
 import { browserPageUrl } from '../cards/browser-url'
 import { FETCH_URL_TOOL, fetchUrlHandler } from '../cards/fetch-tool'
 import { PRESENT_CARDS_TOOL } from '../cards/research'
+import { runSubagentsHandler } from './subagents/run'
+import { RUN_SUBAGENTS_TOOL } from './subagents/tool'
+import { subagentPool, subagentSettings, subagentTurn } from './subagents/host'
+import { foregroundSubagentTools } from './subagents/foreground'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -132,12 +136,19 @@ export function resumePausedAgentTask(id: string): boolean {
   return true
 }
 
-/** Waits while the task is paused; an abort (Stop, Escape) ends the wait. */
+/**
+ * Waits while the task is paused; an abort (Stop, Escape) ends the wait. Its sub-agents wait
+ * here too, so one wake resolves every waiter.
+ */
 async function whilePaused(taskId: string, signal: AbortSignal): Promise<void> {
   while (hold?.taskId === taskId && !signal.aborted) {
     const h = hold
     await new Promise<void>((resolve) => {
-      h.wake = resolve
+      const prev = h.wake
+      h.wake = () => {
+        prev?.()
+        resolve()
+      }
       signal.addEventListener('abort', () => resolve(), { once: true })
     })
   }
@@ -322,8 +333,13 @@ function deps(
   spawn: boolean,
   skills: SkillToolSet,
   guard?: ToolGuard,
-  trace?: RunTrace
+  trace?: RunTrace,
+  /** Sub-agents (08 T49): the task's offered tools; absent = run_subagents not offered. */
+  sub?: { defs: () => ToolDef[]; envelope?: SkillEnvelope }
 ): RunnerDeps {
+  const noteObserved = (t: string): void => {
+    env.observedText = `${env.observedText}\n${t}`.slice(-20_000)
+  }
   const handlers: RunnerDeps['handlers'] = {
     ...createHandlers(env),
     ...skills.handlers,
@@ -335,9 +351,36 @@ function deps(
     ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {}),
     // Research → cards (05 T39).
     present_cards: presentCardsHandler({ background: false, pageUrl: browserPageUrl }),
-    fetch_url: fetchUrlHandler({
-      onText: (t) => (env.observedText = `${env.observedText}\n${t}`.slice(-20_000))
+    fetch_url: fetchUrlHandler({ onText: noteObserved })
+  }
+  if (sub) {
+    const cfg = subagentSettings()
+    const run = runSubagentsHandler({
+      pool: subagentPool(),
+      turn: subagentTurn(cfg.model),
+      costOf: (m, u) => usageCost(m, u).total,
+      now: () => Date.now(),
+      costCapUsd: cfg.costCapUsd,
+      hold: (signal) => whilePaused(env.taskId, signal),
+      // The jobs use this task's own handlers, behind its guards (wrapped by the loop below).
+      tools: async () =>
+        foregroundSubagentTools({
+          taskId: env.taskId,
+          userText: env.prompt,
+          defs: sub.defs(),
+          handlers,
+          ...(sub.envelope ? { envelope: sub.envelope } : {}),
+          observe: noteObserved,
+          observedText: () => env.observedText
+        })
     })
+    // The helpers' results are text the task read (the policy's injection check).
+    handlers.run_subagents = async (input, ctx) => {
+      const r = await run(input, ctx)
+      const t = r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n')
+      if (t.trim()) noteObserved(t)
+      return r
+    }
   }
   // A skill's permissions (11 T04) in front of every call; successful UI calls are traced for
   // "save that as a skill" (11 T09).
@@ -444,25 +487,30 @@ async function run(
   const mcpDefs = connectorDefsFor(mcp.defs, envelope)
   const trace = traceRecorder()
   if (!more.resume) transcripts().foregroundStart(env.taskId, prompt)
+  const tools =
+    envelope?.tools ??
+    (context.files?.length ? [...FOREGROUND_TOOLS, 'read_file'] : FOREGROUND_TOOLS)
+  // Helper tasks in the background (T28) for long detached work; sub-agents (T49) for
+  // parallel jobs that come back as short results.
+  const extraTools = [
+    MEMORY_SEARCH_TOOL,
+    ...skills.defs,
+    ...mcpDefs,
+    // run_subagents first: past Anthropic's 20 strict tools the later ones go non-strict.
+    ...(noSpawn ? [] : [RUN_SUBAGENTS_TOOL, BG_TOOLS.spawn_task]),
+    PRESENT_CARDS_TOOL,
+    // A skill run reaches only its own sites (no fetch_url outside its envelope).
+    ...(envelope ? [] : [FETCH_URL_TOOL])
+  ].filter((d) => !envelope || envelope.offers(d.name))
+  const offersSub = extraTools.some((d) => d.name === RUN_SUBAGENTS_TOOL.name)
   try {
     const r = await withCancelArmed(() =>
       runAgent(
         {
           prompt,
           context,
-          tools:
-            envelope?.tools ??
-            (context.files?.length ? [...FOREGROUND_TOOLS, 'read_file'] : FOREGROUND_TOOLS),
-          // Helper tasks in the background (T28): parallel research fan-out.
-          extraTools: [
-            MEMORY_SEARCH_TOOL,
-            ...skills.defs,
-            ...mcpDefs,
-            ...(noSpawn ? [] : [BG_TOOLS.spawn_task]),
-            PRESENT_CARDS_TOOL,
-            // A skill run reaches only its own sites (no fetch_url outside its envelope).
-            ...(envelope ? [] : [FETCH_URL_TOOL])
-          ].filter((d) => !envelope || envelope.offers(d.name)),
+          tools,
+          extraTools,
           parallelTools: ['spawn_task'],
           ...(skills.index ? { systemExtra: skills.index } : {}),
           cancelWindowMs: loadConfig().agent.cancelWindowMs,
@@ -475,7 +523,13 @@ async function run(
           !noSpawn,
           { ...skills, handlers: { ...skills.handlers, ...mcp.handlers } },
           envelope?.guard,
-          trace
+          trace,
+          offersSub
+            ? {
+                defs: () => [...toolSet(tools), ...extraTools],
+                ...(envelope ? { envelope } : {})
+              }
+            : undefined
         )
       )
     )
