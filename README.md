@@ -11,40 +11,46 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 
 ## What it does
 
-| You say…                                               | Lumen does…                                                                                 |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
-| _"What's the weather in Larnaca and what time is it?"_ | Splits the question and answers both in one card, spoken if you like.                       |
-| _"Where is the compose button?"_                       | Dims the screen and highlights the real control.                                            |
-| _"What's this?"_ (pointing at something)               | Explains the control under your pointer, on any monitor.                                    |
-| _"Teach me Blender."_                                  | Lists lessons for the app you're in; pick one by number.                                    |
-| _"Show me how to add a keyframe."_                     | Runs a lesson: points, waits for you, checks the step, gives more help if you stall.        |
-| _"Write an email to my boss that I'm quitting."_       | Announces the plan, opens Gmail, fills subject and body. Stops before Send.                 |
-| _"In the background, find internships at Exness."_     | Works on it as a background task while you keep using the PC, and tells you when it's done. |
-| _"Show numbers"_ → _"click 5"_                         | Numbers every clickable thing and clicks it, instantly, without calling the AI.             |
-| _"Read this aloud"_ / _"Summarize this page"_          | Built-in skills that run on whatever is on screen.                                          |
-| _"Top news today"_ → _"open the second one"_           | Short brief from free news feeds, with numbered sources you can open by voice.              |
-| _"Click this… move this there"_ (while pointing)       | Point and say: combines your words with where the pointer or gaze was.                      |
-| _"Every weekday at 9, read me my calendar."_           | Creates a routine that runs on that schedule.                                               |
-| _"Undo that."_                                         | Reverses Lumen's last actions where possible, and says what can't be undone.                |
-| _"What changed?"_                                      | Describes what's different on screen since your last command.                               |
-| _"What did you just do?"_                              | Reads back the last actions from the local audit log.                                       |
-| _"Stop"_ or Escape                                     | Cancels whatever is running, including the model call and pending clicks.                   |
+| You say…                                                 | Lumen does…                                                                                  |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| _"What's the weather in Larnaca and what time is it?"_   | Splits the question and answers both in one card, spoken if you like.                        |
+| _"Where is the compose button?"_                         | Dims the screen and highlights the real control.                                             |
+| _"What's this?"_ (pointing at something)                 | Explains the control under your pointer, on any monitor.                                     |
+| _"Teach me Blender."_                                    | Lists lessons for the app you're in; pick one by number.                                     |
+| _"Show me how to add a keyframe."_                       | Runs a lesson: points, waits for you, checks the step, gives more help if you stall.         |
+| _"Write an email to my boss that I'm quitting."_         | Announces the plan, opens Gmail, fills subject and body. Stops before Send.                  |
+| _"In the background, find internships at Exness."_       | Works on it as a background task while you keep using the PC, and tells you when it's done.  |
+| _"Show numbers"_ → _"click 5"_                           | Numbers every clickable thing and clicks it, instantly, without calling the AI.              |
+| _"Read this aloud"_ / _"Summarize this page"_            | Built-in skills that run on whatever is on screen.                                           |
+| _"Top news today"_ → _"open the second one"_             | Short brief from free news feeds, with numbered sources you can open by voice.               |
+| _"Click this… move this there"_ (while pointing)         | Point and say: combines your words with where the pointer or gaze was.                       |
+| _"Summarize my inbox"_ / _"Reply to this saying I'm in"_ | Works in Gmail, the new Outlook and classic Outlook. Drafts only; sending always asks first. |
+| _"Make a Word doc with a packing list."_                 | Creates Word, Excel, CSV, PDF, Markdown or HTML files in `Documents\Lumen`, then opens them. |
+| _"Summarize this file"_ (pointing at it in Explorer)     | Reads the file under your pointer, or one you dropped, and can reformat it into a new file.  |
+| _"Turn on brief mode."_                                  | Reply styles change how Lumen talks (brief, teacher, friendly, formal, or your own).         |
+| _"Every weekday at 9, read me my calendar."_             | Creates a routine that runs on that schedule.                                                |
+| _"Undo that."_                                           | Reverses Lumen's last actions where possible, and says what can't be undone.                 |
+| _"What changed?"_                                        | Describes what's different on screen since your last command.                                |
+| _"What did you just do?"_                                | Reads back the last actions from the local audit log.                                        |
+| _"Stop"_ or Escape                                       | Cancels whatever is running, including the model call and pending clicks.                    |
 
 ### Ask, point and act
 
+- **Works in any app.** No per-app setup: when an app or task is unfamiliar, Lumen looks up how it works (free official help first, your provider's web search if you allow it), finds the named menus and buttons on screen, and remembers what worked for next time.
 - **Accurate pointing.** Windows UI Automation finds real buttons and fields; when an app exposes little, Lumen draws numbered marks, reads the screen with Windows OCR and takes a zoomed second look before it clicks.
 - **Agent mode.** Multi-step tasks announce a plan, give you a few seconds to cancel, then run an observe → act → verify loop. It prefers UI Automation so your real pointer usually stays put (a "ghost cursor"), and it never retypes text it already entered. Hard caps on steps, time and cost.
 - **Background tasks.** Say "in the background…" or "keep an eye on…" and the work runs in parallel without touching your mouse or keyboard. Results land in the Tasks list on Home with a tray badge.
+- **Task chat.** Click any task (background, agent or Claude Code) to watch its conversation live, see every step it took, steer it with a message, answer its questions, pause or stop it.
 - **Safety first.** Every action is rated low / medium / high risk. Risky ones need your OK ("yes", "always" for this site, or "no"), sending, deleting and buying always ask, dangerous shortcuts (Run dialog, terminals) are blocked, passwords and secrets are redacted, and text on screen is treated as data, never as instructions. Every action is written to a local audit log.
 - **Multi-monitor and any display scaling.** Highlights and clicks land in the right place on every screen.
-- **Drop a file** (PDF, Word, text, CSV, image) on the assistant bar and ask about it.
+- **Files in and out.** Drop a file (PDF, Word, Excel, PowerPoint, CSV, text, image) on the bar or point at one in File Explorer and ask about it; Lumen can also create Word, Excel, CSV, PDF, Markdown and HTML files, convert and reformat files into new ones, and attach them to an email. Originals are never changed without asking.
 
-### Connectors, routines and Claude Code
+### Integrations, automations and Claude Code
 
-- **Connectors:** add any MCP server by URL or command in Settings, and Lumen can use its tools in agent mode and background tasks. Every tool call goes through the same safety gate; secrets are stored encrypted.
-- **Routines:** "every weekday at 9…" or "every 30 minutes…" runs a task on a schedule while Lumen is running. Risky steps are skipped unless you approved them for that routine, and three failures in a row turn it off.
-- **Proactive reminders** (opt-in): "when I open Excel, remind me to save a copy".
-- **Claude Code by voice:** open a project, give Claude Code a task, hear what it's doing and answer its questions hands-free, using your own `claude` login. An optional autopilot answers routine questions for you, with a hard deny list.
+- **Integrations:** browse a catalog of well-known MCP servers (Notion, Linear, GitHub, Stripe, Supabase, Microsoft Learn, Playwright and more) and add them with one click and a browser sign-in, or add any MCP server by URL or command. Every tool call goes through the same safety gate; tokens are stored encrypted.
+- **Bring your Claude Code setup:** import Claude Code plugins, marketplaces, skills and output styles from a link, a folder or your own `~/.claude`. Hooks are never imported.
+- **Automations:** "every weekday at 9…", "in 20 minutes…", "when a PDF lands in Downloads…", "when I open Excel…", at login, when idle or back online. They run in the background, never take your mouse or speak while you're away, can optionally wake Lumen through Windows Task Scheduler, and risky steps need your pre-approval. Manage them in Settings → Automations.
+- **Claude Code by voice:** open a project, give Claude Code a task, hear what it's doing and answer its questions hands-free, using your own `claude` login. An optional autopilot answers routine questions for you, with a hard deny list. Coding skills (from a docs link, an import, or a description) are suggested from your project's dependencies, e.g. Next.js and better-auth, and loaded into the session without touching your repo.
 
 ### Voice
 
@@ -83,7 +89,7 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 
 ### Skills
 
-Skills are small, shareable abilities written as a `SKILL.md`, optionally with fixed steps that run without the AI. Lumen ships starter skills (read this aloud, summarize this page, reply to this email, screenshot and explain, make text bigger here, morning briefing, clean downloads, export for YouTube, fill this form from my profile) and triggers them by phrase or app. Make your own by saying it ("when I say 'morning', open my mail and calendar"), by doing it once while Lumen records, or with "save that as a skill" after a task went well. Install and share them from Settings, which also shows each skill's run history.
+Skills are small, shareable abilities written as a `SKILL.md`, optionally with fixed steps that run without the AI. Lumen ships starter skills (read this aloud, summarize this page, reply to this email, screenshot and explain, make text bigger here, morning briefing, clean downloads, export for YouTube, fill this form from my profile) and triggers them by phrase or app. Make your own by saying it ("when I say 'morning', open my mail and calendar"), by doing it once while Lumen records, or with "save that as a skill" after a task went well. Or just describe it: "make a skill that…" writes a full skill for you to review, Lumen offers to save tasks you repeat, and "change my morning skill to also open Slack" edits one by voice. Reply styles are skills too ("turn on teacher mode"). Install and share them from Settings, which also shows each skill's run history.
 
 ### Smart helpers
 
@@ -104,13 +110,13 @@ Optional, local, and off by default (Settings → Smart helpers), except undo:
 - **Memory** you can see, edit and delete, plus a private mode.
 - **Usage and cost** per day, shown in Settings.
 - **Automatic updates** from GitHub Releases (installed build; the portable build tells you when one is out).
-- **Experimental local models** through Ollama or LM Studio, auto-detected.
+- **Any AI provider:** Anthropic, OpenAI, Google Gemini's free tier (opt-in, with its privacy terms shown), OpenRouter, Groq, Mistral, DeepSeek, Together or any OpenAI-compatible service, and local models through Ollama or LM Studio, auto-detected, with a "local only" mode. Pick a provider and model per job.
 
 ---
 
 ## Install
 
-Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and an Anthropic or OpenAI API key. No Python, no Admin rights.
+Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and one AI key (Anthropic, OpenAI, a free Gemini key, or another compatible service) or a local model in Ollama or LM Studio. No Python, no Admin rights.
 
 1. Download `Lumen-Setup-<version>.exe` from [Releases](https://github.com/JanoTheDev/lumen/releases), or `Lumen-<version>-portable.exe` to run without installing. Optionally check it against `SHA256SUMS.txt` from the same release: `Get-FileHash .\Lumen-Setup-<version>.exe`.
 2. Run it. The builds are not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. Lumen installs for your user only, in `%LOCALAPPDATA%\Programs\lumen`, and opens setup.
@@ -249,7 +255,15 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 - [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording or "save that as a skill"
 - [x] Smart helpers: focus mode, undo, shortcut coach, comfort, error rescue, what changed, reading level, learning journal
 - [x] Assistant bar, screen layer, cursor buddy, Home, first-run setup, rebuilt Settings, memory
-- [x] Experimental local models (Ollama, LM Studio)
+- [x] Any provider: Anthropic, OpenAI, Gemini free tier, OpenAI-compatible services, Ollama and LM Studio (local only mode)
+- [x] Works in any app: how-to lookups plus on-screen grounding, learned per-app notes
+- [x] Gmail and Outlook (new and classic): read, summarize, reply, write, search, attach
+- [x] Model-written skills, voice edits, reply styles, Claude Code plugin import
+- [x] Integrations catalog with sign-in
+- [x] Automations: time, app, folder, idle and network triggers, optional wake when closed
+- [x] Task chat for background, agent and Claude Code tasks
+- [x] Create and convert files (Word, Excel, CSV, PDF), point at a file to analyze it
+- [x] Coding skills for Claude Code sessions
 
 **Next**
 
@@ -271,6 +285,9 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 - The audit log stays on your PC, stores typed text only as a length and hash (a redacted copy only if you turn that on), and is pruned after 30 days by default.
 - The camera is used only while face gestures are on; frames are processed locally and never stored or sent.
 - News and page reading fetch only public https pages, respect robots.txt and never refetch one-time links.
+- How-to lookups use free official help first; paid web search only runs if you turned it on, with a daily cap. What worked in each app is remembered locally.
+- Google Gemini's free tier is opt-in: outside the EEA, UK and Switzerland, Google may use free-tier prompts (including screenshots) to improve its products. Use a paid key or a local model if that matters to you.
+- Task transcripts, dictation history, notes and learned app notes stay on your PC, with secrets redacted.
 - No telemetry or analytics. Crash dumps stay local.
 
 ---
