@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -146,6 +146,14 @@ describe('task store', () => {
     expect(s.load()).toEqual([task])
     s.remove(task.id)
     expect(s.load()).toEqual([])
+  })
+
+  it('writes atomically: no temp file is left and an update replaces the whole file', () => {
+    const s = new TaskStore(join(dir, 'atomic'))
+    s.save(task)
+    s.save({ ...task, title: 'Updated' })
+    expect(readdirSync(join(dir, 'atomic'))).toEqual([`${task.id}.json`])
+    expect(s.load()).toEqual([{ ...task, title: 'Updated' }])
   })
 
   it('rejects malformed tasks', () => {

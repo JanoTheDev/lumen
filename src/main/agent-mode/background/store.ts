@@ -1,6 +1,15 @@
 // Background task persistence (08 T30): ~/.ai-overlay/tasks/<id>.json, one file per task,
-// results only (never screenshots). Unreadable files are skipped.
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+// results only (never screenshots), written atomically (temp file + rename) so a crash
+// mid-write cannot lose a finished result. Unreadable files are skipped.
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'fs'
 import { join } from 'path'
 import type { BackgroundTask } from '@shared/types'
 
@@ -37,7 +46,10 @@ export class TaskStore {
     if (!ID_RE.test(task.id)) return
     try {
       mkdirSync(this.dir, { recursive: true })
-      writeFileSync(join(this.dir, `${task.id}.json`), JSON.stringify(task, null, 1), 'utf8')
+      const file = join(this.dir, `${task.id}.json`)
+      const tmp = `${file}.${process.pid}.tmp`
+      writeFileSync(tmp, JSON.stringify(task, null, 1), 'utf8')
+      renameSync(tmp, file)
     } catch (e) {
       console.warn('[tasks] save failed:', (e as Error).message)
     }
