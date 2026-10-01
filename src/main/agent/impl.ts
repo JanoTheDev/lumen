@@ -21,9 +21,8 @@ export interface AgentPathEnv {
 }
 
 /**
- * Capabilities main needs before `auto` runs the native agent. `execute` (the
- * v1 action command main still uses) is not ported yet, so `auto` keeps Python
- * until the native agent advertises it.
+ * Capabilities main needs before `auto` runs the native agent (`execute` is the
+ * v1 action command main still uses for model actions).
  */
 export const REQUIRED_NATIVE_CAPABILITIES = [
   'hotkey',

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'fs'
 import { join } from 'path'
 
 vi.mock('electron', () => ({ app: { getAppPath: () => '/app' } }))
@@ -64,6 +65,13 @@ describe('agent paths', () => {
 
   it('no native agent off Windows', () => {
     expect(nativeLaunch(env([DEV_NATIVE], { platform: 'linux' }))).toBeNull()
+  })
+
+  it('the native agent advertises every capability auto needs', () => {
+    const src = readFileSync(join(__dirname, '..', 'native', 'src', 'app.rs'), 'utf8')
+    const list = /pub const CAPABILITIES: &\[&str\] =\s*&\[([^\]]*)\]/.exec(src)?.[1] ?? ''
+    const caps = [...list.matchAll(/"([^"]+)"/g)].map((m) => m[1])
+    expect(missingCapabilities(caps)).toEqual([])
   })
 
   it('missing capabilities', () => {
