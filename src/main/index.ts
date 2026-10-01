@@ -59,6 +59,8 @@ import { registerUsageIpc } from './ipc/usage'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { installA11y } from './a11y'
+import { loadVault } from './keys/vault'
+import { registerKeysIpc } from './keys/ipc'
 
 // No Lumen window may open popups or navigate away from its own renderer.
 function hardenWebContents(): void {
@@ -101,6 +103,7 @@ function registerIpc(): void {
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerMemoryIpc()
   registerUsageIpc()
+  registerKeysIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
     cancel: () => {
@@ -123,6 +126,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
   hardenWebContents()
+  // Pasted keys (DPAPI vault) fill in for anything .env did not set.
+  loadVault()
   createWindows()
 
   const configWarning = lastConfigWarning()
