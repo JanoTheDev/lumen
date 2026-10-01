@@ -116,22 +116,29 @@ export async function captureContext(
     const fg = await foregroundOf(agent, signal)
     return { ...windowOnlyContext(fg), skill: matchSkill(fg) ?? undefined }
   }
-  if (highlight.isVisible()) {
-    highlight.hide()
-    await sleep(32)
-  }
+  // Hidden only while the frames are taken: lesson highlights, the buddy and focus dimming
+  // come back right after, whatever the reply turns out to be.
+  const wasVisible = highlight.isVisible()
+  const release = highlight.holdHidden()
   const started = Date.now()
-  const [foreground, captured, uia] = await Promise.all([
-    foregroundOf(agent, signal),
-    framesOf(agent, !!opts.allScreens, signal),
-    commands
-      .uiaSnapshot(
-        agent,
-        { scope: 'foreground', maxNodes: 400, interactiveOnly: true },
-        { signal, timeoutMs: UIA_TIMEOUT_MS }
-      )
-      .catch(() => undefined)
-  ])
+  const [foreground, captured, uia] = await (async () => {
+    try {
+      if (wasVisible) await sleep(32)
+      return await Promise.all([
+        foregroundOf(agent, signal),
+        framesOf(agent, !!opts.allScreens, signal),
+        commands
+          .uiaSnapshot(
+            agent,
+            { scope: 'foreground', maxNodes: 400, interactiveOnly: true },
+            { signal, timeoutMs: UIA_TIMEOUT_MS }
+          )
+          .catch(() => undefined)
+      ])
+    } finally {
+      release()
+    }
+  })()
   // Foreground monitor = frame "1" (marks, UIA list); the others follow by position.
   const frames = orderFrames(captured, foreground.monitorId)
   const first = frames[0]

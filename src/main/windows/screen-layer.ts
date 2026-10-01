@@ -34,6 +34,8 @@ const FAILURE_MS = 1500
 const layers = new Map<number, Layer>()
 let scene: Scene = { highlights: [] }
 let suppressed = false
+/** Captures in flight (holdHidden); while any is held, show() keeps the layer hidden. */
+let holds = 0
 /** The follow buddy gets the agent's mouse-moved stream (~60 Hz while moving, nothing at rest). */
 let following = false
 let lastCursor: Point | null = null
@@ -397,8 +399,29 @@ export function hide(): void {
 }
 
 export function show(): void {
-  suppressed = false
+  // A capture in flight keeps the layer hidden; its release brings the scene back.
+  if (holds === 0) suppressed = false
   render()
+}
+
+/**
+ * Hides every layer for one screenshot and returns the release. Holds are counted, so
+ * overlapping captures keep the layer hidden until the last one is taken; the scene comes
+ * back on the last release.
+ */
+export function holdHidden(): () => void {
+  holds++
+  hide()
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    holds = Math.max(0, holds - 1)
+    if (holds === 0 && suppressed) {
+      suppressed = false
+      render()
+    }
+  }
 }
 
 export function isVisible(): boolean {

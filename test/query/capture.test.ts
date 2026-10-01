@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
-vi.mock('../../src/main/windows/highlight', () => ({ isVisible: () => false, hide: vi.fn() }))
+const hl = vi.hoisted(() => ({ release: vi.fn(), holdHidden: vi.fn() }))
+vi.mock('../../src/main/windows/highlight', () => ({
+  isVisible: () => false,
+  hide: vi.fn(),
+  holdHidden: hl.holdHidden
+}))
 vi.mock('../../src/main/util', () => ({ sleep: async () => {} }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
@@ -98,6 +103,8 @@ function fakeAgent(results: Record<string, unknown>, delayMs = 0): FakeAgent {
 const REPO_SKILLS = join(__dirname, '../../skills')
 
 beforeEach(() => {
+  hl.release.mockClear()
+  hl.holdHidden.mockReset().mockReturnValue(hl.release)
   // No skill packs unless a test opts in: they override the UIA quality.
   setSkillsDir(join(__dirname, 'no-skills'))
   resetElectronMock()
@@ -116,6 +123,19 @@ afterEach(() => {
 })
 
 describe('captureContext', () => {
+  it('hides the screen layer only while capturing, then brings it back (review high #1)', async () => {
+    fakeAgent({ active_window: 'Editor', capture: { frames: [] }, uia_snapshot: UIA })
+    await captureContext(true)
+    expect(hl.holdHidden).toHaveBeenCalledTimes(1)
+    expect(hl.release).toHaveBeenCalledTimes(1)
+  })
+
+  it('brings the screen layer back when the capture fails', async () => {
+    fakeAgent({ active_window: 'Editor' })
+    await expect(captureContext(true)).rejects.toThrow()
+    expect(hl.release).toHaveBeenCalledTimes(1)
+  })
+
   it('matches the foreground skill pack, whose uiaQuality caps the measured one', async () => {
     setSkillsDir(REPO_SKILLS)
     fakeAgent({

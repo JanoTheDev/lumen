@@ -14,7 +14,8 @@ vi.mock('../src/main/util', () => ({ sleep: async () => {} }))
 vi.mock('../src/main/ai/observe', () => ({
   waitForSettle: async () => ({ reason: 'timeout', ms: 0 })
 }))
-vi.mock('../src/main/windows/highlight', () => ({ send: vi.fn(), show: vi.fn(), hide: vi.fn() }))
+const hl = vi.hoisted(() => ({ send: vi.fn(), show: vi.fn(), hide: vi.fn(), clear: vi.fn() }))
+vi.mock('../src/main/windows/highlight', () => hl)
 vi.mock('../src/main/windows/status', () => ({ setStatus: vi.fn() }))
 type Refine = typeof import('../src/main/query/refine')
 const refineTarget = vi.fn<Refine['refineTarget']>(async (target) => ({
@@ -57,6 +58,9 @@ function mockAgent(over: Partial<MockAgent> = {}): MockAgent {
     },
     request: async (cmd: string, args?: Record<string, unknown>) => {
       m.calls.push({ cmd, action: args })
+      // A plain text field has the focus (agent typing is rated on it).
+      if (cmd === 'focus_info')
+        return { title: m.window, process: 'chrome.exe', uia: true, role: 'edit', name: 'Search' }
       return {}
     }
   }
@@ -102,6 +106,19 @@ describe('executeActions', () => {
       { type: 'focus_browser' }
     ])
     expect(openExternal).toHaveBeenCalledWith('https://example.com/')
+  })
+
+  it('drops the click preview without suppressing the screen layer (review high #1)', async () => {
+    mockAgent()
+    hl.hide.mockClear()
+    hl.clear.mockClear()
+    await executeActions([{ type: 'click', x: 100, y: 50 }])
+    expect(hl.hide).not.toHaveBeenCalled()
+    expect(hl.clear).toHaveBeenCalled()
+    hl.clear.mockClear()
+    // No click, no preview drawn: lesson highlights stay as they are.
+    await executeActions([{ type: 'hotkey', keys: ['ctrl', 'c'] }])
+    expect(hl.clear).not.toHaveBeenCalled()
   })
 
   it('runs uia_act and input through their own agent commands', async () => {

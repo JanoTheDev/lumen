@@ -91,7 +91,8 @@ async function confirmLowConfidence(
     CONFIRM_MS + 600
   )
   await sleep(CONFIRM_MS)
-  if (!signal?.aborted) highlight.hide()
+  // Drop only the question highlight; hide() would suppress the whole layer until a show().
+  if (!signal?.aborted) highlight.clear()
 }
 
 /** How a click action is found on screen: its targets in priority order. */
@@ -187,7 +188,7 @@ async function resolve(
     ])
     highlight.show()
     await sleep(600)
-    highlight.hide()
+    highlight.clear()
   }
   const button = 'button' in action ? action.button : undefined
   return {
@@ -303,7 +304,8 @@ export async function executeActions(
     }
   } finally {
     disarmCancel()
-    if (preview) highlight.hide()
+    // The pointer preview was drawn: drop it, without suppressing the layer.
+    if (preview && !firstClick) highlight.clear()
     releaseDwell()
   }
 

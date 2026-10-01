@@ -140,4 +140,22 @@ describe('screen layer scene', () => {
     layer.onCursorMoved({ x: 90, y: 90 })
     expect(cursors()).toHaveLength(n)
   })
+
+  it('a capture hold hides the scene only until it is released (review high #1)', () => {
+    const w = wins[0]
+    layer.setHighlights([{ label: 'Lesson', bbox: { x: 10, y: 10, w: 80, h: 30 } }])
+    const a = layer.holdHidden()
+    const b = layer.holdHidden()
+    expect(lastScene(w).highlights).toHaveLength(0)
+    layer.show() // a guide reply mid-capture must not show the layer in the screenshot
+    expect(lastScene(w).highlights).toHaveLength(0)
+    a()
+    a() // idempotent
+    expect(lastScene(w).highlights).toHaveLength(0)
+    b()
+    expect(lastScene(w).highlights.map((h) => h.label)).toEqual(['Lesson'])
+    // Drawn after the capture: visible straight away, no show() needed.
+    layer.setHighlights([{ label: 'Next', bbox: { x: 20, y: 20, w: 80, h: 30 } }])
+    expect(lastScene(w).highlights.map((h) => h.label)).toEqual(['Next'])
+  })
 })
