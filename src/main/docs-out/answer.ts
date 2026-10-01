@@ -129,7 +129,18 @@ export async function makeFile(
   const name = replace && source ? stemOf(source.name) : ''
 
   if (intent.convertOnly && source) {
-    const bytes = await convertLocally(source, format).catch(() => null)
+    // A local conversion that fails is said, never handed to the model (it would get the
+    // file cut to its text cap and write a partial copy).
+    let bytes: Buffer | string | null
+    try {
+      bytes = await convertLocally(source, format)
+    } catch (e) {
+      log('fail', `make file: local conversion failed: ${(e as Error).message}`)
+      const why = /too big for Excel/.test((e as Error).message)
+        ? (e as Error).message
+        : 'The file could not be read; it may be damaged or password protected.'
+      return answer(`I could not convert ${source.name}. ${why}`)
+    }
     if (bytes !== null) {
       log('plan', `make file: ${format} converted locally`)
       const r = await createDocument(

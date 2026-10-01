@@ -56,8 +56,23 @@ export function sheetNames(wanted: string[]): string[] {
   })
 }
 
+/** Excel's own limits: a sheet past them does not open. */
+export const MAX_ROWS = 1_048_576
+export const MAX_COLUMNS = 16_384
+
+/** Why `rows` cannot be one Excel sheet, or null. */
+export function sheetTooBig(rows: string[][]): string | null {
+  if (rows.length > MAX_ROWS)
+    return `it has ${rows.length.toLocaleString('en-US')} rows and Excel holds at most ${MAX_ROWS.toLocaleString('en-US')}`
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 0)
+  if (width > MAX_COLUMNS)
+    return `it has ${width.toLocaleString('en-US')} columns and Excel holds at most ${MAX_COLUMNS.toLocaleString('en-US')}`
+  return null
+}
+
 function sheetXml(rows: string[][]): string {
-  const width = Math.max(1, ...rows.map((r) => r.length))
+  // A loop, not a spread: a spread of 150k+ rows overflows the stack.
+  const width = rows.reduce((w, r) => Math.max(w, r.length), 1)
   const widths = Array.from({ length: width }, (_, i) =>
     Math.min(60, Math.max(8, ...rows.slice(0, 200).map((r) => (r[i] ?? '').length + 2)))
   )
@@ -94,8 +109,13 @@ const STYLES = `${XML_HEAD}<styleSheet xmlns="${SS}">
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`
 
+/** Throws when a sheet is past Excel's limits (nothing is cut silently). */
 export function sheetsToXlsx(sheets: Sheet[], title = ''): Buffer {
   const list = sheets.length ? sheets : [{ name: '', rows: [] }]
+  for (const s of list) {
+    const why = sheetTooBig(s.rows)
+    if (why) throw new Error(`The table is too big for Excel: ${why}.`)
+  }
   const names = sheetNames(list.map((s) => s.name))
   const types = list
     .map(

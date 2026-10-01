@@ -139,7 +139,8 @@ const round = (n: number): number => Math.round(n * 1000) / 1000
 /** Per-column stats of a table whose first row is the header. Pure. */
 export function tableStats(rows: string[][]): { rows: number; columns: ColumnStats[] } {
   const [head = [], ...data] = rows.filter((r) => r.some((c) => c.trim()))
-  const width = Math.max(head.length, ...data.map((r) => r.length), 0)
+  // Loops, not spreads: a spread of 150k+ values overflows the stack.
+  const width = data.reduce((w, r) => Math.max(w, r.length), head.length)
   const columns: ColumnStats[] = []
   for (let i = 0; i < width; i++) {
     const values = data.map((r) => (r[i] ?? '').trim()).filter(Boolean)
@@ -154,8 +155,8 @@ export function tableStats(rows: string[][]): { rows: number; columns: ColumnSta
     }
     if (nums.length && nums.length >= values.length * 0.8) {
       const sum = nums.reduce((a, b) => a + b, 0)
-      col.min = Math.min(...nums)
-      col.max = Math.max(...nums)
+      col.min = nums.reduce((a, b) => (b < a ? b : a), Infinity)
+      col.max = nums.reduce((a, b) => (b > a ? b : a), -Infinity)
       col.sum = round(sum)
       col.mean = round(sum / nums.length)
     }
@@ -218,7 +219,7 @@ export function htmlToText(html: string): string {
       [...r[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/g)].map((c) => cell(c[1]))
     )
     if (!rows.length) return ''
-    const width = Math.max(...rows.map((r) => r.length))
+    const width = rows.reduce((w, r) => Math.max(w, r.length), 0)
     const line = (r: string[]): string =>
       `| ${Array.from({ length: width }, (_, i) => r[i] ?? '').join(' | ')} |`
     return `\n\n${[line(rows[0]), `|${' --- |'.repeat(width)}`, ...rows.slice(1).map(line)].join('\n')}\n\n`
