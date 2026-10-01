@@ -8,6 +8,7 @@ import type { ModelResponse } from '@shared/types'
 import { rememberAnswer } from './answer-link'
 import {
   describeCard,
+  foreignCardPhrase,
   parseCardIntent,
   priceWords,
   resolvePick,
@@ -33,6 +34,8 @@ export interface CardsTurnDeps {
   openUrl(url: string): Promise<boolean>
   saveNote(note: { text: string; title?: string; url?: string }): Promise<boolean>
   openPanel(route: string): void
+  /** The voice language ("nl", "de", "fr", "es" get their basic picks too). */
+  lang?(): string
   /** A question about one card, from its data and its source page; null = no model. */
   ask?(
     card: Card,
@@ -139,7 +142,9 @@ export async function handleCardsTurn(
   const set = deps.current()
   if (!set || deps.now() - set.createdAt > FOLLOWUP_TTL_MS) return null
   if (deps.webAt() > set.createdAt) return null
-  const intent = parseCardIntent(prompt)
+  const foreign = deps.lang ? foreignCardPhrase(prompt, deps.lang()) : null
+  // A phrase in the voice language wins ("open de goedkoopste" is not a card named so).
+  const intent = (foreign ? parseCardIntent(foreign) : null) ?? parseCardIntent(prompt)
   if (!intent) return null
   const cards = set.cards.cards
   const focused = focus?.setId === set.id ? focus.cardId : null

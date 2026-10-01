@@ -10,7 +10,7 @@ import { parseJsonAs } from '../ai/json'
 import { getProvider } from '../ai/providers'
 import { UNTRUSTED_CONTENT_RULE } from '../ai/prompts/untrusted'
 import { loadConfig } from '../config'
-import { replyLanguageLine } from '../speech/language'
+import { effectiveLanguage, replyLanguageLine } from '../speech/language'
 import { webState } from '../web/context'
 import { htmlToText } from '../web/extract'
 import { safeGet, type RobotsCache } from '../web/net'
@@ -98,6 +98,7 @@ export function cardsTurn(prompt: string, signal: AbortSignal): Promise<CardsTur
     openUrl: (url) => ports.openUrl(url),
     saveNote: (note) => ports.saveNote(note),
     openPanel: (route) => ports.openPanel(route),
+    lang: () => effectiveLanguage(loadConfig().voice.language),
     ask: askAboutCard,
     // The pipeline shows the reply text; the booking still shows its confirmation card.
     book: (card, set, utterance, signal) =>

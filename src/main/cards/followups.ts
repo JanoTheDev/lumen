@@ -348,3 +348,169 @@ export function describeCard(card: Card, index: number): string {
   const head = `The ${ordinalWord(index)} one is ${card.title}${card.subtitle ? `, ${card.subtitle}` : ''}`
   return `${head}${bits.length ? `, ${bits.join(', ')}` : ''}.${facts ? ` ${facts}.` : ''}`
 }
+
+// ---- nl / de / fr / es basics (T42) ----
+
+/** Ordinals 1–12 per language (regex alternatives, inflections included). */
+const FOREIGN_ORD: Record<string, string[]> = {
+  nl: [
+    'eerste',
+    'tweede',
+    'derde',
+    'vierde',
+    'vijfde',
+    'zesde',
+    'zevende',
+    'achtste',
+    'negende',
+    'tiende',
+    'elfde',
+    'twaalfde'
+  ],
+  de: [
+    'erste[nmrs]?',
+    'zweite[nmrs]?',
+    'dritte[nmrs]?',
+    'vierte[nmrs]?',
+    'f(?:ü|ue)nfte[nmrs]?',
+    'sechste[nmrs]?',
+    'sie(?:b|bt)te[nmrs]?',
+    'achte[nmrs]?',
+    'neunte[nmrs]?',
+    'zehnte[nmrs]?',
+    'elfte[nmrs]?',
+    'zw(?:ö|oe)lfte[nmrs]?'
+  ],
+  fr: [
+    'premi(?:er|ère|ere)',
+    'deuxi(?:è|e)me|seconde?',
+    'troisi(?:è|e)me',
+    'quatri(?:è|e)me',
+    'cinqui(?:è|e)me',
+    'sixi(?:è|e)me',
+    'septi(?:è|e)me',
+    'huiti(?:è|e)me',
+    'neuvi(?:è|e)me',
+    'dixi(?:è|e)me',
+    'onzi(?:è|e)me',
+    'douzi(?:è|e)me'
+  ],
+  es: [
+    'primer[oa]?',
+    'segund[oa]',
+    'tercer[oa]?',
+    'cuart[oa]',
+    'quint[oa]',
+    'sext[oa]',
+    's(?:é|e)ptim[oa]',
+    'octav[oa]',
+    'noven[oa]',
+    'd(?:é|e)cim[oa]',
+    'und(?:é|e)cim[oa]',
+    'duod(?:é|e)cim[oa]'
+  ]
+}
+
+const FOREIGN: Record<
+  string,
+  {
+    article: string
+    last: string
+    cheapest: string
+    best: string
+    noun: string
+    verbs: [RegExp, string][]
+  }
+> = {
+  nl: {
+    article: '(?:de|het|die|dat)',
+    last: 'laatste',
+    cheapest: 'goedkoopste',
+    best: 'best beoordeelde|beste',
+    noun: '(?:een|optie|hotel|resultaat|product|vlucht|trein|recept|plek)',
+    verbs: [
+      [/^(?:open|openen|toon|laat (?:me )?zien) /, 'open '],
+      [/^(?:bewaar|sla op|opslaan|bewaren) /, 'save '],
+      [/^(?:boek|reserveer|koop|bestel) /, 'book '],
+      [/^(?:vertel (?:me )?meer over|meer over) /, 'tell me more about ']
+    ]
+  },
+  de: {
+    article: '(?:der|die|das|den|dem)',
+    last: 'letzte[nmrs]?',
+    cheapest: '(?:billigste|g(?:ü|ue)nstigste)[nmrs]?',
+    best: '(?:best bewertete|beste)[nmrs]?',
+    noun: '(?:option|hotel|ergebnis|produkt|flug|zug|rezept|ort)',
+    verbs: [
+      [/^(?:(?:ö|oe)ffne|(?:ö|oe)ffnen|zeig(?:e)? mir) /, 'open '],
+      [/^(?:speicher(?:e|n)?|merk dir) /, 'save '],
+      [/^(?:buche|buchen|reservier(?:e|en)?|kauf(?:e|en)?|bestell(?:e|en)?) /, 'book '],
+      [
+        /^(?:erz(?:ä|ae)hl (?:mir )?mehr (?:über|ueber)|mehr (?:über|ueber)) /,
+        'tell me more about '
+      ]
+    ]
+  },
+  fr: {
+    article: "(?:le|la|l'|les)",
+    last: 'derni(?:er|ère|ere)',
+    cheapest: 'moins ch(?:er|ère|ere)',
+    best: 'mieux not(?:é|e)e?|meilleure?',
+    noun: '(?:option|h(?:ô|o)tel|r(?:é|e)sultat|produit|vol|train|recette|endroit)',
+    verbs: [
+      [/^(?:ouvre|ouvrir|montre(?:-| )moi) /, 'open '],
+      [/^(?:enregistre|garde|sauvegarde) /, 'save '],
+      [/^(?:r(?:é|e)serve|ach(?:è|e)te|commande) /, 'book '],
+      [/^(?:dis(?:-| )m'en plus sur|parle(?:-| )moi de) /, 'tell me more about ']
+    ]
+  },
+  es: {
+    article: '(?:el|la|los|las|lo)',
+    last: '(?:ú|u)ltim[oa]',
+    cheapest: 'm(?:á|a)s barat[oa]',
+    best: 'mejor valorad[oa]|mejor',
+    noun: '(?:opci(?:ó|o)n|hotel|resultado|producto|vuelo|tren|receta|sitio|lugar)',
+    verbs: [
+      [/^(?:abre|abrir|mu(?:é|e)strame) /, 'open '],
+      [/^(?:guarda|guardar) /, 'save '],
+      [/^(?:reserva|reservar|compra|comprar|pide) /, 'book '],
+      [/^(?:cu(?:é|e)ntame m(?:á|a)s sobre|m(?:á|a)s sobre) /, 'tell me more about ']
+    ]
+  }
+}
+
+/**
+ * A card follow-up said in Dutch, German, French or Spanish as the English phrase the grammar
+ * knows: "de tweede" → "the second one", "open de goedkoopste" → "open the cheapest one",
+ * "die zweite" / "le deuxième" / "el segundo". Only picks (ordinal, last, cheapest, best rated)
+ * with an optional open / save / book / tell me more verb; null for anything else. Pure.
+ */
+export function foreignCardPhrase(text: string, lang: string): string | null {
+  const l = lang.toLowerCase().split('-')[0]
+  const g = FOREIGN[l]
+  if (!g) return null
+  let t = clean(text).replace(/^(?:graag|bitte|por favor|s'il te plaît|s'il vous plaît) /, '')
+  let verb = ''
+  for (const [re, en] of g.verbs) {
+    if (re.test(t)) {
+      verb = en
+      t = t.replace(re, '')
+      break
+    }
+  }
+  t = t.replace(
+    / (?:alstublieft|alsjeblieft|graag|bitte|por favor|s'il te plaît|s'il vous plaît)$/,
+    ''
+  )
+  // `clean` leaves single spaces; French "l'" runs into its word.
+  const sep = l === 'fr' ? "(?:(?<=')| )" : ' '
+  const head = `^(?:${g.article}${sep})?`
+  const tail = `(?: ${g.noun}| one)?$`
+  const ord = FOREIGN_ORD[l].findIndex((w) => new RegExp(`${head}(?:${w})${tail}`).test(t))
+  let pick: string | null = null
+  if (ord >= 0) pick = `the ${ordinalWord(ord)} one`
+  else if (new RegExp(`${head}(?:${g.last})${tail}`).test(t)) pick = 'the last one'
+  else if (new RegExp(`${head}(?:${g.cheapest})${tail}`).test(t)) pick = 'the cheapest one'
+  else if (new RegExp(`${head}(?:${g.best})${tail}`).test(t)) pick = 'the best rated one'
+  return pick ? `${verb}${pick}` : null
+}
