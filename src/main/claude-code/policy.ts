@@ -301,16 +301,62 @@ function safeSimple(w: string[], req: ToolRequest, filter: boolean): boolean {
   return true
 }
 
-function safeCommand(cmd: string, req: ToolRequest): boolean {
+const CODE_TOOL_RE = /^(vitest|jest|eslint|prettier|playwright)$/i
+
+/**
+ * An allowed shape that runs the project's own code: package scripts, test runners, linters and
+ * formatters with JS configs, cargo build scripts and proc macros (build.rs), go test, MSBuild
+ * targets, pytest conftest, mypy / flake8 plugins. Claude may just have edited that code, so
+ * careful asks. tsc, cargo fmt, go vet / build / fmt, ruff, black --check and reads stay automatic.
+ */
+function runsProjectCode(w: string[]): boolean {
+  const [head = '', ...args] = w
+  const cmd = head.toLowerCase()
+  switch (cmd) {
+    case 'npm':
+    case 'pnpm':
+    case 'yarn':
+    case 'bun':
+    case 'dotnet':
+    case 'pytest':
+    case 'mypy':
+    case 'flake8':
+      return true
+    case 'npx':
+      return CODE_TOOL_RE.test(args[0] ?? '')
+    case 'cargo':
+      return args[0] !== 'fmt'
+    case 'go':
+      return args[0] === 'test'
+  }
+  if (/(^|[\\/])python3?(\.exe)?$/i.test(head)) return args[1] !== 'ruff'
+  const bin = BIN_RE.exec(head)
+  return !!bin && bin[3].toLowerCase() !== 'tsc'
+}
+
+/** Commands outside the allowed shapes that plainly run project code (for the reason). */
+const RUNS_CODE_RE =
+  /^\s*((node|deno|tsx|ts-node|python3?|py)(\.exe)?\s+[^-\s]|(npm|pnpm|yarn|bun)\s+(run|test|start|exec|x)\b|(npx|bunx|pnpx)\s|cargo\s+(run|test|build|check|clippy|bench)\b|go\s+(run|test|generate)\b|dotnet\s+(run|test|build)\b|make\b|(\.[\\/])?(gradlew?|mvnw?)(\.bat|\.cmd)?\b)/i
+
+/** 'read': safe to approve; 'code': an allowed shape that runs project code; null: neither. */
+function commandSafety(cmd: string, req: ToolRequest): 'read' | 'code' | null {
   // Merging stderr into stdout is the one redirection that writes nothing.
   const c = cmd.replace(/(^|\s)2>&1(?=\s|$)/g, ' ').trim()
-  if (!c || EVAL_RE.test(c)) return false
-  return c.split('&&').every((chain) => {
+  if (!c || EVAL_RE.test(c)) return null
+  let code = false
+  const ok = c.split('&&').every((chain) => {
     const stages = chain.split('|').map((s) => s.trim())
     // `||` or an empty stage is not a pipe into a filter.
     if (stages.some((s) => !s)) return false
-    return stages.every((s, i) => !SHELL_META_RE.test(s) && safeSimple(words(s), req, i > 0))
+    return stages.every((s, i) => {
+      if (SHELL_META_RE.test(s)) return false
+      const w = words(s)
+      if (!safeSimple(w, req, i > 0)) return false
+      if (i === 0 && runsProjectCode(w)) code = true
+      return true
+    })
   })
+  return ok ? (code ? 'code' : 'read') : null
 }
 
 // Files whose contents decide what runs later (git config and hooks, Claude Code settings and
@@ -335,6 +381,11 @@ export function execConfigPath(project: string, p: string, cwd = project): boole
   return EXEC_CONFIG_RE.test(segs.join('/'))
 }
 
+// "Always allow this" on such a prompt sends the CLI's session rule for that exact command, so
+// the CLI stops asking for it and careful never sees it again.
+const RUNS_CODE =
+  'it runs the project’s code (scripts, tests or build steps Claude may have changed)'
+
 export function decidePermission(req: ToolRequest, level: AutopilotLevel): ClaudeDecision {
   const what = describeRequest(req)
   const hard = hardReason(req)
@@ -354,8 +405,10 @@ export function decidePermission(req: ToolRequest, level: AutopilotLevel): Claud
   }
   if (req.tool === 'Bash' || req.tool === 'PowerShell') {
     const cmd = str(req.input.command)
-    if (safeCommand(cmd, req))
+    const safety = commandSafety(cmd, req)
+    if (safety === 'read')
       return { verdict: 'allow', risk: 'low', reason: 'a check or read-only command', what }
+    if (safety === 'code') return { verdict: 'ask', risk: 'medium', reason: RUNS_CODE, what }
     if (
       /\b(install|add|i)\b/.test(cmd) &&
       /\b(npm|pnpm|yarn|pip|cargo|winget|choco|scoop|bun)\b/.test(cmd)
@@ -367,6 +420,7 @@ export function decidePermission(req: ToolRequest, level: AutopilotLevel): Claud
       return { verdict: 'ask', risk: 'medium', reason: 'it pushes', what }
     if (/\b(rm|del|erase|rmdir|remove-item|git\s+clean)\b/i.test(cmd))
       return { verdict: 'ask', risk: 'medium', reason: 'it deletes files', what }
+    if (RUNS_CODE_RE.test(cmd)) return { verdict: 'ask', risk: 'medium', reason: RUNS_CODE, what }
     return { verdict: 'ask', risk: 'medium', reason: 'a command I do not know to be safe', what }
   }
   if (req.tool === 'WebFetch' || req.tool === 'WebSearch')

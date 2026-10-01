@@ -88,10 +88,9 @@ describe('decidePermission', () => {
   })
 
   it('careful: approves checks, reads and edits inside the project', () => {
-    expect(decidePermission(bash('npm run typecheck && npx vitest run'), 'careful').verdict).toBe(
+    expect(decidePermission(bash('npx tsc --noEmit && cargo fmt --check'), 'careful').verdict).toBe(
       'allow'
     )
-    expect(decidePermission(bash('cargo clippy --all-targets'), 'careful').verdict).toBe('allow')
     expect(decidePermission(bash('git status'), 'careful').verdict).toBe('allow')
     expect(
       decidePermission(tool('Edit', { file_path: `${P}\\src\\a.ts` }), 'careful').verdict
@@ -166,9 +165,11 @@ describe('decidePermission', () => {
 
   it('careful still approves plain checks, reads and pipes into filters', () => {
     for (const c of [
-      'npm test',
-      'npm run test:unit -- src/a.test.ts',
-      'npm run build 2>&1 | tail -n 40',
+      'npx tsc --noEmit 2>&1 | tail -n 40',
+      'go vet ./...',
+      'npx biome check src',
+      'ruff check src',
+      'black --check src',
       'git log --oneline -5',
       'git diff --stat',
       'git commit -m "fix the thing"',
@@ -180,6 +181,45 @@ describe('decidePermission', () => {
       'mkdir -p src/new && cd src'
     ])
       expect(decidePermission(bash(c), 'careful').verdict, c).toBe('allow')
+  })
+
+  it('careful asks before running the project’s own code (scripts, tests, build steps)', () => {
+    for (const c of [
+      'npm test',
+      'npm run typecheck && npx vitest run',
+      'npm run test:unit -- src/a.test.ts',
+      'npm run build 2>&1 | tail -n 40',
+      'pnpm lint',
+      'yarn build',
+      'npx vitest run',
+      'npx eslint src',
+      'npx prettier --check src',
+      'npx playwright test',
+      'node_modules/.bin/jest',
+      'cargo test',
+      'cargo build --release',
+      'cargo clippy --all-targets',
+      'go test ./...',
+      'dotnet build',
+      'pytest -q',
+      'python -m pytest tests',
+      'mypy src',
+      'node scripts/build.mjs',
+      'python tools/gen.py',
+      'cargo run',
+      'go run .',
+      'dotnet run',
+      'make',
+      './gradlew test',
+      'mvn test'
+    ]) {
+      const d = decidePermission(bash(c), 'careful')
+      expect(d.verdict, c).toBe('ask')
+      expect(d.hard, c).toBeUndefined()
+      expect(d.reason, c).toMatch(/runs the project’s code/)
+    }
+    expect(decidePermission(bash('npm test'), 'full').verdict).toBe('allow')
+    expect(decidePermission(bash('npm install x'), 'careful').reason).toMatch(/installs/)
   })
 
   it('careful never auto-approves edits to config that runs code', () => {
@@ -259,7 +299,7 @@ describe('PermissionBridge', () => {
 
   it('approves by policy without asking and audits it', async () => {
     const { b, audits, deps } = bridge()
-    const out = await b.handle('cc_a1234', req('npm test'), signal())
+    const out = await b.handle('cc_a1234', req('git status'), signal())
     expect(behavior(out)).toBe('allow')
     expect(deps.ask).not.toHaveBeenCalled()
     expect(audits[0]).toMatchObject({ origin: 'claude-code', decision: 'auto', result: 'ok' })
