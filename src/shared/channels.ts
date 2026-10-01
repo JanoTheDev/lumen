@@ -48,6 +48,10 @@ export interface InvokeChannels {
   'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
   'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
   'home:info': { args: []; result: HomeInfo }
+  /** "What can I say": every local voice command, with what applies right now first. */
+  'a11y:commands': { args: []; result: CommandSheetData }
+  /** Dwell click-type palette: current pick, pause and drag/scroll state. */
+  'a11y:dwell-state': { args: []; result: DwellPaletteState }
   /** Applies accessibility profiles (shared/profiles ids) on top of the config; returns it. */
   'a11y:apply-profile': { args: [ids: string[]]; result: Record<string, unknown> }
   'onboarding:info': { args: []; result: OnboardingInfo }
@@ -61,6 +65,8 @@ export interface InvokeChannels {
   'memory:delete-all': { args: [confirm: string]; result: MemoryResult }
   /** Model spend: today, this session, the last 30 days and a rough per-day estimate. */
   'usage:get': { args: []; result: UsageOverview }
+  /** Which OS agent is running (Settings shows it read-only). */
+  'agent:info': { args: []; result: AgentImplInfo }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -93,6 +99,58 @@ export interface SendChannels {
   'panel:close': []
   'home:run': [text: string]
   'memory:open-folder': []
+  /** Command sheet: close its window. */
+  'a11y:sheet-close': []
+  /** Dwell palette button (dwelled on or clicked). */
+  'a11y:dwell-pick': [pick: DwellPaletteButton]
+}
+
+export type DwellPaletteButton = 'left' | 'right' | 'double' | 'drag' | 'scroll' | 'pause'
+
+export interface DwellPaletteState {
+  enabled: boolean
+  /** Click type the next dwell does. */
+  next: Exclude<DwellPaletteButton, 'pause'>
+  /** The pick stays after a click instead of going back to the default. */
+  sticky: boolean
+  paused: boolean
+  /** A drag start is set and waits for the drop dwell. */
+  dragging: boolean
+  /** The scroll arrows are on screen. */
+  scrolling: boolean
+}
+
+export interface CommandSheetRow {
+  category: string
+  say: string
+  does: string
+  /** When it applies ("while numbers are shown"); absent = any time. */
+  when?: string
+  /** It applies right now (always true for rows without `when`). */
+  now: boolean
+}
+
+export interface CommandSheetData {
+  rows: CommandSheetRow[]
+  /** Shortcut that opens the sheet; "" = none. */
+  hotkey: string
+}
+
+/** Dwell ring on the screen layer, in that display's DIP. */
+export interface DwellRingData {
+  x: number
+  y: number
+  progress: number
+  active: boolean
+  /** left, right, double, drag, drop, scroll, pause. */
+  clickType?: string
+  paused?: boolean
+  /** Ring diameter, logical px. */
+  size?: number
+  /** Snapped element the click will hit. */
+  target?: Rect
+  /** A risky target waits for a second dwell. */
+  warn?: boolean
 }
 
 export interface StatusMessage {
@@ -239,6 +297,16 @@ export interface OnboardingInfo {
   screenReader: boolean
 }
 
+/** The running OS agent: the Rust sidecar or the Python fallback. */
+export interface AgentImplInfo {
+  impl: 'native' | 'python' | null
+  /** Agent version; null for the Python agent on protocol v1. */
+  version: string | null
+  protocol: 1 | 2 | null
+  /** Why `auto` dropped the native agent this session, or null. */
+  fallback: string | null
+}
+
 export interface HomeInfo {
   hotkey: string
   agentReady: boolean
@@ -287,7 +355,7 @@ export interface EventChannels {
   'screen:clear': []
   'screen:pointer': [pointer: Point & { text: string }]
   'screen:locate': [items: LocateItem[]]
-  'screen:dwell': [data: { x: number; y: number; progress: number; active: boolean }]
+  'screen:dwell': [data: DwellRingData]
   'screen:render': [scene: ScreenScene]
   /** Cursor in this display's DIP, or null when it is on another display. */
   'screen:cursor': [point: Point | null]
@@ -315,6 +383,9 @@ export interface EventChannels {
   'voice:hands-free': []
   /** Memory changed (voice command, session end, settings); `pending` drives the review chip. */
   'memory:changed': [summary: { pending: number }]
+  /** Command sheet window shown again: re-read the commands for the current context. */
+  'a11y:sheet-refresh': []
+  'a11y:dwell-state': [state: DwellPaletteState]
   'voice:tts': [msg: TtsMessage]
   /** Start or stop streaming mic audio to the wake-word spotter. */
   'voice:wake-listen': [on: boolean]
@@ -348,6 +419,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'keys:clear',
   'keys:test',
   'home:info',
+  'a11y:commands',
+  'a11y:dwell-state',
   'a11y:apply-profile',
   'onboarding:info',
   'memory:get',
@@ -357,7 +430,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:episode-delete',
   'memory:export',
   'memory:delete-all',
-  'usage:get'
+  'usage:get',
+  'agent:info'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
@@ -382,7 +456,9 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'panel:open',
   'panel:close',
   'home:run',
-  'memory:open-folder'
+  'memory:open-folder',
+  'a11y:sheet-close',
+  'a11y:dwell-pick'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
@@ -413,7 +489,9 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'voice:hands-free',
   'voice:tts',
   'voice:wake-listen',
-  'memory:changed'
+  'memory:changed',
+  'a11y:sheet-refresh',
+  'a11y:dwell-state'
 ]
 
 /** Typed surface exposed to renderers as `window.lumen`. */

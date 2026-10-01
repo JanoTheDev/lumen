@@ -56,6 +56,7 @@ import { registerVoiceIpc } from './ipc/voice'
 import { registerWakeIpc } from './ipc/wake'
 import { registerMemoryIpc } from './ipc/memory'
 import { registerUsageIpc } from './ipc/usage'
+import { registerAgentIpc } from './ipc/agent'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { installA11y } from './a11y'
@@ -82,7 +83,6 @@ function createWindows(): void {
   if (uiV2()) {
     assistantWin.create()
     screenLayer.create()
-    homeWin.create()
   } else {
     hud.create()
     highlight.create()
@@ -90,6 +90,7 @@ function createWindows(): void {
     statusWin.create()
     dwellRing.create()
   }
+  homeWin.create()
   tray.create()
   applyUiScaleOnLoad(loadConfig().a11y.uiScale)
 }
@@ -103,6 +104,7 @@ function registerIpc(): void {
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerMemoryIpc()
   registerUsageIpc()
+  registerAgentIpc()
   registerKeysIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
