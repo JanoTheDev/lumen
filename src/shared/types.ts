@@ -94,7 +94,14 @@ export type Action =
   | { type: 'navigate_url'; url: string }
   | { type: 'focus_browser' }
   | { type: 'scroll'; direction: ScrollDirection; amount?: number; x?: number; y?: number }
-  | { type: 'uia_act'; elementId: string; action: UiaAction; value?: string }
+  | {
+      type: 'uia_act'
+      elementId: string
+      action: UiaAction
+      value?: string
+      /** Name of the element (policy risk names, logs). */
+      description?: string
+    }
   | { type: 'input'; steps: InputStep[] }
 
 export type ActionType = Action['type']

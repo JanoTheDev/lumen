@@ -55,8 +55,8 @@ function mockAgent(over: Partial<MockAgent> = {}): MockAgent {
       m.calls.push({ cmd: 'execute', action })
       return m.onExecute?.(action) ?? null
     },
-    request: async (cmd: string) => {
-      m.calls.push({ cmd })
+    request: async (cmd: string, args?: Record<string, unknown>) => {
+      m.calls.push({ cmd, action: args })
       return {}
     }
   }
@@ -92,7 +92,8 @@ describe('executeActions', () => {
       cancelled: false,
       blocked: false,
       reachedBottom: false,
-      targets: []
+      targets: [],
+      maxRisk: 'low'
     })
     expect(executed(m)).toEqual([
       { type: 'click', x: 100, y: 50 },
@@ -101,6 +102,24 @@ describe('executeActions', () => {
       { type: 'focus_browser' }
     ])
     expect(openExternal).toHaveBeenCalledWith('https://example.com/')
+  })
+
+  it('runs uia_act and input through their own agent commands', async () => {
+    const m = mockAgent()
+    const r = await executeActions(
+      [
+        { type: 'uia_act', elementId: 'e4', action: 'toggle', description: 'Dark' },
+        { type: 'input', steps: [{ t: 'move', x: 5, y: 6 }] }
+      ],
+      { preview: false }
+    )
+    expect(r.executed).toBe(2)
+    expect(executed(m)).toEqual([])
+    const sent = m.calls.filter((c) => c.cmd === 'uia_act' || c.cmd === 'input')
+    expect(sent).toEqual([
+      { cmd: 'uia_act', action: { elementId: 'e4', action: 'toggle' } },
+      { cmd: 'input', action: { steps: [{ t: 'move', x: 5, y: 6 }] } }
+    ])
   })
 
   it('turns click_bbox into a click at the bbox centre', async () => {

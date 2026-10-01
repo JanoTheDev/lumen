@@ -3,10 +3,10 @@
 // preview, safety policy and cancellation. Every action passes the policy gate (evaluate,
 // confirm, audit) before it runs, so no caller can skip it.
 import { shell } from 'electron'
-import type { Action, Rect, Target } from '@shared/types'
+import type { Action, InputStep, Rect, Target, UiaAction } from '@shared/types'
 import { currentFrame, physToLogical, rectCenter } from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
-import { assertLaunchableUrl, type Origin, type TaskState } from './safety'
+import { assertLaunchableUrl, type Origin, type Risk, type TaskState } from './safety'
 import { gate, newTaskId } from './policy'
 import { redactForLog } from './redact'
 import { requireAgent } from '../agent/instance'
@@ -52,6 +52,8 @@ export interface ExecuteOptions {
   task?: TaskState
   /** Text the agent read this task (injection check). */
   observedText?: string
+  /** Pause after each action (default 150 ms, 300 ms after a hotkey). */
+  pauseMs?: number
 }
 
 export interface ExecuteResult {
@@ -66,6 +68,8 @@ export interface ExecuteResult {
   reachedBottom: boolean
   /** Physical rects of the click targets, in order (the verifier diffs around them). */
   targets: Rect[]
+  /** Highest policy risk among the actions that ran. */
+  maxRisk: Exclude<Risk, 'blocked'>
 }
 
 /** Shows the uncertain target and gives the user a moment to cancel (Esc / "cancel"). */
@@ -226,7 +230,8 @@ export async function executeActions(
     cancelled: false,
     blocked: false,
     reachedBottom: false,
-    targets: []
+    targets: [],
+    maxRisk: 'low'
   }
   const frame = currentFrame()
   log(
@@ -250,6 +255,8 @@ export async function executeActions(
         break
       }
       prevType = action.type
+      const risk = g.decision.risk
+      if (risk === 'high' || (risk === 'medium' && result.maxRisk === 'low')) result.maxRisk = risk
       if (signal?.aborted) {
         g.finish('cancelled')
         break
@@ -288,7 +295,7 @@ export async function executeActions(
         throw e
       }
       if (stop) break
-      await sleep(scaled.type === 'hotkey' ? 300 : 150)
+      await sleep(opts.pauseMs ?? (scaled.type === 'hotkey' ? 300 : 150))
     }
   } finally {
     disarmCancel()
@@ -330,6 +337,24 @@ export async function executeActions(
       result.executed++
       // The page has loaded when its title changes or the frames stop moving (max 1.5 s).
       await settle(before, signal)
+    } else if (scaled.type === 'uia_act') {
+      // UIA patterns: the real pointer does not move (ghost cursor).
+      const a = scaled as AgentAction & { elementId?: string; action?: UiaAction; value?: string }
+      if (!a.elementId || !a.action) throw new Error('uia_act needs elementId and action')
+      await agent.request(
+        'uia_act',
+        {
+          elementId: a.elementId,
+          action: a.action,
+          ...(a.value !== undefined ? { value: a.value } : {})
+        },
+        { signal }
+      )
+      result.executed++
+    } else if (scaled.type === 'input') {
+      const steps = (scaled as AgentAction & { steps?: InputStep[] }).steps ?? []
+      await agent.request('input', { steps }, { signal })
+      result.executed++
     } else {
       // Show pointer preview before first click
       if (

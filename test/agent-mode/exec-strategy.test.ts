@@ -1,0 +1,249 @@
+import { describe, expect, it } from 'vitest'
+import type { Action, ElementNode, Point } from '@shared/types'
+import type { ExecuteResult } from '../../src/main/actions/executor'
+import {
+  performAct,
+  type StrategyPorts,
+  type TypedFields
+} from '../../src/main/agent-mode/exec-strategy'
+
+const node = (over: Partial<ElementNode>): ElementNode => ({
+  id: 'e1',
+  role: 'button',
+  name: 'Dark',
+  rect: { x: 100, y: 200, w: 40, h: 20 },
+  monitorId: 1,
+  enabled: true,
+  patterns: [],
+  ...over
+})
+
+interface Fake {
+  ports: StrategyPorts
+  batches: Action[][]
+  buddy: { to: Point | null; mode: string }[]
+  restored: Point[]
+  pointer: Point
+  value: string | null
+}
+
+function fake(elements: ElementNode[], over: Partial<Fake> = {}): Fake {
+  const f: Fake = {
+    batches: [],
+    buddy: [],
+    restored: [],
+    pointer: { x: 5, y: 5 },
+    value: null,
+    ports: {} as StrategyPorts,
+    ...over
+  }
+  f.ports = {
+    element: (id) => elements.find((e) => e.id === id),
+    readValue: async () => f.value,
+    execute: async (actions): Promise<ExecuteResult> => {
+      f.batches.push(actions)
+      const targets = actions
+        .filter((a) => a.type === 'click_target')
+        .map(() => ({ x: 100, y: 200, w: 40, h: 20 }))
+      // A real click leaves the pointer on the target.
+      if (targets.length) f.pointer = { x: 120, y: 210 }
+      return {
+        executed: actions.length,
+        cancelled: false,
+        blocked: false,
+        reachedBottom: false,
+        targets,
+        maxRisk: 'low'
+      }
+    },
+    buddy: (to, mode) => f.buddy.push({ to, mode }),
+    physToLogical: (p) => p,
+    pointer: () => f.pointer,
+    restorePointer: async (p) => {
+      f.restored.push(p)
+      f.pointer = p
+    },
+    sleep: async () => {}
+  }
+  return f
+}
+
+const signal = new AbortController().signal
+const fields = (): TypedFields => ({ typed: new Map() })
+
+describe('ghost cursor strategy', () => {
+  it('toggles through UIA without touching the pointer (Settings dark mode)', async () => {
+    const f = fake([node({ role: 'radio button', patterns: ['toggle', 'select'] })])
+    const r = await performAct(
+      { op: 'toggle', target: { kind: 'element', ref: 'e1' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(r).toMatchObject({ ok: true, ghost: true })
+    expect(f.batches).toEqual([
+      [{ type: 'uia_act', elementId: 'e1', action: 'toggle', description: 'Dark' }]
+    ])
+    expect(f.buddy).toEqual([{ to: { x: 120, y: 210 }, mode: 'point' }])
+    expect(f.pointer).toEqual({ x: 5, y: 5 })
+  })
+
+  it('falls back to a real click, buddy first, then restores the pointer', async () => {
+    const f = fake([node({ patterns: [] })])
+    const r = await performAct(
+      { op: 'invoke', target: { kind: 'element', ref: 'e1' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(r).toMatchObject({ ok: true, ghost: false })
+    expect(f.buddy[0].mode).toBe('fly')
+    expect(f.batches[0][0]).toMatchObject({
+      type: 'click_target',
+      target: { kind: 'element', id: 'e1' }
+    })
+    expect(f.restored).toEqual([{ x: 5, y: 5 }])
+  })
+
+  it('does not restore the pointer when the user moved it', async () => {
+    const f = fake([])
+    f.ports.execute = async (actions) => {
+      f.pointer = { x: 900, y: 900 } // the user grabbed the mouse
+      return {
+        executed: 1,
+        cancelled: false,
+        blocked: false,
+        reachedBottom: false,
+        targets: [{ x: 100, y: 200, w: 40, h: 20 }],
+        maxRisk: 'low',
+        ...{ actions }
+      }
+    }
+    await performAct(
+      { op: 'click', target: { kind: 'text', ref: 'Compose' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(f.restored).toEqual([])
+  })
+
+  it('set_value uses ValuePattern on plain fields', async () => {
+    const f = fake([node({ id: 'e2', role: 'edit', name: 'Subject', patterns: ['value'] })])
+    await performAct(
+      { op: 'set_value', target: { kind: 'element', ref: 'e2' }, value: 'Friday' },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(f.batches).toEqual([
+      [
+        {
+          type: 'uia_act',
+          elementId: 'e2',
+          action: 'set_value',
+          value: 'Friday',
+          description: 'Subject'
+        }
+      ]
+    ])
+  })
+
+  it('rich text gets focus + typing instead of set_value', async () => {
+    const f = fake([node({ id: 'e3', role: 'document', name: 'Body', patterns: ['value'] })])
+    await performAct(
+      { op: 'type', target: { kind: 'element', ref: 'e3' }, value: 'Hi Sam' },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(f.batches).toEqual([
+      [{ type: 'uia_act', elementId: 'e3', action: 'focus', description: 'Body' }],
+      [{ type: 'type', text: 'Hi Sam' }]
+    ])
+  })
+
+  it('retry-type guard: text already there is not typed again', async () => {
+    const el = node({ id: 'e3', role: 'document', name: 'Body' })
+    const f = fake([el])
+    const typed = fields()
+    const input = {
+      op: 'type' as const,
+      target: { kind: 'element' as const, ref: 'e3' },
+      value: 'Hi Sam'
+    }
+    await performAct(input, f.ports, typed, signal)
+    f.batches.length = 0
+    f.value = 'Hi Sam'
+    const r = await performAct(input, f.ports, typed, signal)
+    expect(r.ok).toBe(true)
+    expect(r.actions).toBe(0)
+    expect(f.batches).toEqual([])
+  })
+
+  it('retry-type guard: partial text is selected and retyped', async () => {
+    const f = fake([node({ id: 'e3', role: 'document', name: 'Body' })])
+    const typed = fields()
+    const input = {
+      op: 'type' as const,
+      target: { kind: 'element' as const, ref: 'e3' },
+      value: 'Hi Sam'
+    }
+    await performAct(input, f.ports, typed, signal)
+    f.batches.length = 0
+    f.value = 'Hi S'
+    await performAct(input, f.ports, typed, signal)
+    expect(f.batches[1]).toEqual([
+      { type: 'hotkey', keys: ['ctrl', 'a'] },
+      { type: 'type', text: 'Hi Sam' }
+    ])
+  })
+
+  it('retry-type guard: an unreadable field is not retyped blindly', async () => {
+    const f = fake([node({ id: 'e3', role: 'document', name: 'Body' })])
+    const typed = fields()
+    const input = {
+      op: 'type' as const,
+      target: { kind: 'element' as const, ref: 'e3' },
+      value: 'Hi'
+    }
+    await performAct(input, f.ports, typed, signal)
+    f.batches.length = 0
+    const r = await performAct(input, f.ports, typed, signal)
+    expect(r.ok).toBe(false)
+    expect(f.batches).toEqual([])
+  })
+
+  it('reports stale element ids and policy denials', async () => {
+    const f = fake([])
+    const stale = await performAct(
+      { op: 'invoke', target: { kind: 'element', ref: 'e9' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(stale.message).toContain('observe')
+    f.ports.execute = async () => ({
+      executed: 0,
+      cancelled: false,
+      blocked: true,
+      denied: { code: 'E_DENIED', reason: 'blocked scheme' },
+      reachedBottom: false,
+      targets: [],
+      maxRisk: 'low'
+    })
+    const denied = await performAct(
+      { op: 'click', target: { kind: 'text', ref: 'Send' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    expect(denied.message).toMatch(/^E_DENIED: blocked scheme/)
+  })
+
+  it('scroll maps dx/dy to a direction', async () => {
+    const f = fake([])
+    await performAct({ op: 'scroll', dy: -3 }, f.ports, fields(), signal)
+    expect(f.batches[0]).toEqual([{ type: 'scroll', direction: 'up', amount: 3 }])
+  })
+})
