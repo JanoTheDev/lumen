@@ -10,6 +10,7 @@ import {
   exportSkill,
   installArchive,
   previewArchive,
+  saveSkillFiles,
   saveSkillText,
   takenNames
 } from '../../src/main/skills/manage'
@@ -183,6 +184,34 @@ describe('create / edit / delete', () => {
     expect(readFileSync(join(r.builtin, 'clean-downloads', 'SKILL.md'), 'utf8')).not.toContain(
       'Mine now'
     )
+  })
+
+  it('editing a community app-pack skill keeps the copy untrusted', () => {
+    const pack = writeAppPack(r.user, 'editor')
+    const marker = {
+      format: 1,
+      kind: 'app-pack',
+      id: 'editor',
+      trust: 'community-untrusted',
+      source: 'https://example.com/editor.lumen',
+      sha256: 'ab',
+      installedAt: '2026-01-01T00:00:00.000Z'
+    }
+    writeFileSync(join(pack, MARKER_FILE), JSON.stringify(marker))
+    writeSkill(join(pack, 'skills'), 'export-video')
+    reg.load()
+    expect(reg.trustOf(reg.get('export-video')!)).toBe('community-untrusted')
+    expect(saveSkillFiles(reg, 'export-video', { skillMd: skillMd('export-video') })).toEqual({
+      ok: true
+    })
+    reg.load()
+    const s = reg.get('export-video')!
+    expect(s.origin).toBe('user')
+    expect(reg.trustOf(s)).toBe('community-untrusted')
+    expect(s.source).toMatch(/edited copy of https:\/\/example\.com\/editor\.lumen/)
+    // The copy can still be deleted like an installed skill.
+    expect(deleteSkill(reg, 'export-video')).toEqual({ ok: true })
+    expect(existsSync(join(r.user, 'export-video'))).toBe(false)
   })
 
   it('deletes user and installed skills, never builtin ones', () => {

@@ -14,7 +14,10 @@ import {
   PackError,
   planPacks,
   removePack,
-  type InstalledPack
+  MARKER_FILE,
+  packMarker,
+  type InstalledPack,
+  type PackMarker
 } from '../packs/install'
 import { readZip, ZIP_LIMITS } from '../packs/zip-read'
 import { agentSkillKind } from './kind'
@@ -160,7 +163,9 @@ export function createSkill(
 
 /**
  * Saves an edited SKILL.md. The name cannot change. A builtin or app-pack skill is copied to
- * the user folder first, and the copy overrides it from then on.
+ * the user folder first, and the copy overrides it from then on. A copy of a community skill
+ * gets a pack marker of its own, so it stays untrusted (confirming every action) until the
+ * user trusts it: an edit never turns community text into the user's own.
  */
 export function saveSkillText(registry: SkillRegistry, name: string, text: string): Result {
   const s = registry.get(name)
@@ -182,6 +187,19 @@ export function saveSkillText(registry: SkillRegistry, name: string, text: strin
       recursive: true,
       filter: (src) => !src.split(/[\\/]/).pop()!.startsWith('.')
     })
+    if (s.baseTrust === 'community-untrusted') {
+      const from = packMarker(s.dir) ?? packMarker(resolve(s.dir, '..', '..'))
+      const marker: PackMarker = {
+        format: 1,
+        kind: SKILL_PACK_KIND,
+        id: name,
+        trust: 'community-untrusted',
+        source: `edited copy of ${from?.source ?? s.source ?? name}`.slice(0, 500),
+        sha256: from?.sha256 ?? '',
+        installedAt: new Date().toISOString()
+      }
+      writeFileSync(join(target, MARKER_FILE), `${JSON.stringify(marker, null, 2)}\n`, 'utf8')
+    }
     dir = target
   }
   writeFileSync(join(dir, SKILL_FILE), text.replace(/\r\n?/g, '\n'), 'utf8')
