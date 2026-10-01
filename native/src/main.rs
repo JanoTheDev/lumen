@@ -4,6 +4,7 @@
 
 mod app;
 mod dpi;
+mod hotkey;
 mod logging;
 mod proto;
 mod stdio;
@@ -46,6 +47,11 @@ fn main() {
     let app = App::new(router.clone(), opts, log);
     out.emit("ready", app.ready_data());
     app::register_core(&app);
+    if let Some(accel) = app.opts.hotkey.clone()
+        && let Err(e) = app.hotkeys.apply(hotkey::Update { assistant: Some(&accel), ..Default::default() })
+    {
+        tracing::error!("--hotkey {accel:?} rejected: {}", e.message);
+    }
 
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();

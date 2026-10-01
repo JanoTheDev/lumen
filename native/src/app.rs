@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
+use crate::hotkey::{self, accel};
 use crate::logging;
 use crate::proto::router::{CancelToken, Lane, Router};
 use crate::proto::{AgentError, Args, CmdResult, arg};
@@ -13,7 +14,7 @@ use crate::proto::{AgentError, Args, CmdResult, arg};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] = &[];
+pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -49,6 +50,7 @@ type SubscribeFn = Box<dyn Fn(bool) + Send + Sync>;
 pub struct App {
     pub router: Arc<Router>,
     pub opts: Opts,
+    pub hotkeys: hotkey::Service,
     log: logging::Handle,
     subscribable: Mutex<BTreeMap<&'static str, SubscribeFn>>,
     subscriptions: Mutex<BTreeSet<String>>,
@@ -56,8 +58,10 @@ pub struct App {
 
 impl App {
     pub fn new(router: Arc<Router>, opts: Opts, log: logging::Handle) -> Arc<Self> {
+        let hotkeys = hotkey::Service::new(router.out().clone(), opts.accept_injected);
         Arc::new(App {
             router,
+            hotkeys,
             opts,
             log,
             subscribable: Mutex::new(BTreeMap::new()),
@@ -145,6 +149,28 @@ pub fn register_core(app: &Arc<App>) {
 
     app.cmd("init", Lane::Inline, None, cmd_init);
 
+    app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
+        let combo = arg::opt_str(args, "combo")
+            .ok()
+            .flatten()
+            .ok_or_else(|| AgentError::invalid("set_hotkey needs a combo string"))?;
+        app.hotkeys.apply(hotkey::Update { assistant: Some(combo), ..Default::default() })?;
+        Ok(json!({"ok": true, "combo": combo}))
+    });
+
+    app.cmd("set_dictation_hotkey", Lane::Inline, None, |app, args, _| {
+        let combo = arg::opt_str(args, "combo")
+            .ok()
+            .flatten()
+            .ok_or_else(|| AgentError::invalid("set_dictation_hotkey needs a combo string"))?;
+        hotkey::Service::validate(&hotkey::Update { dictation: Some(combo), ..Default::default() })?;
+        if accel::same_combo(combo, &app.hotkeys.assistant()) {
+            return Err(AgentError::invalid("dictation hotkey must differ from the assistant hotkey"));
+        }
+        app.hotkeys.apply(hotkey::Update { dictation: Some(combo), ..Default::default() })?;
+        Ok(json!({"ok": true, "combo": combo}))
+    });
+
     if app.opts.debug {
         app.cmd("debug_emit", Lane::Inline, None, |app, args, _| {
             let n = arg::opt_i64(args, "n")?.unwrap_or(100).clamp(0, 100_000);
@@ -167,6 +193,10 @@ pub fn register_core(app: &Arc<App>) {
         };
         app.cmd("debug_sleep", Lane::Read, None, sleep);
         app.cmd("debug_sleep_input", Lane::Input, None, sleep);
+        app.cmd("debug_parse_hotkey", Lane::Inline, None, |_, args, _| {
+            let hk = accel::parse(arg::str(args, "combo")?)?;
+            Ok(json!({"mods": accel::mod_names(hk.mods), "key": accel::key_name(hk.vk), "vk": hk.vk, "combo": hk.combo()}))
+        });
         app.cmd("debug_panic", Lane::Read, None, |_, _, _| panic!("debug panic"));
     }
 }
@@ -177,12 +207,20 @@ fn cmd_init(app: &Arc<App>, args: &Args, _: &CancelToken) -> CmdResult {
     let hotkey = arg::opt_str(args, "hotkey")
         .map_err(|_| AgentError::invalid("init.hotkey must be a string"))?
         .unwrap_or("");
+    let mut dictation = arg::opt_str(args, "dictationHotkey")
+        .map_err(|_| AgentError::invalid("init.dictationHotkey must be a string"))?
+        .unwrap_or("");
+    let taps = arg::opt_bool(args, "taps")?.unwrap_or(false);
+    let hotkeys = hotkey::Update { assistant: Some(hotkey), dictation: Some(dictation), taps: Some(taps) };
+    hotkey::Service::validate(&hotkeys)?;
     let subscriptions = app.check_events(args.get("subscriptions"))?;
 
     logging::set_level(&app.log, level);
-    if !hotkey.trim().is_empty() {
-        tracing::debug!("init: hotkey {hotkey} ignored (no hotkey module yet)");
+    if accel::same_combo(dictation, hotkey) {
+        tracing::warn!("dictation hotkey {dictation:?} equals the assistant hotkey; not bound");
+        dictation = "";
     }
+    app.hotkeys.apply(hotkey::Update { dictation: Some(dictation), ..hotkeys })?;
     let known: Vec<&'static str> = app.subscribable.lock().unwrap().keys().copied().collect();
     for event in known {
         app.set_subscription(event, subscriptions.iter().any(|s| s == event));

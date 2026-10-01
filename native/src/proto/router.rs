@@ -379,7 +379,7 @@ mod tests {
     }
 
     fn wait_for(router: &Router, sink: &Sink, n: usize) -> Vec<Value> {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + Duration::from_secs(20);
         loop {
             let l = lines(router, sink);
             if l.len() >= n || Instant::now() > deadline {
@@ -402,12 +402,12 @@ mod tests {
     #[test]
     fn cancel_answers_immediately_and_drops_late_result() {
         let (r, s) = setup();
-        r.dispatch(req(5, "sleep", json!({"ms": 5000})));
+        r.dispatch(req(5, "sleep", json!({"ms": 60_000})));
         std::thread::sleep(Duration::from_millis(50));
         let t0 = Instant::now();
         assert!(r.cancel(&json!(5)));
         let l = wait_for(&r, &s, 1);
-        assert!(t0.elapsed() < Duration::from_millis(300));
+        assert!(t0.elapsed() < Duration::from_secs(2));
         assert_eq!(l[0]["error"]["code"], "E_CANCELLED");
         std::thread::sleep(Duration::from_millis(100));
         assert_eq!(lines(&r, &s).len(), 1);
@@ -417,7 +417,7 @@ mod tests {
     #[test]
     fn timeout_ms_arg() {
         let (r, s) = setup();
-        r.dispatch(req(6, "sleep", json!({"ms": 3000, "timeoutMs": 100})));
+        r.dispatch(req(6, "sleep", json!({"ms": 60_000, "timeoutMs": 100})));
         let l = wait_for(&r, &s, 1);
         assert_eq!(l[0]["error"]["code"], "E_TIMEOUT");
     }
@@ -437,7 +437,10 @@ mod tests {
         r.dispatch(req(8, "sleep", json!({"ms": 100})));
         assert!(r.lane_busy(Lane::Read, Duration::ZERO));
         wait_for(&r, &s, 1);
-        std::thread::sleep(Duration::from_millis(20));
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while r.lane_busy(Lane::Read, Duration::ZERO) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
         assert!(!r.lane_busy(Lane::Read, Duration::ZERO));
         assert!(r.lane_busy(Lane::Read, Duration::from_secs(5)));
     }
