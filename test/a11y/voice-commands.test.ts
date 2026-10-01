@@ -181,7 +181,24 @@ const POSITIVE: Row[] = [
   ['wake up', 'lumen.listen', { on: true }],
   ['could you scroll down please', 'scroll', { dir: 'down' }],
   ['um, scroll down, thanks', 'scroll', { dir: 'down' }],
-  ['okay press enter', 'key.press', { combo: 'enter' }]
+  ['okay press enter', 'key.press', { combo: 'enter' }],
+  // describe and read (T13)
+  ['describe screen', 'describe.screen', { detail: 'brief' }],
+  ["what's on my screen", 'describe.screen'],
+  ['where am I', 'describe.screen'],
+  ['describe the screen in detail', 'describe.screen'],
+  ['more detail', 'describe.screen', { detail: 'full' }, { ...IDLE_CONTEXT, described: true }],
+  ["what's under my cursor", 'describe.cursor'],
+  ['what is this button', 'describe.cursor'],
+  ['read this', 'read.selection'],
+  ['read the selection', 'read.selection'],
+  ['read the page', 'read.page'],
+  ['read out the whole thing', 'read.page'],
+  ['stop', 'read.stop', {}, { ...IDLE_CONTEXT, reading: true }],
+  ['pause', 'read.pause', {}, { ...IDLE_CONTEXT, reading: true }],
+  ['continue', 'read.continue', {}, { ...IDLE_CONTEXT, reading: true }],
+  ['next', 'read.skip', { by: 1 }, { ...IDLE_CONTEXT, reading: true }],
+  ['say that again', 'read.skip', { by: -1 }, { ...IDLE_CONTEXT, reading: true }]
 ]
 
 const NEGATIVE: [string, CommandContext?][] = [
@@ -199,8 +216,11 @@ const NEGATIVE: [string, CommandContext?][] = [
   ['scroll'],
   ['how do I make a pivot table'],
   ['where is the save button'],
-  ['what is this'],
-  ['describe screen'],
+  ['what is this error'],
+  ['describe the history of rome'],
+  ['read me a story'],
+  ['stop reading'],
+  ['more detail'],
   ['write an email to my boss about the meeting tomorrow'],
   ['open the first email'],
   ['open gmail and send a message'],
@@ -264,7 +284,9 @@ describe('voice command grammar', () => {
           ? { ...ctx, marksShown: false, gridShown: true, dragStarted: true }
           : e.gate === 'autoscroll'
             ? { ...ctx, autoScrolling: true }
-            : ctx
+            : e.gate === 'reading' || e.gate === 'described'
+              ? { ...ctx, reading: true, described: true }
+              : ctx
       expect(parseCommand(example, c), `${e.id}: "${example}"`).not.toBeNull()
     }
   })

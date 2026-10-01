@@ -4,6 +4,7 @@
 import type { ElementNode, InputStep, Point, Rect, UiaAction } from '@shared/types'
 import { classifyHotkey, isShellWindow, normalizeCombo } from '../actions/safety'
 import type { OcrWord } from '../agent/commands'
+import { shouldYield } from './coexist'
 import { MouseGrid, center, type GridScene } from './grid'
 import {
   MarksState,
@@ -14,6 +15,8 @@ import {
   type Mark,
   type MarksTable
 } from './marks'
+import { phrase, type PhraseId } from './phrases'
+import { PageReader, type ReaderState } from './reader'
 import {
   commandSheet,
   parseCommand,
@@ -41,6 +44,17 @@ export interface A11yScene {
   marks?: { n: number; rect: Rect }[]
   grid?: GridScene
 }
+
+/** `uia_text` reply (native agent). */
+export interface UiaText {
+  text: string
+  source: 'selection' | 'text' | 'document' | 'paragraph' | 'value' | 'name' | 'password' | 'none'
+  truncated?: boolean
+  role?: string
+  name?: string
+}
+
+export type TextScope = 'selection' | 'focused' | 'document' | 'point'
 
 /** Everything the dispatcher needs from the app; faked in tests. */
 export interface A11yIo {
@@ -83,12 +97,38 @@ export interface A11yIo {
   /** Answer card / timer commands; false when there is nothing to act on. */
   answer(op: 'pin' | 'longer' | 'close'): boolean
   log(msg: string): void
+  /** 05 describeScreen: the spoken description. */
+  describe(detail: 'brief' | 'full'): Promise<string>
+  /** 05 explainTarget on the control under the pointer. */
+  explainCursor(): Promise<string>
+  /** UIA TextPattern text (`point` = under the pointer); null when the agent cannot. */
+  readText(scope: TextScope): Promise<UiaText | null>
+  /** OCR text around the pointer or of the foreground window; '' when none. */
+  ocrText(where: 'cursor' | 'window'): Promise<string>
+  /** Shows `text` in the bar and voices it (screen reader or Lumen's voice). */
+  say(text: string): void
+  /** One part of a long reading: shown and voiced; Lumen's voice is cut first. */
+  speakPart(text: string, index: number, total: number): void
+  /** Silences Lumen's voice. */
+  silence(): void
+  /** A screen reader or Lumen's voice can read aloud. */
+  canSpeak(): boolean
+  speechRate(): number
+  /** Reading started, paused or stopped (status line). */
+  readingChanged?(state: ReaderState): void
+  simpleMode(): boolean
+  /** The voice control app Lumen steps aside for (T20), or null. */
+  voiceControl(): string | null
 }
 
 /** Renderer reply for a locally handled utterance: nothing to show (feedback goes to status). */
 export const LOCAL_HANDLED = { mode: 'answer', text: '', local: true, dictated: true } as const
 
 const NOTCHES = { little: 3, normal: 5, lot: 15 } as const
+/** "More detail" applies this long after a description. */
+const DESCRIBED_MS = 60_000
+/** Selections and fields shorter than this are said at once instead of read in parts. */
+const SAY_AT_ONCE = 600
 const NUDGE_PX = 50
 const AUTOSCROLL_MS = 250
 const START_WAIT_MS = 450
@@ -173,8 +213,23 @@ export class A11yCommands {
   private snapshotAt = 0
   /** Nodes behind the marks on screen, by element id (invoke vs click). */
   private markNodes = new Map<string, ElementNode>()
+  private describedAt = -Infinity
+  readonly reader: PageReader
 
-  constructor(private readonly io: A11yIo) {}
+  constructor(private readonly io: A11yIo) {
+    this.reader = new PageReader({
+      speak: (text, i, n) => io.speakPart(text, i, n),
+      silence: () => io.silence(),
+      rate: () => io.speechRate(),
+      setTimeout: (fn, ms) => setTimeout(fn, ms),
+      clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+      onChange: (state) => io.readingChanged?.(state)
+    })
+  }
+
+  private phrase(id: PhraseId, vars?: Record<string, string>): string {
+    return phrase(id, this.io.simpleMode(), vars)
+  }
 
   context(): CommandContext {
     return {
@@ -183,15 +238,25 @@ export class A11yCommands {
       dragStarted: !!this.grid.dragFrom,
       guideActive: this.io.guideActive(),
       autoScrolling: !!this.autoScroll,
-      answerShown: this.io.answerShown()
+      answerShown: this.io.answerShown(),
+      reading: this.reader.active,
+      described: this.io.now() - this.describedAt < DESCRIBED_MS
     }
   }
 
   /** The router's localGrammar hook: a response when handled, null to fall through. */
   tryHandle(utterance: string): { response: unknown } | null {
     const t0 = this.io.now()
-    const cmd = parseCommand(utterance, this.context())
+    const ctx = this.context()
+    const cmd = parseCommand(utterance, ctx)
     if (!cmd) return null
+    const who = this.io.voiceControl()
+    if (shouldYield(cmd, utterance, ctx, who)) {
+      // The other voice control heard it too and acts on it; doing it again would double it.
+      this.io.log(`local ${cmd.id} left to ${who}`)
+      this.io.feedback(this.phrase('yielded', { who: who ?? '' }), true)
+      return { response: LOCAL_HANDLED }
+    }
     const sync = this.prepare(cmd)
     if (sync === null) return null
     this.io.log(`local ${cmd.id} ${JSON.stringify(cmd.args)} parsed in ${this.io.now() - t0}ms`)
@@ -200,13 +265,14 @@ export class A11yCommands {
       .then(() => this.io.log(`local ${cmd.id} done in ${this.io.now() - t0}ms`))
       .catch((e: Error) => {
         this.io.log(`local ${cmd.id} failed: ${e.message}`)
-        this.io.feedback(failText(e), false)
+        this.io.feedback(failText(e, this.io.simpleMode()), false)
       })
     return { response: LOCAL_HANDLED }
   }
 
   /** Escape / cancel: stop auto-scroll and take numbers and the grid off the screen. */
   reset(): void {
+    this.reader.stop()
     this.stopAutoScroll()
     const had = this.marks.shown || this.grid.shown
     this.marks.hide()
@@ -364,8 +430,83 @@ export class A11yCommands {
         this.io.setWakeWord(!!a.on)
         this.io.feedback(a.on ? 'Listening for the wake word' : 'Wake word off', true)
         return
+      case 'describe.screen':
+        return this.describe(a.detail === 'full' ? 'full' : 'brief')
+      case 'describe.cursor':
+        this.io.feedback(this.phrase('looking'), true)
+        this.io.say(await this.io.explainCursor())
+        return
+      case 'read.selection':
+        return this.readSelection()
+      case 'read.page':
+        return this.readPage()
+      case 'read.stop':
+        this.reader.stop()
+        this.io.feedback(this.phrase('stopped-reading'), true)
+        return
+      case 'read.pause':
+        if (this.reader.pause()) this.io.feedback(this.phrase('paused'), true)
+        return
+      case 'read.continue':
+        if (!this.reader.resume()) throw new UserError(this.phrase('not-reading'))
+        return
+      case 'read.skip':
+        if (!this.reader.skip(Number(a.by) || 1)) this.io.feedback(this.phrase('end-of-page'), true)
+        return
     }
     throw new Error(`no handler for ${cmd.id}`)
+  }
+
+  // ---- describe and read (T13) ----
+
+  private async describe(detail: 'brief' | 'full'): Promise<void> {
+    this.io.feedback(this.phrase('looking'), true)
+    const text = await this.io.describe(detail)
+    this.describedAt = this.io.now()
+    this.io.say(text)
+  }
+
+  /** Selection, else the focused field's text, else UIA text or OCR under the pointer. */
+  private async readSelection(): Promise<void> {
+    const sel = await this.io.readText('selection')
+    if (sel?.source === 'password') throw new UserError(this.phrase('nothing-to-read'))
+    let text = sel?.text.trim() ?? ''
+    if (!text) {
+      const focused = await this.io.readText('focused')
+      if (focused && (focused.source === 'text' || focused.source === 'value'))
+        text = focused.text.trim()
+    }
+    if (!text) {
+      const at = await this.io.readText('point')
+      if (at && at.source !== 'password' && at.source !== 'none') text = at.text.trim()
+    }
+    if (!text) text = (await this.io.ocrText('cursor')).trim()
+    if (!text) throw new UserError(this.phrase('nothing-to-read'))
+    this.readAloud(text)
+  }
+
+  private async readPage(): Promise<void> {
+    const doc = await this.io.readText('document')
+    let text = doc?.source === 'document' ? doc.text.trim() : ''
+    if (!text) text = (await this.io.ocrText('window')).trim()
+    if (!text) throw new UserError(this.phrase('no-page-text'))
+    this.readAloud(text, true)
+  }
+
+  /** Short text is said at once; long text is read in parts that "stop" / "next" control. */
+  private readAloud(text: string, page = false): void {
+    if (!this.io.canSpeak()) {
+      this.reader.stop()
+      this.io.say(text)
+      this.io.feedback(this.phrase('voice-off'), true)
+      return
+    }
+    if (!page && text.length <= SAY_AT_ONCE) {
+      this.reader.stop()
+      this.io.say(text)
+      return
+    }
+    this.reader.start(text)
   }
 
   // ---- numbers ----
@@ -627,12 +768,12 @@ export class A11yCommands {
 
 export class UserError extends Error {}
 
-function failText(e: Error): string {
+function failText(e: Error, simple: boolean): string {
   if (e instanceof UserError) return e.message
   const code = (e as Error & { code?: unknown }).code
-  if (code === 'E_DENIED' || /denied/i.test(e.message)) return 'Blocked for safety'
-  if (code === 'E_UNSUPPORTED') return 'The helper app cannot do that yet'
-  return 'That did not work'
+  if (code === 'E_DENIED' || /denied/i.test(e.message)) return phrase('blocked', simple)
+  if (code === 'E_UNSUPPORTED') return phrase('unsupported', simple)
+  return phrase('failed', simple)
 }
 
 function scrollNotches(a: CommandArgs): number {

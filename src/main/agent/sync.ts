@@ -4,6 +4,8 @@ import { buildAgentInitState, dictationHotkeyOf, type AgentInitArgs } from './st
 import { mouseEvents } from './subscriptions'
 import type { AppConfig } from '../config'
 import { screen } from 'electron'
+import { atState } from '../a11y/at-state'
+import { wakeConfig } from '../a11y/coexist'
 import { agentDwellConfig, dwellSettings } from '../a11y/dwell'
 import { focusEventsWanted } from '../a11y/focus-events'
 import { applyWakeState } from '../speech/wake'
@@ -32,9 +34,9 @@ export function applyDwellState(cfg: AppConfig): void {
     .catch((e) => console.error('[dwell] config failed:', (e as Error).message))
 }
 
-/** Wake word + voice cancel: the keyword spotter in main. */
+/** Wake word + voice cancel: the keyword spotter in main (wake word off while Dragon runs). */
 export function applyListenerState(cfg: AppConfig): void {
-  applyWakeState(cfg)
+  applyWakeState(wakeConfig(cfg, atState()))
 }
 
 /** Binds (or unbinds) the dictation hotkey. */

@@ -611,6 +611,44 @@ mod tests {
         assert_eq!(n, 1);
     }
 
+    /// Eye-gaze-like pointer: ±15 px fixation tremor plus a 25 px micro-saccade every second,
+    /// fed through the smoothing the way the poll loop does (plans 06 T19).
+    fn gaze_triggers(f: &mut Fsm, alpha: f64, at: (i32, i32), from: f64, secs: f64, seed: &mut u64) -> usize {
+        let mut p = None;
+        let mut n = 0;
+        let polls = (secs / 0.04) as usize;
+        for i in 0..polls {
+            *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let jx = ((*seed >> 33) % 31) as i32 - 15;
+            let jy = ((*seed >> 13) % 31) as i32 - 15;
+            let saccade = if i % 25 == 24 { 25 } else { 0 };
+            let (sx, sy) = smooth(p, at.0 + jx + saccade, at.1 + jy, alpha);
+            p = Some((sx, sy));
+            n += triggers(&f.step(from + i as f64 * 0.04, sx.round() as i32, sy.round() as i32, 1.0, false));
+        }
+        n
+    }
+
+    #[test]
+    fn gaze_preset_holds_a_dwell_through_eye_tremor() {
+        let mut seed = 42;
+        // The eye-gaze preset: 30 px radius, smoothing 0.5, 1.2 s.
+        let mut gaze = Fsm { ms: 1200, cooldown_ms: 1500, tolerance_px: Some(30.0), ..Fsm::default() };
+        assert_eq!(
+            gaze_triggers(&mut gaze, 0.5, (500, 400), 0.0, 6.0, &mut seed),
+            1,
+            "one click per fixation"
+        );
+        assert_eq!(
+            gaze_triggers(&mut gaze, 0.5, (900, 400), 6.0, 6.0, &mut seed),
+            1,
+            "next target clicks too"
+        );
+        // Mouse defaults (12 px, no smoothing) never settle on the same tremor.
+        let mut mouse = Fsm { ms: 1400, cooldown_ms: 1500, tolerance_px: Some(12.0), ..Fsm::default() };
+        assert_eq!(gaze_triggers(&mut mouse, 0.0, (500, 400), 0.0, 6.0, &mut seed), 0);
+    }
+
     #[test]
     fn mouse_watch_polls_fast_only_while_moving() {
         assert_eq!(mouse_poll_interval(Duration::ZERO), MouseWatch::FAST_POLL);
