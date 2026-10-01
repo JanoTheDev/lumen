@@ -4,6 +4,7 @@ import { PausableTimer, realClock, type Clock } from '../a11y/timings'
 import { startCheck, newBudget, type CheckHandle } from './checks'
 import { accepts, reduce } from './engine'
 import { buildScene, describeDoIt, doItActions, successScene } from './hints'
+import type { LessonContext } from './context'
 import type { Lesson } from './lesson'
 import type { CheckResult, Ports, ResolvedTarget } from './ports'
 import type { Skill } from './registry'
@@ -33,13 +34,6 @@ export interface StartOptions {
   autoStart?: boolean
   pace?: number
   stats?: Record<string, StepStats>
-}
-
-/** What a normal query gets while a lesson runs (lesson-engine.md "Integration points"). */
-export interface LessonContext {
-  app: string
-  lessonTitle: string
-  stepSay: string
 }
 
 export class LessonRunner {

@@ -48,6 +48,24 @@ export interface ScreenScene {
   annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
 }
 
+/** Lesson navigation (07 T16): voice, keyboard and switch all map onto these. */
+export type LessonCommand =
+  | 'next'
+  | 'back'
+  | 'repeat'
+  | 'skip'
+  | 'stop'
+  | 'pause'
+  | 'resume'
+  | 'help'
+  | 'do-it'
+  | 'why'
+  | 'done'
+  | 'slower'
+  | 'faster'
+  | 'yes'
+  | 'no'
+
 /** Summed cost of every model call made for one user turn. */
 export interface TurnCostSummary {
   usd: number
@@ -88,6 +106,16 @@ export type AppEvent =
   | { type: 'action.failed'; actionId: string; error: string }
   | { type: 'lesson.step-started'; lessonId: string; step: number }
   | { type: 'lesson.step-completed'; lessonId: string; step: number }
+  /** The lesson finished (completed) or was stopped. */
+  | { type: 'lesson.done'; lessonId: string; completed: boolean }
+  /** What a lesson draws, in global logical px; null clears it (07 T15). */
+  | { type: 'lesson.scene'; scene: Omit<ScreenScene, 'monitorId'> | null }
+  /** The assistant bar while a lesson runs; null hands the bar back. */
+  | { type: 'lesson.state'; state: AssistantState | null }
+  /** Keyboard / switch / bar input for the running lesson (voice goes through the router). */
+  | { type: 'lesson.command'; command: LessonCommand }
+  /** Passive "Resume Blender: Add an object, step 3?" at startup. */
+  | { type: 'lesson.resume-offer'; lessonId: string; text: string }
   | { type: 'a11y.announce'; text: string; priority: 'polite' | 'assertive' }
 
 export type AppEventType = AppEvent['type']

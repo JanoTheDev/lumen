@@ -1,7 +1,7 @@
 // Lesson engine state, events and effects (plans 07 lesson-engine.md). The reducer in
 // engine.ts maps (state, event) to (state, effects); runner.ts executes the effects.
 // Pure types: no Electron.
-import type { AssistantState } from '@shared/events'
+import type { AssistantState, LessonCommand } from '@shared/events'
 import type { Lesson } from './lesson'
 import type { CheckResult } from './ports'
 
@@ -23,22 +23,7 @@ export type Phase =
   | 'done'
   | 'aborted'
 
-export type LessonCommand =
-  | 'next'
-  | 'back'
-  | 'repeat'
-  | 'skip'
-  | 'stop'
-  | 'pause'
-  | 'resume'
-  | 'help'
-  | 'do-it'
-  | 'why'
-  | 'done'
-  | 'slower'
-  | 'faster'
-  | 'yes'
-  | 'no'
+export type { LessonCommand }
 
 export const LESSON_COMMANDS: readonly LessonCommand[] = [
   'next',
