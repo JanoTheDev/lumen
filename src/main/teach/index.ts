@@ -29,6 +29,7 @@ import { verifyExpectation } from '../ai/verify'
 import { WHY_PROMPT, whyTurn } from '../ai/prompts/lesson'
 import { getProvider } from '../ai/providers'
 import { skillContext } from '../ai/skills'
+import { readingLevelLineFor } from '../coach/reading-level'
 import { matchPlayGuide } from '../guides/voice-nav'
 import { setTeachHandler } from '../query/pipeline'
 import { flattenElements } from '../query/uia-list'
@@ -402,6 +403,7 @@ async function explainWhy(
             step: step.say,
             previous: lesson.steps[i - 1]?.say,
             next: lesson.steps[i + 1]?.say,
+            readingLevel: readingLevelLineFor(loadConfig().helpers, skill?.id ?? lesson.app),
             appNotes:
               skill && hasMatchRules(skill)
                 ? skillContext(skill, step.say, WHY_NOTES_TOKENS)

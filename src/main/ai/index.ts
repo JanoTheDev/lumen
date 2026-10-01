@@ -7,6 +7,7 @@ import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { answerStyle } from '../a11y/phrases'
 import { replyLanguageLine } from '../speech/language'
+import { readingLevelAppId, readingLevelLineFor } from '../coach/reading-level'
 import { skillIndex } from '../skills'
 import { currentFrame } from '../actions/coords'
 import { screenNames } from '../query/screens'
@@ -116,6 +117,11 @@ export async function callModel(
           lesson: lessonLine,
           style: answerStyle(loadConfig()),
           language: replyLanguageLine(loadConfig().voice.language) || undefined,
+          readingLevel:
+            readingLevelLineFor(
+              loadConfig().helpers,
+              readingLevelAppId(skill?.id, ctx?.foreground.process)
+            ) || undefined,
           regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
         })
       }

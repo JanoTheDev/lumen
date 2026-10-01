@@ -6,6 +6,8 @@ import { getProvider } from '../ai/providers'
 import { parseJsonAs } from '../ai/json'
 import { regionsLine, skillContext } from '../ai/skills'
 import { log } from '../logger'
+import { loadConfig } from '../config'
+import { readingLevelAppId, readingLevelLineFor } from '../coach/reading-level'
 import type { QueryContext } from '../query/context'
 import { elementIndex, serializeElements } from '../query/uia-list'
 import { appIdFor, generateLesson, genLessonSchema, type GenerateCall } from './generate'
@@ -81,7 +83,11 @@ export function makeShowMeHow(deps: ShowMeDeps) {
           skillText: pack ? skillContext(pack, question) : undefined,
           regions: pack ? regionsLine(pack) : undefined,
           elements: elements?.text,
-          uiaQuality: quality
+          uiaQuality: quality,
+          readingLevel: readingLevelLineFor(
+            loadConfig().helpers,
+            readingLevelAppId(pack?.id, ctx.foreground.process)
+          )
         },
         image: frame ? { data: frame.data, mime: frame.mime } : undefined
       },

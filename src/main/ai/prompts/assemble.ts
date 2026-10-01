@@ -57,6 +57,8 @@ export interface TurnContext {
   style?: 'plain'
   /** Reply language line for non-English voice users (speech/language replyLanguageLine). */
   language?: string
+  /** Reading level line of the app in front (coach readingLevelLineFor); '' / unset = standard. */
+  readingLevel?: string
   now?: Date
 }
 
@@ -91,6 +93,7 @@ export function userTurn(ctx: TurnContext): string {
     )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
   if (ctx.style === 'plain') lines.push(PLAIN_STYLE_LINE)
+  if (ctx.readingLevel) lines.push(ctx.readingLevel)
   if (ctx.language) lines.push(ctx.language)
   if (ctx.lesson) lines.push(ctx.lesson)
   if (ctx.marks)

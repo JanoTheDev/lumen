@@ -47,6 +47,7 @@ import {
   levelName,
   readingLevelFor,
   readingLevelLine,
+  readingLevelLineFor,
   readingLevelPatch,
   stepLevel
 } from './reading-level'
@@ -324,7 +325,7 @@ async function whatChanged(): Promise<string> {
 
 /** The prompt modifier line for the app in front (05 appends it to the turn); '' = standard. */
 export function readingLevelPrompt(appId?: string | null): string {
-  return readingLevelLine(readingLevelFor(helpers(), appId))
+  return readingLevelLineFor(helpers(), appId)
 }
 
 async function setReadingLevel(

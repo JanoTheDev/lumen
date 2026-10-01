@@ -23,6 +23,25 @@ export function readingLevelLine(level: ReadingLevel): string {
   return LINES[level]
 }
 
+/** The line for an app (pack id, else lowercased process name); '' = standard. */
+export function readingLevelLineFor(
+  cfg: Pick<HelpersConfig, 'readingLevel' | 'readingLevelApps'>,
+  appId?: string | null
+): string {
+  return LINES[readingLevelFor(cfg, appId)]
+}
+
+/** The app key of readingLevelApps (same as the coach): pack id, else the process base name. */
+export function readingLevelAppId(packId?: string | null, process?: string): string | undefined {
+  if (packId) return packId
+  const base = process
+    ?.split(/[\\/]/)
+    .pop()
+    ?.replace(/\.exe$/i, '')
+    .toLowerCase()
+  return base || undefined
+}
+
 const ORDER: ReadingLevel[] = ['plain', 'standard', 'expert']
 
 /** "simpler" moves one step towards plain, "more detail" one towards expert. */

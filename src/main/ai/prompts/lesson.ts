@@ -45,6 +45,8 @@ export interface LessonTurnInput {
   /** Serialized UIA elements list (uia-list serializeElements). */
   elements?: string
   uiaQuality?: 'good' | 'partial' | 'none'
+  /** Reading level line for the app (coach readingLevelLineFor); '' / unset = standard. */
+  readingLevel?: string
 }
 
 /** The generator's user turn: context blocks, then the question verbatim. */
@@ -53,6 +55,7 @@ export function lessonTurn(i: LessonTurnInput): string {
   if (i.app) ctx.push(`app: ${i.app}`)
   if (i.uiaQuality) ctx.push(`accessible controls: ${i.uiaQuality}`)
   if (i.regions) ctx.push(`regions: ${i.regions}`)
+  if (i.readingLevel) ctx.push(i.readingLevel)
   const blocks = [`<context>\n${ctx.join('\n')}\n</context>`]
   if (i.skillText) blocks.push(`<app_notes>\n${i.skillText}\n</app_notes>`)
   if (i.elements) blocks.push(`<elements>\n${i.elements}\n</elements>`)
@@ -74,12 +77,15 @@ export interface WhyTurnInput {
   previous?: string
   next?: string
   appNotes?: string
+  /** Reading level line for the app; '' / unset = standard. */
+  readingLevel?: string
 }
 
 export function whyTurn(i: WhyTurnInput): string {
   const lines = [`app: ${i.app}`, `lesson: ${i.lessonTitle}`]
   if (i.previous) lines.push(`previous step: ${i.previous}`)
   if (i.next) lines.push(`next step: ${i.next}`)
+  if (i.readingLevel) lines.push(i.readingLevel)
   const notes = i.appNotes ? `\n<app_notes>\n${i.appNotes}\n</app_notes>` : ''
   return `<context>\n${lines.join('\n')}\n</context>${notes}\n<step>${i.step}</step>`
 }
