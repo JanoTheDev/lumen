@@ -27,6 +27,7 @@ import type { A11yCommands } from './dispatch'
 import { ScanKeyboardModel, keyboardScanLevel } from './keyboard'
 import { ScanTree } from './scan-tree'
 import { Scanner, toScanScene, type ScanSettings, type SwitchRole } from './switch'
+import { withInputLane } from '../agent-mode/input-lane'
 
 const INPUT_TIMEOUT_MS = 15_000
 /** Key auto-repeat arrives faster than this; a held key counts once (until the repeat delay). */
@@ -167,7 +168,11 @@ export function installSwitch(deps: SwitchInstallDeps): SwitchControl {
     const keep = clash ? [...bound] : []
     if (clash) unbind()
     try {
-      await commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS })
+      await withInputLane(
+        'switch',
+        () => commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+        { user: true }
+      )
     } finally {
       if (clash && keep.length && scanner.state !== 'off') bind()
     }

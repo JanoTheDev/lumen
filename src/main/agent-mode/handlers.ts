@@ -24,6 +24,7 @@ import * as screenLayer from '../windows/screen-layer'
 import { appRegistry, findApp, launchEntry } from './apps'
 import { askUser, type AskIo } from './ask'
 import { performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
+import { withInputLane } from './input-lane'
 import { observed } from './prompts'
 import type { ToolHandler, ToolOutcome } from './runner'
 import type {
@@ -74,6 +75,17 @@ function execOpts(env: TaskEnv, signal: AbortSignal): ExecuteOptions {
     preview: false,
     pauseMs: 100
   }
+}
+
+/** Real input of this task, one batch at a time through the input lane. */
+function run(
+  env: TaskEnv,
+  actions: Parameters<typeof executeActions>[0],
+  signal: AbortSignal
+): Promise<ExecuteResult> {
+  return withInputLane(env.taskId, () => executeActions(actions, execOpts(env, signal)), {
+    signal
+  })
 }
 
 function denied(r: ExecuteResult): string | null {
@@ -142,7 +154,7 @@ function strategyPorts(env: TaskEnv): StrategyPorts {
       const focus = await readFocus(signal)
       return focus?.editable && focus.valueTail ? focus.valueTail : null
     },
-    execute: (actions, signal) => executeActions(actions, execOpts(env, signal)),
+    execute: (actions, signal) => run(env, actions, signal),
     buddy: (to, mode) => {
       try {
         screenLayer.setScene({ buddy: to ? { to, mode } : undefined })
@@ -159,10 +171,7 @@ function strategyPorts(env: TaskEnv): StrategyPorts {
       }
     },
     restorePointer: async (p, signal) => {
-      await executeActions(
-        [{ type: 'input', steps: [{ t: 'move', x: p.x, y: p.y }] }],
-        execOpts(env, signal)
-      )
+      await run(env, [{ type: 'input', steps: [{ t: 'move', x: p.x, y: p.y }] }], signal)
     },
     sleep: (ms, signal) =>
       new Promise<void>((resolve, reject) => {
@@ -237,7 +246,7 @@ async function keys(input: KeysInput, env: TaskEnv, signal: AbortSignal): Promis
     .map((k) => k.trim().toLowerCase())
     .filter(Boolean)
   if (!combo.length) return fail('combo is empty.')
-  const r = await executeActions([{ type: 'hotkey', keys: combo }], execOpts(env, signal))
+  const r = await run(env, [{ type: 'hotkey', keys: combo }], signal)
   return denied(r)
     ? fail(denied(r)!)
     : { content: text(`Pressed ${combo.join('+')}.`), actions: r.executed }
@@ -248,7 +257,7 @@ async function navigate(
   env: TaskEnv,
   signal: AbortSignal
 ): Promise<ToolOutcome> {
-  const r = await executeActions([{ type: 'navigate_url', url: input.url }], execOpts(env, signal))
+  const r = await run(env, [{ type: 'navigate_url', url: input.url }], signal)
   if (denied(r)) return fail(denied(r)!)
   const title = await requireAgent()
     .activeWindow()

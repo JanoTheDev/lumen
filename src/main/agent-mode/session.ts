@@ -19,6 +19,7 @@ import * as assistant from '../windows/assistant'
 import { setStatus } from '../windows/status'
 import { answerQuestion, askPending, type AskIo } from './ask'
 import { createHandlers, type TaskEnv } from './handlers'
+import { inputLane } from './input-lane'
 import { PLAN_SYSTEM, normalizePlan, planSchema, planTurn, type TaskContext } from './prompts'
 import {
   runAgent,
@@ -237,6 +238,7 @@ function deps(env: TaskEnv): RunnerDeps {
       }),
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
+    inputLane: inputLane(),
     newId: () => env.taskId,
     log: (tag, msg) => log(tag as LogTag, msg)
   }

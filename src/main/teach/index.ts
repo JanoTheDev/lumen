@@ -63,6 +63,7 @@ import { draftTextSchema, RECORD_PROMPT, recordTurn } from './record-prompt'
 import type { RawUiaEvent, RecordedApp } from './recorder'
 import { createRecorder, type Recorder } from './recording'
 import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
+import { withInputLane } from '../agent-mode/input-lane'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -312,7 +313,13 @@ async function runAction(
   const agent = getAgent()
   if (!agent) return false
   const input = async (steps: InputStep[]): Promise<boolean> =>
-    !!(await commands.input(agent, steps, { timeoutMs: INPUT_TIMEOUT_MS })).done
+    !!(
+      await withInputLane(
+        'lesson',
+        () => commands.input(agent, steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+        { signal }
+      )
+    ).done
   switch (a.t) {
     case 'keys':
       if (!lessonKeysAllowed(a.combo)) {

@@ -15,6 +15,7 @@ import * as dwellPalette from '../windows/dwell-palette'
 import * as dwellRing from '../windows/dwell-ring'
 import * as screenLayer from '../windows/screen-layer'
 import { DwellController, dwellSettings, setDwellController, type DwellIo } from './dwell'
+import { withInputLane } from '../agent-mode/input-lane'
 
 const INPUT_TIMEOUT_MS = 10_000
 const SNAPSHOT_TIMEOUT_MS = 2500
@@ -28,7 +29,11 @@ export interface DwellInstallDeps {
 }
 
 async function inputSteps(steps: InputStep[]): Promise<void> {
-  await commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS })
+  await withInputLane(
+    'dwell',
+    () => commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+    { user: true }
+  )
 }
 
 function snapWanted(cfg: AppConfig): boolean {
