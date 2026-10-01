@@ -24,8 +24,8 @@ pub enum Action {
     Scroll { dir: Dir, amount: u32, at: Option<(i32, i32)> },
     Move { x: i32, y: i32 },
     Click { x: i32, y: i32, button: Button },
-    Type { text: String, allow_terminal: bool },
-    Hotkey { keys: Vec<String>, allow_terminal: bool },
+    Type { text: String, allow_terminal: bool, allow_password: bool },
+    Hotkey { keys: Vec<String>, allow_terminal: bool, allow_password: bool },
     ClickElement { text: String, button: Button, bbox: Option<[f64; 4]> },
     ClickNth { text: String, n: usize, button: Button },
     NavigateUrl { url: String },
@@ -140,6 +140,7 @@ pub fn parse(action: &Args) -> Result<Action, AgentError> {
     };
     let button = || Button::parse(arg::opt_str(action, "button")?);
     let allow_terminal = action.get("allowTerminal") == Some(&Value::Bool(true));
+    let allow_password = action.get("allowPassword") == Some(&Value::Bool(true));
     Ok(match t.as_str() {
         "scroll" => {
             let dir = match arg::opt_str(action, "direction")?.unwrap_or("down") {
@@ -158,13 +159,13 @@ pub fn parse(action: &Args) -> Result<Action, AgentError> {
             y: coord(action, "y", "click")?,
             button: button()?,
         },
-        "type" => Action::Type { text: text(action, "text")?, allow_terminal },
+        "type" => Action::Type { text: text(action, "text")?, allow_terminal, allow_password },
         "hotkey" => {
             let keys = keys(action.get("keys"))?;
             if !keys.is_empty() {
                 safety::check_combo(&keys)?;
             }
-            Action::Hotkey { keys, allow_terminal }
+            Action::Hotkey { keys, allow_terminal, allow_password }
         }
         "click_element" => Action::ClickElement {
             text: text(action, "text")?,
@@ -231,24 +232,36 @@ mod tests {
         );
         assert_eq!(
             p(json!({"type": "type", "text": "hi", "allowTerminal": true})).unwrap(),
-            Action::Type { text: "hi".into(), allow_terminal: true }
+            Action::Type { text: "hi".into(), allow_terminal: true, allow_password: false }
+        );
+        assert_eq!(
+            p(json!({"type": "type", "text": "hi", "allowPassword": true})).unwrap(),
+            Action::Type { text: "hi".into(), allow_terminal: false, allow_password: true }
         );
         // allowTerminal must be exactly true.
         assert_eq!(
             p(json!({"type": "type", "text": "hi", "allowTerminal": "yes"})).unwrap(),
-            Action::Type { text: "hi".into(), allow_terminal: false }
+            Action::Type { text: "hi".into(), allow_terminal: false, allow_password: false }
         );
         assert_eq!(
             p(json!({"type": "hotkey", "keys": ["Ctrl", "L"]})).unwrap(),
-            Action::Hotkey { keys: vec!["ctrl".into(), "l".into()], allow_terminal: false }
+            Action::Hotkey {
+                keys: vec!["ctrl".into(), "l".into()],
+                allow_terminal: false,
+                allow_password: false
+            }
         );
         assert_eq!(
             p(json!({"type": "hotkey", "keys": "ctrl+shift+t"})).unwrap(),
-            Action::Hotkey { keys: vec!["ctrl".into(), "shift".into(), "t".into()], allow_terminal: false }
+            Action::Hotkey {
+                keys: vec!["ctrl".into(), "shift".into(), "t".into()],
+                allow_terminal: false,
+                allow_password: false
+            }
         );
         assert_eq!(
             p(json!({"type": "hotkey"})).unwrap(),
-            Action::Hotkey { keys: vec![], allow_terminal: false }
+            Action::Hotkey { keys: vec![], allow_terminal: false, allow_password: false }
         );
         assert_eq!(
             p(json!({"type": "click_element", "text": "OK", "bbox": [10, 20, 31, 41]})).unwrap(),

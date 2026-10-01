@@ -450,6 +450,7 @@ pub fn cmd_act(args: &Args, token: &CancelToken) -> CmdResult {
     }
     let (el, node, snap_hwnd) = element(args)?;
     let allow_terminal = arg::opt_bool(args, "allowTerminal")?.unwrap_or(false);
+    let allow_password = args.get("allowPassword") == Some(&Value::Bool(true));
     let value = match args.get("value") {
         Some(Value::String(s)) => Some(s.as_str()),
         _ => None,
@@ -458,17 +459,18 @@ pub fn cmd_act(args: &Args, token: &CancelToken) -> CmdResult {
         if value.is_none() {
             return Err(AgentError::invalid("set_value needs a string value"));
         }
-        if !allow_terminal && let Some(reason) = safety::window_target_reason(snap_hwnd) {
-            return Err(AgentError::denied(format!("set_value denied: {reason}")));
-        }
-        let text = |pid| current_string(&el, pid);
-        if !allow_terminal
-            && let Some(reason) = safety::denied_focus_reason(
-                &window::process_name(snap_hwnd),
-                &text(UIA_ClassNamePropertyId),
-                &text(UIA_NamePropertyId),
-            )
-        {
+        let target = target_info(&el);
+        let entry = safety::Entry::Text(value.unwrap_or(""));
+        let exe = window::process_name(snap_hwnd);
+        let reason = safety::password_reason(entry, allow_password, target.password).or_else(|| {
+            if allow_terminal {
+                return None;
+            }
+            safety::window_target_reason(snap_hwnd)
+                .or_else(|| safety::denied_focus_reason(&exe, &target.class, &target.name))
+                .or_else(|| if allow_password { None } else { safety::opaque_ide_reason(&exe, entry, false) })
+        });
+        if let Some(reason) = reason {
             return Err(AgentError::denied(format!("set_value denied: {reason}")));
         }
     }
@@ -570,12 +572,32 @@ fn current_string(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> String {
         .unwrap_or_default()
 }
 
-/// ClassName and Name of the keyboard-focused element (for the input target guard).
-pub fn focused_class_and_name() -> Option<(String, String)> {
+fn current_bool(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> bool {
+    // SAFETY: current-property read on a live element.
+    unsafe { el.GetCurrentPropertyValue(pid) }.ok().and_then(|v| bool::try_from(&v).ok()).unwrap_or(false)
+}
+
+/// What the input target guard reads from an element.
+pub struct TargetInfo {
+    pub class: String,
+    pub name: String,
+    pub password: bool,
+}
+
+fn target_info(el: &IUIAutomationElement) -> TargetInfo {
+    TargetInfo {
+        class: current_string(el, UIA_ClassNamePropertyId),
+        name: current_string(el, UIA_NamePropertyId),
+        password: current_bool(el, UIA_IsPasswordPropertyId),
+    }
+}
+
+/// The keyboard-focused element, for the input target guard.
+pub fn focused_target() -> Option<TargetInfo> {
     let client = Client::get().ok()?;
     // SAFETY: COM call on this thread's client.
     let el = unsafe { client.u.GetFocusedElement() }.ok()?;
-    Some((current_string(&el, UIA_ClassNamePropertyId), current_string(&el, UIA_NamePropertyId)))
+    Some(target_info(&el))
 }
 
 /// `focus_info`: foreground process plus the keyboard-focused element.

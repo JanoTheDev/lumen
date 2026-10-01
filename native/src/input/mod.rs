@@ -23,8 +23,8 @@ pub enum Step {
     Click { button: Button, at: Option<(i32, i32)>, count: u32 },
     Drag { from: (i32, i32), to: (i32, i32), button: Button },
     Scroll { dx: f64, dy: f64, at: Option<(i32, i32)> },
-    Type { text: String, vk_mode: bool, allow_terminal: bool },
-    Keys { keys: Vec<String>, vks: Vec<u16>, allow_terminal: bool },
+    Type { text: String, vk_mode: bool, allow_terminal: bool, allow_password: bool },
+    Keys { keys: Vec<String>, vks: Vec<u16>, allow_terminal: bool, allow_password: bool },
     Wait { ms: u64 },
 }
 
@@ -86,11 +86,13 @@ pub fn parse_steps(args: &Args) -> Result<Vec<Step>, AgentError> {
         .and_then(Value::as_array)
         .ok_or_else(|| AgentError::invalid("steps must be a list"))?;
     let allow_all = arg::opt_bool(args, "allowTerminal")?.unwrap_or(false);
+    let password_all = args.get("allowPassword") == Some(&Value::Bool(true));
     let mut steps = Vec::with_capacity(list.len());
     for (i, raw) in list.iter().enumerate() {
         let o = raw.as_object().ok_or_else(|| AgentError::invalid(format!("step {i} must be an object")))?;
         let t = arg::opt_str(o, "t")?.unwrap_or("");
         let allow_terminal = allow_all || arg::opt_bool(o, "allowTerminal")?.unwrap_or(false);
+        let allow_password = password_all || o.get("allowPassword") == Some(&Value::Bool(true));
         let step = match t {
             "move" => {
                 let (x, y) = point(o, "move")?.ok_or_else(|| AgentError::invalid("move needs x and y"))?;
@@ -127,7 +129,7 @@ pub fn parse_steps(args: &Args) -> Result<Vec<Step>, AgentError> {
                     Some("vk") => true,
                     Some(m) => return Err(AgentError::invalid(format!("unknown type mode {m:?}"))),
                 };
-                Step::Type { text: text.to_owned(), vk_mode, allow_terminal }
+                Step::Type { text: text.to_owned(), vk_mode, allow_terminal, allow_password }
             }
             "keys" => {
                 let keys = match o.get("combo").or_else(|| o.get("keys")) {
@@ -142,7 +144,7 @@ pub fn parse_steps(args: &Args) -> Result<Vec<Step>, AgentError> {
                     .iter()
                     .map(|k| vk_for(k).ok_or_else(|| AgentError::invalid(format!("unknown key '{k}'"))))
                     .collect::<Result<Vec<_>, _>>()?;
-                Step::Keys { keys, vks, allow_terminal }
+                Step::Keys { keys, vks, allow_terminal, allow_password }
             }
             "wait" => {
                 let ms = arg::opt_f64(o, "ms")?.unwrap_or(0.0);
@@ -199,8 +201,9 @@ pub fn run_step(step: &Step, token: &CancelToken) -> Result<(), AgentError> {
             }
             si::scroll(*dx, *dy)
         }
-        Step::Type { text, vk_mode, allow_terminal } => {
-            safety::check_input_target(*allow_terminal, "type")?;
+        Step::Type { text, vk_mode, allow_terminal, allow_password } => {
+            let allow = safety::Allow { terminal: *allow_terminal, password: *allow_password };
+            safety::check_input_target(allow, "type", safety::Entry::Text(text))?;
             let events = if *vk_mode {
                 si::text_events_vk(text, crate::window::thread_of(crate::window::foreground()))
             } else {
@@ -208,8 +211,9 @@ pub fn run_step(step: &Step, token: &CancelToken) -> Result<(), AgentError> {
             };
             si::send_keys(&events, token)
         }
-        Step::Keys { vks, allow_terminal, .. } => {
-            safety::check_input_target(*allow_terminal, "keys")?;
+        Step::Keys { keys, vks, allow_terminal, allow_password } => {
+            let allow = safety::Allow { terminal: *allow_terminal, password: *allow_password };
+            safety::check_input_target(allow, "keys", safety::Entry::Keys(keys))?;
             si::send_keys(&si::chord_events(vks, si::scan_code), token)
         }
         Step::Wait { ms } => token.sleep(Duration::from_millis(*ms)),
@@ -249,13 +253,19 @@ mod tests {
         .unwrap();
         assert_eq!(steps[0], Step::Move { x: 10, y: 21 });
         assert_eq!(steps[1], Step::Click { button: Button::Right, at: None, count: 2 });
-        assert!(matches!(steps[5], Step::Type { allow_terminal: true, vk_mode: false, .. }));
+        assert!(matches!(
+            steps[5],
+            Step::Type { allow_terminal: true, vk_mode: false, allow_password: false, .. }
+        ));
+        let pw = parse(json!({"allowPassword": true, "steps": [{"t": "type", "text": "x"}]})).unwrap();
+        assert!(matches!(pw[0], Step::Type { allow_password: true, allow_terminal: false, .. }));
         assert_eq!(
             steps[6],
             Step::Keys {
                 keys: vec!["ctrl".into(), "l".into()],
                 vks: vec![0x11, 0x4C],
-                allow_terminal: false
+                allow_terminal: false,
+                allow_password: false
             }
         );
         assert_eq!(steps.len(), 9);

@@ -7,6 +7,14 @@
 //!   request carries `allowTerminal: true` (main sets it only after the user
 //!   explicitly confirmed). An IDE counts as a terminal while its integrated
 //!   terminal has the focus (UIA ClassName / Name of the focused element).
+//! - IDEs whose focus UIA cannot see (JetBrains and Android Studio are Swing,
+//!   Zed and Fleet draw their own UI): typing works, but no line break and no
+//!   Enter right after typing into the same window, since the focus may be their
+//!   terminal. Lifted by `allowTerminal`, and by `allowPassword` (the user's own
+//!   input: this is a guess about the focus, not a known terminal).
+//! - No text into a password field (focused element, or the `set_value` target)
+//!   unless the request carries `allowPassword: true` (main sets it only for the
+//!   user's own direct input).
 
 use crate::proto::AgentError;
 
@@ -27,6 +35,40 @@ pub const TERMINALS: &[&str] = &[
 /// Editors with an integrated terminal: the focused element decides (`denied_focus_reason`).
 pub const IDES: &[&str] =
     &["code.exe", "code - insiders.exe", "vscodium.exe", "cursor.exe", "windsurf.exe", "devenv.exe"];
+
+/// IDEs with a terminal tool window whose focused element UIA cannot tell apart.
+pub const OPAQUE_IDES: &[&str] = &[
+    "idea64.exe",
+    "idea.exe",
+    "pycharm64.exe",
+    "webstorm64.exe",
+    "rider64.exe",
+    "clion64.exe",
+    "goland64.exe",
+    "phpstorm64.exe",
+    "rubymine64.exe",
+    "datagrip64.exe",
+    "studio64.exe",
+    "zed.exe",
+    "fleet.exe",
+];
+
+/// Enter this soon after typing into the same opaque-IDE window may run a command.
+pub const ENTER_AFTER_TYPE: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// Request overrides, each set by main only after its own checks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Allow {
+    pub terminal: bool,
+    pub password: bool,
+}
+
+/// What would be sent to the focused window.
+#[derive(Debug, Clone, Copy)]
+pub enum Entry<'a> {
+    Text(&'a str),
+    Keys(&'a [String]),
+}
 
 /// UIA ClassName of a focused terminal: xterm.js (VS Code and its forks), Windows Terminal's
 /// control (Visual Studio).
@@ -145,7 +187,7 @@ fn is_terminal_name(name: &str) -> bool {
 
 /// Typing into an IDE's integrated terminal (by the focused element's class or name).
 pub fn denied_focus_reason(exe: &str, focus_class: &str, focus_name: &str) -> Option<String> {
-    if !IDES.contains(&exe) {
+    if !IDES.contains(&exe) && !OPAQUE_IDES.contains(&exe) {
         return None;
     }
     let class = focus_class.trim().to_lowercase();
@@ -154,6 +196,37 @@ pub fn denied_focus_reason(exe: &str, focus_class: &str, focus_name: &str) -> Op
     }
     None
 }
+
+/// An opaque IDE (see `OPAQUE_IDES`) and the entry would submit a line: text with a line break,
+/// or Enter (any modifiers) within `ENTER_AFTER_TYPE` of typing into the same window.
+pub fn opaque_ide_reason(exe: &str, entry: Entry, typed_recently: bool) -> Option<String> {
+    if !OPAQUE_IDES.contains(&exe) {
+        return None;
+    }
+    let submits = match entry {
+        Entry::Text(t) => t.contains(['\n', '\r', '\u{2028}', '\u{2029}']),
+        Entry::Keys(keys) => typed_recently && keys.iter().any(|k| k == "enter" || k == "return"),
+    };
+    submits.then(|| format!("{exe} may have its terminal focused, so no Enter after typing there"))
+}
+
+/// Text into a password field without `allowPassword`.
+pub fn password_reason(entry: Entry, allow_password: bool, is_password: bool) -> Option<String> {
+    (matches!(entry, Entry::Text(_)) && !allow_password && is_password)
+        .then(|| "target is a password field".to_owned())
+}
+
+/// Whether the last typing (window, time) was into `hwnd` within `ENTER_AFTER_TYPE` of `now`.
+pub fn typed_recently(
+    last: Option<(isize, std::time::Instant)>,
+    hwnd: isize,
+    now: std::time::Instant,
+) -> bool {
+    last.is_some_and(|(h, at)| h == hwnd && now.saturating_duration_since(at) < ENTER_AFTER_TYPE)
+}
+
+#[cfg(windows)]
+static LAST_TYPED: std::sync::Mutex<Option<(isize, std::time::Instant)>> = std::sync::Mutex::new(None);
 
 /// (exe, class, child classes) of a top-level window.
 #[cfg(windows)]
@@ -177,21 +250,28 @@ pub fn window_target_reason(hwnd: isize) -> Option<String> {
     denied_target_reason(&exe, &cls, &kids)
 }
 
-/// E_DENIED when typing/keys would land in a terminal or the Run dialog.
+/// E_DENIED when typing/keys would land in a terminal, the Run dialog or a password field.
 #[cfg(windows)]
-pub fn check_input_target(allow_terminal: bool, what: &str) -> Result<(), AgentError> {
-    if allow_terminal {
-        return Ok(());
-    }
-    let (exe, cls, kids) = window_target(crate::window::foreground());
-    let reason = denied_target_reason(&exe, &cls, &kids).or_else(|| {
-        if !IDES.contains(&exe.as_str()) {
-            return None;
+pub fn check_input_target(allow: Allow, what: &str, entry: Entry) -> Result<(), AgentError> {
+    let fg = crate::window::foreground();
+    let (exe, cls, kids) = window_target(fg);
+    let is_text = matches!(entry, Entry::Text(_));
+    let ide = IDES.contains(&exe.as_str()) || OPAQUE_IDES.contains(&exe.as_str());
+    // One UIA read of the focused element, only when something depends on it; the client's
+    // timeouts bound it. Unreadable focus passes (main's policy checks first).
+    let focus =
+        ((is_text && !allow.password) || (ide && !allow.terminal)).then(crate::uia::focused_target).flatten();
+    let mut reason = password_reason(entry, allow.password, focus.as_ref().is_some_and(|f| f.password));
+    if !allow.terminal && reason.is_none() {
+        let mut last = LAST_TYPED.lock().unwrap();
+        let recent = typed_recently(*last, fg, std::time::Instant::now());
+        reason = denied_target_reason(&exe, &cls, &kids)
+            .or_else(|| focus.as_ref().and_then(|f| denied_focus_reason(&exe, &f.class, &f.name)))
+            .or_else(|| if allow.password { None } else { opaque_ide_reason(&exe, entry, recent) });
+        if is_text && reason.is_none() {
+            *last = Some((fg, std::time::Instant::now()));
         }
-        // Only IDEs pay for the UIA read; the client's timeouts bound it.
-        let (class, name) = crate::uia::focused_class_and_name()?;
-        denied_focus_reason(&exe, &class, &name)
-    });
+    }
     match reason {
         Some(reason) => Err(AgentError::denied(format!("{what} denied: {reason}"))),
         None => Ok(()),
@@ -249,6 +329,41 @@ mod tests {
         assert!(!d("code.exe", "", "The editor is not accessible. Terminal settings"));
         assert!(!d("notepad.exe", "xterm-helper-textarea", "Terminal 1"));
         assert!(!d("code.exe", "", ""));
+    }
+
+    #[test]
+    fn opaque_ides() {
+        assert!(denied_focus_reason("idea64.exe", "", "Terminal").is_some());
+        assert!(denied_focus_reason("pycharm64.exe", "SunAwtFrame", "proj - main.py").is_none());
+        let enter = vec!["enter".to_owned()];
+        let shift_enter = vec!["shift".to_owned(), "return".to_owned()];
+        let r = |exe, entry, recent| opaque_ide_reason(exe, entry, recent).is_some();
+        assert!(!r("idea64.exe", Entry::Text("let x = 1;"), false), "plain typing works");
+        assert!(r("idea64.exe", Entry::Text("rm -rf x\n"), false));
+        assert!(r("zed.exe", Entry::Text("a\r\nb"), false));
+        assert!(!r("fleet.exe", Entry::Keys(&enter), false), "Enter on its own works");
+        assert!(r("fleet.exe", Entry::Keys(&enter), true), "not right after typing");
+        assert!(r("studio64.exe", Entry::Keys(&shift_enter), true));
+        assert!(!r("code.exe", Entry::Text("a\nb"), true), "VS Code is judged by its focus");
+        assert!(!r("notepad.exe", Entry::Keys(&enter), true));
+    }
+
+    #[test]
+    fn enter_window_is_per_window_and_timed() {
+        let t0 = std::time::Instant::now();
+        assert!(typed_recently(Some((7, t0)), 7, t0 + std::time::Duration::from_secs(3)));
+        assert!(!typed_recently(Some((7, t0)), 8, t0));
+        assert!(!typed_recently(Some((7, t0)), 7, t0 + ENTER_AFTER_TYPE));
+        assert!(!typed_recently(None, 7, t0));
+    }
+
+    #[test]
+    fn password_fields() {
+        let keys = vec!["ctrl".to_owned(), "v".to_owned()];
+        assert!(password_reason(Entry::Text("hunter2"), false, true).is_some());
+        assert!(password_reason(Entry::Text("hunter2"), true, true).is_none(), "allowPassword");
+        assert!(password_reason(Entry::Text("hi"), false, false).is_none());
+        assert!(password_reason(Entry::Keys(&keys), false, true).is_none(), "keys are not text");
     }
 
     #[test]

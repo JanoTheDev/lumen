@@ -289,13 +289,15 @@ pub fn run(action: &Action, token: &CancelToken) -> CmdResult {
         Action::Scroll { dir, amount, at } => return scroll(*dir, *amount, *at, token),
         Action::Move { x, y } => glide(*x, *y, ms(300), token)?,
         Action::Click { x, y, button } => click_at(*x, *y, *button, token)?,
-        Action::Type { text, allow_terminal } => {
-            safety::check_input_target(*allow_terminal, "type")?;
+        Action::Type { text, allow_terminal, allow_password } => {
+            let allow = safety::Allow { terminal: *allow_terminal, password: *allow_password };
+            safety::check_input_target(allow, "type", safety::Entry::Text(text))?;
             type_text(text, token)?;
         }
-        Action::Hotkey { keys, allow_terminal } => {
+        Action::Hotkey { keys, allow_terminal, allow_password } => {
             if !keys.is_empty() {
-                safety::check_input_target(*allow_terminal, "hotkey")?;
+                let allow = safety::Allow { terminal: *allow_terminal, password: *allow_password };
+                safety::check_input_target(allow, "hotkey", safety::Entry::Keys(keys))?;
                 hotkey(keys, token)?;
             }
         }
