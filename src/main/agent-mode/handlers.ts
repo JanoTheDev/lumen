@@ -24,13 +24,15 @@ import * as screenLayer from '../windows/screen-layer'
 import { focusOff, focusOn } from '../focus'
 import { loadContent } from '../files/content'
 import { getFile } from '../files/store'
+import { howtoToolHandler, taskLearner } from '../howto'
+import type { LearnedTarget } from '../howto/learn'
 import { appRegistry, findApp, launchEntry } from './apps'
 import { askUser, type AskIo } from './ask'
 import { nameAtTarget, performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
 import { withInputLane } from './input-lane'
 import { observed } from './prompts'
 import { OBSERVE_TEXT_MAX, readWindowText, windowTextResult, type TextPorts } from './read-text'
-import type { ToolHandler, ToolOutcome } from './runner'
+import type { ToolCtx, ToolHandler, ToolOutcome } from './runner'
 import type {
   ActInput,
   AskUserInput,
@@ -452,12 +454,62 @@ export async function readDropped(input: ReadFileInput, env: TaskEnv): Promise<T
   return { content }
 }
 
+// ---- app notes (05 T36): what worked is kept per app, what failed twice is dropped ----
+
+/** The goal a call works on: its plan step, else the task. */
+function goalOf(ctx: ToolCtx): string {
+  const t = ctx.task()
+  return t.steps.find((s) => s.i === ctx.step)?.label ?? t.prompt
+}
+
+/** The name / automation id of an act target in the snapshot the model saw. */
+function learnedTarget(input: ActInput): LearnedTarget {
+  const t = input.target
+  if (!t) return {}
+  if (t.kind === 'text') return { name: t.ref }
+  const ctx = currentContext()
+  if (t.kind === 'element') {
+    const el = elementIndex(ctx?.uia).get(t.ref)
+    return el
+      ? { name: el.name || undefined, automationId: el.automationId || undefined, role: el.role }
+      : {}
+  }
+  if (t.kind === 'mark') {
+    const m = ctx?.marks?.find((x) => String(x.n) === t.ref.trim())
+    return m?.label ? { name: m.label } : {}
+  }
+  return {}
+}
+
+async function learnFrom(run: () => Promise<void>): Promise<void> {
+  try {
+    await run()
+  } catch (e) {
+    log('fail', `app notes: ${(e as Error).message}`)
+  }
+}
+
 /** The handlers for one task. */
 export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
+  const learner = taskLearner()
   return {
     observe: (i, c) => observe(i as ObserveInput, env, c.signal),
-    act: (i, c) => act(i as ActInput, env, c.signal, c.retry),
-    keys: (i, c) => keys(i as KeysInput, env, c.signal),
+    lookup_howto: howtoToolHandler(learner),
+    act: async (i, c) => {
+      const input = i as ActInput
+      const target = learnedTarget(input)
+      const out = await act(input, env, c.signal, c.retry)
+      const first = out.content[0]
+      const denied = first?.type === 'text' && first.text.startsWith('E_DENIED')
+      if (!out.isError) await learnFrom(() => learner.acted(goalOf(c), input.op, target))
+      else if (target.name && !denied) await learnFrom(() => learner.failed(target.name!))
+      return out
+    },
+    keys: async (i, c) => {
+      const out = await keys(i as KeysInput, env, c.signal)
+      if (!out.isError) await learnFrom(() => learner.pressed(goalOf(c), (i as KeysInput).combo))
+      return out
+    },
     navigate: (i, c) => navigate(i as NavigateInput, env, c.signal),
     launch_app: (i, c) => launchApp(i as LaunchAppInput, env, c.signal),
     wait_for: (i, c) => waitForTool(i as WaitForInput, c.signal),

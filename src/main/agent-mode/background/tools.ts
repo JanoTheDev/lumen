@@ -4,6 +4,7 @@
 import { z } from 'zod'
 import type { ToolDef } from '../../ai/providers/types'
 import { MEMORY_SEARCH_TOOL } from '../../ai/memory/search'
+import { LOOKUP_HOWTO_TOOL } from '../../howto/tool'
 
 export const fetchUrlInput = z.object({
   url: z.string().describe('Full https URL of a public web page or JSON endpoint.')
@@ -58,6 +59,7 @@ export const BG_TOOLS = {
     schema: readFileInput
   },
   memory_search: MEMORY_SEARCH_TOOL,
+  lookup_howto: LOOKUP_HOWTO_TOOL,
   memory_write: {
     name: 'memory_write',
     description:
@@ -94,6 +96,7 @@ export function backgroundToolDefs(opts: { child: boolean }): ToolDef[] {
     'fetch_url',
     'read_file',
     'memory_search',
+    'lookup_howto',
     'memory_write',
     'notify',
     'request_foreground'

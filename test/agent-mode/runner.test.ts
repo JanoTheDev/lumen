@@ -99,6 +99,21 @@ describe('runAgent', () => {
     expect(h.published.some((t) => t.phase === 'countdown')).toBe(true)
   })
 
+  it('adds the money a tool spent (paid lookup) to the task cost', async () => {
+    const h = harness(
+      [
+        reply(call('lookup_howto', { goal: 'x', app: '' })),
+        reply(call('finish', { summary: 'ok' }))
+      ],
+      {},
+      {
+        lookup_howto: async () => ({ content: [{ type: 'text', text: 'steps' }], costUsd: 0.02 })
+      }
+    )
+    const r = await runAgent(opts({ skipPlan: true }), h.deps)
+    expect(r.task.counters.costUsd).toBeCloseTo(0.02 + 2 * 0.001)
+  })
+
   it('cancel during the countdown makes no actions', async () => {
     const h = harness([reply(call('act', { op: 'click' }))], {
       countdown: async () => 'cancel'

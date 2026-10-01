@@ -32,6 +32,8 @@ export interface BgPorts {
   child: boolean
   fetch(url: string, signal: AbortSignal): Promise<FetchedPage>
   readFile(path: string): ReadResult
+  /** lookup_howto (05 T36): how-to steps for an app; absent = not offered by this host. */
+  howto?: ToolHandler
   /** memory_search (05): past sessions and saved facts, read-only. */
   memorySearch(input: { query: string; app?: string }): string
   memoryWrite(fact: string): 'ok' | 'disabled' | 'rejected'
@@ -157,6 +159,8 @@ export function createBackgroundHandlers(p: BgPorts): Record<string, ToolHandler
         content: text(observed('memory', p.memorySearch({ query, ...(app ? { app } : {}) })))
       }
     },
+    lookup_howto: (i, c) =>
+      p.howto ? p.howto(i, c) : Promise.resolve(fail('How-to lookups are not available here.')),
     memory_write: async (i) => {
       const fact = String(i.fact ?? '').trim()
       if (!fact) return fail('The note is empty.')
