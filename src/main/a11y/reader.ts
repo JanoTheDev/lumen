@@ -112,6 +112,35 @@ export function voiceStartPausesReading(
   return !(e.handsFree && conversationActive)
 }
 
+/**
+ * Voice starts around a reading. An agent question re-opens the mic hands-free (ask_user): the
+ * reading pauses so the mic does not take the voice for the answer, and goes on once the question
+ * is settled, since an answer is used up before any request starts (no query.started). The user
+ * talking (hotkey) pauses it for good, and a request ends it.
+ */
+export function readerVoiceHooks(
+  reader: Pick<PageReader, 'pause' | 'resume' | 'status'>,
+  env: { conversationActive(): boolean; askPending(): boolean }
+): { voiceStarted(e: { handsFree: boolean }): void; askSettled(): void; queryStarted(): void } {
+  let pausedForAsk = false
+  return {
+    voiceStarted(e) {
+      const forAsk = e.handsFree && env.askPending()
+      if (!forAsk) pausedForAsk = false
+      if (!voiceStartPausesReading(e, env.conversationActive() && !forAsk)) return
+      if (reader.pause() && forAsk) pausedForAsk = true
+    },
+    askSettled() {
+      if (!pausedForAsk) return
+      pausedForAsk = false
+      if (reader.status === 'paused') reader.resume()
+    },
+    queryStarted() {
+      pausedForAsk = false
+    }
+  }
+}
+
 export class PageReader {
   private parts: string[] = []
   private index = 0

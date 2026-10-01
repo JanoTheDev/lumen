@@ -12,6 +12,16 @@ export interface AskIo {
 export const ASK_TIMEOUT_MS = 30_000
 
 let pending: { resolve: (answer: string) => void } | null = null
+const settledListeners = new Set<() => void>()
+
+/**
+ * Called once each question is settled (answered, timed out, replaced or cancelled), e.g. so a
+ * page reading paused by the question's re-listen goes on. Returns an unsubscribe.
+ */
+export function onAskSettled(fn: () => void): () => void {
+  settledListeners.add(fn)
+  return () => settledListeners.delete(fn)
+}
 
 /** A question is waiting for the user. */
 export function askPending(): boolean {
@@ -56,6 +66,7 @@ export function askUser(
       clearTimeout(timer)
       signal.removeEventListener('abort', onAbort)
       if (pending === entry) pending = null
+      for (const fn of [...settledListeners]) fn()
     }
     io.speak(question)
     io.listen()
