@@ -127,12 +127,33 @@ export interface StyleContext {
 
 const SENTENCE_START = /(^|[.!?]["')\]]*\s+|\n\s*(?:\d+\.\s+|-\s+)?)(\p{Lu})(\p{L}*)/gu
 
-/** Words that keep their capital: "I", acronyms, mixed case, dictionary terms. */
-function keepsCapital(word: string, keep: ReadonlySet<string>): boolean {
+/** Always written with a capital (not "may", which is also a word). */
+const PROPER = new Set(
+  (
+    'monday tuesday wednesday thursday friday saturday sunday january february march april ' +
+    'june july august september october november december'
+  ).split(' ')
+)
+
+/** The word is written capitalised after another word somewhere in the text (a name). */
+function capitalisedMidSentence(word: string, text: string): boolean {
+  for (const m of text.matchAll(/[\p{L}\p{N},;:]\s+(\p{Lu}[\p{L}'’]*)/gu))
+    if (m[1] === word) return true
+  return false
+}
+
+/**
+ * Words that keep their capital: "I", acronyms, mixed case, dictionary terms and names on
+ * screen (`keep`), day and month names, and a word written capitalised mid-sentence
+ * elsewhere in the same text (L4).
+ */
+function keepsCapital(word: string, keep: ReadonlySet<string>, text: string): boolean {
   if (/^I(?:'|’|$)/.test(word)) return true
   if (word.length > 1 && word === word.toUpperCase()) return true
   if (/\p{Lu}/u.test(word.slice(1))) return true
-  return keep.has(word.toLowerCase())
+  const lower = word.toLowerCase()
+  if (keep.has(lower) || PROPER.has(lower)) return true
+  return capitalisedMidSentence(word, text)
 }
 
 function lowerStarts(text: string, keep: ReadonlySet<string>, firstOnly: boolean): string {
@@ -140,7 +161,7 @@ function lowerStarts(text: string, keep: ReadonlySet<string>, firstOnly: boolean
   return text.replace(SENTENCE_START, (m, pre: string, c: string, rest: string) => {
     if (firstOnly && n++ > 0) return m
     const word = c + rest
-    return keepsCapital(word, keep) ? m : pre + c.toLowerCase() + rest
+    return keepsCapital(word, keep, text) ? m : pre + c.toLowerCase() + rest
   })
 }
 

@@ -49,3 +49,14 @@ describe('shapeDictation coding mode (M8)', () => {
     expect(shape('x less than y', t).text).toBe('x < y')
   })
 })
+
+describe('shapeDictation names mid-sentence (L4)', () => {
+  it('keeps a name on screen capitalised when joining an unfinished sentence', () => {
+    const t = target({ process: 'winword.exe', valueTail: 'I met ' })
+    expect(
+      shapeDictation({ text: 'John yesterday.', source: 'model' }, t, cfg, {
+        screenNames: ['John']
+      }).text
+    ).toBe('John yesterday.')
+  })
+})

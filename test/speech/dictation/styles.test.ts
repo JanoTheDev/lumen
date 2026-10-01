@@ -94,6 +94,17 @@ describe('applyStyle', () => {
     expect(applyStyle('Then we go.', 'formal', { valueTail: 'Done. ' })).toBe('Then we go.')
   })
 
+  it('keeps names capitalised when joining an unfinished sentence (L4)', () => {
+    const ctx = { valueTail: 'I met ' }
+    expect(applyStyle('John yesterday.', 'formal', { ...ctx, keepCase: ['John'] })).toBe(
+      'John yesterday.'
+    )
+    expect(applyStyle('Monday at noon.', 'formal', ctx)).toBe('Monday at noon.')
+    expect(applyStyle('Ann and then Ann again.', 'formal', ctx)).toBe('Ann and then Ann again.')
+    expect(applyStyle('Then we go.', 'formal', ctx)).toBe('then we go.')
+    expect(applyStyle('May I come?', 'formal', ctx)).toBe('may I come?')
+  })
+
   it('keeps dictionary words capitalised', () => {
     expect(applyStyle('Figma is open.', 'very-casual', { keepCase: ['Figma'] })).toBe(
       'Figma is open'

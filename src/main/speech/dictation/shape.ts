@@ -46,7 +46,8 @@ export function shapeDictation(
   const style = styleFor(kind, cfg.styles)
   text = applyStyle(text, style, {
     valueTail: target.valueTail,
-    keepCase: [...cfg.dictionary, ...appTerms]
+    // Names on screen keep their capital mid-sentence too ("I met" + "John") (L4).
+    keepCase: [...cfg.dictionary, ...appTerms, ...(extras.screenNames ?? [])]
   })
   // Spoken symbols only in real editors and terminals, never a browser tab by its title (M8).
   if (cfg.codingMode !== false && isCodeEditorTarget(target, cfg.styleApps))
