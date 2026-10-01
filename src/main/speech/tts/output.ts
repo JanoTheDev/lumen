@@ -1,5 +1,5 @@
 // Muted-output check (04 T20) and the screen-reader rule (T21), kept pure for tests.
-import type { OutputState } from './win-helper'
+import type { OutputState } from './win-voices'
 
 /** Muted, or the volume is so low nothing would be heard. */
 export function silentOutput(s: OutputState): boolean {

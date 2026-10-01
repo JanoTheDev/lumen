@@ -1,7 +1,7 @@
 // Spoken replies. Answers are spoken sentence by sentence as `speech.say-chunk` arrives, so
 // speech starts before the reply is finished. Default engine: Windows voices, rendered to WAV
-// by the voice helper and played by the voice renderer's WebAudio player (echo cancelled, so
-// barge-in works). speechSynthesis is the fallback when the helper is unavailable. OpenAI
+// by the native agent and played by the voice renderer's WebAudio player (echo cancelled, so
+// barge-in works). speechSynthesis is the fallback when the agent is not running. OpenAI
 // voices are optional.
 //
 // Before a turn speaks, the default output device is checked: muted → nothing is spoken, the
@@ -9,6 +9,7 @@
 // screen reader runs, Lumen stays quiet and answers go to the screen reader instead.
 import type { TtsMessage } from '@shared/channels'
 import { bus } from '../../bus'
+import { getAgent } from '../../agent/instance'
 import { loadConfig } from '../../config'
 import { log } from '../../logger'
 import { screenReaderActive } from '../../a11y/at-state'
@@ -20,14 +21,15 @@ import { forTheEar } from './ear'
 import { openAiTtsAvailable, synthOpenAi } from './openai'
 import { OutputGate, ttsAllowed } from './output'
 import { TurnSpeech, ttsEngine } from './turns'
-import { WinVoiceHelper } from './win-helper'
+import { WinVoices } from './win-voices'
 
 const OUTPUT_CHECK_MS = 600
 
 const turns = new TurnSpeech()
-const helper = new WinVoiceHelper()
-// Bumped on stop; audio from an older generation is dropped.
+const helper = new WinVoices(getAgent)
+// Bumped on stop; audio from an older generation is dropped and its synthesis cancelled.
 let generation = 0
+let aborter = new AbortController()
 let seq = 0
 let chain: Promise<void> = Promise.resolve()
 /** The latest finished answer, for copy-when-muted and speaking it again after Unmute. */
@@ -51,6 +53,8 @@ export function setAnswerAnnouncer(fn: (text: string) => void): void {
 
 export function stopSpeaking(): void {
   generation++
+  aborter.abort()
+  aborter = new AbortController()
   chain = Promise.resolve()
   send({ op: 'stop' })
 }
@@ -91,11 +95,12 @@ function synth(
   engine: 'windows' | 'cloud',
   text: string,
   voice: string,
-  rate: number
+  rate: number,
+  signal: AbortSignal
 ): Promise<{ mime: string; data: string }> {
   return engine === 'cloud'
     ? synthOpenAi(text, voice, rate).then((data) => ({ mime: 'audio/mpeg', data }))
-    : helper.synth(text, voice, rate).then((data) => ({ mime: 'audio/wav', data }))
+    : helper.synth(text, voice, rate, signal).then((data) => ({ mime: 'audio/wav', data }))
 }
 
 function say(text: string, turnId: string): void {
@@ -106,14 +111,14 @@ function say(text: string, turnId: string): void {
   const n = seq++
   const { ttsVoice: voice, ttsRate: rate } = cfg.voice
   const fallback: TtsMessage = { op: 'say', turnId, seq: n, text: clean, voice, rate }
-  const checkOutput = helper.usable
+  const checkOutput = helper.canCheckOutput
   if (engine === 'windows' && !helper.usable) {
     send(fallback)
     return
   }
   // Synthesis starts now; playback order is kept by chaining the sends.
   const gen = generation
-  const audio = synth(engine, clean, voice, rate)
+  const audio = synth(engine, clean, voice, rate, aborter.signal)
   audio.catch(() => {})
   chain = chain.then(async () => {
     if (checkOutput && (await output.mutedFor(turnId))) return
@@ -144,7 +149,7 @@ export async function speakAnswer(text: string): Promise<void> {
   say(text, `preview-${seq}`)
 }
 
-/** Starts the Windows voice helper early when spoken replies are on. */
+/** Loads the Windows voice list early when spoken replies are on. */
 export function warmTts(): void {
   if (loadConfig().voice.tts !== 'off') helper.warm()
 }

@@ -79,7 +79,11 @@ const CAPABILITY: Record<string, string> = {
   uia_snapshot: 'uia',
   uia_act: 'uia',
   announce: 'announce',
-  system_info: 'system-info'
+  system_info: 'system-info',
+  tts_voices: 'tts',
+  tts_synthesize: 'tts',
+  audio_output: 'audio-output',
+  audio_unmute: 'audio-output'
 }
 
 function send<T>(
@@ -211,4 +215,61 @@ export interface SystemInfo {
 
 export function systemInfo(bridge: AgentBridge, opts?: RequestOptions): Promise<SystemInfo> {
   return send(bridge, 'system_info', {}, opts)
+}
+
+export interface TtsVoice {
+  id: string
+  name: string
+  lang: string
+  gender: 'male' | 'female' | 'unknown'
+}
+
+export interface TtsSynthesizeArgs {
+  text: string
+  /** Voice id or display name; empty = the system default. */
+  voice?: string
+  /** 0.5–6. */
+  rate?: number
+  /** 0–2, 1 = the voice's own pitch. */
+  pitch?: number
+  /** `text` is SSML. */
+  ssml?: boolean
+}
+
+export interface TtsAudio {
+  mime: 'audio/wav'
+  /** Base64 WAV. */
+  data: string
+  bytes: number
+  /** Display name of the voice used. */
+  voice: string
+}
+
+/** Installed OneCore voices (Windows.Media.SpeechSynthesis). */
+export async function ttsVoices(bridge: AgentBridge, opts?: RequestOptions): Promise<TtsVoice[]> {
+  const r = await send<{ voices?: TtsVoice[] }>(bridge, 'tts_voices', {}, opts)
+  return Array.isArray(r?.voices) ? r.voices : []
+}
+
+/** Renders speech to WAV agent-side; nothing is played there. */
+export function ttsSynthesize(
+  bridge: AgentBridge,
+  args: TtsSynthesizeArgs,
+  opts?: RequestOptions
+): Promise<TtsAudio> {
+  return send(bridge, 'tts_synthesize', args, { timeoutMs: 15_000, ...opts })
+}
+
+export interface AudioOutputState {
+  muted: boolean
+  /** 0..1 master volume of the default playback device. */
+  volume: number
+}
+
+export function audioOutput(bridge: AgentBridge, opts?: RequestOptions): Promise<AudioOutputState> {
+  return send(bridge, 'audio_output', {}, opts)
+}
+
+export async function audioUnmute(bridge: AgentBridge, opts?: RequestOptions): Promise<void> {
+  await send(bridge, 'audio_unmute', {}, opts)
 }

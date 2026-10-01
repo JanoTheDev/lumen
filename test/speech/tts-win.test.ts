@@ -1,14 +1,15 @@
-import { EventEmitter } from 'events'
-import { PassThrough, Writable } from 'stream'
-import type { ChildProcessWithoutNullStreams } from 'child_process'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
+
+vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
+vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 import { OutputGate, silentOutput, ttsAllowed } from '../../src/main/speech/tts/output'
+import type { AgentBridge, RequestOptions } from '../../src/main/agent/bridge'
 import {
-  WinVoiceHelper,
+  WinVoices,
   pickWinVoice,
   winRate,
   type WinVoice
-} from '../../src/main/speech/tts/win-helper'
+} from '../../src/main/speech/tts/win-voices'
 
 const VOICES: WinVoice[] = [
   { id: 'ar', name: 'Microsoft Naayf', lang: 'ar-SA' },
@@ -37,113 +38,83 @@ describe('winRate', () => {
   })
 })
 
-type Answer = (req: Record<string, unknown>) => Record<string, unknown> | null
+type Reply = (cmd: string, args: Record<string, unknown>) => Promise<unknown>
 
-/** A PowerShell stand-in: answers each JSON line with `answer(req)` (null = no reply). */
-function fakeHelper(answer: Answer): {
-  spawn: () => ChildProcessWithoutNullStreams
-  spawned: () => number
-  last: () => EventEmitter & { stdout: PassThrough }
+/** A stand-in for the agent bridge: answers each request with `reply`. */
+function fakeAgent(
+  reply: Reply,
+  caps = ['tts', 'audio-output']
+): {
+  bridge: AgentBridge
+  request: Mock<(cmd: string, args: Record<string, unknown>, opts?: RequestOptions) => unknown>
 } {
-  let count = 0
-  let current: (EventEmitter & { stdout: PassThrough }) | null = null
-  const spawn = (): ChildProcessWithoutNullStreams => {
-    count++
-    const child = new EventEmitter() as EventEmitter & {
-      stdout: PassThrough
-      stderr: PassThrough
-      stdin: Writable
-      kill: () => void
-    }
-    child.stdout = new PassThrough()
-    child.stderr = new PassThrough()
-    child.stdin = new Writable({
-      write(chunk, _enc, cb) {
-        for (const line of String(chunk).split('\n').filter(Boolean)) {
-          const req = JSON.parse(line) as Record<string, unknown>
-          const reply = answer(req)
-          if (reply) child.stdout.write(JSON.stringify({ id: req.id, ...reply }) + '\n')
-        }
-        cb()
-      }
-    })
-    child.kill = () => child.emit('exit', 0)
-    current = child
-    return child as unknown as ChildProcessWithoutNullStreams
-  }
-  return { spawn, spawned: () => count, last: () => current! }
+  const request = vi.fn((cmd: string, args: Record<string, unknown>, opts?: RequestOptions) => {
+    void opts
+    return reply(cmd, args)
+  })
+  const bridge = { impl: 'native', hasCapability: (c: string) => caps.includes(c), request }
+  return { bridge: bridge as unknown as AgentBridge, request }
 }
 
-describe('WinVoiceHelper', () => {
+describe('WinVoices', () => {
   it('synthesises with the picked voice id and clamped rate', async () => {
-    const seen: Record<string, unknown>[] = []
-    const f = fakeHelper((req) => {
-      seen.push(req)
-      if (req.op === 'voices') return { ok: true, voices: VOICES }
-      if (req.op === 'synth') return { ok: true, wav: 'UklGRg==' }
-      return { ok: false, error: 'nope' }
-    })
-    const h = new WinVoiceHelper({ spawn: f.spawn })
-    await expect(h.synth('Héllo', 'Microsoft Zira - English', 0.2)).resolves.toBe('UklGRg==')
-    const synth = seen.find((r) => r.op === 'synth')!
-    expect(synth.voiceId).toBe('zira')
-    expect(synth.rate).toBe(0.5)
-    expect(Buffer.from(String(synth.text), 'base64').toString('utf8')).toBe('Héllo')
-    expect(f.spawned()).toBe(1)
-    h.dispose()
-  })
-
-  it('reports the output state and surfaces helper errors', async () => {
-    const f = fakeHelper((req) =>
-      req.op === 'output' ? { ok: true, muted: true, volume: 0.4 } : { ok: false, error: 'boom' }
+    const { bridge, request } = fakeAgent(async (cmd) =>
+      cmd === 'tts_voices' ? { voices: VOICES } : { mime: 'audio/wav', data: 'UklGRg==' }
     )
-    const h = new WinVoiceHelper({ spawn: f.spawn })
-    await expect(h.outputState(1000)).resolves.toEqual({ muted: true, volume: 0.4 })
-    await expect(h.unmute()).rejects.toThrow('boom')
-    h.dispose()
+    const v = new WinVoices(() => bridge)
+    const ctl = new AbortController()
+    await expect(v.synth('Héllo', 'Microsoft Zira - English', 0.2, ctl.signal)).resolves.toBe(
+      'UklGRg=='
+    )
+    const call = request.mock.calls.find((c) => c[0] === 'tts_synthesize')!
+    expect(call[1]).toEqual({ text: 'Héllo', voice: 'zira', rate: 0.5 })
+    expect(call[2]?.signal).toBe(ctl.signal)
+    await v.synth('again', '', 1)
+    expect(request.mock.calls.filter((c) => c[0] === 'tts_voices')).toHaveLength(1)
   })
 
-  it('times out a request that gets no answer', async () => {
-    vi.useFakeTimers()
-    try {
-      const f = fakeHelper(() => null)
-      const h = new WinVoiceHelper({ spawn: f.spawn })
-      const p = h.outputState(300)
-      const check = expect(p).rejects.toThrow('timed out')
-      await vi.advanceTimersByTimeAsync(301)
-      await check
-      h.dispose()
-    } finally {
-      vi.useRealTimers()
-    }
+  it('rejects an empty answer', async () => {
+    const { bridge } = fakeAgent(async (cmd) => (cmd === 'tts_voices' ? { voices: [] } : {}))
+    await expect(new WinVoices(() => bridge).synth('x', '', 1)).rejects.toThrow('no audio')
   })
 
-  it('gives up after repeated deaths before any reply', async () => {
-    const f = fakeHelper(() => null)
-    const h = new WinVoiceHelper({ spawn: f.spawn, maxFailures: 2 })
-    for (let i = 0; i < 2; i++) {
-      const p = h.outputState(5000)
-      f.last().emit('exit', 1)
-      await expect(p).rejects.toThrow('exited')
-    }
-    expect(h.usable).toBe(false)
-    await expect(h.outputState(100)).rejects.toThrow('unavailable')
-    expect(f.spawned()).toBe(2)
+  it('reloads the voice list after a failure', async () => {
+    let fail = true
+    const { bridge, request } = fakeAgent(async () => {
+      if (fail) throw new Error('boom')
+      return { voices: VOICES }
+    })
+    const v = new WinVoices(() => bridge)
+    await expect(v.voices()).rejects.toThrow('boom')
+    fail = false
+    await expect(v.voices()).resolves.toHaveLength(3)
+    expect(request).toHaveBeenCalledTimes(2)
   })
 
-  it('stops when idle and starts again on the next request', async () => {
-    vi.useFakeTimers()
-    try {
-      const f = fakeHelper(() => ({ ok: true, muted: false, volume: 1 }))
-      const h = new WinVoiceHelper({ spawn: f.spawn, idleMs: 1000 })
-      await h.outputState(500)
-      await vi.advanceTimersByTimeAsync(1001)
-      await h.outputState(500)
-      expect(f.spawned()).toBe(2)
-      h.dispose()
-    } finally {
-      vi.useRealTimers()
-    }
+  it('is unusable without an agent or the tts capability', async () => {
+    expect(new WinVoices(() => null).usable).toBe(false)
+    await expect(new WinVoices(() => null).synth('x', '', 1)).rejects.toThrow('agent')
+    const { bridge } = fakeAgent(async () => ({}), ['capture'])
+    const v = new WinVoices(() => bridge)
+    expect(v.usable).toBe(false)
+    expect(v.canCheckOutput).toBe(false)
+    await expect(v.synth('x', '', 1)).rejects.toThrow('unsupported')
+  })
+
+  it('reports the output state and unmutes', async () => {
+    const { bridge, request } = fakeAgent(async (cmd) =>
+      cmd === 'audio_output' ? { muted: true, volume: 0.4 } : { done: true }
+    )
+    const v = new WinVoices(() => bridge)
+    await expect(v.outputState(600)).resolves.toEqual({ muted: true, volume: 0.4 })
+    expect(request.mock.calls[0][2]).toEqual({ timeoutMs: 600 })
+    await v.unmute()
+    expect(request.mock.calls[1][0]).toBe('audio_unmute')
+  })
+
+  it('a missing agent fails the output check without throwing synchronously', async () => {
+    const gate = new OutputGate(() => new WinVoices(() => null).outputState(100), vi.fn())
+    expect(await gate.mutedFor('t')).toBe(false)
   })
 })
 
