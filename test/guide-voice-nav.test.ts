@@ -43,6 +43,8 @@ describe('parseGuideNav', () => {
     ['how do I open settings', null],
     ['done with the report, send it', null],
     ['repeat the last email to john', null],
+    ['repeat that email to john', null],
+    ['one more time send it', null],
     ['open the back office page', null],
     ['close this tab', null],
     ['go back to the previous page in chrome', null],
@@ -58,9 +60,17 @@ describe('parseGuideNav', () => {
   })
 })
 
-// Natural repeat phrasings are not recognised yet; see 10-quality/tasks.md Notes.
-describe('parseGuideNav gaps', () => {
-  it.fails.each(['repeat that', 'one more time', 'say it again'])('%j -> repeat', (u) => {
+describe('parseGuideNav natural repeat phrasings', () => {
+  it.each([
+    'repeat that',
+    'Repeat that, please.',
+    'repeat it',
+    'one more time',
+    'One more time?',
+    'say it again',
+    'say it one more time',
+    'come again?'
+  ])('%j -> repeat', (u) => {
     expect(parseGuideNav(u)).toBe('repeat')
   })
 })

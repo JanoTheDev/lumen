@@ -16,7 +16,10 @@ export function normalizeUtterance(text: string): string {
 const NAV_RULES: Array<[GuideNavCommand, RegExp]> = [
   ['next', /^(next( step)?|continue|go on)$/],
   ['prev', /^(back|previous( step)?|go back)$/],
-  ['repeat', /^(repeat|say (that )?again|what was that)$/],
+  [
+    'repeat',
+    /^(repeat( that| it)?|say (that |it )?again|(say it|tell me) one more time|one more time|come again|what was that)$/
+  ],
   ['done', /^(done|finish(ed)?|close (the )?guide|exit guide)$/]
 ]
 
