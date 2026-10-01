@@ -48,6 +48,9 @@ export interface InvokeChannels {
   'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
   'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
   'home:info': { args: []; result: HomeInfo }
+  /** Applies accessibility profiles (shared/profiles ids) on top of the config; returns it. */
+  'a11y:apply-profile': { args: [ids: string[]]; result: Record<string, unknown> }
+  'onboarding:info': { args: []; result: OnboardingInfo }
   'memory:get': { args: []; result: MemoryOverview }
   'memory:fact': { args: [op: MemoryFactOp]; result: MemoryResult }
   'memory:review': { args: [req: { id: string; accept: boolean }]; result: MemoryResult }
@@ -231,6 +234,11 @@ export interface MemoryResult {
   error?: string
 }
 
+export interface OnboardingInfo {
+  /** A screen reader is running, so onboarding does not read itself aloud. */
+  screenReader: boolean
+}
+
 export interface HomeInfo {
   hotkey: string
   agentReady: boolean
@@ -286,6 +294,8 @@ export interface EventChannels {
   'screen:set-capture': [on: boolean]
   'assistant:state': [view: AssistantView]
   'home:shown': []
+  /** Home flyout: focus the "Ask" field (tray menu "Ask…"). */
+  'home:ask': []
   /** Panel window: switch to this route without reloading. */
   'panel:route': [route: string]
   'answer:text': [text: string]
@@ -338,6 +348,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'keys:clear',
   'keys:test',
   'home:info',
+  'a11y:apply-profile',
+  'onboarding:info',
   'memory:get',
   'memory:fact',
   'memory:review',
@@ -384,6 +396,7 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'screen:set-capture',
   'assistant:state',
   'home:shown',
+  'home:ask',
   'panel:route',
   'answer:text',
   'assistant:cancel-request',
