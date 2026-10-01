@@ -192,6 +192,10 @@ export const configV2Schema = z.object({
     terminal: z.enum(['type-no-enter', 'block']),
     dictionary: z.array(shortText(60)).max(500)
   }),
+  /** v2 = assistant bar, per-display screen layer and panel window instead of the old windows. */
+  ui: z.object({ v2: z.boolean() }),
+  /** First-run setup finished (or skipped). */
+  onboarding: z.object({ done: z.boolean() }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -247,7 +251,9 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     autoDetect: true,
     terminal: 'type-no-enter',
     dictionary: []
-  }
+  },
+  ui: { v2: false },
+  onboarding: { done: false }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -331,7 +337,9 @@ export const configPatchSchema = z
     teach: s2.teach.partial().strict(),
     memory: s2.memory.partial().strict(),
     ai: s2.ai.partial().strict(),
-    dictation: s2.dictation.partial().strict()
+    dictation: s2.dictation.partial().strict(),
+    ui: s2.ui.partial().strict(),
+    onboarding: s2.onboarding.partial().strict()
   })
   .partial()
   .strict()

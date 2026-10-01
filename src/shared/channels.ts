@@ -1,7 +1,8 @@
 // IPC channel names and payload types (CONTRACTS C5). Zod-free so the sandboxed preload can
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
-import type { GuideStep, LocateItem, ModelResponse, Point, SavedGuide } from './types'
+import type { AssistantState, ScreenScene } from './events'
+import type { GuideStep, LocateItem, ModelResponse, Point, Rect, SavedGuide } from './types'
 
 type Confidence = 'high' | 'medium' | 'low'
 
@@ -40,6 +41,11 @@ export interface InvokeChannels {
   'guides:delete': { args: [id: string]; result: { ok: boolean } }
   'wake:model-status': { args: []; result: { installed: boolean; path: string } }
   'wake:model-install': { args: []; result: { ok: boolean; error?: string } }
+  'keys:status': { args: []; result: KeyStatus[] }
+  'keys:set': { args: [req: { provider: KeyProvider; key: string }]; result: KeySetResult }
+  'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
+  'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
+  'home:info': { args: []; result: HomeInfo }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -55,6 +61,18 @@ export interface SendChannels {
   'settings:window-close': []
   'settings:window-minimize': []
   'settings:window-maximize': []
+  'assistant:command': [cmd: AssistantCommand]
+  /** Card size in CSS px, for dwell suppression over the bar. */
+  'assistant:resize': [size: { w: number; h: number }]
+  /** Pointer is over the card: stop forwarding clicks through the window. */
+  'assistant:interactive': [on: boolean]
+  'screen:user-drawing': [drawing: { points: Point[]; rect: Rect }]
+  'screen:capture-end': []
+  /** Opens the panel window at a route: settings, settings/<section>, onboarding, home. */
+  'panel:open': [route: string]
+  /** Closes the panel window (or flyout) that sent it. */
+  'panel:close': []
+  'home:run': [text: string]
 }
 
 export interface StatusMessage {
@@ -72,6 +90,46 @@ export interface SttStatus {
   installing: boolean
   percent?: number
   modelSizeMb: number
+}
+
+export type KeyProvider = 'anthropic' | 'openai'
+
+/** Never carries the key itself, only where it came from and its last 4 characters. */
+export interface KeyStatus {
+  provider: KeyProvider
+  set: boolean
+  source?: 'env' | 'vault'
+  last4?: string
+}
+
+export interface KeySetResult {
+  ok: boolean
+  /** False when Windows encryption is unavailable and the key lives in memory only. */
+  persisted: boolean
+  error?: string
+}
+
+export type AssistantCommand = {
+  type: 'repeat' | 'pin' | 'close' | 'copy' | 'cancel' | 'confirm' | 'deny'
+  turnId?: string
+}
+
+/** What the assistant bar renders: CONTRACTS C6 state plus display settings from main. */
+export interface AssistantView extends AssistantState {
+  /** False when the bar should play its exit and main is about to hide the window. */
+  visible: boolean
+  /** Auto-close for answers and errors; 0 = never. */
+  autoCloseMs: number
+  costUsd?: number
+}
+
+export interface HomeInfo {
+  hotkey: string
+  agentReady: boolean
+  wakeWord: boolean
+  dwell: boolean
+  buddy: boolean
+  recent: string[]
 }
 
 export interface WakeModelProgress {
@@ -101,6 +159,14 @@ export interface EventChannels {
   'settings:changed': [config: Record<string, unknown>]
   'wake:model-progress': [progress: WakeModelProgress]
   'voice:stt-model-progress': [progress: WakeModelProgress]
+  'screen:render': [scene: ScreenScene]
+  /** Cursor in this display's DIP, or null when it is on another display. */
+  'screen:cursor': [point: Point | null]
+  'screen:set-capture': [on: boolean]
+  'assistant:state': [view: AssistantView]
+  'home:shown': []
+  /** Panel window: switch to this route without reloading. */
+  'panel:route': [route: string]
   'status:set': [message: StatusMessage]
   'status:hide': []
   'voice:tts-audio': [audio: { mime: string; data: string }]
@@ -131,7 +197,12 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'guides:replay',
   'guides:delete',
   'wake:model-status',
-  'wake:model-install'
+  'wake:model-install',
+  'keys:status',
+  'keys:set',
+  'keys:clear',
+  'keys:test',
+  'home:info'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
@@ -145,7 +216,15 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'settings:open',
   'settings:window-close',
   'settings:window-minimize',
-  'settings:window-maximize'
+  'settings:window-maximize',
+  'assistant:command',
+  'assistant:resize',
+  'assistant:interactive',
+  'screen:user-drawing',
+  'screen:capture-end',
+  'panel:open',
+  'panel:close',
+  'home:run'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
@@ -161,6 +240,12 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'wake:model-progress',
   'voice:stt-model-progress',
   'status:set',
+  'screen:render',
+  'screen:cursor',
+  'screen:set-capture',
+  'assistant:state',
+  'home:shown',
+  'panel:route',
   'status:hide',
   'voice:tts-audio',
   'voice:start',
