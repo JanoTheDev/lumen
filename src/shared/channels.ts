@@ -85,6 +85,38 @@ export interface LabelEntryView {
   origin?: 'mine' | 'shared'
 }
 
+/** Helper handoff (11 T24): lessons (+ their apps' labels) shared as one `.lumen` file. */
+export interface HandoffExport {
+  lessonIds: string[]
+  title: string
+  from?: string
+  note?: string
+  includeLabels: boolean
+}
+
+export interface HandoffInfo {
+  id: string
+  title: string
+  from?: string
+  note?: string
+  lessons: number
+  installedAt: string
+}
+
+export interface HandoffInstallResult {
+  ok: boolean
+  installed?: {
+    id: string
+    title: string
+    from?: string
+    lessons: number
+    labels: number
+    updated: boolean
+  }[]
+  error?: string
+  problems?: string[]
+}
+
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
   'assistant:query': {
@@ -273,6 +305,14 @@ export interface InvokeChannels {
     args: [id: string]
     result: { ok: boolean; path?: string; error?: string }
   }
+  /** Helper handoff (11 T24): share some of my lessons, open a helper's file, list, remove. */
+  'teach:handoff-export': {
+    args: [req: HandoffExport]
+    result: { ok: boolean; path?: string; error?: string }
+  }
+  'teach:handoff-install': { args: []; result: HandoffInstallResult }
+  'teach:handoff-list': { args: []; result: HandoffInfo[] }
+  'teach:handoff-remove': { args: [id: string]; result: { ok: boolean } }
   /** Skills (11 T05/T06): Settings → Skills. */
   'skills:list': { args: []; result: SkillSummary[] }
   /** The full SKILL.md and the skill's file list, for View / Edit. */
@@ -1038,6 +1078,10 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:pack-install-url',
   'teach:pack-remove',
   'teach:pack-export',
+  'teach:handoff-export',
+  'teach:handoff-install',
+  'teach:handoff-list',
+  'teach:handoff-remove',
   'skills:list',
   'skills:get',
   'skills:set-enabled',

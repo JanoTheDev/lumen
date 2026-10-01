@@ -9,6 +9,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import { z } from 'zod'
 import { matchSkill, type SkillPack, type SkillRegion } from '../ai/skills'
+import { HANDOFF_FILE } from '../packs/handoff-kind'
 import { packMarker, type PackTrust } from '../packs/install'
 import { parseCurriculum, type Curriculum } from './curriculum'
 import { parseLesson, type Lesson } from './lesson'
@@ -108,6 +109,8 @@ export class SkillRegistry {
   private problemList: RegistryProblem[] = []
   /** Ids of the loose user lessons (saved "show me how" lessons, migrated guides). */
   private loose = new Set<string>()
+  /** Helper handoff folders (11 T24): their lessons join their apps after every pack loaded. */
+  private handoffs: string[] = []
 
   constructor(private readonly dirs: { builtin: string; user?: string }) {}
 
@@ -116,11 +119,13 @@ export class SkillRegistry {
     this.skills.clear()
     this.problemList = []
     this.loose.clear()
+    this.handoffs = []
     for (const id of listDirs(this.dirs.builtin))
       this.loadPack(join(this.dirs.builtin, id), 'builtin')
     const user = this.dirs.user
     if (user) {
       for (const id of listDirs(user)) this.loadPack(join(user, id), 'user')
+      for (const dir of this.handoffs) this.loadHandoff(dir)
       this.loadLooseLessons(join(user, 'user', 'lessons'))
     }
     return this
@@ -162,6 +167,10 @@ export class SkillRegistry {
 
   private loadPack(dir: string, source: SkillSource): void {
     const manifestFile = join(dir, 'skill.json')
+    if (source === 'user' && !existsSync(manifestFile) && existsSync(join(dir, HANDOFF_FILE))) {
+      this.handoffs.push(dir)
+      return
+    }
     const trust = source === 'user' ? packMarker(dir)?.trust : undefined
     const loaded = this.loadLessons(join(dir, 'lessons'))
     const lessons = trust ? loaded.map(withoutDoIt) : loaded
@@ -240,6 +249,23 @@ export class SkillRegistry {
       const skill = this.skills.get(lesson.app) ?? this.lessonsOnlySkill(lesson.app, dir)
       skill.lessons = mergeLessons(skill.lessons, [lesson])
       this.loose.add(lesson.id)
+    }
+  }
+
+  /**
+   * A helper's lessons (11 T24) join the pack of their app (so regions and matching work), or a
+   * lessons-only skill. They never replace a lesson that is already there.
+   */
+  private loadHandoff(dir: string): void {
+    const trust = packMarker(dir)?.trust
+    for (const loaded of this.loadLessons(join(dir, 'lessons'))) {
+      const lesson = trust ? withoutDoIt(loaded) : loaded
+      if (this.lesson(lesson.id)) {
+        this.problem(join(dir, 'lessons'), `lesson ${lesson.id} is already installed; skipped`)
+        continue
+      }
+      const skill = this.skills.get(lesson.app) ?? this.lessonsOnlySkill(lesson.app, dir)
+      skill.lessons = [...skill.lessons, lesson]
     }
   }
 

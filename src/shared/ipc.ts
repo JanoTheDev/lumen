@@ -78,6 +78,20 @@ export const labelEditSchema = z
     label: z.string().max(60).nullable()
   })
   .strict()
+/** Helper handoff (11 T24). */
+export const handoffExportSchema = z
+  .object({
+    lessonIds: z.array(lessonIdSchema).min(1).max(50),
+    title: z.string().trim().min(1).max(80),
+    from: z.string().max(60).optional(),
+    note: z.string().max(400).optional(),
+    includeLabels: z.boolean()
+  })
+  .strict()
+export const handoffIdSchema = z
+  .string()
+  .max(70)
+  .regex(/^handoff-[a-z0-9]+(-[a-z0-9]+)*$/)
 /** helpers:journal-read day (11 T23). */
 export const journalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 /** Background task ids (08 T29) and a typed answer to a task's question. */

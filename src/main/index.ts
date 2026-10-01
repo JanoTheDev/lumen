@@ -35,6 +35,7 @@ import { registerHelpersIpc } from './coach/ipc'
 import { installDeictic, interceptDeictic } from './deictic'
 import { installLabels, interceptLabels } from './labels'
 import { registerLabelsIpc } from './labels/ipc'
+import { registerFirstsIpc } from './teach/firsts-ipc'
 import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
 import { installClaudeCode, interceptClaudeCode, shutdownClaudeCode } from './claude-code'
 import { runQuery } from './query/pipeline'
@@ -124,6 +125,7 @@ function registerIpc(): void {
   registerSkillsIpc()
   registerHelpersIpc()
   registerLabelsIpc()
+  registerFirstsIpc()
   registerBridgesIpc()
   registerConnectorsIpc()
   registerMemoryIpc()

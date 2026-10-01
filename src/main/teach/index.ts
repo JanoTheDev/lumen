@@ -682,6 +682,11 @@ export function skillRegistry(): SkillRegistry | null {
   return registry
 }
 
+/** ~/.ai-overlay/skills once teach is installed, else "". */
+export function userSkillsRoot(): string {
+  return skillsRoot
+}
+
 /** Starts a pack lesson by id; false when there is no such lesson. */
 export function startLesson(
   id: string,

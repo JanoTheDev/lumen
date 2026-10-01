@@ -16,6 +16,7 @@ import {
 } from '../../../ui'
 import type { SectionProps } from '../meta'
 import { CommunityPacks } from './CommunityPacks'
+import { Handoff } from './Handoff'
 import { RecordSteps } from './RecordSteps'
 
 function play(id: string): void {
@@ -262,6 +263,8 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       <CommunityPacks apps={apps} onChanged={refresh} />
+
+      <Handoff mine={mine} onChanged={refresh} />
 
       <Card title="Learning help">
         <Switch
