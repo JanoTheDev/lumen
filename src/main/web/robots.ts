@@ -1,6 +1,6 @@
-// robots.txt (RFC 9309) for the tutorial importer (11 T12): a page is fetched only when the
-// site allows it for Lumen (or for every agent). Longest match wins, Allow wins a tie; `*`
-// and a trailing `$` work as in the RFC. No Electron.
+// robots.txt (RFC 9309) for server-side page reads (tutorial importer, web reading, news
+// feeds): a page is fetched only when the site allows it for Lumen (or for every agent).
+// Longest match wins, Allow wins a tie; `*` and a trailing `$` work as in the RFC. No Electron.
 
 export const USER_AGENT_TOKEN = 'lumen'
 

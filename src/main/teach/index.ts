@@ -75,6 +75,7 @@ import {
   type TutorialSource
 } from './importers'
 import { tutorialSchema } from './importers/tutorial'
+import { pinnedFetch } from '../web/net'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -591,7 +592,7 @@ export function importTutorialFrom(src: TutorialSource, appId?: string): Promise
     src,
     { appId },
     {
-      fetch: (url, init) => fetch(url, init),
+      fetch: pinnedFetch(),
       app: (id) => importApp(registry?.get(id)),
       appByName: (name) => {
         const all = registry?.all() ?? []

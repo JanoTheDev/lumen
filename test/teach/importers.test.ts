@@ -3,7 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseSubtitles, transcriptFromCues } from '../../src/main/teach/importers/subtitles'
-import { parseRobots, robotsAllow } from '../../src/main/teach/importers/robots'
+import { parseRobots, robotsAllow } from '../../src/main/web/robots'
 import {
   fetchPage,
   htmlToArticle,
