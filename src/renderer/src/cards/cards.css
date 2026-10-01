@@ -38,6 +38,17 @@
   opacity: 0.6;
 }
 
+/* A picture that arrives later fades in over the placeholder's space (same box, no jump). */
+img.cd-card__img {
+  animation: cd-fade var(--dur-base) var(--ease-out) both;
+}
+
+@keyframes cd-fade {
+  from {
+    opacity: 0;
+  }
+}
+
 .cd-card__body {
   display: flex;
   flex-direction: column;
@@ -58,6 +69,26 @@
 .cd-card__note {
   font-size: var(--text-sm);
   color: var(--fg-muted);
+}
+
+.cd-card__sub.is-oneline {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cd-card__key {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.cd-card__summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  font-size: var(--text-sm);
 }
 
 .cd-card__price {
@@ -137,9 +168,30 @@
 
 /* ---- Bar strip ---- */
 
+/* The strip enters with a fade and a short lift; the bar's surface springs to the new height
+   around it (MorphSurface, transforms only). */
 .cd-strip {
   --cd-gap: var(--space-2);
   margin-top: var(--space-2);
+  animation: cd-in var(--dur-base) var(--ease-out) both;
+}
+
+.cd-strip__item:nth-child(2) .cd-card {
+  animation-delay: 40ms;
+}
+
+.cd-strip__item:nth-child(3) .cd-card {
+  animation-delay: 80ms;
+}
+
+:root[data-reduce-motion='true'] .cd-strip__item .cd-card {
+  animation-delay: 0ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion='false']) .cd-strip__item .cd-card {
+    animation-delay: 0ms;
+  }
 }
 
 .cd-strip__viewport {
@@ -277,6 +329,15 @@
 .cd-table thead th {
   color: var(--fg-muted);
   font-weight: var(--weight-strong);
+}
+
+.cd-tag {
+  display: inline-block;
+  margin-left: var(--space-1);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  font-weight: var(--weight-regular);
 }
 
 .cd-table__sub {

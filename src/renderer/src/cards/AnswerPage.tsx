@@ -1,5 +1,7 @@
 // Panel route #/answer/<id>[/table] (05 T37): every card of an answer as a grid or a table,
-// sorted by price or rating and narrowed by the filter chips the answer suggested.
+// sorted by price or rating and narrowed by the filter chips the answer suggested. The table is
+// the comparison view: every fact label is a column, and the lowest price and the best rating
+// are tagged when more than one card has one.
 import { useMemo, useState } from 'react'
 import type { CardActionKind, CardFilter, CardsView } from '@shared/cards'
 import { SegmentedControl, Select, icons } from '../ui'
@@ -7,6 +9,7 @@ import { CardItem } from './CardItem'
 import './cards.css'
 import { runCardAction, useCardsView } from './useCards'
 import {
+  bestIds,
   factColumns,
   factValue,
   filterCards,
@@ -58,6 +61,7 @@ export function AnswerPageView({
     return sortCards(filterCards(view.cards, on), sort)
   }, [view.cards, chips, active, sort])
   const columns = factColumns(cards)
+  const best = bestIds(cards)
   const toggle = (label: string): void =>
     setActive((a) => (a.includes(label) ? a.filter((x) => x !== label) : [...a, label]))
 
@@ -143,8 +147,14 @@ export function AnswerPageView({
                       {card.title}
                       {card.subtitle && <span className="cd-table__sub">{card.subtitle}</span>}
                     </th>
-                    <td>{card.price ? formatPrice(card.price) : ''}</td>
-                    <td>{card.rating ? formatRating(card.rating) : ''}</td>
+                    <td>
+                      {card.price ? formatPrice(card.price) : ''}
+                      {best.cheapest === card.id && <span className="cd-tag">Lowest</span>}
+                    </td>
+                    <td>
+                      {card.rating ? formatRating(card.rating) : ''}
+                      {best.best === card.id && <span className="cd-tag">Top rated</span>}
+                    </td>
                     {columns.map((c) => (
                       <td key={c}>{factValue(card, c)}</td>
                     ))}

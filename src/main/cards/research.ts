@@ -42,9 +42,17 @@ export const presentCardsInput = z.object({
   cards: z
     .array(
       z.object({
-        kind: z.enum(CARD_KINDS),
+        kind: z
+          .enum(CARD_KINDS)
+          .describe(
+            'lodging: hotels, rentals; place: sights, restaurants, shops; product: things to buy; trip: flights, trains, buses; recipe; entity: a person, place or thing to explain; generic: anything else.'
+          ),
         title: z.string(),
-        subtitle: z.string().describe('Area, brand or one short line; "" when none.'),
+        subtitle: z
+          .string()
+          .describe(
+            'Area, brand or one short line (entity: a one-line description); "" when none.'
+          ),
         link: z.string().describe('https page of this option; "" when none.'),
         price: z
           .array(
@@ -67,7 +75,11 @@ export const presentCardsInput = z.object({
             })
           )
           .describe('0 or 1 entry: only a rating read on a source page.'),
-        facts: z.array(factInput).describe('Up to 6 short facts read on the pages.'),
+        facts: z
+          .array(factInput)
+          .describe(
+            'Up to 6 short facts read on the pages. Labels per kind: recipe "Time", "Servings"; product "Store", "Availability"; trip "Departs", "Arrives", "Duration", "Changes" (times exactly as on the page).'
+          ),
         badges: z.array(z.string()).describe('Up to 3 short tags ("Sea view", "Free parking").'),
         doLabel: z
           .string()
@@ -89,12 +101,14 @@ export const PRESENT_CARDS_TOOL: ToolDef = {
   schema: presentCardsInput
 }
 
-/** Prompt lines for research tasks (agent and background system prompts). */
-export const CARDS_RULE_FOREGROUND =
-  'Options to choose from (hotels, flights, products, places, recipes): end with present_cards instead of finish, one card per option. Prices, ratings and facts only as read on a page in this task, each price / rating with that page as its source; never estimate or invent them, leave them out instead. Sources in this order: the page in front of the user, pages you open in the browser like any app (a search results page, then the best results), then fetch_url. Ask with ask_user only for essentials you cannot assume (dates, place, budget, people); otherwise do a broad first pass and suggest filters.'
+/** Which card kind and layout fits (both research prompts). */
+const CARDS_KINDS_RULE =
+  'Card kind: lodging for hotels and rentals, place for sights and restaurants, product for things to buy (facts "Store", "Availability"), trip for flights, trains and buses (facts "Departs", "Arrives", "Duration", "Changes"; times only as written on a page you read, never worked out), recipe (facts "Time", "Servings"), entity for a person, place or thing the user wants explained (subtitle: one line saying what it is; Lumen adds a Wikipedia summary and picture), generic otherwise. Layout table when the user compares (products, trips), else carousel for up to 6, grid for more.'
 
-export const CARDS_RULE_BACKGROUND =
-  'Options to choose from (hotels, flights, products, places, recipes): end with present_cards instead of finish, one card per option. Prices, ratings and facts only as read on a fetched page, each price / rating with that page as its source; never estimate or invent them, leave them out instead. Ask only for essentials you cannot assume (dates, place, budget, people).'
+/** Prompt lines for research tasks (agent and background system prompts). */
+export const CARDS_RULE_FOREGROUND = `Options to choose from (hotels, flights, products, places, recipes, people or things to explain): end with present_cards instead of finish, one card per option. Prices, ratings and facts only as read on a page in this task, each price / rating with that page as its source; never estimate or invent them, leave them out instead. Sources in this order: the page in front of the user, pages you open in the browser like any app (a search results page, then the best results), then fetch_url. Ask with ask_user only for essentials you cannot assume (dates, place, budget, people); otherwise do a broad first pass and suggest filters. ${CARDS_KINDS_RULE}`
+
+export const CARDS_RULE_BACKGROUND = `Options to choose from (hotels, flights, products, places, recipes, people or things to explain): end with present_cards instead of finish, one card per option. Prices, ratings and facts only as read on a fetched page, each price / rating with that page as its source; never estimate or invent them, leave them out instead. Ask only for essentials you cannot assume (dates, place, budget, people). ${CARDS_KINDS_RULE}`
 
 // ---- what the task observed ----
 
@@ -204,6 +218,20 @@ export function numberSeen(n: number, text: string): boolean {
   )
 }
 
+/** Clock times in a fact value ("08:12", "8.05 pm" → "8:05", "14h30" → "14:30"). */
+export function clockTimes(value: string): string[] {
+  const out: string[] = []
+  for (const m of value.matchAll(/(?<![\d:.])([01]?\d|2[0-3])[:.h]([0-5]\d)(?![\d])/g))
+    out.push(`${Number(m[1])}:${m[2]}`)
+  return out
+}
+
+/** Every clock time of `value` appears in `text` (as 8:05, 08:05, 8.05 or 8h05). */
+export function timesSeen(value: string, text: string): boolean {
+  const have = new Set(clockTimes(text))
+  return clockTimes(value).every((t) => have.has(t))
+}
+
 // ---- input → AnswerCards ----
 
 const CURRENCY: Record<string, string> = {
@@ -293,6 +321,12 @@ export function buildAnswerCards(
       facts: c.facts
         .map((f) => ({ label: cut(f.label, L.label), value: cut(f.value, L.value) }))
         .filter((f) => f.label && f.value)
+        .filter((f) => {
+          // Trip times only as read on a page in this task (never worked out).
+          if (c.kind !== 'trip' || timesSeen(f.value, seen.text)) return true
+          dropped.push(`${title}: ${f.label} ${f.value} is not on the pages read`)
+          return false
+        })
         .slice(0, L.facts),
       links: [],
       actions: []

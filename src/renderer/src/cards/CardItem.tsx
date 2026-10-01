@@ -1,9 +1,18 @@
-// One answer card (05 Phase R). DOM order is the screen reader order: title, price, rating,
-// facts, badges, source, then the buttons; the picture sits first visually only (CSS order).
+// One answer card (05 Phase R). DOM order is the screen reader order: title, the kind's key line
+// (recipe time / servings, product store, trip times), price, rating, summary, facts, badges,
+// source, then the buttons; the picture sits first visually only (CSS order).
 // Images are data URLs from main; nothing remote loads here.
 import { useId } from 'react'
 import type { CardActionKind, CardSource, CardView } from '@shared/cards'
-import { formatPrice, formatRating, isDataImage, mainSource, sourceLine } from './view'
+import {
+  formatPrice,
+  formatRating,
+  isDataImage,
+  keyLine,
+  mainSource,
+  restFacts,
+  sourceLine
+} from './view'
 
 const ACTION_LABEL: Record<Exclude<CardActionKind, 'do'>, string> = {
   open: 'Open',
@@ -37,6 +46,8 @@ export function CardItem({
   const id = useId()
   const Heading = level === 2 ? 'h2' : 'h3'
   const src = mainSource(card, sources)
+  const line = keyLine(card)
+  const facts = restFacts(card, line)
   return (
     <article
       className={`cd-card is-${card.kind}`}
@@ -53,7 +64,22 @@ export function CardItem({
             </span>
           )}
         </Heading>
-        {card.subtitle && <p className="cd-card__sub">{card.subtitle}</p>}
+        {card.subtitle && (
+          <p className={`cd-card__sub${card.kind === 'entity' ? ' is-oneline' : ''}`}>
+            {card.subtitle}
+          </p>
+        )}
+        {line.items.length > 0 && (
+          <p className="cd-card__key">
+            {line.items.map((item, i) => (
+              <span key={item}>
+                {i > 0 && <span aria-hidden="true"> · </span>}
+                {i > 0 && <span className="visually-hidden">, </span>}
+                {item}
+              </span>
+            ))}
+          </p>
+        )}
         {card.price && (
           <p className="cd-card__price">
             <span className="visually-hidden">Price: </span>
@@ -68,9 +94,14 @@ export function CardItem({
             {formatRating(card.rating)}
           </p>
         )}
-        {card.facts.length > 0 && (
+        {card.summary && (
+          <p className="cd-card__summary">
+            {card.summary.text} <span className="cd-card__credit">From {card.summary.source}</span>
+          </p>
+        )}
+        {facts.length > 0 && (
           <dl className="cd-card__facts">
-            {card.facts.map((f) => (
+            {facts.map((f) => (
               <div key={f.label} className="cd-card__fact">
                 <dt>{f.label}</dt>
                 <dd>{f.value}</dd>

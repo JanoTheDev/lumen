@@ -60,13 +60,19 @@ export function sourceLine(src: CardSource, now: number): string {
   return `From ${src.title}${ago ? `, checked ${ago}` : ''}`
 }
 
-/** What a screen reader (or simple mode's Read) says, in order: title, price, rating, facts, source. */
+/**
+ * What a screen reader (or simple mode's Read) says, in order: title, the kind's key line,
+ * price, rating, summary, facts, source.
+ */
 export function readOrder(card: CardView, sources: CardSource[], now: number): string[] {
   const out = [card.subtitle ? `${card.title}, ${card.subtitle}` : card.title]
+  const line = keyLine(card)
+  if (line.items.length) out.push(line.items.join(', '))
   if (card.price)
     out.push(`Price ${formatPrice(card.price)}${card.price.note ? `, ${card.price.note}` : ''}`)
   if (card.rating) out.push(`Rated ${formatRating(card.rating)}`)
-  for (const f of card.facts) out.push(`${f.label}: ${f.value}`)
+  if (card.summary) out.push(`${card.summary.text} From ${card.summary.source}`)
+  for (const f of restFacts(card, line)) out.push(`${f.label}: ${f.value}`)
   if (card.badges?.length) out.push(card.badges.join(', '))
   const src = mainSource(card, sources)
   if (src) out.push(sourceLine(src, now))
@@ -127,4 +133,95 @@ export function factColumns(cards: CardView[]): string[] {
 
 export function factValue(card: CardView, label: string): string {
   return card.facts.find((f) => f.label === label)?.value ?? ''
+}
+
+// ---- per-kind key line (T42) ----
+
+const RECIPE_TIME =
+  /^(?:(?:total|prep|preparation|cook|cooking) )?time$|^(?:duration|ready in|takes)$/i
+const RECIPE_SERVES = /^(?:servings?|serves|yield|portions?|makes)$/i
+const PRODUCT_STORE = /^(?:store|shop|seller|sold by|retailer)$/i
+const PRODUCT_STOCK = /^(?:availability|stock|in stock)$/i
+const TRIP_DEPART = /^(?:departs?|departure|leaves?|dep\.?)$/i
+const TRIP_ARRIVE = /^(?:arrives?|arrival|arr\.?)$/i
+const TRIP_DURATION = /^(?:duration|travel time|journey time|takes)$/i
+const TRIP_CHANGES = /^(?:changes|transfers|stops|connections)$/i
+
+export interface KeyLine {
+  /** Short pieces shown on one line ("35 min", "Serves 4"). */
+  items: string[]
+  /** Fact labels the line already says (left out of the fact list). */
+  used: string[]
+}
+
+const findFact = (card: CardView, re: RegExp): CardView['facts'][number] | undefined =>
+  card.facts.find((f) => re.test(f.label.trim()))
+
+/**
+ * The line a card's kind puts first: recipes their time and servings, products the store and
+ * stock, trips their times, changes and duration. Built from the card's own facts only (the
+ * price's source line already names where a price is from).
+ */
+export function keyLine(card: CardView): KeyLine {
+  const items: string[] = []
+  const used: string[] = []
+  const take = (re: RegExp): string | undefined => {
+    const f = findFact(card, re)
+    if (!f) return undefined
+    used.push(f.label)
+    return f.value
+  }
+  switch (card.kind) {
+    case 'recipe': {
+      const time = take(RECIPE_TIME)
+      if (time) items.push(time)
+      const serves = take(RECIPE_SERVES)
+      if (serves) items.push(/^\d+$/.test(serves) ? `Serves ${serves}` : serves)
+      break
+    }
+    case 'product': {
+      const store = take(PRODUCT_STORE)
+      if (store) items.push(`At ${store}`)
+      const stock = take(PRODUCT_STOCK)
+      if (stock) items.push(stock)
+      break
+    }
+    case 'trip': {
+      const dep = take(TRIP_DEPART)
+      const arr = take(TRIP_ARRIVE)
+      if (dep && arr) items.push(`${dep} → ${arr}`)
+      else if (dep) items.push(`Leaves ${dep}`)
+      else if (arr) items.push(`Arrives ${arr}`)
+      const dur = take(TRIP_DURATION)
+      if (dur) items.push(dur)
+      const ch = take(TRIP_CHANGES)
+      if (ch)
+        items.push(
+          /^0$/.test(ch) ? 'Direct' : /^\d+$/.test(ch) ? `${ch} change${ch === '1' ? '' : 's'}` : ch
+        )
+      break
+    }
+  }
+  return { items, used }
+}
+
+/** The facts left for the list once the key line has said some. */
+export function restFacts(card: CardView, line: KeyLine): CardView['facts'] {
+  return line.used.length ? card.facts.filter((f) => !line.used.includes(f.label)) : card.facts
+}
+
+/** For the comparison table: the cheapest card (one currency) and the best rated one. */
+export function bestIds(cards: CardView[]): { cheapest?: string; best?: string } {
+  const out: { cheapest?: string; best?: string } = {}
+  const priced = cards.filter((c) => c.price)
+  if (priced.length > 1) {
+    const cur = priced[0].price!.currency
+    const same = priced.filter((c) => c.price!.currency === cur)
+    if (same.length > 1)
+      out.cheapest = same.reduce((a, b) => (b.price!.amount < a.price!.amount ? b : a)).id
+  }
+  const rated = cards.filter((c) => c.rating)
+  if (rated.length > 1)
+    out.best = rated.reduce((a, b) => (ratingScore(b.rating) > ratingScore(a.rating) ? b : a)).id
+  return out
 }

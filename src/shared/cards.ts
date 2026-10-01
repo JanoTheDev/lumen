@@ -35,7 +35,8 @@ export const CARD_LIMITS = {
   note: 120,
   alt: 200,
   url: 2048,
-  text: 2000
+  text: 2000,
+  summary: 400
 } as const
 
 /** Where a fact came from: a page that was fetched or read, with the time it was checked. */
@@ -88,6 +89,15 @@ export interface CardLink {
   url: string
 }
 
+/** A short description from a reference page (an entity's Wikipedia summary). */
+export interface CardSummary {
+  text: string
+  /** The page it is from (https). */
+  url: string
+  /** "Wikipedia". */
+  source: string
+}
+
 export interface CardAction {
   kind: CardActionKind
   /** Button label ("Book it", "Buy it"); required for `do`. */
@@ -99,6 +109,8 @@ export interface Card {
   kind: CardKind
   title: string
   subtitle?: string
+  /** Entities: a few sentences from a reference page, with its link. */
+  summary?: CardSummary
   image?: ImageRef
   price?: CardPrice
   rating?: CardRating

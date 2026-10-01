@@ -66,6 +66,7 @@ const card = z.strictObject({
   kind: z.enum(CARD_KINDS),
   title: text(L.title),
   subtitle: text(L.subtitle).optional(),
+  summary: z.strictObject({ text: text(L.summary), url: https, source: text(L.label) }).optional(),
   image: image.optional(),
   price: price.optional(),
   rating: rating.optional(),
