@@ -74,7 +74,8 @@ export interface ModelInfo {
 
 export interface LlmProvider {
   id: ProviderId
-  stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk>
+  /** With a schema the reply is constrained JSON; the caller parses the final text. */
+  stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk>
   complete<T = unknown>(req: StructuredRequest<T>, signal?: AbortSignal): Promise<CompleteResult<T>>
   /** Opens the connection pool early; never throws. */
   warmup(): Promise<void>

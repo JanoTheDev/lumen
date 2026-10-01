@@ -38,12 +38,18 @@ export interface ElementNode {
   children?: ElementNode[]
 }
 
-/** What the model can point at, in priority order. */
+/**
+ * What the model can point at, in priority order. Points and rects are image px of the
+ * named frame. `rect` covers areas (a panel, a cluster of rows) that a point cannot.
+ */
 export type Target =
   | { kind: 'element'; id: string }
   | { kind: 'mark'; n: number }
   | { kind: 'text'; text: string; nth?: number }
   | { kind: 'point'; x: number; y: number; frame: string }
+  | { kind: 'rect'; x: number; y: number; w: number; h: number; frame: string }
+
+export type Risk = 'low' | 'medium' | 'high'
 
 export type ResponseMode = 'answer' | 'guide' | 'action' | 'text_insert' | 'locate'
 
@@ -96,6 +102,8 @@ export interface GuideStep {
   label: string
   target_hint: string
   bbox?: Rect
+  target?: Target
+  detail?: string
 }
 
 export interface SavedGuide {
@@ -110,6 +118,7 @@ export interface LocateItem {
   label: string
   bbox: Rect
   description?: string
+  target?: Target
 }
 
 export interface FollowUp {
@@ -117,16 +126,36 @@ export interface FollowUp {
   delay_ms: number
 }
 
-/** Parsed model reply for one turn. `cancelled` marks a turn the user stopped. */
+/**
+ * Parsed model reply for one turn. `cancelled` marks a turn the user stopped.
+ * Answer: `text` is what the answer card shows (markdown ?? spoken), `spoken` is for TTS,
+ * `clarify` marks a question back to the user.
+ */
 export type ModelResponse =
-  | { mode: 'answer'; text: string; confidence?: Confidence; cancelled?: boolean }
+  | {
+      mode: 'answer'
+      text: string
+      spoken?: string
+      markdown?: string
+      point?: Target
+      clarify?: boolean
+      confidence?: Confidence
+      cancelled?: boolean
+    }
   | { mode: 'guide'; steps: GuideStep[]; confidence?: Confidence }
   | {
       mode: 'action'
       actions: Action[]
       summary?: string
       follow_up?: FollowUp
+      risk?: Risk
       confidence?: Confidence
     }
-  | { mode: 'text_insert'; text: string; target_hint: string; confidence?: Confidence }
-  | { mode: 'locate'; items: LocateItem[]; confidence?: Confidence }
+  | {
+      mode: 'text_insert'
+      text: string
+      target_hint: string
+      targetField?: Target
+      confidence?: Confidence
+    }
+  | { mode: 'locate'; items: LocateItem[]; notFoundReason?: string; confidence?: Confidence }

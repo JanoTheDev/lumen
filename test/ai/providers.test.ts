@@ -92,11 +92,11 @@ describe('anthropic params', () => {
 })
 
 describe('anthropic provider', () => {
-  function fake(
-    create: (...a: unknown[]) => unknown,
-    parse?: (...a: unknown[]) => unknown
-  ): { client: { messages: { create: Mock; parse: Mock } }; provider: LlmProvider } {
-    const client = { messages: { create: vi.fn(create), parse: vi.fn(parse) } }
+  function fake(create: (...a: unknown[]) => unknown): {
+    client: { messages: { create: Mock } }
+    provider: LlmProvider
+  } {
+    const client = { messages: { create: vi.fn(create) } }
     return { client, provider: createAnthropicProvider(() => client as unknown as Anthropic) }
   }
 
@@ -180,15 +180,26 @@ describe('anthropic provider', () => {
     await expect(provider.complete(req())).rejects.toMatchObject({ code: 'E_REFUSED' })
   })
 
-  it('returns parsed data when a schema is given', async () => {
-    const { client, provider } = fake(
-      async () => null,
-      async () => ({ ...anthropicMessage('{"n":2}', 'end_turn'), parsed_output: { n: 2 } })
+  it('sends the schema as output_config.format and validates the reply', async () => {
+    const { client, provider } = fake(async () =>
+      anthropicMessage('{"n":2,"tag":null}', 'end_turn')
     )
-    const res = await provider.complete({ ...req(), schema: z.object({ n: z.number() }) })
+    const schema = z.object({ n: z.number(), tag: z.string().optional() })
+    const res = await provider.complete({ ...req(), schema })
     expect(res.data).toEqual({ n: 2 })
-    const body = client.messages.parse.mock.calls[0][0] as { output_config: { format: unknown } }
-    expect(body.output_config.format).toBeTruthy()
+    const body = client.messages.create.mock.calls[0][0] as {
+      output_config: { format: { type: string; schema: { additionalProperties: boolean } } }
+    }
+    expect(body.output_config.format.type).toBe('json_schema')
+    expect(body.output_config.format.schema.additionalProperties).toBe(false)
+  })
+
+  it('returns null data for a reply that does not match the schema', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { provider } = fake(async () => anthropicMessage('{"n":"two"}', 'end_turn'))
+    const res = await provider.complete({ ...req(), schema: z.object({ n: z.number() }) })
+    expect(res.data).toBeNull()
+    expect(res.text).toBe('{"n":"two"}')
   })
 })
 
@@ -226,10 +237,10 @@ describe('openai provider', () => {
   })
 
   function fake(create: (...a: unknown[]) => unknown): {
-    client: { responses: { create: Mock; parse: Mock } }
+    client: { responses: { create: Mock } }
     provider: LlmProvider
   } {
-    const client = { responses: { create: vi.fn(create), parse: vi.fn() } }
+    const client = { responses: { create: vi.fn(create) } }
     return { client, provider: createOpenAIProvider(() => client as unknown as OpenAI) }
   }
 
@@ -242,6 +253,22 @@ describe('openai provider', () => {
       cacheReadTokens: 40,
       cacheWriteTokens: 0
     })
+  })
+
+  it('sends a strict json_schema and drops nulls before validating', async () => {
+    const { client, provider } = fake(async () => response('{"n":2,"tag":null}'))
+    const schema = z.object({ n: z.number(), tag: z.string().optional() })
+    const res = await provider.complete({
+      ...req({ model: 'gpt-5-mini' }),
+      schema,
+      schemaName: 'x'
+    })
+    expect(res.data).toEqual({ n: 2 })
+    const body = client.responses.create.mock.calls[0][0] as {
+      text: { format: { type: string; strict: boolean; schema: { required: string[] } } }
+    }
+    expect(body.text.format).toMatchObject({ type: 'json_schema', strict: true })
+    expect(body.text.format.schema.required).toEqual(['n', 'tag'])
   })
 
   it('retries a truncated reply once', async () => {

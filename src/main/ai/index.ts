@@ -4,7 +4,7 @@ import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
 import { buildSystemBlocks } from './prompts/system'
-import { parseResponse, sanitizeResponse } from './schema'
+import { parseReplyText, replySchema, toModelResponse } from './schema'
 import { LlmError, REFUSAL_MESSAGE, getProvider, onUsage, warmupProviders } from './providers'
 import { noteAnswerModel, recordUsage } from './cost'
 
@@ -37,7 +37,7 @@ export async function callModel(
           ...historyMessages(),
           {
             role: 'user',
-            content: `Active window: ${activeWindow}\nScreenshot dimensions: ${imgW}x${imgH} pixels (all coordinates must be within this range)\n\nUser request: ${prompt}`
+            content: `Active window: ${activeWindow}\n${screenshotBase64 ? `Screenshot: frame "1", ${imgW}x${imgH} pixels` : 'No screenshot'}\n\nUser request: ${prompt}`
           }
         ],
         images: screenshotBase64
@@ -45,12 +45,14 @@ export async function callModel(
           : [],
         maxTokens: opts.lowDetail ? 2048 : 4096,
         effort,
-        json: true
+        schema: replySchema,
+        schemaName: 'lumen_reply'
       },
       opts.signal
     )
     noteAnswerModel(res.model)
-    return sanitizeResponse(parseResponse(res.text))
+    const reply = res.data?.response ?? parseReplyText(res.text)
+    return toModelResponse(reply, activeWindow)
   } catch (e) {
     if (e instanceof LlmError && e.code === 'E_REFUSED')
       return { mode: 'answer', text: REFUSAL_MESSAGE }

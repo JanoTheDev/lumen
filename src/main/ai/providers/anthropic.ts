@@ -1,13 +1,12 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod'
-import type { ZodType } from 'zod'
+import { parseJsonAs } from '../json'
+import { anthropicJsonSchema } from './structured'
 import {
   EMPTY_USAGE,
   LlmError,
   REFUSAL_MESSAGE,
   retryBudget,
   type ChatChunk,
-  type ChatRequest,
   type CompleteResult,
   type LlmProvider,
   type StructuredRequest,
@@ -47,7 +46,7 @@ export function thinkingOff(model: string): Anthropic.ThinkingConfigParam | unde
 
 type CreateParams = Anthropic.MessageCreateParamsNonStreaming
 
-export function buildParams(req: ChatRequest): CreateParams {
+export function buildParams(req: StructuredRequest<unknown>): CreateParams {
   const system: Anthropic.TextBlockParam[] = req.system.map((b) => ({
     type: 'text',
     text: b.text,
@@ -74,6 +73,10 @@ export function buildParams(req: ChatRequest): CreateParams {
   const thinking = req.thinking ? undefined : thinkingOff(req.model)
   if (thinking) params.thinking = thinking
   if (req.effort && supportsEffort(req.model)) params.output_config = { effort: req.effort }
+  if (req.schema) {
+    const format = { type: 'json_schema' as const, schema: anthropicJsonSchema(req.schema) }
+    params.output_config = { ...params.output_config, format }
+  }
   if (req.temperature !== undefined && supportsTemperature(req.model))
     params.temperature = req.temperature
   return params
@@ -106,23 +109,8 @@ function addUsage(a: Usage, b: Usage): Usage {
 }
 
 export function createAnthropicProvider(getClient: () => Anthropic = anthropicClient): LlmProvider {
-  async function send<T>(
-    params: CreateParams,
-    schema: ZodType<T> | undefined,
-    signal?: AbortSignal
-  ): Promise<{ msg: Anthropic.Message; data: T | null }> {
-    if (!schema) {
-      return { msg: await getClient().messages.create(params, { signal }), data: null }
-    }
-    const parsed = await getClient().messages.parse(
-      {
-        ...params,
-        output_config: { ...params.output_config, format: zodOutputFormat(schema) }
-      },
-      { signal }
-    )
-    return { msg: parsed, data: (parsed.parsed_output as T | null) ?? null }
-  }
+  const send = (params: CreateParams, signal?: AbortSignal): Promise<Anthropic.Message> =>
+    getClient().messages.create(params, { signal })
 
   return {
     id: 'anthropic',
@@ -132,22 +120,24 @@ export function createAnthropicProvider(getClient: () => Anthropic = anthropicCl
       signal?: AbortSignal
     ): Promise<CompleteResult<T>> {
       const params = buildParams(req)
-      let { msg, data } = await send(params, req.schema, signal)
+      let msg = await send(params, signal)
       let usage = toUsage(msg.usage)
       if (msg.stop_reason === 'max_tokens') {
         const budget = retryBudget(params.max_tokens)
         if (budget === null) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
         console.log(`[fail] truncated response, retrying with max_tokens ${budget}`)
-        ;({ msg, data } = await send({ ...params, max_tokens: budget }, req.schema, signal))
+        msg = await send({ ...params, max_tokens: budget }, signal)
         usage = addUsage(usage, toUsage(msg.usage))
         if (msg.stop_reason === 'max_tokens')
           throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
       }
       if (msg.stop_reason === 'refusal') throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
-      return { data, text: textOf(msg), usage, model: msg.model, stopReason: msg.stop_reason ?? '' }
+      const text = textOf(msg)
+      const data = req.schema ? parseJsonAs(text, req.schema) : null
+      return { data, text, usage, model: msg.model, stopReason: msg.stop_reason ?? '' }
     },
 
-    async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk> {
+    async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
       const events = await getClient().messages.create(
         { ...buildParams(req), stream: true },
         { signal }

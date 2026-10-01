@@ -1,13 +1,12 @@
 import OpenAI from 'openai'
-import { zodTextFormat } from 'openai/helpers/zod'
-import type { ZodType } from 'zod'
+import { parseJsonAs } from '../json'
+import { openaiStrictSchema } from './structured'
 import {
   EMPTY_USAGE,
   LlmError,
   REFUSAL_MESSAGE,
   retryBudget,
   type ChatChunk,
-  type ChatRequest,
   type CompleteResult,
   type Effort,
   type LlmProvider,
@@ -50,7 +49,7 @@ export function reasoningEffort(
 
 type CreateParams = OpenAI.Responses.ResponseCreateParamsNonStreaming
 
-export function buildParams(req: ChatRequest): CreateParams {
+export function buildParams(req: StructuredRequest<unknown>): CreateParams {
   const input: OpenAI.Responses.ResponseInput = req.messages.map((m, i) => {
     const isLast = i === req.messages.length - 1
     if (!isLast || m.role !== 'user' || !req.images?.length) {
@@ -80,7 +79,16 @@ export function buildParams(req: ChatRequest): CreateParams {
   const effort = reasoningEffort(req.model, req.effort)
   if (effort) params.reasoning = { effort }
   else if (req.temperature !== undefined) params.temperature = req.temperature
-  if (req.json) params.text = { format: { type: 'json_object' } }
+  if (req.schema) {
+    params.text = {
+      format: {
+        type: 'json_schema',
+        name: req.schemaName ?? 'response',
+        schema: openaiStrictSchema(req.schema),
+        strict: true
+      }
+    }
+  } else if (req.json) params.text = { format: { type: 'json_object' } }
   return params
 }
 
@@ -124,19 +132,8 @@ function addUsage(a: Usage, b: Usage): Usage {
 }
 
 export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): LlmProvider {
-  async function send<T>(
-    params: CreateParams,
-    schema: ZodType<T> | undefined,
-    schemaName: string,
-    signal?: AbortSignal
-  ): Promise<{ res: OpenAI.Responses.Response; data: T | null }> {
-    if (!schema) return { res: await getClient().responses.create(params, { signal }), data: null }
-    const res = await getClient().responses.parse(
-      { ...params, text: { format: zodTextFormat(schema, schemaName) } },
-      { signal }
-    )
-    return { res, data: (res.output_parsed as T | null) ?? null }
-  }
+  const send = (params: CreateParams, signal?: AbortSignal): Promise<OpenAI.Responses.Response> =>
+    getClient().responses.create(params, { signal })
 
   return {
     id: 'openai',
@@ -146,28 +143,24 @@ export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): Ll
       signal?: AbortSignal
     ): Promise<CompleteResult<T>> {
       const params = buildParams(req)
-      const name = req.schemaName ?? 'response'
-      let { res, data } = await send(params, req.schema, name, signal)
+      let res = await send(params, signal)
       let usage = toUsage(res.usage)
       if (truncated(res)) {
         const budget = retryBudget(req.maxTokens)
         if (budget === null) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
         console.log(`[fail] truncated response, retrying with max_output_tokens ${budget}`)
-        ;({ res, data } = await send(
-          { ...params, max_output_tokens: budget },
-          req.schema,
-          name,
-          signal
-        ))
+        res = await send({ ...params, max_output_tokens: budget }, signal)
         usage = addUsage(usage, toUsage(res.usage))
         if (truncated(res)) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
       }
       if (refused(res)) throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
       const stopReason = res.status === 'incomplete' ? 'incomplete' : 'end_turn'
-      return { data, text: textOf(res), usage, model: res.model, stopReason }
+      const text = textOf(res)
+      const data = req.schema ? parseJsonAs(text, req.schema) : null
+      return { data, text, usage, model: res.model, stopReason }
     },
 
-    async *stream(req: ChatRequest, signal?: AbortSignal): AsyncIterable<ChatChunk> {
+    async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
       const events = await getClient().responses.create(
         { ...buildParams(req), stream: true },
         { signal }

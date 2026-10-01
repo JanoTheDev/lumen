@@ -128,7 +128,7 @@ async function runTurn(
     result.mode === 'action' &&
     result.follow_up
   ) {
-    result.follow_up.query = `The page is loaded. Highlight where the user can find: "${prompt}". Respond ONLY with {"mode":"locate","items":[...]} — each item bbox tightly wraps only the matching visible rows/elements. Do NOT click, navigate, or open anything.`
+    result.follow_up.query = `The page is loaded. Highlight where the user can find: "${prompt}". Use locate mode: each item's rect tightly wraps only the matching visible rows or elements. Do not click, navigate or open anything.`
     console.log('[locate-chain] replaced follow_up with locate query')
   }
 
@@ -157,11 +157,12 @@ async function runTurn(
   }
 
   // Start TTS synth early — parallel to renderer showing the answer card
-  if (result.mode === 'answer' && result.text?.trim()) {
+  const spoken = result.mode === 'answer' ? (result.spoken ?? result.text)?.trim() : ''
+  if (spoken) {
     const cfgNow = loadConfig()
     if (cfgNow.voice.tts === 'cloud') {
       deps
-        .speak(result.text.trim(), cfgNow.voice.ttsVoice)
+        .speak(spoken, cfgNow.voice.ttsVoice)
         .catch((e) => console.warn('[tts] early synth failed:', (e as Error).message))
     }
   }
@@ -170,7 +171,7 @@ async function runTurn(
   if (!opts.lowDetail) {
     const summary =
       result.mode === 'answer'
-        ? result.text
+        ? (result.spoken ?? result.text)
         : result.mode === 'action'
           ? (result.summary ?? `action: ${result.actions?.map((a) => a.type).join(', ')}`)
           : result.mode === 'guide'

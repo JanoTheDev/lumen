@@ -50,7 +50,7 @@ ${UNTRUSTED_CONTENT_RULE}
 RULES for step breakdown:
 - Each step is ONE semantic action the assistant executes in a single AI query with 1-3 low-level actions.
 - DO NOT include setup steps: "focus window", "bring to foreground", "type URL in address bar", "click the address bar", "press Enter", "wait for page to load". The assistant handles those automatically.
-- For ANY URL open/navigate: ONE step only, phrased "Navigate to <full URL>". The downstream AI emits a navigate_url action. NEVER split into click-address-bar + type-URL + press-Enter.
+- For ANY URL open/navigate: ONE step only, phrased "Navigate to <full URL>". The downstream AI opens it with one open_url action. NEVER split into click-address-bar + type-URL + press-Enter.
 - DO NOT split compose into click-to-field + type-field per field. ONE step: "Fill the email (Subject, Body — skip To if no recipient given)" is fine.
 - DO NOT include bbox coordinates in step descriptions. Plans are semantic; the next AI call sees the screenshot and targets itself.
 - Use imperative verbs: "Navigate to X", "Click Y", "Fill Z".
@@ -149,7 +149,7 @@ export async function runResearchAgent(
 
     const firstIterRule =
       i === 0
-        ? `\nITERATION 1 CRITICAL RULE: If the current screenshot is NOT the target of the query (wrong website, wrong app, unrelated content), you MUST respond with action mode + navigate_url to a Google search for the query. Do NOT answer from the current screen unless it is unambiguously the intended subject. Brand names / proper nouns the user mentioned ALWAYS take the navigate path on iter 1 — they are almost never already on screen.`
+        ? `\nITERATION 1 CRITICAL RULE: If the current screenshot is NOT the target of the query (wrong website, wrong app, unrelated content), you MUST respond with action mode + open_url to a Google search for the query. Do NOT answer from the current screen unless it is unambiguously the intended subject. Brand names / proper nouns the user mentioned ALWAYS take the navigate path on iter 1 — they are almost never already on screen.`
         : ''
 
     const stepPrompt = `RESEARCH TASK: "${query}"
@@ -159,14 +159,14 @@ You are an autonomous research agent. Look at the current screenshot and decide:
 1. If the requested information is CLEARLY VISIBLE on this page AND the page is the intended subject — respond with answer mode containing the extracted content. Format the answer as a clean markdown summary (list of items, key facts, direct answer). Do NOT say "the page shows" — just give the info.
 
 2. If the target info is NOT yet visible but you can make PROGRESS — respond with action mode to do ONE of:
-   - navigate_url to a Google search (if you haven't searched yet): "https://www.google.com/search?q=<encoded>"
+   - open_url to a Google search (if you haven't searched yet): "https://www.google.com/search?q=<encoded>"
    - click a link that looks most relevant (skip ads, prefer official sites, job boards, or pages with "positions/listings/results")
    - scroll with amount=1 (single Page Down, ~80% of viewport) to scan the next screenful. NEVER use amount >= 3 — that jumps past content and may hit the page bottom. If you need to go further, the agent loops and you can scroll again next iteration.
 
 3. If stuck (404, login wall, irrelevant page) — respond with answer mode summarizing the obstacle and any partial info.
 
 IMPORTANT:
-- Do NOT include follow_up in your response. The agent loops automatically.
+- Do NOT include followUp in your response. The agent loops automatically.
 - Prefer answer mode as soon as you have enough info — do not over-navigate.
 - Iteration ${i + 1} of ${MAX_RESEARCH_ITERATIONS}. Be decisive.${firstIterRule}`
 
