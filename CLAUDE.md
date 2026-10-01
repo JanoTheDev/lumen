@@ -38,7 +38,7 @@ The Python `keyboard` lib may need Admin on Windows to suppress the global hotke
 
 1. **Electron main** (`src/main/`) — query pipeline, AI calls, action execution, config, windows.
 2. **Renderers** (`src/renderer/`) — entries `index` (HUD), `highlight`, `answeroverlay`, `status`, `dwellring`, `settings`. All windows are sandboxed with CSP; `highlight`/`answeroverlay`/`dwellring` scripts live in `src/renderer/src/legacy/*.ts`.
-3. **Python agent** (`agent/`) — spawned subprocess, NDJSON over stdio.
+3. **Agent** — spawned subprocess, NDJSON over stdio: the Python agent (`agent/`) or the Rust sidecar `lumen-native` (`native/`), picked by config `agentImpl`.
 
 ### Shared contracts (`src/shared/`, alias `@shared`)
 
@@ -64,7 +64,7 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 - `query/` — `pipeline` (runQuery), `context` (speculative capture as a promise cache), `overrides` (pure prompt steering, composes flags), `present` (guide/locate output), `research`, `cancel` (`CancelScope` per turn; Escape / voice cancel / `assistant:cancel` cancel all), planner (`task-planner`, `step-verifier`, `task-queue`, `task-splitter`, `query-classifier`, `nth`).
 - `actions/` — `executor` (single `executeActions` for renderer, plan and research paths), `coords` (the only image ↔ physical ↔ logical conversions), `agent-action` (model action → agent wire format), `safety` (URL scheme allowlist, hotkey/typing policy), `policy`.
 - `ai/` — `index` (`callModel`, `callClaude` alias), `providers/{anthropic,openai}` (singleton clients), `prompts/system`, `prompts/untrusted` (screen text is data, never instructions), `schema` (response parsing), `history`, `router` (provider + model per role), `computer-use`, `pricing`, `app-context`.
-- `agent/` — `bridge` (protocol v1/v2 client, restart backoff, per-command timeouts, init replay), `commands` (typed v2 wrappers), `state` (`buildAgentInitState`), `events` (hotkey/wake/dwell/cancel wiring), `escape` (ref-counted global Escape).
+- `agent/` — `bridge` (protocol v1/v2 client, restart backoff, per-command timeouts, init replay), `commands` (typed v2 wrappers), `state` (`buildAgentInitState`), `impl` (binary selection, see below), `events` (hotkey/wake/dwell/cancel wiring), `escape` (ref-counted global Escape).
 - `guides/` — `store` (saved guides, id validation), `voice-nav` (whole-utterance next/back/repeat/done), `session`.
 - `speech/` — `stt` (Whisper, in-memory upload), `tts`.
 - `config.ts` — load/migrate/save `~/.ai-overlay/config.json`; `logger.ts`; `wake-model.ts` (Vosk model download).
@@ -75,6 +75,14 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 - `dispatch.py` — inline, input and read lanes; cancel tokens; per-call `timeoutMs`.
 - Protocol v1 by default; v2 (`{v:2,id,cmd,args}`, `ready` handshake, `init`) with `--protocol 2`. The bridge switches to v2 when the first stdout line is the v2 `ready` event.
 - Modules: `hotkey` (Electron accelerator parser, `--hotkey`), `dpi` (per-monitor-v2 awareness, set before other imports), `monitors`, `capture` (mss, frame cache), `window` (process-based active window / browser detection), `actions`, `safety`, `pagediff`, `wake` (Vosk), `dwell`.
+
+### Native agent (`native/`)
+
+Rust crate `lumen-native`, protocol v2 only (`--protocol 2`). Build with `cargo build --release` (or `--profile fastrel` for a quicker local build); `cargo test`, `cargo clippy --all-targets -- -D warnings`. `lumen-native --bench` prints capture / OCR / UIA / typing-prep / SendInput latencies (nothing is typed).
+
+### Agent selection (`src/main/agent/impl.ts`)
+
+`agentImpl`: `python` | `native` | `auto` (default). Paths: dev `native/target/release/lumen-native.exe` (then `fastrel`) and `agent/.venv/Scripts/python.exe agent/main.py`; packaged `resources/native/lumen-native.exe` and `resources/agent/lumen-agent.exe` (falls back to the bundled venv). `auto` runs native when the exe exists and its `ready.capabilities` include `REQUIRED_NATIVE_CAPABILITIES` (incl. `execute`, which native does not advertise yet), otherwise Python. Native failing to start under `auto`, or crashing 3 times within 60 s under any setting, switches the session to Python (`agent-impl-fallback` event, logged).
 
 ### Coordinates
 
