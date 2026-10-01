@@ -28,8 +28,17 @@ export function encodeWav(samples: Float32Array, sampleRate: number): ArrayBuffe
   return buf
 }
 
-/** Decodes a MediaRecorder blob and resamples it to 16 kHz mono WAV. */
-export async function toSttWav(encoded: ArrayBuffer): Promise<ArrayBuffer> {
+/** Puts `head` (16 kHz audio from before the recording, e.g. barge-in pre-roll) in front. */
+export function prependPcm(head: Float32Array | undefined, body: Float32Array): Float32Array {
+  if (!head?.length) return body
+  const out = new Float32Array(head.length + body.length)
+  out.set(head)
+  out.set(body, head.length)
+  return out
+}
+
+/** Decodes a MediaRecorder blob and resamples it to 16 kHz mono WAV, after optional pre-roll. */
+export async function toSttWav(encoded: ArrayBuffer, preRoll?: Float32Array): Promise<ArrayBuffer> {
   const ctx = new AudioContext()
   let decoded: AudioBuffer
   try {
@@ -44,5 +53,5 @@ export async function toSttWav(encoded: ArrayBuffer): Promise<ArrayBuffer> {
   src.connect(offline.destination)
   src.start()
   const rendered = await offline.startRendering()
-  return encodeWav(rendered.getChannelData(0), STT_SAMPLE_RATE)
+  return encodeWav(prependPcm(preRoll, rendered.getChannelData(0)), STT_SAMPLE_RATE)
 }

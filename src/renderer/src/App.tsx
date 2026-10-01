@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 import { startSpeaker } from './voice/speaker'
+import { startBargeIn, takePreRoll } from './voice/barge-in'
 import { setWakeFeedPaused, startWakeFeed } from './voice/wake-feed'
 import { startMicDeviceSync } from './voice/mic'
 import { RmsGate } from './voice/vad/rms'
@@ -253,6 +254,7 @@ export default function App(): JSX.Element {
   }, [abort])
 
   useEffect(() => startSpeaker(), [])
+  useEffect(() => startBargeIn(), [])
   useEffect(() => startWakeFeed(), [])
   useEffect(() => startMicDeviceSync(), [])
   useEffect(() => setWakeFeedPaused(listening), [listening])
@@ -318,11 +320,13 @@ export default function App(): JSX.Element {
         maxWaitMs: number
         maxRecordMs: number
         onNoSpeech: () => void
+        // Speech already started before the recording (barge-in pre-roll).
+        heardSpeech?: boolean
       }
     ): void => {
       const startedAt = Date.now()
       const gate = new RmsGate({ threshold: opts.threshold })
-      let heardSpeech = false
+      let heardSpeech = opts.heardSpeech ?? false
       let silenceStart = 0
       // The hotkey state in main must know the recording is over, or the next press stops
       // a recording that no longer exists.
@@ -372,13 +376,16 @@ export default function App(): JSX.Element {
       const session = beginSessionRef.current()
       const vad = vadRef.current ?? DEFAULT_VAD
       const maxRecordMs = vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS
-      start({ speechThreshold: vad.speechThreshold, maxRecordMs })
+      // After a voice barge-in, the words that interrupted the answer lead the recording.
+      const preRoll = takePreRoll() ?? undefined
+      start({ speechThreshold: vad.speechThreshold, maxRecordMs, preRoll })
       watchSilence(session, {
         threshold: vad.speechThreshold,
         silenceMs: vad.silenceMs,
         maxWaitMs: vad.maxWaitMs,
         maxRecordMs,
-        onNoSpeech: () => {}
+        onNoSpeech: () => {},
+        heardSpeech: !!preRoll
       })
     }
     // Dictation hotkey: held until release; a double-tap turns it hands-free.

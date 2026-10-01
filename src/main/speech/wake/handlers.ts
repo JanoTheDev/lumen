@@ -2,6 +2,7 @@
 import { holdEscape } from '../../agent/escape'
 import { bus } from '../../bus'
 import { dismissGuide } from '../../guides/session'
+import { loadConfig } from '../../config'
 import { cancelAll } from '../../query/cancel'
 import { setStatus } from '../../windows/status'
 
@@ -10,6 +11,15 @@ export function handleWake(engine: string): void {
   holdEscape('hud')
   bus.emit({ type: 'voice.started', handsFree: true })
   setStatus('listening', 'Wake word detected — listening…')
+}
+
+/** The user talked over a spoken answer: the renderer stopped playback, now listen. */
+export function handleBargeIn(): void {
+  if (!loadConfig().voice.bargeIn) return
+  console.log('[barge-in] user spoke over the answer — listening with auto-stop')
+  holdEscape('hud')
+  bus.emit({ type: 'voice.started', handsFree: true })
+  setStatus('listening', 'Listening…')
 }
 
 export function handleVoiceCancel(phrase: string): void {

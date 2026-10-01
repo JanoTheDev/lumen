@@ -7,6 +7,7 @@ import { onRecordingEnded } from '../speech/hotkey'
 import { sttStatus } from '../speech/stt'
 import { installLocalModel } from '../speech/stt/local-model'
 import { onWakePcm, wakeFeedWanted } from '../speech/wake'
+import { handleBargeIn } from '../speech/wake/handlers'
 
 const transcribeOptsSchema = z.object({ dictation: z.boolean().optional() }).strict().optional()
 
@@ -42,6 +43,7 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
   })
   ipcMain.on('voice:ended', () => onRecordingEnded())
   ipcMain.on('voice:wake-pcm', (_e, raw: unknown) => onWakePcm(raw))
+  ipcMain.on('voice:barge-in', () => handleBargeIn())
   ipcMain.handle('voice:wake-state', () => ({ listen: wakeFeedWanted() }))
   ipcMain.handle('voice:stt-status', () => sttStatus())
   ipcMain.handle('voice:stt-install', async () => {

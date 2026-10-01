@@ -8,6 +8,7 @@ const REOPEN_MS = 1500
 
 let wanted = false
 let paused = false
+let quiet = false
 let ctx: AudioContext | null = null
 let generation = 0
 let reopenTimer: ReturnType<typeof setTimeout> | null = null
@@ -41,7 +42,7 @@ async function open(): Promise<void> {
     if (gen !== generation) return
     const node = new AudioWorkletNode(audio, 'pcm-tap', { numberOfInputs: 1, numberOfOutputs: 0 })
     node.port.onmessage = (e: MessageEvent<ArrayBuffer>): void => {
-      if (!paused && gen === generation) window.lumen.send('voice:wake-pcm', e.data)
+      if (!paused && !quiet && gen === generation) window.lumen.send('voice:wake-pcm', e.data)
     }
     audio.createMediaStreamSource(stream).connect(node)
     await audio.resume()
@@ -78,6 +79,14 @@ function setListening(on: boolean): void {
 /** While a recording runs the feed stays open but sends nothing (wake can't re-trigger). */
 export function setWakeFeedPaused(on: boolean): void {
   paused = on
+}
+
+/**
+ * Held quiet while Lumen speaks without echo-cancelled barge-in, so the spotter never hears
+ * Lumen's own voice (it could say the wake phrase or "stop").
+ */
+export function setWakeFeedQuiet(on: boolean): void {
+  quiet = on
 }
 
 /** Follows main's wake state; returns the cleanup. */

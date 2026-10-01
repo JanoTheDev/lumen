@@ -16,6 +16,8 @@ export interface VoiceStartOptions {
   dictation?: boolean
   // Safety stop for a recording nobody ended (default 60s).
   watchdogMs?: number
+  // 16 kHz audio captured just before the recording (barge-in), put in front of it.
+  preRoll?: Float32Array
 }
 
 interface UseVoiceReturn {
@@ -204,7 +206,7 @@ export function useVoice(
           const blob = new Blob(chunks, { type: mimeType })
           const encoded = await blob.arrayBuffer()
           // 16 kHz WAV for the local engine; the encoded recording is the fallback.
-          const arrayBuffer = await toSttWav(encoded).catch((err) => {
+          const arrayBuffer = await toSttWav(encoded, opts.preRoll).catch((err) => {
             console.warn('[voice] wav conversion failed, sending encoded audio:', err)
             return encoded
           })
