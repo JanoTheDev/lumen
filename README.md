@@ -5,95 +5,132 @@
 
 ![status](https://img.shields.io/badge/status-active%20development-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4) ![electron](https://img.shields.io/badge/Electron-39-47848F) ![rust](https://img.shields.io/badge/native%20helper-Rust-B7410E) ![license](https://img.shields.io/badge/license-AGPL--3.0-A42E2B)
 
-Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, and it answers, points at the right button, walks you through a lesson, types for you, or does the task itself while you watch. One AI key is all it needs; speech, wake word, OCR and dwell run locally.
+Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, and it answers, points at the right button, walks you through a lesson, types for you, or does the whole task while you watch. One AI key is all it needs; speech, wake word, OCR and dwell run locally.
 
 ---
 
 ## What it does
 
-| You say…                                               | Lumen does…                                                                          |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| _"What's the weather in Larnaca and what time is it?"_ | Splits the question and answers both in one card, spoken if you like.                |
-| _"Where is the compose button?"_                       | Dims the screen and highlights the real control.                                     |
-| _"Teach me Blender."_                                  | Lists lessons for the app you're in; pick one by number.                             |
-| _"Show me how to add a keyframe."_                     | Runs a lesson: points, waits for you, checks the step, gives more help if you stall. |
-| _"Write an email to my boss that I'm quitting."_       | Opens Gmail, starts a draft, fills subject and body. Stops before Send.              |
-| _"Show me internship roles at Exness."_                | Searches, opens the best result, scrolls and summarizes.                             |
-| _"Show numbers"_ → _"click 5"_                         | Numbers every clickable thing and clicks it, without calling the AI.                 |
-| _"Remember I use the dark theme in Figma."_            | Saves it to local memory (opt-in); _"forget that"_ removes it.                       |
-| _"Stop"_ or Escape                                     | Cancels whatever is running, including the model call and pending clicks.            |
+| You say…                                               | Lumen does…                                                                                 |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------- |
+| _"What's the weather in Larnaca and what time is it?"_ | Splits the question and answers both in one card, spoken if you like.                       |
+| _"Where is the compose button?"_                       | Dims the screen and highlights the real control.                                            |
+| _"What's this?"_ (pointing at something)               | Explains the control under your pointer, on any monitor.                                    |
+| _"Teach me Blender."_                                  | Lists lessons for the app you're in; pick one by number.                                    |
+| _"Show me how to add a keyframe."_                     | Runs a lesson: points, waits for you, checks the step, gives more help if you stall.        |
+| _"Write an email to my boss that I'm quitting."_       | Announces the plan, opens Gmail, fills subject and body. Stops before Send.                 |
+| _"In the background, find internships at Exness."_     | Works on it as a background task while you keep using the PC, and tells you when it's done. |
+| _"Show numbers"_ → _"click 5"_                         | Numbers every clickable thing and clicks it, instantly, without calling the AI.             |
+| _"Read this aloud"_ / _"Summarize this page"_          | Built-in skills that run on whatever is on screen.                                          |
+| _"What did you just do?"_                              | Reads back the last actions from the local audit log.                                       |
+| _"Stop"_ or Escape                                     | Cancels whatever is running, including the model call and pending clicks.                   |
 
 ### Ask, point and act
 
-- **Accurate pointing.** Windows UI Automation finds real buttons and fields; when an app exposes little, Lumen draws numbered marks, reads on-screen text with Windows OCR and takes a zoomed second look before it clicks.
-- **Observe → act → verify.** Multi-step tasks are planned with success criteria, each step is checked (cheap checks first, vision only when needed), and Lumen replans instead of retyping text it already entered.
-- **Confirm before risky actions.** Risky steps show a short countdown you can cancel. Only web links can be opened, dangerous shortcuts (Run dialog, terminals) are blocked, and text on screen is never treated as an instruction.
+- **Accurate pointing.** Windows UI Automation finds real buttons and fields; when an app exposes little, Lumen draws numbered marks, reads the screen with Windows OCR and takes a zoomed second look before it clicks.
+- **Agent mode.** Multi-step tasks announce a plan, give you a few seconds to cancel, then run an observe → act → verify loop. It prefers UI Automation so your real pointer usually stays put (a "ghost cursor"), and it never retypes text it already entered. Hard caps on steps, time and cost.
+- **Background tasks.** Say "in the background…" or "keep an eye on…" and the work runs in parallel without touching your mouse or keyboard. Results land in the Tasks list on Home with a tray badge.
+- **Safety first.** Every action is rated low / medium / high risk. Risky ones need your OK ("yes", "always" for this site, or "no"), sending, deleting and buying always ask, dangerous shortcuts (Run dialog, terminals) are blocked, passwords and secrets are redacted, and text on screen is treated as data, never as instructions. Every action is written to a local audit log.
 - **Multi-monitor and any display scaling.** Highlights and clicks land in the right place on every screen.
 
 ### Voice
 
-- **Free local speech recognition** (sherpa-onnx) by default; cloud Whisper is optional.
+- **Free local speech recognition** (sherpa-onnx) by default, offline in English, Spanish, German and French; cloud Whisper is optional and covers more languages.
+- **Replies in your language:** English, Spanish, German, French, Italian, Portuguese and Dutch, or auto-detect.
 - **Offline wake word** ("hey lumen") and voice cancel, with adjustable sensitivity and microphone choice.
-- **Hold or tap the hotkey**; tap mode stops on silence with an adaptive noise floor.
-- **Spoken answers** with Windows voices, sentence by sentence, and optional barge-in (talk over it to interrupt).
-- **Dictation anywhere** (Ctrl+Shift+D, or automatically when a text field has focus): light cleanup that never drops your words, a personal dictionary and a guard that never presses Enter in terminals.
+- **Hold or tap** the hotkey; **double-tap** for conversation mode, where every sentence is a question until you stop.
+- **Spoken answers** with Windows voices, sentence by sentence, with optional barge-in (talk over it to interrupt).
+- **Dictation anywhere:** light cleanup that never drops your words, a personal dictionary that learns from your corrections, and a guard that never presses Enter in terminals.
 
 ### Accessibility
 
-- **Local voice commands:** "show numbers", "click 5", "show grid", "scroll down" and more run instantly, with no AI call.
-- **Mouse grid**, **dwell clicking** with a click-type palette (left, right, double, drag) and an on-screen keyboard.
+- **Local voice commands:** "show numbers", "click 5", "show grid", "scroll down" and more run instantly, with no AI call. Lumen steps aside when Windows Voice Access or Dragon is running.
+- **Mouse grid**, **dwell clicking** with a click-type palette (left, right, double, drag) and tremor smoothing that suits eye-gaze and head pointers, plus an on-screen keyboard.
 - **Switch scanning** with a scan ring, menu and scan keyboard for one- or two-switch users.
-- **Screen reader output** through NVDA, JAWS or Windows Narrator (UI Automation notifications), plus optional focus narration.
-- Follows Windows text size, reduced motion and high-contrast (forced colors); adjustable UI scale and timings; accessibility profiles.
-- Global shortcuts for everything (Ctrl+Shift+F1 lists what you can say; F2–F10 for the bar, repeat, numbers, grid, dwell, cancel and keyboard).
+- **Screen reader output** through NVDA, JAWS or Narrator, focus narration, "describe the screen" and "read this".
+- **Simple mode** with a calmer bar and plain-language answers.
+- Follows Windows text size, reduced motion and high contrast; adjustable UI scale, timings, captions and accessibility profiles.
 
 ### Teaching
 
-- **Skill packs** for Windows, Blender, DaVinci Resolve, Excel, OBS Studio, VS Code, Photoshop, GIMP, Premiere Pro and Figma: glossary, shortcuts, screen regions and ready-made lessons.
+- **App packs** for Windows, Blender, DaVinci Resolve, Excel, OBS Studio, VS Code, Photoshop, GIMP, Premiere Pro and Figma: glossary, shortcuts, screen regions and 50+ ready-made lessons.
 - **Lessons** with a hint ladder: point, wait, check, explain _why_, and "do it for me" when you'd rather watch.
-- **"Show me how"** generates a lesson on the spot for anything not covered by a pack.
-- **Progress is saved**, so "continue where we left off" works across sessions. Write your own lessons or override a pack in your user folder.
+- **"Show me how"** generates a lesson on the spot for anything a pack doesn't cover.
+- **Record my steps:** do a task once and Lumen turns it into a lesson you can replay or share.
+- **Progress is saved**, so "continue where we left off" works across sessions.
+- **Share packs** as a single `.lumen` file; install community packs from a file or link.
+
+### Skills
+
+Skills are small, shareable abilities written as a `SKILL.md`. Lumen ships starter skills (read this aloud, summarize this page, reply to this email, screenshot and explain, make text bigger here, morning briefing, clean downloads, export for YouTube, fill this form from my profile), triggers them by phrase or app, and lets you install, write and share your own from Settings.
 
 ### Everything else
 
-- **Home flyout** (Ctrl+Shift+H) with an ask box, suggestions, recent questions and quick toggles.
+- **Home flyout** with an ask box, suggestions, recent questions, background tasks and quick toggles.
 - **First-run setup** with profiles, one API key, voice files and a practice round.
-- **Settings** for hotkeys, voice, accessibility, interface, library, models, memory and appearance (eight themes, including a custom one); no JSON editing.
-- **Memory** you can see, edit and delete, a private mode, and per-day usage with a cost estimate.
-- **Experimental local models** through Ollama or LM Studio (auto-detected).
+- **Settings** for hotkeys, voice, accessibility, interface, library, models, skills, memory and appearance (eight themes including a custom one); no JSON editing.
+- **Memory** you can see, edit and delete, plus a private mode.
+- **Usage and cost** per day, shown in Settings.
+- **Automatic updates** from GitHub Releases (installed build; the portable build tells you when one is out).
+- **Experimental local models** through Ollama or LM Studio, auto-detected.
 
 ---
 
 ## Install
-
-Step-by-step guide with the SmartScreen warning, updates and uninstall: [docs/INSTALL.md](./docs/INSTALL.md).
 
 Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and an Anthropic or OpenAI API key. No Python, no Admin rights.
 
 1. Download `Lumen-Setup-<version>.exe` from [Releases](https://github.com/JanoTheDev/lumen/releases), or `Lumen-<version>-portable.exe` to run without installing. Optionally check it against `SHA256SUMS.txt` from the same release: `Get-FileHash .\Lumen-Setup-<version>.exe`.
 2. Run it. The builds are not code-signed, so SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. Lumen installs for your user only, in `%LOCALAPPDATA%\Programs\lumen`, and opens setup.
 3. Paste your API key when asked. It is encrypted with Windows (DPAPI) in `%USERPROFILE%\.ai-overlay\keys.dat`, never in the config file.
-4. Hold **Ctrl+Shift+Space**, speak, release.
+4. Hold **Ctrl+Shift+Space**, say what you want, let go.
 
 Speech recognition and wake-word models (about 100 MB and 18 MB) download on first use and are checked against pinned SHA-256 hashes.
 
-The installed version checks for updates once a day, downloads them in the background and installs them when you quit (Settings → About to turn this off); the portable one shows a link instead.
-
 Settings, keys and models live in `%USERPROFILE%\.ai-overlay`; logs in `%APPDATA%\Lumen\logs` (Settings → About → Open logs folder, or Export diagnostics for a zip without keys). Uninstall from Windows Settings → Apps; it asks whether to remove your settings, keys and models too. The portable build never adds start-at-login entries and uses the same settings folder.
 
-### Default shortcuts
+---
 
-| Shortcut               | Action                            |
-| ---------------------- | --------------------------------- |
-| Ctrl+Shift+Space       | Talk to Lumen (hold, or tap)      |
-| Ctrl+Shift+D           | Dictate into the focused field    |
-| Ctrl+Shift+H           | Open Home                         |
-| Ctrl+Shift+F1          | What can I say?                   |
-| Ctrl+Shift+F6 / F7     | Numbers / mouse grid              |
-| Ctrl+Shift+F9, Escape  | Cancel                            |
-| Ctrl+Alt+→ / ← / H / D | Lesson next / back / help / do it |
+## Keyboard shortcuts
 
-All of them can be changed in Settings.
+You only need the first one. Everything else is optional, and every shortcut can be changed or turned off in Settings → Accessibility → Shortcuts.
+
+**Talking to Lumen**
+
+| Press                  | What happens                                                                              |
+| ---------------------- | ----------------------------------------------------------------------------------------- |
+| **Ctrl+Shift+Space**   | Hold it, speak, let go. Or tap once to start and Lumen stops listening when you go quiet. |
+| Ctrl+Shift+Space twice | Conversation mode: keep talking back and forth until you say "stop" or press Escape.      |
+| **Ctrl+Shift+D**       | Dictate: whatever you say is typed into the text field you're in.                         |
+| **Ctrl+Shift+H**       | Open Home (ask box, recent questions, background tasks, quick toggles).                   |
+| **Escape**             | Stop whatever Lumen is doing.                                                             |
+
+**Hands-free helpers** (the F-key row, all with Ctrl+Shift)
+
+| Press              | What happens                                                    |
+| ------------------ | --------------------------------------------------------------- |
+| Ctrl+Shift+**F1**  | Show what you can say.                                          |
+| Ctrl+Shift+**F2**  | Jump to the assistant bar (to type instead of talk).            |
+| Ctrl+Shift+**F3**  | Repeat the last answer.                                         |
+| Ctrl+Shift+**F4**  | Pin the answer so it stays on screen.                           |
+| Ctrl+Shift+**F5**  | Close the answer.                                               |
+| Ctrl+Shift+**F6**  | Show numbers on everything clickable (then say "click 5").      |
+| Ctrl+Shift+**F7**  | Show the mouse grid (say 1–9 to zoom into a box, then "click"). |
+| Ctrl+Shift+**F8**  | Pause or resume dwell clicking.                                 |
+| Ctrl+Shift+**F9**  | Cancel (same as Escape, for when Escape is taken).              |
+| Ctrl+Shift+**F10** | Show the on-screen keyboard.                                    |
+
+F3–F5 only work while an answer is showing, and F8 only while dwell clicking is on, so they don't steal keys from your other apps the rest of the time.
+
+**During a lesson** (only active while a lesson runs)
+
+| Press          | What happens              |
+| -------------- | ------------------------- |
+| Ctrl+Alt+→ / ← | Next step / previous step |
+| Ctrl+Alt+H     | More help with this step  |
+| Ctrl+Alt+D     | "Do it for me"            |
+
+You can also just say "next", "back", "help" or "do it".
 
 ---
 
@@ -102,18 +139,18 @@ All of them can be changed in Settings.
 ```
 ┌──────────────────────────────┐   typed IPC   ┌──────────────────────────────┐
 │ Electron main (src/main)     │ ◄───────────► │ Renderers (src/renderer)     │
-│ query pipeline, AI router,   │               │ assistant bar, screen layer, │
-│ planner + verifier, lessons, │               │ Home, settings, onboarding   │
-│ memory, safety, executor     │               └──────────────────────────────┘
+│ router, agent mode, lessons, │               │ assistant bar, screen layer, │
+│ skills, memory, safety gate, │               │ Home, settings, onboarding   │
+│ background tasks, audit log  │               └──────────────────────────────┘
 └──────────────┬───────────────┘
-               │ NDJSON over stdio (protocol v2)
+               │ NDJSON over stdio
 ┌──────────────▼───────────────┐
-│ lumen-native (native/, Rust) │  hotkeys, SendInput, DXGI capture,
-│                              │  Windows OCR, UI Automation, dwell,
-└──────────────────────────────┘  screen reader output
+│ lumen-native (native/, Rust) │  hotkeys, SendInput, DXGI capture, Windows OCR,
+│                              │  UI Automation, dwell, switch hook, screen reader output
+└──────────────────────────────┘
 ```
 
-The main process decides, the renderers draw, the agent touches the OS. The Rust sidecar is the only OS helper and ships in the installer; it is restarted with backoff if it crashes. The wake word and local speech recognition run in the main process (sherpa-onnx). Shared types and IPC contracts live in `src/shared/`; app knowledge lives in `skills/`. See [CLAUDE.md](./CLAUDE.md) for the full module map.
+The main process decides, the renderers draw, the Rust helper touches the OS. Speech recognition and the wake word run in a worker thread with sherpa-onnx. Shared types and IPC contracts live in `src/shared/`; app packs and built-in skills live in `skills/`. See [CLAUDE.md](./CLAUDE.md) for the full module map.
 
 Default models: Claude Sonnet 5.5 for answers and planning and Claude Haiku 4.5 for quick checks; with only an OpenAI key, gpt-5-mini and gpt-5-nano. Override per role in Settings → Models.
 
@@ -121,36 +158,36 @@ Default models: Claude Sonnet 5.5 for answers and planning and Claude Haiku 4.5 
 
 ## Run from source
 
-Requirements: Windows 10 22H2+ or 11, Node.js 22, Rust (https://rustup.rs) for the native helper, and one API key.
+Requirements: Windows 10 22H2+ or 11, Node.js 22, the Rust toolchain ([rustup.rs](https://rustup.rs)) and one API key.
 
 ```bash
 git clone https://github.com/JanoTheDev/lumen.git
 cd lumen
 npm install
-npm run build:native        # Rust helper (native/target/release/lumen-native.exe)
-
-copy .env.example .env      # add ANTHROPIC_API_KEY or OPENAI_API_KEY
+npm run build:native        # builds the Rust helper once
+copy .env.example .env      # add ANTHROPIC_API_KEY or OPENAI_API_KEY (or paste a key in Settings later)
 npm run dev
 ```
-
-You can also paste a key in Settings → Models instead of using `.env`.
 
 ## Development
 
 ```bash
 npm run dev              # app + Vite dev server
 npm run build            # typecheck + bundle
-npm run build:win        # native helper + NSIS installer + portable exe in dist/, then package checks
+npm run build:win        # Rust helper + installer + portable exe in dist/, then package checks
 npm run lint             # ESLint
 npm test                 # Vitest
 npm run test:live        # tests that call real APIs (needs a key)
-npm run validate:skills  # check skill packs against their schema
+npm run validate:skills  # check app packs against their schema
 npm run eval:router      # intent router eval
 npm run eval:dictation   # dictation word-preservation eval
-cd native && cargo test && cargo clippy --all-targets -- -D warnings
+npm run eval:grounding   # offline pointing eval
+npm run size:report      # bundle size budgets
+cargo test --manifest-path native/Cargo.toml
+cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
 ```
 
-CI runs typecheck, lint, Vitest and the Rust checks on Windows for every push.
+CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size check on Windows for every push. Pushing a `v<version>` tag builds the installer and portable exe into a draft GitHub Release.
 
 ---
 
@@ -158,28 +195,43 @@ CI runs typecheck, lint, Vitest and the Rust checks on Windows for every push.
 
 **Done**
 
-- [x] Security hardening: sandboxed windows, link and shortcut policy, validated settings and IPC
-- [x] Reliable cancel, correct clicks at any scaling and on multiple monitors
-- [x] Rust native helper with capture, OCR, UI Automation, input, dwell and screen reader output
-- [x] AI intent router, structured planner, observe → act → verify loop
-- [x] Element-accurate pointing: UI Automation, numbered marks, zoom-in second look
-- [x] Local speech recognition, Windows voices, sentence-by-sentence answers, barge-in
-- [x] Dictation anywhere
-- [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning
-- [x] Screen reader output (NVDA, JAWS, Narrator), text scale, reduced motion, forced colors
-- [x] Skill packs for ten apps, lessons with checks and hints, progress across sessions
-- [x] Design system, rebuilt Settings, Home flyout, first-run setup, memory settings
-- [x] One-click per-user installer and portable build
+- [x] Security: sandboxed windows, validated settings and IPC, risk-rated safety gate, local audit log
+- [x] Rust native helper, no Python needed; one-click per-user installer, portable build, auto-update
+- [x] Accurate pointing: UI Automation, numbered marks, OCR, zoom-in second look
+- [x] AI intent router, agent mode with plan, countdown, ghost cursor and caps
+- [x] Background tasks running in parallel, with a Tasks list on Home
+- [x] Local speech recognition, Windows voices, barge-in, conversation mode, seven reply languages
+- [x] Dictation anywhere with a learning dictionary
+- [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning
+- [x] Screen reader output (NVDA, JAWS, Narrator), simple mode, text scale, reduced motion, high contrast
+- [x] App packs for ten apps, 50+ lessons, show me how, record my steps, saved progress, `.lumen` sharing
+- [x] Skills: `SKILL.md` format, built-in starter skills, install and share
+- [x] Assistant bar, screen layer, cursor buddy, Home, first-run setup, rebuilt Settings, memory
 - [x] Experimental local models (Ollama, LM Studio)
 
 **In progress**
 
-- [ ] New assistant bar and cursor buddy as the default UI (available behind a setting)
-- [ ] Smooth spring animations everywhere
-- [ ] Agent mode with a visible ghost cursor and per-app permissions
-- [ ] Captions and more lesson content
-- [ ] Auto-update
-- [ ] Connectors and more app firsts
+- [ ] **Connectors:** add MCP servers (by URL or command) and let Lumen use their tools, with per-tool permissions
+- [ ] **Routines:** run a task on a schedule, paused automatically after repeated failures
+- [ ] **Focus mode:** dim everything in a complex app except what the current step needs
+- [ ] **Undo what you just did:** "undo that" reverses Lumen's last actions where possible, and says what can't be undone
+- [ ] **Coach:** shortcut tips, error rescue ("want me to explain this error?"), fatigue-aware pacing, reading level
+- [ ] **"What changed?"** after an action, for blind and low-vision users
+- [ ] **Learning journal:** "what did I learn this week?"
+- [ ] **Claude Code by voice:** open a project, start and answer a coding session hands-free
+
+**Next**
+
+- [ ] Drop a file (PDF, Word, image) on the assistant bar to ask about it
+- [ ] Turn a YouTube or web tutorial into a step-by-step lesson in the real app
+- [ ] Community accessibility labels for unlabeled buttons
+- [ ] "Put that there": voice plus pointer or gaze for click and drag
+- [ ] Skills by voice, by demonstration ("watch me") and "save that as a skill"
+- [ ] Practice challenges per app
+- [ ] Face-gesture input (webcam, local)
+- [ ] Browser research through the page itself, not screenshots
+- [ ] Optional streaming cloud voices (paid, opt-in)
+- [ ] winget package
 
 ---
 
@@ -188,8 +240,9 @@ CI runs typecheck, lint, Vitest and the Rust checks on Windows for every push.
 - Requests go straight from your PC to the AI provider you chose. Nothing is proxied.
 - Speech recognition, wake word, OCR, UI Automation and dwell run locally.
 - Screenshots are sent with a request and never written to disk.
-- API keys come from `.env` (development) or the encrypted key store (Windows DPAPI), never from the config file or logs.
+- API keys come from `.env` (development) or the encrypted key store (Windows DPAPI), never from the config file or logs. Passwords and secrets are redacted before anything reaches the model.
 - Memory is off by default, stays on your PC, and can be viewed, edited or wiped in Settings.
+- The audit log stays on your PC, stores typed text only as a length and hash, and is pruned after 30 days.
 - No telemetry or analytics. Crash dumps stay local.
 
 ---
