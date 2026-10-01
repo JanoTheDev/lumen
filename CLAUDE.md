@@ -85,7 +85,7 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 
 ### Native agent (`native/`)
 
-Rust crate `lumen-native`, protocol v2 only (`--protocol 2`; `{v:2,id,cmd,args}` requests, `ready` handshake event first, then `init`; any other request shape is a `protocol-error`). stdout carries only protocol frames (single writer); logs go to stderr. Lanes: inline, input, read; cancel tokens; per-call `timeoutMs`. Build with `cargo build --release` (or `--profile fastrel` for a quicker local build); `cargo test`, `cargo clippy --all-targets -- -D warnings`. `lumen-native --bench` prints capture / OCR / UIA / typing-prep / SendInput latencies (nothing is typed).
+Rust crate `lumen-native`, protocol v2 only (`--protocol 2`; `{v:2,id,cmd,args}` requests, `ready` handshake event first, then `init`; any other request shape is a `protocol-error`). stdout carries only protocol frames (single writer); logs go to stderr. Lanes: inline, input, read (pool of 3), uia, speech (voice synthesis); cancel tokens; per-call `timeoutMs`. Build with `cargo build --release` (or `--profile fastrel` for a quicker local build); `cargo test`, `cargo clippy --all-targets -- -D warnings`. `lumen-native --bench` prints capture / OCR / UIA / typing-prep / SendInput latencies (nothing is typed). Input guard (`input/safety.rs`): terminals, the Run dialog and an IDE's integrated terminal (focused UIA ClassName / Name) need `allowTerminal`. Edge events (key / button releases) keep reserved writer-queue room; `mouse-moved` coalesces to the latest position.
 
 ### Agent launch (`src/main/agent/impl.ts`)
 
