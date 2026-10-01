@@ -82,6 +82,35 @@ export function appKindOf(
   return 'other'
 }
 
+/**
+ * A real code editor or terminal, where spoken symbols ("equals", "less than") become code:
+ * by process (the built-in table or the user's own process mapping), never by a window
+ * title, so a GitHub comment in a browser stays prose (M8).
+ */
+export function isCodeEditorTarget(
+  target: Pick<FocusTarget, 'process' | 'title' | 'name'>,
+  userApps: Readonly<Record<string, DictationAppKind>> = {}
+): boolean {
+  if (appKindOf(target, userApps) !== 'code') return false
+  if (isTerminalTarget(target)) return true
+  const proc = target.process.trim().toLowerCase()
+  if (!proc) return false
+  const user = Object.entries(userApps).find(([key]) => {
+    const k = key.trim().toLowerCase()
+    return k === proc || k === proc.replace(/\.exe$/, '')
+  })
+  return user ? user[1] === 'code' : isCodeProcess(proc)
+}
+
+/**
+ * Line breaks go in as Shift+Enter everywhere except where Enter is known to be a plain
+ * new line (documents, mail, code editors): in chat apps and unknown apps Enter may send
+ * a half-written message (M5). Terminals never get a break at all.
+ */
+export function softBreaksFor(kind: DictationAppKind): boolean {
+  return kind !== 'docs' && kind !== 'email' && kind !== 'code'
+}
+
 export function styleFor(
   kind: DictationAppKind,
   styles: Partial<Record<DictationAppKind, DictationStyle>> = {}

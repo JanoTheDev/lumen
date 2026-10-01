@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyStyle, appKindOf, styleFor } from '../../../src/main/speech/dictation/styles'
+import {
+  applyStyle,
+  appKindOf,
+  isCodeEditorTarget,
+  softBreaksFor,
+  styleFor
+} from '../../../src/main/speech/dictation/styles'
 import { wordsPreserved } from '../../../src/main/speech/dictation/cleanup'
 
 const target = (
@@ -28,6 +34,30 @@ describe('appKindOf', () => {
     expect(appKindOf(target('foo.exe'), { foo: 'work' })).toBe('work')
     expect(appKindOf(target('chrome.exe', 'Basecamp - Chat'), { basecamp: 'work' })).toBe('work')
     expect(appKindOf(target('slack.exe'), { 'slack.exe': 'personal' })).toBe('personal')
+  })
+})
+
+describe('isCodeEditorTarget (M8)', () => {
+  it('counts editors and terminals by process, never a browser tab by title', () => {
+    expect(isCodeEditorTarget(target('code.exe'))).toBe(true)
+    expect(isCodeEditorTarget(target('windowsterminal.exe'))).toBe(true)
+    expect(isCodeEditorTarget(target('chrome.exe', 'Pull request #3 · GitHub'))).toBe(false)
+    expect(isCodeEditorTarget(target('githubdesktop.exe', 'GitHub Desktop'))).toBe(false)
+    expect(isCodeEditorTarget(target('', 'replit'))).toBe(false)
+    expect(isCodeEditorTarget(target('chrome.exe', 'my ide'), { 'my ide': 'code' })).toBe(false)
+    expect(isCodeEditorTarget(target('myide.exe'), { myide: 'code' })).toBe(true)
+    expect(isCodeEditorTarget(target('code.exe'), { code: 'docs' })).toBe(false)
+  })
+})
+
+describe('softBreaksFor (M5)', () => {
+  it('types Enter only where it is a plain new line', () => {
+    expect(softBreaksFor('other')).toBe(true)
+    expect(softBreaksFor('work')).toBe(true)
+    expect(softBreaksFor('personal')).toBe(true)
+    expect(softBreaksFor('docs')).toBe(false)
+    expect(softBreaksFor('email')).toBe(false)
+    expect(softBreaksFor('code')).toBe(false)
   })
 })
 

@@ -5,7 +5,7 @@ import { applyDictionary, type CleanupResult } from './cleanup'
 import { applyCodingMode, type FileResolver } from './coding'
 import { fieldKindOf, formatDictation } from './format'
 import { respellFromScreen } from './names'
-import { appKindOf, applyStyle, styleFor } from './styles'
+import { appKindOf, applyStyle, isCodeEditorTarget, softBreaksFor, styleFor } from './styles'
 import type { FocusTarget } from './terminal-guard'
 
 type DictationConfig = AppConfig['dictation']
@@ -13,7 +13,7 @@ type DictationConfig = AppConfig['dictation']
 export interface Shaped {
   text: string
   style: string
-  /** Chat apps send on Enter: line breaks go in as Shift+Enter. */
+  /** Line breaks go in as Shift+Enter (chat and unknown apps, where Enter may send). */
   softBreaks: boolean
 }
 
@@ -48,7 +48,8 @@ export function shapeDictation(
     valueTail: target.valueTail,
     keepCase: [...cfg.dictionary, ...appTerms]
   })
-  if (kind === 'code' && cfg.codingMode !== false)
+  // Spoken symbols only in real editors and terminals, never a browser tab by its title (M8).
+  if (cfg.codingMode !== false && isCodeEditorTarget(target, cfg.styleApps))
     text = applyCodingMode(text, { resolveFile: extras.resolveFile })
-  return { text, style, softBreaks: kind === 'work' || kind === 'personal' }
+  return { text, style, softBreaks: softBreaksFor(kind) }
 }
