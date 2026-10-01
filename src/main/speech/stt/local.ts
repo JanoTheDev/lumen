@@ -5,23 +5,9 @@ import { join } from 'path'
 import type { OfflineRecognizer } from 'sherpa-onnx-node'
 import { log } from '../../logger'
 import { localModelDir, localModelInstalled } from './local-model'
+import { loadSherpa } from '../sherpa'
 
-type Sherpa = typeof import('sherpa-onnx-node')
-
-let sherpa: Sherpa | null | undefined
 let recognizer: Promise<OfflineRecognizer> | null = null
-
-function loadSherpa(): Sherpa | null {
-  if (sherpa !== undefined) return sherpa
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    sherpa = require('sherpa-onnx-node') as Sherpa
-  } catch (e) {
-    log('fail', `local speech engine unavailable: ${(e as Error).message.split('\n')[0]}`)
-    sherpa = null
-  }
-  return sherpa
-}
 
 /** True when the native engine loads on this machine (model may still need downloading). */
 export function localEngineSupported(): boolean {

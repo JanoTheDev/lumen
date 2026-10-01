@@ -24,6 +24,7 @@ import * as highlight from '../windows/highlight'
 import { setStatus } from '../windows/status'
 import { sleep } from '../util'
 import { waitForSettle } from '../ai/observe'
+import { armCancel } from '../speech/wake/arm'
 
 // How long an uncertain target stays on screen before the click (cancel window).
 const CONFIRM_MS = 2500
@@ -215,6 +216,7 @@ export async function executeActions(
 
   const pauseDwell = canPauseDwell(agent)
   if (pauseDwell) await agent.request('dwell_pause').catch(() => {})
+  const disarmCancel = armCancel()
 
   let firstClick = true
   let prev: AgentAction | undefined
@@ -296,6 +298,7 @@ export async function executeActions(
       await sleep(scaled.type === 'hotkey' ? 300 : 150)
     }
   } finally {
+    disarmCancel()
     if (preview) highlight.hide()
     if (pauseDwell) await agent.request('dwell_resume').catch(() => {})
   }

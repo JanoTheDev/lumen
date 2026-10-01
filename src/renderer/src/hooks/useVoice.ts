@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 'react'
 import { toSttWav } from '../voice/wav'
+import { dropMic, getMicStream, holdMic } from '../voice/mic'
 
 export interface VoiceResultInfo {
   // Milliseconds of audio above the speech threshold during the recording.
@@ -33,7 +34,6 @@ export type VoiceResultHandler = (text: string, info: VoiceResultInfo) => void
 export type VoiceErrorHandler = (message: string) => void
 
 const WATCHDOG_MS = 60000
-const IDLE_RELEASE_MS = 10000
 const DEFAULT_SPEECH_THRESHOLD = 0.04
 
 const SILENCE_HALLUCINATION_RE = /^(thank you( for watching)?|thanks for watching|you|bye)\.?$/i
@@ -65,23 +65,6 @@ function errorReason(err: unknown): string {
   return String(err)
 }
 
-// Stream is opened lazily on the first start(), reused across recordings, and
-// released after IDLE_RELEASE_MS without a recording so the OS mic indicator turns off.
-let sharedStream: MediaStream | null = null
-
-async function getStream(): Promise<MediaStream> {
-  if (sharedStream && sharedStream.getTracks().every((t) => t.readyState === 'live')) {
-    return sharedStream
-  }
-  sharedStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-  return sharedStream
-}
-
-function releaseStream(): void {
-  sharedStream?.getTracks().forEach((t) => t.stop())
-  sharedStream = null
-}
-
 interface Session {
   id: number
   stopRequested: boolean
@@ -105,23 +88,12 @@ export function useVoice(
   const [transcript, setTranscript] = useState('')
   const levelRef = useRef(0)
   const sessionRef = useRef<Session | null>(null)
-  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onResultRef = useRef(onResult)
   const onErrorRef = useRef(onError)
   useEffect(() => {
     onResultRef.current = onResult
     onErrorRef.current = onError
   })
-
-  const scheduleIdleRelease = useCallback(() => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-    idleTimerRef.current = setTimeout(() => {
-      idleTimerRef.current = null
-      const s = sessionRef.current
-      if (s && !s.finished && s.recorder?.state === 'recording') return
-      releaseStream()
-    }, IDLE_RELEASE_MS)
-  }, [])
 
   const teardownAudio = useCallback((s: Session): void => {
     cancelAnimationFrame(s.raf)
@@ -145,10 +117,10 @@ export function useVoice(
       }
       if (sessionRef.current === s) {
         setListening(false)
-        scheduleIdleRelease()
+        dropMic('record')
       }
     },
-    [scheduleIdleRelease, teardownAudio]
+    [teardownAudio]
   )
 
   const abortSession = useCallback(
@@ -176,10 +148,7 @@ export function useVoice(
     async (opts: VoiceStartOptions = {}): Promise<void> => {
       const prev = sessionRef.current
       if (prev && !prev.finished && prev.recorder?.state !== 'inactive') abortSession(prev)
-      if (idleTimerRef.current) {
-        clearTimeout(idleTimerRef.current)
-        idleTimerRef.current = null
-      }
+      holdMic('record')
 
       const s: Session = {
         id: ++sessionSeq,
@@ -199,7 +168,7 @@ export function useVoice(
 
       let stream: MediaStream
       try {
-        stream = await getStream()
+        stream = await getMicStream()
       } catch (err) {
         console.error('[voice] getUserMedia failed:', err)
         if (s.discarded) return
@@ -350,8 +319,7 @@ export function useVoice(
   useEffect(
     () => () => {
       abortSession(sessionRef.current)
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current)
-      releaseStream()
+      dropMic('record', 0)
     },
     [abortSession]
   )

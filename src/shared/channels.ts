@@ -29,6 +29,8 @@ export interface InvokeChannels {
   'voice:speak': { args: [text: string]; result: { ok: boolean; error?: string } }
   'voice:stt-status': { args: []; result: SttStatus }
   'voice:stt-install': { args: []; result: { ok: boolean; error?: string } }
+  /** Whether main wants the wake-word mic feed (renderer start-up sync). */
+  'voice:wake-state': { args: []; result: { listen: boolean } }
   'settings:get': { args: []; result: Record<string, unknown> }
   'settings:patch': {
     args: [patch: ConfigPatch | Record<string, unknown>]
@@ -73,6 +75,8 @@ export interface SendChannels {
   'settings:window-maximize': []
   /** A hands-free recording ended on its own (silence, no speech, mic error). */
   'voice:ended': []
+  /** 100 ms of 16 kHz mono Int16 mic audio for the wake-word spotter. */
+  'voice:wake-pcm': [pcm: ArrayBuffer]
   'assistant:command': [cmd: AssistantCommand]
   /** Card size in CSS px, for dwell suppression over the bar. */
   'assistant:resize': [size: { w: number; h: number }]
@@ -263,12 +267,6 @@ export interface EventChannels {
   'screen:pointer': [pointer: Point & { text: string }]
   'screen:locate': [items: LocateItem[]]
   'screen:dwell': [data: { x: number; y: number; progress: number; active: boolean }]
-  'answer:text': [text: string]
-  'assistant:cancel-request': []
-  'assistant:run-query': [text: string]
-  'settings:changed': [config: Record<string, unknown>]
-  'wake:model-progress': [progress: WakeModelProgress]
-  'voice:stt-model-progress': [progress: WakeModelProgress]
   'screen:render': [scene: ScreenScene]
   /** Cursor in this display's DIP, or null when it is on another display. */
   'screen:cursor': [point: Point | null]
@@ -277,6 +275,12 @@ export interface EventChannels {
   'home:shown': []
   /** Panel window: switch to this route without reloading. */
   'panel:route': [route: string]
+  'answer:text': [text: string]
+  'assistant:cancel-request': []
+  'assistant:run-query': [text: string]
+  'settings:changed': [config: Record<string, unknown>]
+  'wake:model-progress': [progress: WakeModelProgress]
+  'voice:stt-model-progress': [progress: WakeModelProgress]
   'status:set': [message: StatusMessage]
   'status:hide': []
   'voice:tts-audio': [audio: { mime: string; data: string }]
@@ -287,6 +291,8 @@ export interface EventChannels {
   /** Memory changed (voice command, session end, settings); `pending` drives the review chip. */
   'memory:changed': [summary: { pending: number }]
   'voice:tts': [msg: TtsMessage]
+  /** Start or stop streaming mic audio to the wake-word spotter. */
+  'voice:wake-listen': [on: boolean]
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -302,6 +308,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'voice:speak',
   'voice:stt-status',
   'voice:stt-install',
+  'voice:wake-state',
   'settings:get',
   'settings:patch',
   'screen:hide',
@@ -339,6 +346,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'settings:window-minimize',
   'settings:window-maximize',
   'voice:ended',
+  'voice:wake-pcm',
   'assistant:command',
   'assistant:resize',
   'assistant:interactive',
@@ -356,6 +364,12 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'screen:pointer',
   'screen:locate',
   'screen:dwell',
+  'screen:render',
+  'screen:cursor',
+  'screen:set-capture',
+  'assistant:state',
+  'home:shown',
+  'panel:route',
   'answer:text',
   'assistant:cancel-request',
   'assistant:run-query',
@@ -363,18 +377,13 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'wake:model-progress',
   'voice:stt-model-progress',
   'status:set',
-  'screen:render',
-  'screen:cursor',
-  'screen:set-capture',
-  'assistant:state',
-  'home:shown',
-  'panel:route',
   'status:hide',
   'voice:tts-audio',
   'voice:start',
   'voice:stop',
   'voice:hands-free',
   'voice:tts',
+  'voice:wake-listen',
   'memory:changed'
 ]
 

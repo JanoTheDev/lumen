@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 import { startSpeaker } from './voice/speaker'
+import { setWakeFeedPaused, startWakeFeed } from './voice/wake-feed'
 import { RmsGate } from './voice/vad/rms'
 
 type ClaudeResponse = ModelResponse
@@ -251,6 +252,8 @@ export default function App(): JSX.Element {
   }, [abort])
 
   useEffect(() => startSpeaker(), [])
+  useEffect(() => startWakeFeed(), [])
+  useEffect(() => setWakeFeedPaused(listening), [listening])
 
   useEffect(() => {
     return window.api.onRunQuery((text) => {

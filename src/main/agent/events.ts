@@ -1,17 +1,15 @@
 // Agent events (hotkey, wake word, voice cancel, dwell, mouse) and agent lifecycle status.
 import type { AgentBridge } from './bridge'
-import { holdEscape } from './escape'
-import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { physToLogical } from '../actions/coords'
 import { dismissGuide } from '../guides/session'
-import { cancelAll } from '../query/cancel'
 import * as dwellRing from '../windows/dwell-ring'
 import { isOverOwnWindow } from '../windows/registry'
 import { setStatus } from '../windows/status'
 import { onDictationDown, onDictationUp } from '../speech/dictation/pipeline'
 import { onAssistantHotkeyDown, onAssistantHotkeyUp } from '../speech/hotkey'
+import { handleVoiceCancel, handleWake } from '../speech/wake/handlers'
 
 let agentFailed = false
 
@@ -40,24 +38,10 @@ export function wireAgentEvents(agent: AgentBridge): void {
   agent.onEvent('dictation-down', () => onDictationDown())
   agent.onEvent('dictation-up', () => onDictationUp())
 
-  agent.onEvent('wake-detected', () => {
-    console.log('[wake] detected — showing HUD, starting recording with VAD auto-stop')
-    holdEscape('hud')
-    bus.emit({ type: 'voice.started', handsFree: true })
-    setStatus('listening', 'Wake word detected — listening…')
-  })
-
-  agent.onEvent('voice-cancel', (data) => {
-    const phrase = (data?.phrase as string | undefined) ?? 'cancel'
-    console.log(`[cancel-voice] matched "${phrase}"`)
-    if (cancelAll()) {
-      setStatus('error', 'Cancelled by voice', undefined, 1600)
-    } else {
-      // Not in a query — treat as "close any active UI"
-      bus.emit({ type: 'voice.cancelled' })
-      dismissGuide()
-    }
-  })
+  agent.onEvent('wake-detected', () => handleWake('vosk'))
+  agent.onEvent('voice-cancel', (data) =>
+    handleVoiceCancel((data?.phrase as string | undefined) ?? 'cancel')
+  )
 
   agent.onEvent('dwell-progress', (data) => {
     if (!loadConfig().dwellClick.enabled) return

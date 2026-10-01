@@ -23,6 +23,10 @@ import { loadConfig } from '../config'
 import { log, type Timer } from '../logger'
 import { sleep } from '../util'
 import { setStatus } from '../windows/status'
+import { withCancelArmed } from '../speech/wake/arm'
+
+// "Stop" / "cancel" are heard only while a loop acts, not while the user speaks a request.
+const armedLoop: typeof runLoop = (opts, deps) => withCancelArmed(() => runLoop(opts, deps))
 
 const DEFAULT_MAX_STEPS = 8
 const DEFAULT_MAX_FOLLOW_UPS = 6
@@ -159,7 +163,7 @@ export async function runPlanned(
       lowDetail: false
     }).then(toDecision)
   }
-  const run = await runLoop(
+  const run = await armedLoop(
     {
       goal: plan.goal,
       steps: plan.steps,
@@ -250,7 +254,7 @@ export async function runResearch(
       done: true
     }
   }
-  const run = await runLoop(
+  const run = await armedLoop(
     {
       goal: prompt,
       steps: [{ intent: prompt }],
@@ -309,7 +313,7 @@ export async function runFollowUps(
     return d
   }
   const { maxFollowUps } = limits()
-  const run = await runLoop(
+  const run = await armedLoop(
     {
       goal: prompt,
       steps: [{ intent: prompt }],
