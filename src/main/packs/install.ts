@@ -67,6 +67,9 @@ export class PackError extends Error {
   }
 }
 
+/** The archive holds no pack of this kind (a `.lumen` may carry other kinds only). */
+export class NoPackError extends PackError {}
+
 export interface PlannedPack {
   id: string
   /** The folder prefix inside the archive ("" or "x/" or "x/y/"). */
@@ -104,7 +107,7 @@ export function planPacks(files: ZipFile[], kind: PackKind, subpath?: string): P
     .filter((f) => f.name.split('/').pop() === kind.manifest && !isHidden(f.name))
     .map((f) => f.name.slice(0, f.name.length - kind.manifest.length))
     .filter((root) => root.split('/').length - 1 <= MAX_ROOT_DEPTH)
-  if (!roots.length) throw new PackError(`no ${kind.name} pack (${kind.manifest}) in the file`)
+  if (!roots.length) throw new NoPackError(`no ${kind.name} pack (${kind.manifest}) in the file`)
   for (const a of roots)
     for (const b of roots)
       if (a !== b && b.startsWith(a)) throw new PackError(`a pack inside another pack: ${b}`)
@@ -185,8 +188,13 @@ export function installPacks(archive: Buffer, opts: InstallOptions): InstalledPa
 
   for (const p of packs) {
     const dest = join(destRoot, p.id)
-    if (existsSync(dest) && !readMarker(dest))
+    if (!existsSync(dest)) continue
+    const marker = readMarker(dest)
+    if (!marker)
       throw new PackError(`you already have your own pack named "${p.id}"; it was left as it is`)
+    // Kinds share a folder (lesson packs and skills both live in ~/.ai-overlay/skills).
+    if (marker.kind !== kind.name)
+      throw new PackError(`a different kind of pack named "${p.id}" is installed; remove it first`)
   }
 
   mkdirSync(destRoot, { recursive: true })
@@ -253,11 +261,12 @@ export function packMarker(dir: string): PackMarker | null {
   return readMarker(dir)
 }
 
-/** Removes an installed pack; never a folder without a marker. */
-export function removePack(destRoot: string, id: string): boolean {
+/** Removes an installed pack (of `kind` when given); never a folder without a marker. */
+export function removePack(destRoot: string, id: string, kind?: string): boolean {
   if (!PACK_ID_RE.test(id)) return false
   const dir = join(destRoot, id)
-  if (!readMarker(dir)) return false
+  const marker = readMarker(dir)
+  if (!marker || (kind && marker.kind !== kind)) return false
   rmSync(dir, { recursive: true, force: true })
   return true
 }
