@@ -51,6 +51,7 @@ afterEach(() => {
 describe('gemini', () => {
   it('a Gemini key alone powers every role: Flash-Lite for fast, Flash for the rest', () => {
     keys({ gemini: true })
+    saveConfig({ models: { geminiAck: true } })
     expect(activeProvider()).toBe('gemini')
     expect(resolveRole('fast')).toMatchObject({
       provider: 'gemini',
@@ -66,8 +67,19 @@ describe('gemini', () => {
   it('auto prefers a paid key; the config can prefer Gemini', () => {
     keys({ anthropic: true, gemini: true })
     expect(activeProvider()).toBe('anthropic')
-    saveConfig({ models: { provider: 'gemini' } })
+    saveConfig({ models: { provider: 'gemini', geminiAck: true } })
     expect(activeProvider()).toBe('gemini')
+  })
+
+  it('a Gemini key does nothing until the free-tier note was read', () => {
+    keys({ gemini: true })
+    expect(providerReady('gemini')).toBe(false)
+    expect(() => activeProvider()).toThrow(/No API key/)
+    setLocalServer(server())
+    expect(resolveRole('main').provider).toBe('local')
+    saveConfig({ models: { geminiAck: true } })
+    expect(providerReady('gemini')).toBe(true)
+    expect(resolveRole('main').provider).toBe('gemini')
   })
 
   it('labels Gemini models', () => {
@@ -106,6 +118,7 @@ describe('per-role choice', () => {
     keys({ anthropic: true, gemini: true })
     saveConfig({
       models: {
+        geminiAck: true,
         roles: {
           fast: { provider: 'gemini', model: '' },
           planning: { provider: 'anthropic', model: 'claude-opus-5-5' }
@@ -125,9 +138,9 @@ describe('per-role choice', () => {
 
   it('the close-look pass follows the main choice unless it has its own', () => {
     keys({ anthropic: true, gemini: true })
-    saveConfig({ models: { roles: { main: { provider: 'gemini' } } } })
+    saveConfig({ models: { geminiAck: true, roles: { main: { provider: 'gemini' } } } })
     expect(resolveRole('vision-refine').provider).toBe('gemini')
-    saveConfig({ models: { roles: { vision: { provider: 'anthropic' } } } })
+    saveConfig({ models: { geminiAck: true, roles: { vision: { provider: 'anthropic' } } } })
     expect(resolveRole('vision-refine').provider).toBe('anthropic')
   })
 

@@ -76,13 +76,19 @@ export function isLocalOnly(): boolean {
   return loadConfig().models.localOnly === true
 }
 
+/** The user has read the Gemini free-tier privacy note (Settings or onboarding). */
+export function geminiAcked(): boolean {
+  return loadConfig().models.geminiAck === true
+}
+
 /** The provider can take calls now: a key (or a running local server), and not cut off by Local only. */
 export function providerReady(p: ProviderId): boolean {
   if (p === 'local') return !!localServer()
   if (isLocalOnly()) return false
   if (p === 'anthropic') return !!process.env.ANTHROPIC_API_KEY
   if (p === 'openai') return !!process.env.OPENAI_API_KEY
-  if (p === 'gemini') return !!process.env[GEMINI_ENV]
+  // Gemini's free tier may use prompts for training and human review: only after the note.
+  if (p === 'gemini') return !!process.env[GEMINI_ENV] && geminiAcked()
   return compatibleReady() && !!process.env[COMPATIBLE_ENV]
 }
 

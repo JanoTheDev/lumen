@@ -9,7 +9,7 @@ import { callModel } from '../../src/main/ai'
 import { setProvider } from '../../src/main/ai/providers'
 import { GEMINI_RATE_LIMIT_MESSAGE } from '../../src/main/ai/providers/gemini'
 import { LlmError, type LlmProvider } from '../../src/main/ai/providers/types'
-import { setConfigDir } from '../../src/main/config'
+import { saveConfig, setConfigDir } from '../../src/main/config'
 
 function limited(): LlmProvider {
   const fail = (): never => {
@@ -34,6 +34,7 @@ describe('rate limits', () => {
     vi.stubEnv('ANTHROPIC_API_KEY', '')
     vi.stubEnv('OPENAI_API_KEY', '')
     vi.stubEnv('GEMINI_API_KEY', 'g-key')
+    saveConfig({ models: { geminiAck: true } })
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
   afterEach(() => {

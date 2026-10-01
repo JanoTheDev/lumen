@@ -2,10 +2,17 @@
 // models a role can pick (with vision / tool / price facts) and what every role resolves to now.
 import type { CatalogModel, CatalogProvider, ModelRoleId, ModelsCatalog } from '@shared/channels'
 import type { ModelProvider } from '@shared/config'
-import { isLocalOnly, modelLabel, providerReady, resolveRole, type Role } from '../models'
+import {
+  geminiAcked,
+  isLocalOnly,
+  modelLabel,
+  providerReady,
+  resolveRole,
+  type Role
+} from '../models'
 import { rateFor } from '../pricing'
 import { compatibleSettings, listCompatibleModels } from './compatible'
-import { GEMINI_MODELS } from './gemini'
+import { GEMINI_ENV, GEMINI_MODELS } from './gemini'
 import { capsOf, chatModels, localServer } from './local'
 import { refreshLocalModels } from './index'
 
@@ -28,6 +35,8 @@ function notReady(p: ModelProvider): string | undefined {
   if (providerReady(p)) return undefined
   if (p !== 'local' && isLocalOnly()) return 'Off while Local only is on.'
   if (p === 'local') return 'No Ollama or LM Studio running.'
+  if (p === 'gemini' && process.env[GEMINI_ENV] && !geminiAcked())
+    return 'Read the free-tier note first.'
   if (p === 'compatible') {
     const s = compatibleSettings()
     if (!s?.baseUrl) return 'Pick a service first.'
