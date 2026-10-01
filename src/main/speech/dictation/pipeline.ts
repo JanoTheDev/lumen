@@ -1,6 +1,7 @@
 // Dictation: speak, get clean text typed into the focused field. Driven by the dedicated
 // dictation hotkey (always pure dictation, never the assistant) and by auto-detect on the
 // assistant hotkey. Text is saved for recovery until it has been typed.
+import { clipboard } from 'electron'
 import type { AgentBridge } from '../../agent/bridge'
 import { armEscape, disarmEscape, holdEscape, keepEscapeWhile } from '../../agent/escape'
 import { getAgent } from '../../agent/instance'
@@ -17,7 +18,10 @@ import {
   isConfidentDictation,
   looksLikeRequest
 } from './autodetect'
+import { applyBacktrack } from './backtrack'
 import { cleanupDictation } from './cleanup'
+import { looksLikeEditCommand } from './command'
+import { dropEditChip, runEditCommand } from './command-run'
 import { handleNoteCommand } from './notes'
 import { insertDictation, readFocus } from './insert'
 import { watchCorrections, type LearnDeps } from './learn-watch'
@@ -28,6 +32,8 @@ import {
   savePending,
   takeRecoverable
 } from './recovery'
+import { shapeDictation } from './shape'
+import { expandSnippet, loadSnippets, matchSnippet } from './snippets'
 import type { FocusTarget } from './terminal-guard'
 
 type DictationConfig = AppConfig['dictation']
@@ -38,6 +44,45 @@ export interface DictateResult {
 }
 
 export const NOTHING_HEARD = "Didn't hear anything to type"
+
+/** What one dictation produced, typed or not (for 04 T44-T46 history and stats). */
+export interface DictationReport {
+  /** Transcript before any cleanup. */
+  raw: string
+  /** Text that was typed (or would have been); the new text for a command edit. */
+  text: string
+  /** Process of the target window. */
+  app?: string
+  source: 'hotkey' | 'auto' | 'command' | 'snippet'
+  ok: boolean
+  /** Dictation style applied (T36). */
+  style?: string
+}
+
+export type DictationRecorder = (report: DictationReport) => void
+
+let recorder: DictationRecorder | null = null
+
+/** The one call site for history and stats: called once after every dictation. */
+export function setDictationRecorder(fn: DictationRecorder | null): void {
+  recorder = fn
+}
+
+function report(r: DictationReport): void {
+  try {
+    recorder?.(r)
+  } catch (e) {
+    log('fail', `dictation recorder failed: ${(e as Error).message}`)
+  }
+}
+
+/** A saved snippet the whole utterance names, expanded; null when none (04 T38). */
+function snippetFor(text: string, needLead: boolean): string | null {
+  const m = matchSnippet(text, loadSnippets())
+  if (!m || (needLead && !m.lead && m.score < 1)) return null
+  log('plan', 'dictation snippet expanded')
+  return expandSnippet(m.snippet.text, { clipboard: () => clipboard.readText() })
+}
 
 function tapHint(cfg: DictationConfig): string {
   return `Hold ${cfg.hotkey} to dictate, or double-tap it for hands-free`
@@ -87,15 +132,33 @@ const learnDeps: LearnDeps = {
   }
 }
 
+interface InsertMeta {
+  raw: string
+  source: DictationReport['source']
+  style?: string
+  softBreaks?: boolean
+}
+
 /** Types already-cleaned text; on failure the text is kept in recovered.txt and shown. */
 async function finishInsert(
   agent: AgentBridge,
   pendingId: string,
   text: string,
   target: FocusTarget,
-  cfg: DictationConfig
+  cfg: DictationConfig,
+  meta: InsertMeta
 ): Promise<DictateResult> {
-  const res = await insertDictation(agent, text, target, cfg.terminal)
+  const res = await insertDictation(agent, text, target, cfg.terminal, {
+    softBreaks: meta.softBreaks
+  })
+  report({
+    raw: meta.raw,
+    text,
+    app: target.process,
+    source: meta.source,
+    ok: res.ok,
+    style: meta.style
+  })
   if (res.ok) {
     clearPending(pendingId)
     log('done', `dictation typed (${text.length} chars${res.terminal ? ', terminal' : ''})`)
@@ -130,21 +193,54 @@ ${text}`)
     return { ok: false, notice: 'agent not running' }
   }
   setStatus('thinking', cfg.cleanup === 'light' ? 'Cleaning up' : 'Typing')
+  dropEditChip()
   // Escape (and the voice cancel) cancels the cleanup call and skips typing.
   const scope = beginScope()
   armEscape()
   try {
+    const focus = readFocus(agent)
+    // Command mode (T37): "make this shorter" with text selected edits the selection.
+    if (cfg.commandMode && looksLikeEditCommand(text)) {
+      const target = await focus
+      const edited = await runEditCommand(agent, text, target, scope.signal)
+      if (edited) {
+        clearPending(pendingId)
+        const out = edited.text ?? ''
+        report({ raw: text, text: out, app: target.process, source: 'command', ok: edited.ok })
+        return { ok: edited.ok, notice: edited.notice }
+      }
+    }
+    const snippet = cfg.snippets ? snippetFor(text, false) : null
+    if (snippet)
+      return await finishInsert(agent, pendingId, snippet, await focus, cfg, {
+        raw: text,
+        source: 'snippet'
+      })
+    // Course correction (T34) before cleanup; the cleanup check runs on the corrected text.
+    const spoken = cfg.backtrack ? applyBacktrack(text).text : text
+    if (!spoken.trim()) {
+      clearPending(pendingId)
+      setStatus('answer', 'Scratched that', undefined, 1500)
+      return { ok: true, notice: 'nothing left after the correction' }
+    }
     const [cleaned, target] = await Promise.all([
-      cleanupDictation(text, {
+      cleanupDictation(spoken, {
         mode: cfg.cleanup,
         dictionary: cfg.dictionary,
+        backtrack: cfg.backtrack,
         signal: scope.signal
       }),
-      readFocus(agent)
+      focus
     ])
     scope.throwIfCancelled()
     log('plan', `dictation cleanup: ${cleaned.source}`)
-    return await finishInsert(agent, pendingId, cleaned.text, target, cfg)
+    const shaped = shapeDictation(cleaned, target, cfg)
+    return await finishInsert(agent, pendingId, shaped.text, target, cfg, {
+      raw: text,
+      source: 'hotkey',
+      style: shaped.style,
+      softBreaks: shaped.softBreaks
+    })
   } catch (e) {
     if (!scope.cancelled && !isAbortError(e)) throw e
     clearPending(pendingId)
@@ -170,10 +266,19 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   if (!agent) return false
   const target = await readFocus(agent)
   if (!autoDictateGate(prompt, cfg, target)) return false
+  // "insert my signature" with a text field focused (T38).
+  const snippet = cfg.snippets ? snippetFor(prompt, true) : null
+  if (snippet) {
+    const id = savePending(prompt)
+    await finishInsert(agent, id, snippet, target, cfg, { raw: prompt, source: 'snippet' })
+    return true
+  }
 
-  const cleanup = cleanupDictation(prompt, {
+  const spoken = cfg.backtrack ? applyBacktrack(prompt).text : prompt
+  const cleanup = cleanupDictation(spoken || prompt, {
     mode: cfg.cleanup,
     dictionary: cfg.dictionary,
+    backtrack: cfg.backtrack,
     signal
   })
   cleanup.catch(() => {})
@@ -194,7 +299,13 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
     clearPending(pendingId)
     throw e
   }
-  await finishInsert(agent, pendingId, cleaned.text, target, cfg)
+  const shaped = shapeDictation(cleaned, target, cfg)
+  await finishInsert(agent, pendingId, shaped.text, target, cfg, {
+    raw: prompt,
+    source: 'auto',
+    style: shaped.style,
+    softBreaks: shaped.softBreaks
+  })
   return true
 }
 
