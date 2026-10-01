@@ -18,7 +18,15 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../src/main/ai/providers', () => ({
-  getProvider: () => ({ llm: { complete: async () => ({ text: 'Short.' }) }, model: 'm' })
+  getProvider: () => ({
+    llm: {
+      complete: async (req: { schemaName?: string }) =>
+        req.schemaName === 'lumen_dictation_check'
+          ? { text: '', data: { kind: 'dictation', confidence: 0.99 } }
+          : { text: 'Short.' }
+    },
+    model: 'm'
+  })
 }))
 
 vi.mock('../../../src/main/claude-code', () => ({
@@ -91,6 +99,7 @@ import { showAnswer } from '../../../src/main/windows/assistant'
 import { archivePending, clearPending } from '../../../src/main/speech/dictation/recovery'
 import {
   dictate,
+  maybeAutoDictate,
   onDictationDown,
   onDictationUp,
   setDictationRecorder,
@@ -268,6 +277,29 @@ describe('dictate', () => {
     expect(res.ok).toBe(false)
     expect(h.executed).toEqual([])
     expect(reports).toEqual([])
+  })
+
+  it('sends nothing to Claude when everything was taken back (L1)', async () => {
+    h.focus = { ...h.focus, process: 'windowsterminal.exe', title: 'claude' }
+    const res = await dictate('to Claude, run the tests, scratch that')
+    expect(res.ok).toBe(true)
+    expect(h.claude).toEqual([])
+    expect(h.executed).toEqual([])
+  })
+
+  it('types nothing on auto-dictation that took itself back (L1)', async () => {
+    h.dictation = { enabled: true, autoDetect: true }
+    h.focus = { ...h.focus, role: 'Edit' }
+    expect(await maybeAutoDictate('Hello there everyone, scratch that')).toBe(true)
+    expect(h.executed).toEqual([])
+    expect(reports).toEqual([])
+  })
+
+  it('types auto-dictation as usual', async () => {
+    h.dictation = { enabled: true, autoDetect: true }
+    h.focus = { ...h.focus, role: 'Edit' }
+    expect(await maybeAutoDictate('Hello there everyone, see you soon')).toBe(true)
+    expect(h.executed).toHaveLength(1)
   })
 
   it('edits the selection in an editable field', async () => {

@@ -231,7 +231,9 @@ async function dictateToClaude(
   durationMs: number | undefined
 ): Promise<DictateResult> {
   const corrected = cfg.backtrack ? applyBacktrack(body).text : body
-  const spoken = applySpellAs(corrected || body, cfg.spellAs)
+  // Everything was taken back ("…, scratch that"): nothing goes to Claude (L1).
+  if (!corrected.trim()) return scratched(pendingId)
+  const spoken = applySpellAs(corrected, cfg.spellAs)
   const [cleaned, resolveFile] = await Promise.all([
     cleanupDictation(spoken, {
       mode: cfg.cleanup,
@@ -256,6 +258,15 @@ async function dictateToClaude(
     showAnswer(`${res.notice}\n\n${text}`)
   }
   return { ok: res.ok, notice: res.notice }
+}
+
+const SCRATCHED = 'Scratched that'
+
+/** Everything said was taken back: nothing is typed or sent. */
+function scratched(pendingId: string): DictateResult {
+  clearPending(pendingId)
+  setStatus('answer', SCRATCHED, undefined, 1500)
+  return { ok: true, notice: 'nothing left after the correction' }
 }
 
 /** Types already-cleaned text; on failure the text is kept in recovered.txt and shown. */
@@ -360,11 +371,7 @@ ${text}`)
       })
     // Course correction (T34) before cleanup; the cleanup check runs on the corrected text.
     const corrected = cfg.backtrack ? applyBacktrack(text).text : text
-    if (!corrected.trim()) {
-      clearPending(pendingId)
-      setStatus('answer', 'Scratched that', undefined, 1500)
-      return { ok: true, notice: 'nothing left after the correction' }
-    }
+    if (!corrected.trim()) return scratched(pendingId)
     const [cleaned, target] = await Promise.all([
       // Spell-as rules (T39) before cleanup, so the model sees the written form.
       cleanupDictation(applySpellAs(corrected, cfg.spellAs), {
@@ -426,19 +433,26 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   }
 
   const spoken = cfg.backtrack ? applyBacktrack(prompt).text : prompt
-  const cleanup = cleanupDictation(applySpellAs(spoken || prompt, cfg.spellAs), {
-    mode: cfg.cleanup,
-    dictionary: cfg.dictionary,
-    backtrack: cfg.backtrack,
-    signal
-  })
-  cleanup.catch(() => {})
+  const cleanup = spoken.trim()
+    ? cleanupDictation(applySpellAs(spoken, cfg.spellAs), {
+        mode: cfg.cleanup,
+        dictionary: cfg.dictionary,
+        backtrack: cfg.backtrack,
+        signal
+      })
+    : null
+  cleanup?.catch(() => {})
   const verdict = await classifyUtterance(prompt, target, { signal })
   log(
     'plan',
     `auto-dictate check: ${verdict ? `${verdict.kind} ${verdict.confidence.toFixed(2)}` : 'failed'}`
   )
   if (!isConfidentDictation(verdict)) return false
+  // Dictation that took itself back entirely: nothing to type, not the raw words (L1).
+  if (!cleanup) {
+    setStatus('answer', SCRATCHED, undefined, 1500)
+    return true
+  }
 
   const pendingId = savePending(prompt)
   let cleaned
