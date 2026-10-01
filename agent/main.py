@@ -20,6 +20,7 @@ logging.basicConfig(
 log = logging.getLogger("agent")
 log.info(dpi.describe())
 
+import a11y_state
 import announce
 import capture
 import monitors
@@ -30,6 +31,7 @@ from capture import take_screenshot, get_active_window
 from actions import execute_action
 import wake
 import dwell
+import input_steps
 from mousewatch import MouseWatcher
 from dispatch import Dispatcher, INLINE, INPUT, READ
 from errors import AgentError, E_INVALID, E_UNSUPPORTED
@@ -73,7 +75,8 @@ def _cmd_subscribe(args, token):
 
 AGENT_VERSION = "0.2.0"
 # Capabilities whose v2 commands match plans CONTRACTS C2; more are added as they land.
-CAPABILITIES = ["hotkey", "dictation-hotkey", "wake", "dwell", "capture", "ocr", "uia", "announce"]
+CAPABILITIES = ["hotkey", "dictation-hotkey", "wake", "dwell", "capture", "ocr", "uia", "announce", "input",
+                "a11y-state"]
 
 LOG_LEVELS = {"debug": logging.DEBUG, "info": logging.INFO, "warn": logging.WARNING, "error": logging.ERROR}
 
@@ -314,6 +317,8 @@ def register_commands(debug: bool = False) -> None:
     reg("uia_act", _cmd_uia_act, INPUT)
     reg("focus_info", lambda args, token: uia.focus_info(token), READ, timeout_ms=1000)
     reg("announce", announce.announce, READ)
+    reg("a11y_state", a11y_state.state, READ, timeout_ms=2000)
+    reg("input", lambda args, token: input_steps.run(args, token), INPUT)
     if v2:
         reg("active_window", _cmd_active_window, READ)
     else:
