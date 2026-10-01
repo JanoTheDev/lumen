@@ -76,6 +76,8 @@ export type AppEvent =
       cost?: TurnCostSummary
     }
   | { type: 'query.failed'; turnId: string; error: string; cancelled?: boolean }
+  /** The turn was cancelled (Esc, "cancel", a new turn); nothing of it reaches the screen or TTS. */
+  | { type: 'query.cancelled'; turnId: string }
   | { type: 'action.planned'; actionId: string; actions: Action[] }
   | { type: 'action.confirmed'; actionId: string }
   | { type: 'action.executed'; actionId: string }

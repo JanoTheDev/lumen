@@ -3,7 +3,7 @@
 // or the research loop) and present the result.
 import { randomUUID } from 'crypto'
 import type { ModelResponse } from '@shared/types'
-import type { CancelScope } from './cancel'
+import { isAbortError, type CancelScope } from './cancel'
 import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext } from './context'
 import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
@@ -70,7 +70,10 @@ async function screenContext(
   return captureContext(true, { signal })
 }
 
-/** Runs one turn and publishes `query.done` with the model and the turn's summed cost. */
+/**
+ * Runs one turn and publishes `query.done` with the model and the turn's summed cost, or
+ * `query.cancelled` / `query.failed`.
+ */
 export async function runQuery(
   prompt: string,
   baseOpts: CallOptions,
@@ -80,10 +83,21 @@ export async function runQuery(
   let cost: TurnCost | undefined
   const turnId = randomUUID()
   bus.emit({ type: 'query.started', turnId, prompt })
-  const response = await withTurnCost(
-    () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
-    (c) => (cost = c)
-  )
+  let response: ModelResponse
+  try {
+    response = await withTurnCost(
+      () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
+      (c) => (cost = c)
+    )
+  } catch (e) {
+    if (scope.cancelled || isAbortError(e)) {
+      log('skip', `turn cancelled: "${prompt.slice(0, 40)}"`)
+      bus.emit({ type: 'query.cancelled', turnId })
+    } else {
+      bus.emit({ type: 'query.failed', turnId, error: (e as Error).message })
+    }
+    throw e
+  }
   bus.emit({
     type: 'query.done',
     turnId,
@@ -275,10 +289,11 @@ async function runTurn(
     }
   }
 
+  await present(result, prompt, deps.onGuide, ctx.frames.length ? ctx : undefined, scope.signal)
+  scope.throwIfCancelled()
+
   if (split) recordSplitHistory(split, historySummary)
   else if (!opts.lowDetail) addToHistory(prompt, historySummary(result))
-
-  await present(result, prompt, deps.onGuide, ctx.frames.length ? ctx : undefined)
   return result
 }
 

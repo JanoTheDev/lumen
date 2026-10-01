@@ -36,14 +36,37 @@ async function screenRect(
   return r && isUsableRect(r.logicalRect) ? r.logicalRect : null
 }
 
+/**
+ * Shows a reply. Targets resolve first; when `signal` aborts meanwhile nothing is drawn (a
+ * cancelled turn never reaches the screen).
+ */
 export async function present(
   result: ModelResponse,
   prompt: string,
   onGuide: GuideStartFn,
-  ctx: GroundingContext = groundingNow()
+  context: GroundingContext = groundingNow(),
+  signal?: AbortSignal
 ): Promise<void> {
+  if (signal?.aborted) return
+  const ctx: GroundingContext = { ...context, signal }
+  try {
+    await show(result, prompt, onGuide, ctx)
+  } catch (e) {
+    if (signal?.aborted) return
+    throw e
+  }
+}
+
+async function show(
+  result: ModelResponse,
+  prompt: string,
+  onGuide: GuideStartFn,
+  ctx: GroundingContext
+): Promise<void> {
+  const aborted = (): boolean => !!ctx.signal?.aborted
   if (result.mode === 'locate' && result.items?.length) {
     const resolved = await Promise.all(result.items.map((item) => screenRect(item, ctx)))
+    if (aborted()) return
     const screenItems: (LocateItem & { bbox: Rect })[] = []
     result.items.forEach((item, i) => {
       const bbox = resolved[i]
@@ -60,6 +83,7 @@ export async function present(
     }
   } else if (result.mode === 'guide' && result.steps?.some((s) => s.bbox || s.target)) {
     const resolved = await Promise.all(result.steps.map((s) => screenRect(s, ctx)))
+    if (aborted()) return
     const bboxSteps: GuideStep[] = []
     result.steps.forEach((s, i) => {
       const bbox = resolved[i]

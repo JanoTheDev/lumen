@@ -131,7 +131,7 @@ async function resolve(
 ): Promise<AgentAction | null> {
   const plan = clickPlan(action)
   if (!plan) return toAgentAction(action, currentFrame())
-  const ctx = groundingNow()
+  const ctx: GroundingContext = { ...groundingNow(), signal: opts.signal }
   const r = await resolveClick(plan, ctx)
   if (!r) {
     if (plan.agentFallback) {
@@ -199,7 +199,13 @@ export async function executeActions(
   try {
     for (const action of actions) {
       if (signal?.aborted) break
-      const scaled = await resolve(action, { refine, preview, signal })
+      let scaled: AgentAction | null
+      try {
+        scaled = await resolve(action, { refine, preview, signal })
+      } catch (e) {
+        if (signal?.aborted) break
+        throw e
+      }
       if (signal?.aborted) break
 
       if (!scaled) continue

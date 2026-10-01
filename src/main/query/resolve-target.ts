@@ -37,6 +37,8 @@ export interface GroundingContext {
   uia?: UiaSnapshotResult
   marks?: MarksTable
   ocr?: () => Promise<OcrResult | null>
+  /** The turn's signal: a cancelled turn resolves nothing (throws its abort reason). */
+  signal?: AbortSignal
 }
 
 /** The latest capture's context, or just the current frame geometry before any capture. */
@@ -287,7 +289,9 @@ export async function resolveTarget(
   target: Target,
   ctx: GroundingContext
 ): Promise<ResolvedTarget | null> {
+  ctx.signal?.throwIfAborted()
   const hit = await resolveHit(target, ctx)
+  ctx.signal?.throwIfAborted()
   if (!hit) return null
   const notes = [...(hit.notes ?? [])]
   let confidence = hit.confidence

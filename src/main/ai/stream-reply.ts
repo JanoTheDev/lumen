@@ -29,6 +29,8 @@ export async function streamReply(
   }
 
   for await (const chunk of llm.stream(req, signal)) {
+    // A cancelled turn publishes nothing more (no deltas, no speech chunks).
+    if (signal?.aborted) break
     if (chunk.type === 'done') {
       result = chunk.result
       continue
