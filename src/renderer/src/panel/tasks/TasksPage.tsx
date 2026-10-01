@@ -1,24 +1,30 @@
 // Task chat view (08 T43), panel route #/tasks/<id>: the list of task chats on the side
 // (background tasks, on-screen agent tasks, Claude Code sessions) and the chosen one's chat.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatSummary } from '@shared/task-chat'
 import { icons } from '../../ui'
 import { invoke, useIpc } from '../../lib/ipc'
 import { ChatPane } from './ChatPane'
-import { summaryStatus } from './chat-view'
+import { rowChanged, summaryStatus } from './chat-view'
 
 function useChats(): ChatSummary[] {
   const [list, setList] = useState<ChatSummary[]>([])
+  const shown = useRef<ChatSummary[]>([])
   const refresh = useCallback((): void => {
     invoke('tasks:chats')
-      .then((l) => Array.isArray(l) && setList(l))
+      .then((l) => {
+        if (!Array.isArray(l)) return
+        shown.current = l
+        setList(l)
+      })
       .catch(() => {})
   }, [])
   useEffect(refresh, [refresh])
-  // The Tasks list changes with every task; the chat list follows it.
+  // Main pushes tasks:changed here for every kind of task; the chat list follows it.
   useIpc('tasks:changed', refresh)
+  // The open chat's header: only a new phase or title moves its row.
   useIpc('tasks:chat-delta', (d) => {
-    if (d.header) refresh()
+    if (d.header && rowChanged(shown.current, d.header)) refresh()
   })
   return list
 }

@@ -213,6 +213,8 @@ export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
 // ---- live pushes to the panel window ----
 
 const views = new Map<string, () => void>()
+/** Panel windows whose close ends every watch (a reopened panel watches again itself). */
+const closing = new WeakSet<object>()
 
 /** The panel window shows chat `id`: push its changes there (only while it is open). */
 export function watchChat(id: string, on: boolean): boolean {
@@ -220,6 +222,12 @@ export function watchChat(id: string, on: boolean): boolean {
     views.get(id)?.()
     views.delete(id)
     return true
+  }
+  const win = panel.get()
+  if (!win) return false
+  if (!closing.has(win)) {
+    closing.add(win)
+    win.once('closed', unwatchAll)
   }
   if (views.has(id)) return true
   const off = transcripts().watch(id, (d) => {

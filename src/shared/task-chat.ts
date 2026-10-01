@@ -78,6 +78,8 @@ export interface ChatView {
   entries: ChatEntry[]
   /** Older entries dropped by the size cap. */
   dropped: number
+  /** The newest push already in this snapshot (deltas with a higher seq are newer). */
+  seq?: number
 }
 
 /** Pushed to the open view only (tasks:watch). */
@@ -86,6 +88,8 @@ export interface ChatDelta {
   header?: ChatHeader
   /** New or replaced entries (upsert by n). */
   entries?: ChatEntry[]
+  /** Increasing per app run. */
+  seq?: number
 }
 
 /** One row of the view's task list. */

@@ -1,13 +1,14 @@
 // One task's chat (08 T43): status header with Stop / Pause / Resume / Run again, the live
 // transcript, a confirm card for a waiting OK, and the composer that steers the task.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
-import type { ChatControlOp, ChatHeader, ChatView } from '@shared/task-chat'
+import type { ChatControlOp, ChatDelta, ChatHeader, ChatView } from '@shared/task-chat'
 import { announce, Button, icons, Toast } from '../../ui'
 import { prefersReducedMotion } from '../../ui/motion'
 import { invoke, useIpc } from '../../lib/ipc'
 import { ChatEntries } from './ChatEntries'
 import {
   announcement,
+  applyBuffered,
   applyDelta,
   composerHint,
   composerLabel,
@@ -23,20 +24,26 @@ function useChat(id: string): {
   const [view, setView] = useState<ChatView | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'missing'>('loading')
   const title = useRef('')
+  /** Deltas that arrive before the snapshot (null once it is in). */
+  const early = useRef<ChatDelta[] | null>([])
   useEffect(() => {
     // The pane is keyed by id, so a new task starts from the loading state.
     let alive = true
-    invoke('tasks:chat', id)
+    early.current = []
+    // Live pushes only while this view is open; watching first means no change falls between
+    // the snapshot and the first push.
+    invoke('tasks:watch', id, true)
+      .catch(() => {})
+      .then(() => invoke('tasks:chat', id))
       .then((v) => {
         if (!alive) return
         if (v && 'header' in v) {
-          setView(v)
+          setView(applyBuffered(v, early.current ?? []))
           setState('ready')
         } else setState('missing')
+        early.current = null
       })
       .catch(() => alive && setState('missing'))
-    // Live pushes only while this view is open.
-    void invoke('tasks:watch', id, true).catch(() => {})
     return () => {
       alive = false
       void invoke('tasks:watch', id, false).catch(() => {})
@@ -47,6 +54,10 @@ function useChat(id: string): {
   }, [view])
   useIpc('tasks:chat-delta', (d) => {
     if (d.id !== id) return
+    if (early.current) {
+      early.current.push(d)
+      return
+    }
     setView((v) => applyDelta(v, d))
     for (const e of d.entries ?? []) {
       const line = announcement(e, title.current || 'Task')

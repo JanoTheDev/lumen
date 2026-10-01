@@ -32,6 +32,23 @@ export function applyDelta(view: ChatView | null, d: ChatDelta): ChatView | null
   return { ...view, header: d.header ?? view.header, entries }
 }
 
+/**
+ * The snapshot plus the deltas that arrived while it loaded (the view watches first, so nothing
+ * falls between the two); only deltas newer than the snapshot apply, so none undoes it.
+ */
+export function applyBuffered(view: ChatView, deltas: readonly ChatDelta[]): ChatView {
+  let v: ChatView = view
+  for (const d of deltas)
+    if (d.seq === undefined || view.seq === undefined || d.seq > view.seq) v = applyDelta(v, d) ?? v
+  return v
+}
+
+/** The list follows a header push only when the row would change (phase or title). */
+export function rowChanged(list: readonly ChatSummary[], h: ChatHeader): boolean {
+  const row = list.find((r) => r.id === h.id)
+  return !row || row.title !== h.title || row.phase !== h.phase
+}
+
 export type ChatItem =
   | { type: 'entry'; entry: ChatEntry }
   | { type: 'tools'; key: number; entries: Extract<ChatEntry, { k: 'tool' }>[] }

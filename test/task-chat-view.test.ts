@@ -6,11 +6,13 @@ import { describe, expect, it } from 'vitest'
 import type { ChatEntry, ChatHeader, ChatView } from '@shared/task-chat'
 import {
   announcement,
+  applyBuffered,
   applyDelta,
   composerHint,
   duration,
   groupEntries,
-  headerFacts
+  headerFacts,
+  rowChanged
 } from '../src/renderer/src/panel/tasks/chat-view'
 import { ChatEntries } from '../src/renderer/src/panel/tasks/ChatEntries'
 import { parseRoute } from '../src/renderer/src/panel/routes'
@@ -111,5 +113,30 @@ describe('ChatEntries markup', () => {
     expect(html).toContain('role="group" aria-label="Answers"')
     for (const m of html.matchAll(/<button\b([^>]*)>/g)) expect(m[1]).toContain('type="button"')
     expect(html).toContain('>Work<')
+  })
+})
+
+describe('snapshot and early pushes', () => {
+  it('applies only the pushes newer than the snapshot, so none undoes it', () => {
+    const snap: ChatView = { header, entries: [tool(1, 'ok')], dropped: 0, seq: 5 }
+    const older = { id: header.id, entries: [tool(1, 'running')], seq: 4 }
+    const newer = { id: header.id, entries: [tool(2, 'running')], seq: 6 }
+    const v = applyBuffered(snap, [older, newer])
+    expect(v.entries.map((e) => (e.k === 'tool' ? `${e.n}:${e.status}` : ''))).toEqual([
+      '1:ok',
+      '2:running'
+    ])
+  })
+
+  it('refreshes the side list only when the open chat’s row changes', () => {
+    const row = {
+      id: header.id,
+      kind: 'background' as const,
+      title: header.title,
+      phase: 'running' as const,
+      at: 0
+    }
+    expect(rowChanged([row], header)).toBe(false)
+    expect(rowChanged([row], { ...header, phase: 'done' })).toBe(true)
   })
 })
