@@ -3,7 +3,7 @@
 // 'focused'}` (TextPattern, else the value; never a password field) and `focus_info`.
 import type { AgentBridge } from '../../agent/bridge'
 import { log } from '../../logger'
-import { findCorrections, noteCorrections, withLearned } from './learn'
+import { findCorrections, noteCorrections, withLearned, type Correction } from './learn'
 
 export const FIRST_READ_MS = 400
 export const SECOND_READ_MS = 20_000
@@ -19,8 +19,8 @@ interface FieldText {
 
 export interface LearnDeps {
   dictionary: () => readonly string[]
-  /** Saves the new dictionary and tells the user. */
-  learned: (dictionary: string[], added: string[]) => void
+  /** Saves the new dictionary (and spell-as rules for respellings) and tells the user. */
+  learned: (dictionary: string[], added: string[], found?: readonly Correction[]) => void
   storePath?: string
   setTimer?: (fn: () => void, ms: number) => unknown
   clearTimer?: (h: unknown) => void
@@ -79,7 +79,7 @@ export function watchCorrections(agent: AgentBridge, dictated: string, deps: Lea
       log('step', `dictation corrections: ${found.map((c) => `${c.from}→${c.to}`).join(', ')}`)
       const dictionary = deps.dictionary()
       const added = noteCorrections(found, dictionary, deps.storePath)
-      if (added.length) deps.learned(withLearned(dictionary, added), added)
+      if (added.length) deps.learned(withLearned(dictionary, added), added, found)
     }, SECOND_READ_MS)
   }, FIRST_READ_MS)
 }

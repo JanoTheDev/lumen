@@ -11,6 +11,7 @@ import { glossaryTerms } from './vocabulary'
 const FOCUS_TIMEOUT_MS = 800
 const cache = new Map<string, string[]>()
 let current: string[] = []
+let currentApp = { process: '', title: '' }
 
 function packTerms(id: string, dir: string): string[] {
   let terms = cache.get(id)
@@ -27,6 +28,7 @@ function packTerms(id: string, dir: string): string[] {
 
 async function refresh(): Promise<void> {
   current = []
+  currentApp = { process: '', title: '' }
   const agent = getAgent()
   if (!agent) return
   try {
@@ -35,6 +37,7 @@ async function refresh(): Promise<void> {
       {},
       { timeoutMs: FOCUS_TIMEOUT_MS }
     )
+    currentApp = { process: String(f?.process ?? '').toLowerCase(), title: String(f?.title ?? '') }
     const pack = matchSkill({ process: String(f?.process ?? ''), title: String(f?.title ?? '') })
     current = pack ? packTerms(pack.id, pack.dir) : []
   } catch {
@@ -45,6 +48,11 @@ async function refresh(): Promise<void> {
 /** Terms of the app that was in front when the current recording started. */
 export function foregroundTerms(): readonly string[] {
   return current
+}
+
+/** Process and title of the app in front when the current recording started. */
+export function foregroundApp(): { process: string; title: string } {
+  return currentApp
 }
 
 bus.on('voice.started', () => void refresh())

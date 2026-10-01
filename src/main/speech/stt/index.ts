@@ -9,7 +9,8 @@ import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { voiceLatency } from '../latency'
 import { chooseStt, wantsLocalModel, type SttAvailability } from './engine'
-import { foregroundTerms } from './foreground-vocab'
+import { appTermsFor } from '../dictation/dictionary'
+import { foregroundApp, foregroundTerms } from './foreground-vocab'
 import { localEngineSupported, transcribeLocal, warmLocalStt } from './local'
 import {
   currentSttModel,
@@ -50,12 +51,24 @@ export function dictationPrompt(terms: readonly string[], lang = 'en'): string {
   return `Dictated text, written out with normal punctuation and capital letters.${names}`
 }
 
-/** User vocabulary, then the personal dictionary, then the glossary of the app in front. */
+/**
+ * User vocabulary, then the personal dictionary (global, the app's own terms and spell-as
+ * targets, 04 T39), then the glossary of the app in front. The offline models take no word
+ * list, so these reach the cloud prompt; offline, dictation applies them after recognition.
+ */
 export function sttTerms(
   cfg: Pick<AppConfig, 'voiceVocab' | 'dictation'>,
-  appTerms: readonly string[] = foregroundTerms()
+  appTerms: readonly string[] = foregroundTerms(),
+  app: { process: string; title: string } = foregroundApp()
 ): string[] {
-  return mergeVocabulary([splitTerms(cfg.voiceVocab), cfg.dictation.dictionary, appTerms])
+  const d = cfg.dictation
+  return mergeVocabulary([
+    splitTerms(cfg.voiceVocab),
+    d.dictionary,
+    appTermsFor(d.appDictionary, app),
+    (d.spellAs ?? []).map((r) => r.to),
+    appTerms
+  ])
 }
 
 function availability(): SttAvailability {
