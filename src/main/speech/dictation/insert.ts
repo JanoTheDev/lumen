@@ -52,7 +52,8 @@ export function withJoiningSpace(text: string, valueTail: string): string {
 
 export type InsertResult =
   | { ok: true; terminal: boolean; notice?: string }
-  | { ok: false; notice: string }
+  /** `refused`: not typed on purpose (password field, blocked terminal), never an error. */
+  | { ok: false; notice: string; refused?: 'password' | 'terminal' }
 
 export const PASSWORD_NOTICE = 'Dictation does not type into password fields.'
 
@@ -73,9 +74,9 @@ export async function insertDictation(
   policy: TerminalPolicy,
   opts: { softBreaks?: boolean } = {}
 ): Promise<InsertResult> {
-  if (target.password) return { ok: false, notice: PASSWORD_NOTICE }
+  if (target.password) return { ok: false, notice: PASSWORD_NOTICE, refused: 'password' }
   const decision = guardText(text, target, policy)
-  if (decision.kind === 'block') return { ok: false, notice: decision.notice }
+  if (decision.kind === 'block') return { ok: false, notice: decision.notice, refused: 'terminal' }
   const typed = decision.terminal
     ? decision.text
     : withJoiningSpace(decision.text, target.valueTail)

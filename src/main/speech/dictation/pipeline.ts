@@ -274,11 +274,19 @@ async function finishInsert(
   const res = await insertDictation(agent, text, target, cfg.terminal, {
     softBreaks: meta.softBreaks
   })
+  if (!res.ok && res.refused === 'password') {
+    // A spoken password is never kept: not in history, recovery or on the bar (M7).
+    clearPending(pendingId)
+    log('skip', 'dictation not typed: password field')
+    setStatus('error', res.notice, undefined, 4000)
+    return { ok: false, notice: res.notice }
+  }
   if (!res.ok && scratchpadOnFailure(target)) {
     const kept = toScratchpad(pendingId, text, target, meta)
     if (kept) return kept
   }
-  report({ ...reportBase(text, target, meta), ok: res.ok })
+  // Refused for safety (a blocked terminal): shown and kept for recovery, not in history.
+  if (res.ok || !res.refused) report({ ...reportBase(text, target, meta), ok: res.ok })
   if (res.ok) {
     clearPending(pendingId)
     log('done', `dictation typed (${text.length} chars${res.terminal ? ', terminal' : ''})`)

@@ -88,6 +88,7 @@ vi.mock('../../../src/main/config', async (orig) => {
 
 import { bus } from '../../../src/main/bus'
 import { showAnswer } from '../../../src/main/windows/assistant'
+import { archivePending, clearPending } from '../../../src/main/speech/dictation/recovery'
 import {
   dictate,
   onDictationDown,
@@ -245,6 +246,28 @@ describe('dictate', () => {
         allowTerminal: false
       }
     ])
+  })
+
+  it('keeps a dictated password out of history, recovery and the bar (M7)', async () => {
+    h.focus = { ...h.focus, role: 'Edit', password: true }
+    vi.mocked(clearPending).mockClear()
+    vi.mocked(archivePending).mockClear()
+    const res = await dictate('correct horse battery staple')
+    expect(res.ok).toBe(false)
+    expect(h.executed).toEqual([])
+    expect(reports).toEqual([])
+    expect(clearPending).toHaveBeenCalled()
+    expect(archivePending).not.toHaveBeenCalled()
+    expect(showAnswer).not.toHaveBeenCalled()
+  })
+
+  it('does not record a dictation refused in a blocked terminal (M7)', async () => {
+    h.focus = { ...h.focus, process: 'windowsterminal.exe', title: 'PowerShell' }
+    h.dictation = { terminal: 'block' }
+    const res = await dictate('list the files')
+    expect(res.ok).toBe(false)
+    expect(h.executed).toEqual([])
+    expect(reports).toEqual([])
   })
 
   it('edits the selection in an editable field', async () => {
