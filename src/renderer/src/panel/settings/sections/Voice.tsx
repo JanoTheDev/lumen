@@ -1,19 +1,105 @@
 import { useEffect, useState } from 'react'
-import type { WakeModelProgress } from '@shared/channels'
+import type { SttStatus, WakeModelProgress } from '@shared/channels'
 import {
   Button,
   Card,
   NumberField,
   ProgressBar,
   Select,
+  Slider,
   Switch,
   TextField,
   announce,
   icons
 } from '../../../ui'
+import { windowsVoices } from '../../../voice/speaker'
 import type { SectionProps } from '../meta'
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
+
+function SpeechModel(): JSX.Element {
+  const [status, setStatus] = useState<SttStatus | null>(null)
+  const [progress, setProgress] = useState<WakeModelProgress | null>(null)
+
+  useEffect(() => {
+    const refresh = (): void => {
+      window.lumen
+        .invoke('voice:stt-status')
+        .then(setStatus)
+        .catch(() => {})
+    }
+    refresh()
+    return window.lumen.on('voice:stt-model-progress', (p) => {
+      setProgress(p)
+      if (p.phase === 'done') {
+        announce('Offline speech recognition is ready')
+        refresh()
+      }
+      if (p.phase === 'error') announce(`Download failed. ${p.message ?? ''}`, 'assertive')
+    })
+  }, [])
+
+  if (!status) return <p className="ui-hint">Checking offline speech recognition…</p>
+  const busy =
+    progress?.phase === 'downloading' ||
+    progress?.phase === 'extracting' ||
+    (status.installing && progress?.phase !== 'error')
+  if (busy) {
+    return (
+      <ProgressBar
+        label={
+          progress?.phase === 'extracting'
+            ? 'Unpacking the speech model'
+            : 'Downloading the speech model'
+        }
+        value={
+          progress?.phase === 'extracting'
+            ? undefined
+            : (progress?.percent ?? status.percent ?? 0) / 100
+        }
+      />
+    )
+  }
+  if (!status.localSupported) {
+    return <p className="ui-hint">Offline recognition can’t run on this PC.</p>
+  }
+  if (status.localInstalled) {
+    return (
+      <p className="panel-ok">
+        <icons.checkCircle /> Offline model installed
+        {status.engine === 'cloud' ? ' (OpenAI is in use)' : ''}
+      </p>
+    )
+  }
+  return (
+    <div className="panel-row">
+      <Button
+        variant="primary"
+        onClick={() => {
+          setProgress({ phase: 'downloading', percent: 0 })
+          window.lumen.invoke('voice:stt-install').catch(() => {})
+        }}
+      >
+        Download offline model ({status.modelSizeMb} MB)
+      </Button>
+      <span className="ui-hint">
+        {progress?.phase === 'error'
+          ? `Last try failed: ${progress.message ?? 'unknown error'}`
+          : 'Free, one-time download.'}
+      </span>
+    </div>
+  )
+}
+
+function useWindowsVoices(): SpeechSynthesisVoice[] {
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  useEffect(() => {
+    windowsVoices()
+      .then(setVoices)
+      .catch(() => {})
+  }, [])
+  return voices
+}
 
 function WakeModel(): JSX.Element {
   const [installed, setInstalled] = useState<boolean | null>(null)
@@ -80,6 +166,15 @@ function WakeModel(): JSX.Element {
 
 export function Voice({ cfg, patch }: SectionProps): JSX.Element {
   const speaking = cfg.voice.tts !== 'off'
+  const cloud = cfg.voice.tts === 'cloud'
+  const winVoices = useWindowsVoices()
+  const voiceOptions = cloud
+    ? OPENAI_VOICES.map((v) => ({ value: v as string, label: v[0].toUpperCase() + v.slice(1) }))
+    : winVoices.map((v) => ({ value: v.name, label: v.name.replace(/^Microsoft /, '') }))
+  // A voice from the other engine (or none yet) shows the voice that will actually be used.
+  const voiceValue = voiceOptions.some((o) => o.value === cfg.voice.ttsVoice)
+    ? cfg.voice.ttsVoice
+    : (voiceOptions[0]?.value ?? '')
   return (
     <>
       <Card
@@ -162,19 +257,60 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
         />
       </Card>
 
+      <Card
+        title="Speech recognition"
+        description="Turns what you say into text. On this PC it’s free and audio never leaves your computer."
+      >
+        <Select
+          label="Recognise speech"
+          value={cfg.voice.stt === 'local' ? 'local' : 'cloud-batch'}
+          options={[
+            { value: 'local', label: 'On this PC (free, private)' },
+            { value: 'cloud-batch', label: 'OpenAI (needs an OpenAI key)' }
+          ]}
+          onChange={(stt) => patch({ voice: { stt } })}
+          hint="Without an OpenAI key, Lumen always uses this PC."
+        />
+        <SpeechModel />
+      </Card>
+
       <Card title="Read answers aloud">
         <Switch
           checked={speaking}
-          onChange={(on) => patch({ voice: { tts: on ? 'cloud' : 'off' } })}
+          onChange={(on) => patch({ voice: { tts: on ? 'windows' : 'off' } })}
           label="Speak answers"
-          hint="Uses an OpenAI voice and needs an OpenAI key."
+          hint="Starts speaking while the answer is still being written."
+        />
+        <Select
+          label="Voice engine"
+          value={cloud ? 'cloud' : 'windows'}
+          disabled={!speaking}
+          options={[
+            { value: 'windows', label: 'Windows voices (free, offline)' },
+            { value: 'cloud', label: 'OpenAI voices (needs an OpenAI key)' }
+          ]}
+          onChange={(tts) =>
+            patch({
+              voice: { tts, ttsVoice: tts === 'cloud' ? 'alloy' : (winVoices[0]?.name ?? '') }
+            })
+          }
         />
         <Select
           label="Voice"
-          value={cfg.voice.ttsVoice}
-          disabled={!speaking}
-          options={OPENAI_VOICES.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1) }))}
+          value={voiceValue}
+          disabled={!speaking || voiceOptions.length === 0}
+          options={voiceOptions}
           onChange={(ttsVoice) => patch({ voice: { ttsVoice } })}
+        />
+        <Slider
+          label="Speed"
+          value={cfg.voice.ttsRate}
+          min={0.5}
+          max={2}
+          step={0.1}
+          disabled={!speaking}
+          format={(v) => `${v.toFixed(1)}×`}
+          onChange={(ttsRate) => patch({ voice: { ttsRate } })}
         />
         <div className="panel-row">
           <Button
@@ -182,7 +318,7 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
             disabled={!speaking}
             onClick={() => {
               window.lumen
-                .invoke('voice:speak', 'Hi, this is Lumen.')
+                .invoke('voice:speak', 'Hi, this is Lumen. This is how I sound.')
                 .then((r) => {
                   if (!r.ok) announce(r.error ?? 'Couldn’t play the preview.', 'assertive')
                 })

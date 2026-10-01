@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
+import { startSpeaker } from './voice/speaker'
 
 type ClaudeResponse = ModelResponse
 
@@ -246,6 +247,8 @@ export default function App(): JSX.Element {
       window.api.closeHUD()
     })
   }, [abort])
+
+  useEffect(() => startSpeaker(), [])
 
   useEffect(() => {
     return window.api.onRunQuery((text) => {
