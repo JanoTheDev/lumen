@@ -8,7 +8,7 @@ import { basename, join, relative, sep } from 'path'
 import { fetchPack, githubPackSource } from '../packs/fetch'
 import { readZip } from '../packs/zip-read'
 import { MAX_FILE_BYTES, MAX_FILES, safeRel } from './library'
-import { parseSkillMd, type ParsedSkillMd } from './skillmd'
+import { parseSkillMd, sanitizeSkillMd, type ParsedSkillMd } from './skillmd'
 
 /** Files kept from an imported skill folder (text a skill may reference). */
 const TEXT_EXT = /\.(md|txt|json|ya?ml|toml|csv|xml|html?|js|mjs|cjs|ts|py|sh|ps1|sql)$/i
@@ -24,6 +24,8 @@ export interface ImportedSkill {
   files: { path: string; text: string }[]
   /** Scripts in the folder (Claude may run them when it uses the skill). */
   scripts: string[]
+  /** What re-rendering removed (header settings, load-time commands). */
+  notes: string[]
   from: string
 }
 
@@ -86,8 +88,11 @@ export function pickSkill(files: FileSet, from: string, pick?: string): Imported
         .join(', ')}. Say which one`
     )
   const prefix = hit.f ? `${hit.f}/` : ''
-  const skillMd = files.get(`${prefix}SKILL.md`)!.toString('utf8')
-  const parsed = parseSkillMd(skillMd, hit.name.toLowerCase())
+  // Re-rendered: allowed-tools, hooks, model … and !`cmd` lines never reach Claude Code.
+  const { skillMd, parsed, notes } = sanitizeSkillMd(
+    files.get(`${prefix}SKILL.md`)!.toString('utf8'),
+    hit.name.toLowerCase()
+  )
   const extra: { path: string; text: string }[] = []
   const scripts: string[] = []
   for (const [p, data] of files) {
@@ -100,7 +105,7 @@ export function pickSkill(files: FileSet, from: string, pick?: string): Imported
     if (SCRIPT_EXT.test(rel)) scripts.push(rel)
   }
   if (extra.length > MAX_FILES) throw new Error('that skill has too many files')
-  return { parsed, skillMd, files: extra, scripts, from }
+  return { parsed, skillMd, files: extra, scripts, notes, from }
 }
 
 /** A blob link to a file → the tree link of its folder (the pack fetcher takes trees). */

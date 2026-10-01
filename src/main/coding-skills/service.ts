@@ -164,9 +164,12 @@ export class CodingSkills {
       .split('-')
       .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
       .join(' ')
-    const warnings = s.scripts.length
-      ? [`has scripts Claude may run: ${s.scripts.slice(0, 6).join(', ')}`]
-      : []
+    const warnings = [
+      ...(s.scripts.length
+        ? [`has scripts Claude may run: ${s.scripts.slice(0, 6).join(', ')}`]
+        : []),
+      ...s.notes
+    ]
     return this.makeDraft(
       {
         name: s.parsed.name,

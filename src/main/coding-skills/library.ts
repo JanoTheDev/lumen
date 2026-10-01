@@ -20,6 +20,7 @@ import {
 import { dirname, join, relative, resolve, sep } from 'path'
 import { z } from 'zod'
 import { CODING_SKILL_NAME_RE, type CodingSkillInfo } from '@shared/coding-skills'
+import { sanitizeSkillMd } from './skillmd'
 
 export const PLUGIN_NAME = 'lumen-skills'
 export const MAX_SKILLS = 200
@@ -242,7 +243,17 @@ export class CodingSkillLibrary {
       )}\n`,
       'utf8'
     )
-    for (const s of skills) copyTree(join(this.libraryDir, s), join(dir, 'skills', s))
+    for (const s of skills) {
+      const to = join(dir, 'skills', s)
+      copyTree(join(this.libraryDir, s), to)
+      // Older entries and Settings edits: no header permissions / hooks, no load-time commands.
+      try {
+        const md = join(to, 'SKILL.md')
+        writeFileSync(md, sanitizeSkillMd(readFileSync(md, 'utf8'), s).skillMd, 'utf8')
+      } catch {
+        rmSync(to, { recursive: true, force: true })
+      }
+    }
     return dir
   }
 

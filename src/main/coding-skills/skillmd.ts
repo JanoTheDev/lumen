@@ -51,7 +51,47 @@ export function renderSkillMd(s: SkillMdInput): string {
   if (s.sources?.length) meta.push(`  sources: [${s.sources.slice(0, 10).map(q).join(', ')}]`)
   if (meta.length) head.push('metadata:', ...meta)
   head.push('---')
-  return `${head.join('\n')}\n\n${s.body.trim().slice(0, BODY_MAX)}\n`
+  return `${head.join('\n')}\n\n${neutralizeBody(s.body).body.trim().slice(0, BODY_MAX)}\n`
+}
+
+/**
+ * Claude Code runs dynamic context (!`command` inline, ```! blocks) when it loads a skill.
+ * Lumen-written and imported skills keep such lines as plain code (as plugins/convert does).
+ */
+export function neutralizeBody(body: string): { body: string; changed: boolean } {
+  const out = body.replace(/(^|\s)!`([^`\n]*)`/g, '$1`$2`').replace(/^(\s*)```!\s*$/gm, '$1```')
+  return { body: out, changed: out !== body }
+}
+
+/** Header keys Lumen keeps; anything else (allowed-tools, hooks, model, context …) is dropped. */
+const KEPT_KEYS = new Set(['name', 'description', 'when_to_use', 'metadata'])
+
+/**
+ * An imported (or library) SKILL.md re-rendered from its name, description, when_to_use and
+ * metadata only, with dynamic-context commands made plain. `notes` say what was dropped.
+ * Throws like `parseSkillMd`.
+ */
+export function sanitizeSkillMd(
+  text: string,
+  fallbackName?: string
+): { skillMd: string; parsed: ParsedSkillMd; notes: string[] } {
+  const parsed = parseSkillMd(text, fallbackName)
+  const { data } = splitFrontmatter(text)
+  const dropped = Object.keys(data).filter((k) => !KEPT_KEYS.has(k))
+  const notes: string[] = []
+  if (dropped.length)
+    notes.push(`dropped Claude Code settings from its header: ${dropped.slice(0, 10).join(', ')}`)
+  if (neutralizeBody(parsed.body).changed)
+    notes.push('commands it would run while loading are kept as plain text')
+  const skillMd = renderSkillMd({
+    name: parsed.name,
+    description: parsed.description,
+    whenToUse: parsed.whenToUse,
+    body: parsed.body,
+    sources: parsed.sources,
+    version: parsed.version
+  })
+  return { skillMd, parsed: parseSkillMd(skillMd, fallbackName), notes }
 }
 
 export interface ParsedSkillMd {
@@ -131,6 +171,11 @@ const WARN_RULES: [RegExp, string][] = [
     'sends secrets somewhere'
   ],
   [/--dangerously-skip-permissions|bypassPermissions/i, 'turns off Claude Code permissions'],
+  [
+    /^\s*(?:allowed-tools|disallowed-tools|hooks)\s*:/,
+    'sets Claude Code tool permissions or hooks'
+  ],
+  [/(^|\s)!`|^\s*```!\s*$/, 'runs a command when Claude loads it'],
   [/\bnpm\s+publish\b|\bcargo\s+publish\b|\btwine\s+upload\b/i, 'publishes a package']
 ]
 
