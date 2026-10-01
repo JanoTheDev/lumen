@@ -1,6 +1,8 @@
 // read_file for background tasks: only text files inside a granted folder (config
-// agent.background.readFolders or the skill's files.read). Symlinks and ".." are resolved
-// before the check, so a link out of a granted folder is refused too.
+// agent.background.readFolders or the skill's files.read). UNC and device paths are refused
+// before any file system call (a \\host\share path would make Windows connect out and send
+// the user's NTLM hash). The normalized path is checked first, then symlinks are resolved and
+// checked again, so a link out of a granted folder is refused too.
 import { existsSync, readFileSync, realpathSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { extname, isAbsolute, relative, resolve } from 'path'
@@ -46,16 +48,28 @@ export function inside(root: string, file: string): boolean {
   return !!rel && !rel.startsWith('..') && !isAbsolute(rel)
 }
 
+/** \\server\share, //server/share, \\?\..., \\.\... and other network or device paths. */
+export function isRemoteOrDevicePath(path: string): boolean {
+  const p = path.trim()
+  return /^[\\/]{2}/.test(p) || /^[a-z]+:[\\/]{2}/i.test(p) || p.includes('\0')
+}
+
 export function readGranted(path: string, roots: readonly string[]): ReadResult {
+  if (isRemoteOrDevicePath(path))
+    return { ok: false, error: 'E_DENIED: network and device paths cannot be read.' }
   if (!isAbsolute(path)) return { ok: false, error: 'E_DENIED: give an absolute path.' }
-  const realRoots = roots
-    .map(expandRoot)
-    .filter((r): r is string => !!r && existsSync(r))
+  const lexical = resolve(path)
+  const grants = roots.map(expandRoot).filter((r): r is string => !!r && !isRemoteOrDevicePath(r))
+  // Lexical containment before touching the disk at all.
+  if (!grants.some((r) => inside(r, lexical)))
+    return { ok: false, error: 'E_DENIED: that file is outside the granted folders.' }
+  const realRoots = grants
+    .filter((r) => existsSync(r))
     .map(real)
     .filter((r): r is string => !!r)
   if (!realRoots.length)
     return { ok: false, error: 'E_DENIED: no folders are granted to background tasks.' }
-  const file = real(resolve(path))
+  const file = real(lexical)
   if (!file) return { ok: false, error: 'File not found.' }
   if (!realRoots.some((r) => inside(r, file)))
     return { ok: false, error: 'E_DENIED: that file is outside the granted folders.' }
