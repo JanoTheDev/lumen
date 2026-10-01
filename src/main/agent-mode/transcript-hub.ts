@@ -10,11 +10,20 @@ import type { BackgroundTask } from '@shared/types'
 import type { TaskRecord } from './background/manager'
 import { taskTitle } from './background/manager'
 import { applyClaudeEvent, applyClaudeUser, applyClaudeView } from './transcript-claude'
+import { redactForLog } from '../actions/redact'
 import { TranscriptRecorder, type ChatMeta, type TranscriptData } from './transcript'
-import type { TranscriptStore } from './transcript-store'
+import { KEEP_OTHER, type TranscriptStore } from './transcript-store'
 
 export const SAVE_DELAY_MS = 1000
 const MAX_STEERS = 10
+/** Phases a foreground or Claude transcript may still change in (its recorder stays loaded). */
+const LIVE = new Set<ChatPhase>(['queued', 'running', 'paused', 'asking', 'confirm'])
+
+/** A steer message the task never read (it ended first). */
+export function unreadLine(notes: readonly string[]): string {
+  const said = notes.map((n) => `“${n}”`).join(', ')
+  return `The task ended before it read your message: ${said}. Say or type it again as a new request if you still want it.`
+}
 
 type Watcher = (d: ChatDelta) => void
 
@@ -51,15 +60,37 @@ export class TranscriptHub {
   private claudeTasks = new Set<string>()
   private store: TranscriptStore | null = null
   private header: (id: string) => ChatHeader | null = () => null
+  /** Metas of the foreground and Claude transcripts on disk, read once (the list asks often). */
+  private index: Map<string, ChatMeta> | null = null
+  private seq = 0
+  /** Fills an empty Claude session chat from the CLI's own history (transcript-history.ts). */
+  private history: ((id: string, rec: TranscriptRecorder) => void) | null = null
+  private historyTried = new Set<string>()
 
   constructor(private readonly deps: HubDeps = DEFAULT_DEPS) {}
 
   setStore(store: TranscriptStore | null): void {
     this.store = store
+    this.index = null
+  }
+
+  private metaIndex(): Map<string, ChatMeta> {
+    if (this.index) return this.index
+    const index = new Map<string, ChatMeta>()
+    for (const id of this.store?.ids() ?? []) {
+      if (id.startsWith('bg_')) continue
+      const meta = this.recs.get(id)?.meta ?? this.store?.load(id)?.meta
+      if (meta) index.set(id, meta)
+    }
+    return (this.index = index)
   }
 
   setHeaderSource(fn: (id: string) => ChatHeader | null): void {
     this.header = fn
+  }
+
+  setHistorySource(fn: ((id: string, rec: TranscriptRecorder) => void) | null): void {
+    this.history = fn
   }
 
   /** The recorder for `id` (loaded from disk the first time, or new). */
@@ -83,30 +114,44 @@ export class TranscriptHub {
   }
 
   has(id: string): boolean {
-    return this.recs.has(id) || !!this.store?.load(id)
+    if (this.recs.has(id)) return true
+    if (!id.startsWith('bg_')) return this.metaIndex().has(id)
+    return !!this.store?.load(id)
   }
 
   view(id: string): ChatView | null {
     const header = this.header(id)
     if (!header) return null
     const r = this.rec(id)
-    return { header, entries: [...r.entries], dropped: r.dropped }
+    if (this.history && id.startsWith('cc_') && !this.historyTried.has(id)) {
+      this.historyTried.add(id)
+      if (!r.entries.length) {
+        try {
+          this.history(id, r)
+        } catch {
+          /* no history: the chat starts empty */
+        }
+      }
+    }
+    return { header, entries: [...r.entries], dropped: r.dropped, seq: this.seq }
   }
 
   /** Metas of foreground and Claude transcripts (the view's task list). */
   metas(): { id: string; meta: ChatMeta }[] {
-    const out = new Map<string, ChatMeta>()
-    for (const id of this.store?.ids() ?? []) {
-      if (id.startsWith('bg_')) continue
-      const meta = this.recs.get(id)?.meta ?? this.store?.load(id)?.meta
-      if (meta) out.set(id, meta)
-    }
+    const out = new Map(this.metaIndex())
     for (const [id, r] of this.recs) if (!id.startsWith('bg_') && r.meta) out.set(id, r.meta)
     return [...out].map(([id, meta]) => ({ id, meta }))
   }
 
   meta(id: string): ChatMeta | undefined {
-    return this.recs.get(id)?.meta ?? this.store?.load(id)?.meta
+    const r = this.recs.get(id)
+    if (r) return r.meta
+    return id.startsWith('bg_') ? this.store?.load(id)?.meta : this.metaIndex().get(id)
+  }
+
+  /** Recorders kept in memory (tests). */
+  get loaded(): number {
+    return this.recs.size
   }
 
   // ---- live view ----
@@ -132,8 +177,11 @@ export class TranscriptHub {
     if (header) this.push(id, { id, header })
   }
 
-  private push(id: string, d: ChatDelta): void {
-    for (const fn of this.watchers.get(id) ?? []) {
+  private push(id: string, delta: ChatDelta): void {
+    const set = this.watchers.get(id)
+    if (!set?.size) return
+    const d = { ...delta, seq: ++this.seq }
+    for (const fn of set) {
       try {
         fn(d)
       } catch {
@@ -152,12 +200,39 @@ export class TranscriptHub {
     )
   }
 
-  flush(id: string): void {
+  private clearTimer(id: string): void {
     const t = this.timers.get(id)
     if (t !== undefined) this.deps.clearTimer(t)
     this.timers.delete(id)
+  }
+
+  flush(id: string): void {
+    this.clearTimer(id)
     const r = this.recs.get(id)
-    if (r && this.store) this.store.save(r.data())
+    if (!r || !this.store) return
+    this.store.save(r.data())
+    if (r.meta && !id.startsWith('bg_')) this.metaIndex().set(id, r.meta)
+  }
+
+  /**
+   * Ended foreground and Claude transcripts leave memory once saved (they load again from disk
+   * when opened); the files beyond the newest KEEP_OTHER go.
+   */
+  evictIdle(): void {
+    // Without a store the recorder is the only copy.
+    if (!this.store) return
+    for (const [id, r] of [...this.recs]) {
+      if (id.startsWith('bg_') || this.watched(id) || (r.meta && LIVE.has(r.meta.phase))) continue
+      // Opened but never used (a view of a gone task): nothing to keep.
+      if (r.meta || r.entries.length) this.flush(id)
+      else this.clearTimer(id)
+      this.recs.delete(id)
+      this.steers.delete(id)
+    }
+    const index = this.metaIndex()
+    if (!this.store || index.size <= KEEP_OTHER) return
+    const kept = new Set(this.store.prune(null, KEEP_OTHER))
+    for (const id of [...index.keys()]) if (!kept.has(id)) index.delete(id)
   }
 
   flushAll(): void {
@@ -165,12 +240,11 @@ export class TranscriptHub {
   }
 
   remove(id: string): void {
-    const t = this.timers.get(id)
-    if (t !== undefined) this.deps.clearTimer(t)
-    this.timers.delete(id)
+    this.clearTimer(id)
     this.recs.delete(id)
     this.steers.delete(id)
     this.claudeTasks.delete(id)
+    this.index?.delete(id)
     this.store?.remove(id)
   }
 
@@ -205,6 +279,9 @@ export class TranscriptHub {
       case 'resumed':
         r.status('Going on.')
         break
+      case 'unread':
+        r.status(unreadLine(e.texts))
+        break
       case 'end':
         endBackground(r, e.task)
         this.flush(id)
@@ -219,7 +296,7 @@ export class TranscriptHub {
     if (!r.entries.length) r.user(prompt)
     r.meta = {
       kind: 'foreground',
-      title: taskTitle(prompt),
+      title: taskTitle(redactForLog(prompt)),
       phase: 'running',
       startedAt: r.meta?.startedAt ?? this.deps.now(),
       modelCalls: r.meta?.modelCalls ?? 0,
@@ -254,7 +331,9 @@ export class TranscriptHub {
     const r = this.recs.get(id)
     if (!r) return
     r.closeOpen()
+    const unread = this.steers.get(id) ?? []
     this.steers.delete(id)
+    if (unread.length) r.status(unreadLine(unread))
     let phase: ChatPhase
     if ('error' in end) {
       phase = end.cancelled ? 'cancelled' : 'failed'
@@ -270,6 +349,15 @@ export class TranscriptHub {
     if (r.meta)
       r.meta = { ...r.meta, phase, ...(phase === 'paused' ? {} : { endedAt: this.deps.now() }) }
     this.flush(id)
+    this.touch(id)
+    this.evictIdle()
+  }
+
+  /** The running foreground task was paused or goes on (the chat's buttons, voice). */
+  foregroundPaused(id: string, paused: boolean): void {
+    const r = this.recs.get(id)
+    if (!r) return
+    r.status(paused ? 'Paused. It goes on when you press Resume.' : 'Going on.')
     this.touch(id)
   }
 
@@ -313,6 +401,7 @@ export class TranscriptHub {
     ) {
       this.saveSoon(v.id)
       this.touch(v.id)
+      if (m && !LIVE.has(m.phase) && before && LIVE.has(before.phase)) this.evictIdle()
     }
   }
 }

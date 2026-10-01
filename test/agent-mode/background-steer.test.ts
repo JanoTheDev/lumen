@@ -111,6 +111,20 @@ describe('background steering', () => {
     const end = records[records.length - 1].e
     expect(end.type === 'end' && end.task.phase).toBe('done')
   })
+
+  it('a steer message the task never read is recorded before the end', async () => {
+    const { m, finish, records } = setup()
+    const t = m.start({ prompt: 'check my email', origin: 'voice' })
+    expect(m.steer(t.id, 'also check spam')).toBe(true)
+    finish({ summary: 'Done.' })
+    await tick()
+    const types = records.map((r) => r.e.type)
+    expect(types.slice(-2)).toEqual(['unread', 'end'])
+    expect(records.find((r) => r.e.type === 'unread')?.e).toEqual({
+      type: 'unread',
+      texts: ['also check spam']
+    })
+  })
 })
 
 describe('runner hooks', () => {

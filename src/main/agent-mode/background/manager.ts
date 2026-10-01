@@ -51,6 +51,8 @@ export type TaskRecord =
   | { type: 'answer'; text: string }
   | { type: 'steer'; text: string }
   | { type: 'paused' | 'resumed' }
+  /** Steer messages the task never read (it ended before its next model turn). */
+  | { type: 'unread'; texts: string[] }
   | { type: 'end'; task: BackgroundTask }
 
 export interface RunOutcome {
@@ -328,6 +330,7 @@ export class BackgroundManager {
     if (!e || !isOpen(e.task)) return
     e.answer = undefined
     e.paused = false
+    if (e.steers.length) this.deps.record?.(id, { type: 'unread', texts: e.steers })
     e.steers = []
     this.patch(id, { ...p, endedAt: this.deps.now() })
     this.deps.record?.(id, { type: 'end', task: e.task })

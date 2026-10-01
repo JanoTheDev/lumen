@@ -12,7 +12,8 @@ import {
 } from '@shared/task-chat'
 import type { BackgroundTask } from '@shared/types'
 import { TranscriptHub, type HubDeps } from '../../src/main/agent-mode/transcript-hub'
-import { TranscriptStore } from '../../src/main/agent-mode/transcript-store'
+import { KEEP_OTHER, TranscriptStore } from '../../src/main/agent-mode/transcript-store'
+import type { TranscriptData } from '../../src/main/agent-mode/transcript'
 import {
   backgroundHeader,
   chatSummaries,
@@ -190,6 +191,111 @@ describe('TranscriptHub', () => {
       project: 'app',
       title: 'Claude: app: fix tests'
     })
+  })
+})
+
+describe('TranscriptHub: memory, disk reads and privacy', () => {
+  /** A store in memory that counts loads. */
+  function memStore(): TranscriptStore & { loads: number; files: Map<string, TranscriptData> } {
+    const files = new Map<string, TranscriptData>()
+    const s = {
+      dir: '',
+      loads: 0,
+      files,
+      load(id: string) {
+        s.loads++
+        return files.get(id) ?? null
+      },
+      save(d: TranscriptData) {
+        files.set(d.id, JSON.parse(JSON.stringify(d)) as TranscriptData)
+      },
+      remove(id: string) {
+        files.delete(id)
+      },
+      ids: () => [...files.keys()],
+      prune(_t: unknown, keep = KEEP_OTHER) {
+        const ids = [...files.keys()].filter((i) => !i.startsWith('bg_'))
+        ids.slice(0, Math.max(0, ids.length - keep)).forEach((i) => files.delete(i))
+        return [...files.keys()]
+      }
+    }
+    return s as unknown as TranscriptStore & { loads: number; files: Map<string, TranscriptData> }
+  }
+
+  it('reads each saved transcript from disk at most once for the list', () => {
+    const store = memStore()
+    for (const id of ['t_old001', 'cc_old002'])
+      store.save({
+        id,
+        entries: [],
+        dropped: 0,
+        meta: {
+          kind: 'foreground',
+          title: id,
+          phase: 'done',
+          startedAt: 1,
+          modelCalls: 0,
+          costUsd: 0
+        }
+      })
+    const { hub } = hubWith(store)
+    hub.metas()
+    hub.metas()
+    hub.meta('t_old001')
+    expect(hub.has('cc_old002')).toBe(true)
+    expect(store.loads).toBe(2)
+  })
+
+  it('drops ended foreground transcripts from memory and keeps the newest on disk', () => {
+    const store = memStore()
+    const { hub } = hubWith(store)
+    for (let i = 0; i < 40; i++) {
+      const id = `t_many${String(i).padStart(2, '0')}`
+      hub.foregroundStart(id, `task ${i}`)
+      hub.foregroundEnd(id, { status: 'done', summary: 'ok' })
+    }
+    expect(hub.loaded).toBeLessThanOrEqual(1)
+    expect(store.files.size).toBeLessThanOrEqual(KEEP_OTHER)
+    expect(hub.metas().length).toBeLessThanOrEqual(KEEP_OTHER)
+    // Opened again later: it comes back from disk.
+    expect(hub.rec('t_many39').entries.map((e) => e.k)).toEqual(['user', 'result'])
+  })
+
+  it('keeps no secret in a foreground task title', () => {
+    const { hub } = hubWith()
+    const gh = ['ghp', 'a1B2'.repeat(9)].join('_')
+    hub.foregroundStart('t_title1', `use token ${gh} to open the repo`)
+    expect(hub.meta('t_title1')?.title).not.toContain('ghp_')
+  })
+
+  it('notes a steer message the foreground task ended before reading', () => {
+    const { hub } = hubWith()
+    hub.foregroundStart('t_unread', 'fill the form')
+    hub.steer('t_unread', 'use my work address')
+    hub.foregroundEnd('t_unread', { status: 'done', summary: 'Filled.' })
+    const status = hub.rec('t_unread').entries.find((e) => e.k === 'status')
+    expect(status).toMatchObject({ k: 'status' })
+    expect(status && 'text' in status ? status.text : '').toContain('use my work address')
+  })
+
+  it('a background task’s unread steer message becomes a status line', () => {
+    const { hub } = hubWith()
+    const t = task({ id: 'bg_unread1' })
+    hub.background(t.id, { type: 'start', task: t })
+    hub.background(t.id, { type: 'unread', texts: ['also check spam'] })
+    expect(hub.rec(t.id).entries[1]).toMatchObject({ k: 'status' })
+  })
+
+  it('numbers pushes so a view can tell what its snapshot already has', () => {
+    const { hub } = hubWith()
+    hub.setHeaderSource(header)
+    const got: ChatDelta[] = []
+    hub.watch('bg_seq001', (d) => got.push(d))
+    hub.rec('bg_seq001').user('first')
+    const snap = hub.view('bg_seq001')
+    hub.rec('bg_seq001').user('second')
+    expect(snap?.seq).toBe(got[0].seq)
+    expect(got[1].seq).toBeGreaterThan(snap?.seq ?? 0)
   })
 })
 

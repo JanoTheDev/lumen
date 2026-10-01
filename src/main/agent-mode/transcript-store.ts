@@ -96,15 +96,15 @@ export class TranscriptStore {
   }
 
   /**
-   * Background transcripts whose task is gone are removed; foreground and Claude transcripts
-   * beyond the newest `keepOther` too. Returns the ids kept.
+   * Background transcripts whose task is gone are removed (`tasks` null: background ones stay);
+   * foreground and Claude transcripts beyond the newest `keepOther` too. Returns the ids kept.
    */
-  prune(tasks: ReadonlySet<string>, keepOther = KEEP_OTHER): string[] {
+  prune(tasks: ReadonlySet<string> | null, keepOther = KEEP_OTHER): string[] {
     const other: { id: string; t: number }[] = []
     const kept: string[] = []
     for (const id of this.ids()) {
       if (id.startsWith('bg_')) {
-        if (tasks.has(id)) kept.push(id)
+        if (!tasks || tasks.has(id)) kept.push(id)
         else this.remove(id)
         continue
       }
