@@ -102,7 +102,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Smart helpers',
     icon: icons.sparkles,
     keywords:
-      'focus mode dim declutter undo shortcut coach tips comfort fatigue tired break error rescue what changed did it work reading level plain expert journal learned'
+      'focus mode dim declutter undo shortcut coach tips comfort fatigue tired break error rescue what changed did it work reading level plain expert journal learned point and say click this move this there deictic'
   },
   {
     id: 'bridges',

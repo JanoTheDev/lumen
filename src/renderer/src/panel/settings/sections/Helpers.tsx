@@ -6,6 +6,7 @@ import type { CoachStatus } from '@shared/channels'
 import type { HelpersConfig, ReadingLevel } from '@shared/config'
 import { Button, Card, Kbd, Markdown, NumberField, SegmentedControl, Switch } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { Pointing } from './Pointing'
 
 const LEVELS: { value: ReadingLevel; label: string }[] = [
   { value: 'plain', label: 'Plain' },
@@ -250,6 +251,8 @@ export function Helpers({ cfg, patch }: SectionProps): JSX.Element {
         />
         <Journal on={h.journal} />
       </Card>
+
+      <Pointing h={h} set={set} />
     </>
   )
 }

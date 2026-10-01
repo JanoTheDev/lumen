@@ -32,6 +32,7 @@ import { cancelAll } from './query/cancel'
 import { interceptLocal } from './query/local'
 import { installHelpers, interceptHelpers } from './coach'
 import { registerHelpersIpc } from './coach/ipc'
+import { installDeictic, interceptDeictic } from './deictic'
 import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
 import { installClaudeCode, interceptClaudeCode, shutdownClaudeCode } from './claude-code'
 import { runQuery } from './query/pipeline'
@@ -143,6 +144,7 @@ function registerIpc(): void {
       interceptAgentMode(prompt) ??
       interceptRoutines(prompt) ??
       interceptHelpers(prompt) ??
+      interceptDeictic(prompt) ??
       interceptLocal(prompt),
     preempt: (prompt, opts, scope) =>
       opts.lowDetail ? Promise.resolve(false) : maybeAutoDictate(prompt, scope.signal),
@@ -196,6 +198,7 @@ app.whenReady().then(() => {
   installLessonOutput()
   installTeach()
   installHelpers()
+  installDeictic()
   installSkills()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
   installLiveFeedback(announce)

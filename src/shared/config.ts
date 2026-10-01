@@ -272,7 +272,11 @@ const helpersSchema = z.object({
   readingLevelApps: z
     .record(z.string().max(80), z.enum(READING_LEVELS))
     .refine((o) => Object.keys(o).length <= 100, 'too many apps'),
-  journal: z.boolean()
+  journal: z.boolean(),
+  /** "click this", "move this there": the pointer is watched (memory, 10 s) while on. */
+  deictic: z.boolean(),
+  /** Speak and target unnamed controls by their saved community labels. */
+  labels: z.boolean()
 })
 
 export type HelpersConfig = z.infer<typeof helpersSchema>
@@ -289,7 +293,9 @@ export const HELPERS_DEFAULTS: HelpersConfig = {
   whatChanged: false,
   readingLevel: 'standard',
   readingLevelApps: {},
-  journal: false
+  journal: false,
+  deictic: false,
+  labels: true
 }
 
 export const configV2Schema = z.object({
