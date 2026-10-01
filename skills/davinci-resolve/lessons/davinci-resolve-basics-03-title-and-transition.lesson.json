@@ -1,0 +1,230 @@
+{
+  "id": "davinci-resolve-basics-03-title-and-transition",
+  "app": "davinci-resolve",
+  "title": "Add a title and a transition",
+  "summary": "Put a Text Plus title over your video and blend two clips with a Cross Dissolve.",
+  "level": "beginner",
+  "minutes": 8,
+  "prereqs": ["davinci-resolve-basics-02-cut-and-trim"],
+  "appVersion": ">=20",
+  "tags": ["titles", "transitions", "effects"],
+  "steps": [
+    {
+      "id": "open-edit-page",
+      "say": "Click Edit on the bottom bar of the window to open the Edit page.",
+      "target": {
+        "region": "page-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "allOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "DaVinci Resolve"
+            },
+            {
+              "type": "anyOf",
+              "checks": [
+                {
+                  "type": "bridge",
+                  "app": "davinci-resolve",
+                  "expect": {
+                    "page": "edit"
+                  }
+                },
+                {
+                  "type": "keypress",
+                  "combo": "Shift+4"
+                },
+                {
+                  "type": "vision",
+                  "prompt": "Is the Edit page active, with the Edit icon highlighted on the bottom bar and a timeline across the lower part of the window?"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The page buttons are icons with labels in a row along the very bottom edge. Edit is one of them.",
+        "You can also press Shift 4 to jump straight to the Edit page."
+      ],
+      "why": "Every task in Resolve belongs to a page, and the Edit page has the tools for this lesson.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-effects",
+      "say": "Click Effects near the top left of the window to open the Effects panel.",
+      "target": {
+        "text": "Effects"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Effects panel open on the left, showing a Toolbox list with Video Transitions and Titles?"
+        }
+      },
+      "hints": [
+        "Effects is a button in the toolbar under the menu bar, next to Media Pool.",
+        "In older versions the button is called Effects Library."
+      ],
+      "why": "The Effects panel holds the ready-made titles and transitions."
+    },
+    {
+      "id": "find-text-plus",
+      "say": "In the Toolbox list, click Titles, then find Text Plus under Fusion Titles.",
+      "target": {
+        "text": "Titles"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Titles list showing in the Effects panel, with a Text+ entry visible?"
+        }
+      },
+      "hints": [
+        "Text Plus appears as Text with a plus sign. Scroll down past the basic titles to Fusion Titles.",
+        "Type Text into the search box at the top of the Effects panel to filter the list."
+      ],
+      "why": "Text Plus gives you more styling options than the basic Text title."
+    },
+    {
+      "id": "place-title",
+      "say": "Drag Text Plus onto the empty track above your clip in the timeline.",
+      "target": {
+        "region": "edit-timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "davinci-resolve",
+              "expect": {
+                "titleCount": {
+                  "gte": 1
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new title clip on a video track above the other clips?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Drop it on track V2, above your video, so the text shows on top of the picture.",
+        "If there is no empty track, drop it above the top track and Resolve adds one."
+      ],
+      "why": "Clips on higher tracks are drawn on top of the clips below them."
+    },
+    {
+      "id": "open-inspector",
+      "say": "Click the title clip, then click Inspector at the top right of the window.",
+      "target": {
+        "text": "Inspector"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Inspector panel open on the right, showing text settings for the title?"
+        }
+      },
+      "hints": [
+        "Inspector is the last button at the right end of the toolbar under the menu bar.",
+        "Double clicking the title clip in the timeline also opens it in the Inspector."
+      ],
+      "why": "The Inspector is where you change the words, font, size and color."
+    },
+    {
+      "id": "type-title",
+      "say": "In the Inspector, click the Text box, delete the sample words, and type your title.",
+      "target": {
+        "region": "edit-inspector"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the viewer show the new title text over the video instead of the sample text?"
+        }
+      },
+      "hints": [
+        "The Text box is at the top of the Inspector, under the Title tab.",
+        "Move the playhead over the title clip so the viewer shows it."
+      ],
+      "why": "Your own words replace the placeholder text in the title."
+    },
+    {
+      "id": "add-transition",
+      "say": "In the Toolbox list, click Video Transitions, then drag Cross Dissolve onto the cut between two clips.",
+      "target": {
+        "text": "Cross Dissolve"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+T"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a transition marker sitting across the join between two clips on the timeline?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Drop it right on the line where one clip ends and the next one starts.",
+        "Or click that join and press Control T, which adds the default Cross Dissolve."
+      ],
+      "why": "A dissolve fades one shot into the next so the change feels smooth."
+    },
+    {
+      "id": "watch",
+      "say": "Move the playhead before the transition and press Space to watch it.",
+      "target": {
+        "shortcut": "Space"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Space"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the video playing in the timeline viewer?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click in the time ruler a little to the left of the join, then press Space.",
+        "Press Space again to stop playback."
+      ],
+      "why": "Watching the result tells you whether the title and dissolve last long enough."
+    }
+  ]
+}

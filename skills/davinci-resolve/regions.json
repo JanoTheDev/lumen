@@ -1,0 +1,238 @@
+{
+  "window": "main",
+  "layout": "default page layouts, single screen",
+  "notes": "Approximate fractions of the main window for each page's default layout at 1920 by 1080. Regions with a page field are only valid while that page is active.",
+  "regions": {
+    "menu-bar": { "x": 0, "y": 0, "w": 1, "h": 0.03, "desc": "Menu bar across the top" },
+    "interface-toolbar": {
+      "x": 0,
+      "y": 0.03,
+      "w": 1,
+      "h": 0.04,
+      "desc": "Panel buttons such as Media Pool, Effects and Inspector, under the menu bar"
+    },
+    "page-bar": {
+      "x": 0,
+      "y": 0.955,
+      "w": 1,
+      "h": 0.045,
+      "desc": "Page buttons along the bottom edge: Media, Cut, Edit, Fusion, Color, Fairlight, Deliver"
+    },
+    "media-storage": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.2,
+      "h": 0.45,
+      "desc": "Drive and folder browser, top left",
+      "page": "media"
+    },
+    "media-viewer": {
+      "x": 0.2,
+      "y": 0.07,
+      "w": 0.55,
+      "h": 0.45,
+      "desc": "Clip viewer, top centre",
+      "page": "media"
+    },
+    "media-pool": {
+      "x": 0,
+      "y": 0.52,
+      "w": 0.75,
+      "h": 0.435,
+      "desc": "Media Pool, lower half",
+      "page": "media"
+    },
+    "cut-media-pool": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.35,
+      "h": 0.45,
+      "desc": "Media Pool, top left",
+      "page": "cut"
+    },
+    "cut-viewer": {
+      "x": 0.35,
+      "y": 0.07,
+      "w": 0.65,
+      "h": 0.45,
+      "desc": "Viewer, top right",
+      "page": "cut"
+    },
+    "cut-timeline": {
+      "x": 0,
+      "y": 0.55,
+      "w": 1,
+      "h": 0.405,
+      "desc": "Upper and lower timelines",
+      "page": "cut"
+    },
+    "edit-media-pool": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.22,
+      "h": 0.45,
+      "desc": "Media Pool, top left",
+      "page": "edit"
+    },
+    "edit-effects": {
+      "x": 0,
+      "y": 0.3,
+      "w": 0.22,
+      "h": 0.22,
+      "desc": "Effects panel, left side under the Media Pool when open",
+      "page": "edit"
+    },
+    "edit-source-viewer": {
+      "x": 0.22,
+      "y": 0.07,
+      "w": 0.29,
+      "h": 0.45,
+      "desc": "Source viewer, left of centre",
+      "page": "edit"
+    },
+    "edit-timeline-viewer": {
+      "x": 0.51,
+      "y": 0.07,
+      "w": 0.29,
+      "h": 0.45,
+      "desc": "Timeline viewer, right of centre",
+      "page": "edit"
+    },
+    "edit-inspector": {
+      "x": 0.8,
+      "y": 0.07,
+      "w": 0.2,
+      "h": 0.45,
+      "desc": "Inspector, top right when open",
+      "page": "edit"
+    },
+    "edit-toolbar": {
+      "x": 0.22,
+      "y": 0.52,
+      "w": 0.58,
+      "h": 0.04,
+      "desc": "Timeline toolbar with selection, trim and blade buttons",
+      "page": "edit"
+    },
+    "edit-timeline": {
+      "x": 0,
+      "y": 0.56,
+      "w": 1,
+      "h": 0.395,
+      "desc": "Timeline tracks, lower part of the window",
+      "page": "edit"
+    },
+    "fusion-viewer": {
+      "x": 0,
+      "y": 0.07,
+      "w": 1,
+      "h": 0.45,
+      "desc": "Viewers, top half",
+      "page": "fusion"
+    },
+    "fusion-nodes": {
+      "x": 0,
+      "y": 0.52,
+      "w": 0.75,
+      "h": 0.435,
+      "desc": "Node editor, lower left",
+      "page": "fusion"
+    },
+    "fusion-inspector": {
+      "x": 0.75,
+      "y": 0.52,
+      "w": 0.25,
+      "h": 0.435,
+      "desc": "Inspector, lower right",
+      "page": "fusion"
+    },
+    "color-viewer": {
+      "x": 0.22,
+      "y": 0.07,
+      "w": 0.5,
+      "h": 0.4,
+      "desc": "Viewer, top centre",
+      "page": "color"
+    },
+    "color-nodes": {
+      "x": 0.72,
+      "y": 0.07,
+      "w": 0.28,
+      "h": 0.4,
+      "desc": "Node editor, top right",
+      "page": "color"
+    },
+    "color-clips": {
+      "x": 0,
+      "y": 0.47,
+      "w": 1,
+      "h": 0.12,
+      "desc": "Clip thumbnails strip across the middle",
+      "page": "color"
+    },
+    "color-wheels": {
+      "x": 0,
+      "y": 0.6,
+      "w": 0.55,
+      "h": 0.355,
+      "desc": "Color Wheels with Lift, Gamma, Gain and Offset, bottom left",
+      "page": "color"
+    },
+    "color-scopes": {
+      "x": 0.72,
+      "y": 0.6,
+      "w": 0.28,
+      "h": 0.355,
+      "desc": "Scopes or keyframes, bottom right",
+      "page": "color"
+    },
+    "fairlight-timeline": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.75,
+      "h": 0.885,
+      "desc": "Audio tracks timeline",
+      "page": "fairlight"
+    },
+    "fairlight-mixer": {
+      "x": 0.75,
+      "y": 0.07,
+      "w": 0.25,
+      "h": 0.885,
+      "desc": "Mixer, right side",
+      "page": "fairlight"
+    },
+    "deliver-render-settings": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.27,
+      "h": 0.6,
+      "desc": "Render Settings with presets, top left",
+      "page": "deliver"
+    },
+    "deliver-viewer": {
+      "x": 0.27,
+      "y": 0.07,
+      "w": 0.46,
+      "h": 0.6,
+      "desc": "Viewer, top centre",
+      "page": "deliver"
+    },
+    "deliver-render-queue": {
+      "x": 0.73,
+      "y": 0.07,
+      "w": 0.27,
+      "h": 0.6,
+      "desc": "Render Queue with Render All, top right",
+      "page": "deliver"
+    },
+    "deliver-timeline": {
+      "x": 0,
+      "y": 0.67,
+      "w": 1,
+      "h": 0.285,
+      "desc": "Timeline, lower part",
+      "page": "deliver"
+    }
+  }
+}

@@ -1,0 +1,221 @@
+{
+  "id": "davinci-resolve-basics-04-color-basics",
+  "app": "davinci-resolve",
+  "title": "Basic color correction with the wheels",
+  "summary": "Use Lift, Gamma and Gain on the Color page to fix shadows, midtones and highlights.",
+  "level": "beginner",
+  "minutes": 8,
+  "prereqs": ["davinci-resolve-basics-01-import-and-timeline"],
+  "appVersion": ">=20",
+  "tags": ["color", "grading"],
+  "steps": [
+    {
+      "id": "open-color-page",
+      "say": "Click Color on the bottom bar of the window to open the Color page.",
+      "target": {
+        "region": "page-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "allOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "DaVinci Resolve"
+            },
+            {
+              "type": "anyOf",
+              "checks": [
+                {
+                  "type": "bridge",
+                  "app": "davinci-resolve",
+                  "expect": {
+                    "page": "color"
+                  }
+                },
+                {
+                  "type": "keypress",
+                  "combo": "Shift+6"
+                },
+                {
+                  "type": "vision",
+                  "prompt": "Is the Color page active, with the Color icon highlighted on the bottom bar and color wheels in the lower left?"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The page buttons are icons with labels in a row along the very bottom edge. Color is one of them.",
+        "You can also press Shift 6 to jump straight to the Color page."
+      ],
+      "why": "Every task in Resolve belongs to a page, and the Color page has the tools for this lesson.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+6"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pick-clip",
+      "say": "Click the clip you want to correct in the thumbnail strip across the middle.",
+      "target": {
+        "region": "color-clips"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is one clip thumbnail in the middle strip outlined as the current clip?"
+        }
+      },
+      "hints": [
+        "Each thumbnail in the strip is one clip from your timeline.",
+        "Press the Up or Down arrow to step between clips."
+      ],
+      "why": "Color changes apply to the current clip only."
+    },
+    {
+      "id": "add-node",
+      "say": "Press Alt S to add a new serial node for this correction.",
+      "target": {
+        "shortcut": "Alt+S"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Alt+S"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there one more node box in the node editor at the top right than before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Look at the node editor at the top right. A second numbered box appears after you press it.",
+        "You can also right click in the node editor and choose Add Node, then Add Serial."
+      ],
+      "why": "Keeping each change in its own node lets you switch it off or redo it later.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "color-nodes"
+          },
+          {
+            "t": "keys",
+            "combo": "Alt+S"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lift",
+      "say": "Drag the dial under the Lift wheel slightly left to deepen the shadows.",
+      "target": {
+        "region": "color-wheels"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Do the darkest areas of the picture look darker than at the start of the step?"
+        }
+      },
+      "hints": [
+        "Lift is the first of the four wheels at the bottom left. The dial is the horizontal strip under it.",
+        "Small moves are enough. Double click the wheel name to reset it."
+      ],
+      "why": "Lift controls the shadows, which gives the picture depth."
+    },
+    {
+      "id": "gain",
+      "say": "Drag the dial under the Gain wheel slightly right to brighten the highlights.",
+      "target": {
+        "region": "color-wheels"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Do the brightest areas of the picture look brighter than before?"
+        }
+      },
+      "hints": [
+        "Gain is the third wheel, after Lift and Gamma.",
+        "Stop before skies or white shirts lose all detail."
+      ],
+      "why": "Gain controls the highlights, which sets how bright the picture feels."
+    },
+    {
+      "id": "gamma",
+      "say": "Drag the dial under the Gamma wheel until faces and midtones look natural.",
+      "target": {
+        "region": "color-wheels"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the overall middle brightness of the picture changed compared to before this step?"
+        }
+      },
+      "hints": [
+        "Gamma is the second wheel. Move right to brighten midtones, left to darken them.",
+        "Watch skin tones in the viewer while you drag."
+      ],
+      "why": "Gamma shifts the middle tones without crushing shadows or highlights."
+    },
+    {
+      "id": "compare",
+      "say": "Press Shift D to switch the correction off and on, and compare.",
+      "target": {
+        "shortcut": "Shift+D"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+D"
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the viewer switched between the original and the corrected look?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Press Shift D once to see the original, and once more to bring your grade back.",
+        "Make sure your grade is on again before you leave the page."
+      ],
+      "why": "Comparing before and after shows whether the change really improved the shot.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+D"
+          },
+          {
+            "t": "keys",
+            "combo": "Shift+D"
+          }
+        ]
+      }
+    }
+  ]
+}

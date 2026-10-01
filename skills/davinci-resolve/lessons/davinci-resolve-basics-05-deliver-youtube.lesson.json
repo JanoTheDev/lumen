@@ -1,0 +1,205 @@
+{
+  "id": "davinci-resolve-basics-05-deliver-youtube",
+  "app": "davinci-resolve",
+  "title": "Export a video for YouTube",
+  "summary": "Use the YouTube preset on the Deliver page to render your timeline to a file.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["davinci-resolve-basics-01-import-and-timeline"],
+  "appVersion": ">=20",
+  "tags": ["export", "deliver", "youtube"],
+  "steps": [
+    {
+      "id": "open-deliver-page",
+      "say": "Click Deliver on the bottom bar of the window to open the Deliver page.",
+      "target": {
+        "region": "page-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "allOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "DaVinci Resolve"
+            },
+            {
+              "type": "anyOf",
+              "checks": [
+                {
+                  "type": "bridge",
+                  "app": "davinci-resolve",
+                  "expect": {
+                    "page": "deliver"
+                  }
+                },
+                {
+                  "type": "keypress",
+                  "combo": "Shift+8"
+                },
+                {
+                  "type": "vision",
+                  "prompt": "Is the Deliver page active, with the Deliver icon highlighted on the bottom bar and Render Settings on the left?"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The page buttons are icons with labels in a row along the very bottom edge. Deliver is one of them.",
+        "You can also press Shift 8 to jump straight to the Deliver page."
+      ],
+      "why": "Every task in Resolve belongs to a page, and the Deliver page has the tools for this lesson.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+8"
+          }
+        ]
+      }
+    },
+    {
+      "id": "youtube-preset",
+      "say": "In Render Settings at the top left, click the YouTube preset.",
+      "target": {
+        "text": "YouTube"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the YouTube preset highlighted at the top of Render Settings?"
+        }
+      },
+      "hints": [
+        "The presets are a row of tiles across the top of Render Settings. Scroll the row sideways if needed.",
+        "If you cannot find it, choose H.264 or the Custom Export preset with MP4 format instead."
+      ],
+      "why": "The preset fills in format and codec settings that YouTube handles well."
+    },
+    {
+      "id": "resolution",
+      "say": "Check that the resolution matches your timeline, for example 1080p.",
+      "target": {
+        "region": "deliver-render-settings"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "The YouTube preset has a resolution menu next to it. Pick 1080p for most videos.",
+        "Pick 2160p only if your footage and timeline are 4K."
+      ],
+      "why": "Exporting at the timeline resolution keeps the picture sharp without wasting space."
+    },
+    {
+      "id": "name-and-folder",
+      "say": "Type a file name, then click Browse to choose where to save it.",
+      "target": {
+        "text": "Browse"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a file name filled in and a save folder shown in Render Settings?"
+        }
+      },
+      "hints": [
+        "The Filename and Location fields are near the top of Render Settings.",
+        "Pick a folder you can find later, such as Videos or Desktop."
+      ],
+      "why": "Choosing the folder now saves searching for the finished file later."
+    },
+    {
+      "id": "add-to-queue",
+      "say": "Click Add to Render Queue at the bottom of Render Settings.",
+      "target": {
+        "text": "Add to Render Queue"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "davinci-resolve",
+              "expect": {
+                "renderJobCount": {
+                  "gte": 1
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new job listed in the Render Queue on the right?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Scroll Render Settings down if the button is hidden below the settings.",
+        "This only creates a job. Nothing is exported until the next step."
+      ],
+      "why": "The queue lets you line up several exports and run them together."
+    },
+    {
+      "id": "render-all",
+      "say": "Click Render All in the Render Queue on the right.",
+      "target": {
+        "text": "Render All"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a render progress bar or percentage showing in the Render Queue or under the viewer?"
+        }
+      },
+      "hints": [
+        "Render All is the button at the bottom of the Render Queue panel.",
+        "If the Render Queue is hidden, click Render Queue at the top right of the window."
+      ],
+      "why": "Render All starts writing the video file."
+    },
+    {
+      "id": "wait",
+      "say": "Wait until the job says it is complete, then open the folder to find your video.",
+      "target": {
+        "region": "deliver-render-queue"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "davinci-resolve",
+              "expect": {
+                "renderStatus": "complete"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the render job show as completed, with no progress bar running?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Rendering time depends on the length of the video and your computer.",
+        "Right click the finished job and choose Open File Location to find the file."
+      ],
+      "why": "Checking the finished file confirms the export worked before you upload it.",
+      "timeoutSec": 600
+    }
+  ]
+}

@@ -1,0 +1,314 @@
+{
+  "id": "davinci-resolve-basics-02-cut-and-trim",
+  "app": "davinci-resolve",
+  "title": "Cut and trim clips on the Edit page",
+  "summary": "Split a clip at the playhead, remove a piece without leaving a gap, and trim a clip end.",
+  "level": "beginner",
+  "minutes": 7,
+  "prereqs": ["davinci-resolve-basics-01-import-and-timeline"],
+  "appVersion": ">=20",
+  "tags": ["cut", "trim", "timeline"],
+  "steps": [
+    {
+      "id": "open-edit-page",
+      "say": "Click Edit on the bottom bar of the window to open the Edit page.",
+      "target": {
+        "region": "page-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "allOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "DaVinci Resolve"
+            },
+            {
+              "type": "anyOf",
+              "checks": [
+                {
+                  "type": "bridge",
+                  "app": "davinci-resolve",
+                  "expect": {
+                    "page": "edit"
+                  }
+                },
+                {
+                  "type": "keypress",
+                  "combo": "Shift+4"
+                },
+                {
+                  "type": "vision",
+                  "prompt": "Is the Edit page active, with the Edit icon highlighted on the bottom bar and a timeline across the lower part of the window?"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The page buttons are icons with labels in a row along the very bottom edge. Edit is one of them.",
+        "You can also press Shift 4 to jump straight to the Edit page."
+      ],
+      "why": "Every task in Resolve belongs to a page, and the Edit page has the tools for this lesson.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "selection-mode",
+      "say": "Press A to make sure the Selection tool is active.",
+      "target": {
+        "shortcut": "A"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the arrow Selection tool highlighted in the timeline toolbar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click once on an empty part of the timeline first so the key goes to the timeline.",
+        "You can also click the arrow icon in the toolbar above the timeline."
+      ],
+      "why": "The Selection tool lets you click and move clips without cutting them.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "edit-timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "A"
+          }
+        ]
+      }
+    },
+    {
+      "id": "place-playhead",
+      "say": "Click in the time ruler above the tracks where you want to cut.",
+      "target": {
+        "region": "edit-timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the red playhead line moved to a new position in the timeline?"
+        }
+      },
+      "hints": [
+        "The ruler is the strip with timecode numbers along the top of the timeline.",
+        "Press Space to play and Space again to stop at the moment you want."
+      ],
+      "why": "Resolve cuts at the playhead, so its position decides where the split happens."
+    },
+    {
+      "id": "blade-cut",
+      "say": "Press Control B to cut the clip at the playhead.",
+      "target": {
+        "shortcut": "Ctrl+B"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+B"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new cut line splitting the clip exactly under the playhead?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold Control and tap B. The clip under the red line splits into two pieces.",
+        "You can also press B for the Blade tool and click on the clip, then press A to go back."
+      ],
+      "why": "Cutting splits one clip into two so you can remove or move a part of it.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+B"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-piece",
+      "say": "Click the piece of the clip you want to remove.",
+      "target": {
+        "region": "edit-timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is one part of the cut clip now outlined in red or orange as selected?"
+        }
+      },
+      "hints": [
+        "A selected clip gets a coloured outline. Click once, without dragging.",
+        "If both sides highlight, click an empty area first and then click only one piece."
+      ],
+      "why": "Resolve only deletes what is selected, so pick the part you do not want."
+    },
+    {
+      "id": "ripple-delete",
+      "say": "Press Shift Backspace to delete it and close the gap. Control Z undoes it.",
+      "target": {
+        "shortcut": "Shift+Backspace"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+Backspace"
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the selected piece disappeared with the following clips moved left to close the gap?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Plain Backspace leaves an empty gap. Add Shift to slide the later clips over.",
+        "You can also right click the clip and choose Ripple Delete."
+      ],
+      "why": "Ripple delete keeps your edit tight, with no black gaps between clips.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+Backspace"
+          }
+        ]
+      }
+    },
+    {
+      "id": "trim-mode",
+      "say": "Press T to switch to Trim Edit mode.",
+      "target": {
+        "shortcut": "T"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "T"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Trim Edit mode button highlighted in the timeline toolbar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Trim button is next to the arrow in the toolbar above the timeline.",
+        "Click the timeline first if the key does nothing, then press T again."
+      ],
+      "why": "Trim mode lets you change where clips start and end while keeping neighbours in place.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "edit-timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "T"
+          }
+        ]
+      }
+    },
+    {
+      "id": "trim-end",
+      "say": "Drag the right edge of a clip to the left to shorten it.",
+      "target": {
+        "region": "edit-timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is one of the clips in the timeline shorter than before?"
+        }
+      },
+      "hints": [
+        "Move the mouse onto the right edge of a clip until the pointer changes, then drag left.",
+        "Press Control Z if you trimmed the wrong clip."
+      ],
+      "why": "Trimming removes slow starts and ends so the video keeps moving."
+    },
+    {
+      "id": "back-to-selection",
+      "say": "Press A to go back to the Selection tool.",
+      "target": {
+        "shortcut": "A"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the arrow Selection tool highlighted again?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A is the shortcut for the arrow tool in the timeline toolbar.",
+        "You can click the arrow icon above the timeline instead."
+      ],
+      "why": "Returning to the Selection tool prevents accidental trims while you keep working.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "edit-timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "A"
+          }
+        ]
+      }
+    }
+  ]
+}

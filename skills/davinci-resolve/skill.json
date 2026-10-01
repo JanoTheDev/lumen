@@ -1,0 +1,17 @@
+{
+  "id": "davinci-resolve",
+  "name": "DaVinci Resolve",
+  "version": "1.0.0",
+  "description": "Video editing in DaVinci Resolve: importing, cutting and trimming, titles and transitions, basic color correction and exporting.",
+  "match": {
+    "process": ["Resolve.exe"],
+    "title": ["^DaVinci Resolve"]
+  },
+  "uiaQuality": "partial",
+  "bridge": "resolve-studio",
+  "appVersion": ">=20",
+  "appVersionTested": "DaVinci Resolve 20.x and 21.x (free and Studio), checked against the official manual and shortcut lists",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "The free edition has no external scripting, so lessons are verified with vision, window title and key presses only. The resolve-studio bridge (Studio 21.1 or later) is listed as an optional alternate check. UIA quality is an estimate: menus and some dialogs are exposed, panels, timeline and color wheels are custom drawn. Region fractions assume the default layout of each page at 1920 by 1080."
+}

@@ -1,0 +1,33 @@
+# DaVinci Resolve glossary
+
+- **Page** — one of the seven full-window workspaces (Media, Cut, Edit, Fusion, Color, Fairlight, Deliver) chosen from the bottom bar.
+- **Project Manager** — the window listing your projects; opens when Resolve starts.
+- **Media Pool** — the clips and timelines that belong to the current project.
+- **Bin** — a folder inside the Media Pool.
+- **Timeline** — the place where clips are arranged in order on tracks.
+- **Track** — one row of the timeline; V tracks hold video, A tracks hold audio.
+- **Playhead** — the red line showing the frame you are looking at.
+- **In and out points** — marks that set the start and end of a section.
+- **Blade** — a cut that splits a clip in two at the playhead or where you click.
+- **Trim** — changing where a clip starts or ends.
+- **Ripple delete** — removing a clip and sliding later clips left so no gap remains.
+- **Snapping** — clips and the playhead jump to nearby edit points while dragging.
+- **Edit point** — the join between two clips.
+- **Transition** — a blend between two clips, such as Cross Dissolve.
+- **Effects panel** — the library of transitions, titles, generators and filters, opened from Effects in the toolbar.
+- **Text Plus** — the Fusion-based title tool, shown on screen as "Text+".
+- **Inspector** — the panel showing settings for the selected clip, title or transition.
+- **Node** — one processing step in a grade or effect; nodes are linked left to right.
+- **Serial node** — a node added after the current one, so its change builds on the previous one.
+- **Lift** — the color wheel that adjusts the darkest parts of the picture.
+- **Gamma** — the color wheel that adjusts the midtones.
+- **Gain** — the color wheel that adjusts the brightest parts.
+- **Offset** — the wheel that shifts the whole image evenly.
+- **Master wheel** — the horizontal dial under each color wheel that changes brightness only.
+- **Scopes** — graphs such as the waveform that measure brightness and color.
+- **Grade** — all the color changes on a clip.
+- **LUT** — a lookup table, a preset color transform applied in one step.
+- **Render Settings** — the Deliver page panel where you choose format, codec, name and folder.
+- **Render Queue** — the list of export jobs waiting to run.
+- **Render All** — the button that starts every job in the Render Queue.
+- **Studio** — the paid edition of Resolve with extra features and scripting.

@@ -1,0 +1,248 @@
+{
+  "id": "davinci-resolve-basics-01-import-and-timeline",
+  "app": "davinci-resolve",
+  "title": "Import media and make a timeline",
+  "summary": "Bring video clips into the project and put them on a new timeline.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": ">=20",
+  "tags": ["import", "timeline"],
+  "steps": [
+    {
+      "id": "open-edit-page",
+      "say": "Click Edit on the bottom bar of the window to open the Edit page.",
+      "target": {
+        "region": "page-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "allOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "DaVinci Resolve"
+            },
+            {
+              "type": "anyOf",
+              "checks": [
+                {
+                  "type": "bridge",
+                  "app": "davinci-resolve",
+                  "expect": {
+                    "page": "edit"
+                  }
+                },
+                {
+                  "type": "keypress",
+                  "combo": "Shift+4"
+                },
+                {
+                  "type": "vision",
+                  "prompt": "Is the Edit page active, with the Edit icon highlighted on the bottom bar and a timeline across the lower part of the window?"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The page buttons are icons with labels in a row along the very bottom edge. Edit is one of them.",
+        "You can also press Shift 4 to jump straight to the Edit page."
+      ],
+      "why": "Every task in Resolve belongs to a page, and the Edit page has the tools for this lesson.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+4"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-import",
+      "say": "Press Control I to open the import window.",
+      "target": {
+        "shortcut": "Ctrl+I"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+I"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a file browser window open for choosing media to import?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold the Control key and tap I, with the Resolve window in front.",
+        "You can also open the File menu at the top left, then choose Import, then Media."
+      ],
+      "why": "Importing adds your clips to the Media Pool without moving the files on disk.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+I"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pick-files",
+      "say": "Choose one or more video clips, then click Open.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "davinci-resolve",
+              "expect": {
+                "mediaPoolClipCount": {
+                  "gte": 1
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Are there new clip thumbnails in the Media Pool at the top left that were not there before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold Control while clicking to pick several files at once, then press Enter.",
+        "If Resolve asks to change the project frame rate, choose Change to match your clips."
+      ],
+      "why": "You need clips in the Media Pool before you can edit them.",
+      "timeoutSec": 180
+    },
+    {
+      "id": "select-clips",
+      "say": "Click one clip in the Media Pool, then press Control A to select them all.",
+      "target": {
+        "region": "edit-media-pool"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Are all the clips in the Media Pool highlighted as selected?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Media Pool is the panel at the top left with your clip thumbnails.",
+        "You can also drag a box around the thumbnails to select them."
+      ],
+      "why": "Selecting the clips first lets Resolve build the timeline from all of them at once."
+    },
+    {
+      "id": "create-timeline",
+      "say": "Right click a selected clip, point to Timelines, then choose Create New Timeline Using Selected Clips.",
+      "target": {
+        "region": "edit-media-pool"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a New Timeline window open, or has a new timeline with clips appeared at the bottom?"
+        }
+      },
+      "hints": [
+        "Right click directly on one of the highlighted thumbnails so the menu shows clip options.",
+        "Another way is to drag the selected clips down into the empty timeline area."
+      ],
+      "why": "A timeline is where you arrange clips into the order of your video."
+    },
+    {
+      "id": "name-timeline",
+      "say": "Type a name for the timeline, then click Create.",
+      "target": {
+        "text": "Create"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "davinci-resolve",
+              "expect": {
+                "timelineClipCount": {
+                  "gte": 1
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Are clips now shown on the timeline tracks in the lower part of the window?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Timeline Name box is at the top of the New Timeline window.",
+        "If you skip the name, Resolve calls it Timeline 1, which is fine for now."
+      ],
+      "why": "Naming timelines helps when a project has several versions of an edit."
+    },
+    {
+      "id": "save",
+      "say": "Press Control S to save your project.",
+      "target": {
+        "shortcut": "Ctrl+S"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+S"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "If this is a new project, Resolve asks for a project name. Type one and click Save.",
+        "You can also use the File menu, then Save Project."
+      ],
+      "why": "Saving often protects your work if Resolve or the computer stops unexpectedly.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+S"
+          }
+        ]
+      }
+    }
+  ]
+}
