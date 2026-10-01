@@ -35,14 +35,12 @@ const VOSK_SIZE_MB = 40
 
 let engine: WakeEngine = 'off'
 let spotter: Spotter | null = null
+/** Phrases + sensitivity the current spotter was built for; unchanged settings reuse it. */
+let spotterKey = ''
 let applySeq = 0
 let lastWakeAt = 0
 let confirming = false
 let unusable: string[] = []
-
-export function wakeEngine(): WakeEngine {
-  return engine
-}
 
 /** Engine, model and phrase state for Settings. */
 export function wakeStatus(): WakeStatus {
@@ -95,6 +93,7 @@ function startVosk(p: Phrases): void {
 function switchTo(next: WakeEngine, p?: Phrases): void {
   if (next !== 'kws') {
     spotter = null
+    spotterKey = ''
     unusable = []
   }
   if (next !== engine) log('step', `wake engine: ${next}`)
@@ -116,11 +115,14 @@ export function applyWakeState(cfg: AppConfig): void {
 
   const lib = loadSherpa()
   if (lib && kwsModelInstalled()) {
+    const key = JSON.stringify(p)
+    if (spotter && engine === 'kws' && key === spotterKey) return switchTo('kws')
     try {
       const next = new Spotter(lib, kwsModelDir(), p)
       for (const phrase of next.unusable)
         log('fail', `wake: "${phrase}" can't be spelled by the model`)
       spotter = next
+      spotterKey = key
       unusable = next.unusable
       return switchTo('kws')
     } catch (e) {

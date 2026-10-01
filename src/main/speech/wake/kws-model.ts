@@ -50,10 +50,6 @@ export function kwsModelInstalled(): boolean {
 
 let installing: Promise<void> | null = null
 
-export function kwsModelInstalling(): boolean {
-  return installing !== null
-}
-
 /** Downloads the model once; concurrent callers share the install. Progress goes to Settings. */
 export function installKwsModel(): Promise<void> {
   if (kwsModelInstalled()) return Promise.resolve()
