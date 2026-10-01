@@ -33,6 +33,8 @@ export function pickVoice(
 
 const player = new TtsPlayer()
 let synthesizing = 0
+/** Bumped by every stop; a `say` still loading voices from before it is dropped. */
+let stopGeneration = 0
 const listeners = new Set<(state: SpeakingState) => void>()
 
 /**
@@ -63,6 +65,7 @@ player.onSpeakingChange(notify)
 
 /** Silences everything now (barge-in, stop, new turn). */
 export function stopSpeaking(): void {
+  stopGeneration++
   player.stop()
   speechSynthesis.cancel()
   synthesizing = 0
@@ -70,8 +73,11 @@ export function stopSpeaking(): void {
 }
 
 async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void> {
+  const gen = stopGeneration
+  const voices = await windowsVoices()
+  if (gen !== stopGeneration) return
   const u = new SpeechSynthesisUtterance(msg.text)
-  const voice = pickVoice(await windowsVoices(), msg.voice)
+  const voice = pickVoice(voices, msg.voice)
   if (voice) {
     u.voice = voice
     u.lang = voice.lang
