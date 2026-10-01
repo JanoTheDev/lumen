@@ -240,6 +240,17 @@ export interface SkillSummary {
   warnings: string[]
 }
 
+/** One run of a skill (11 T04), newest first in Settings → Skills. */
+export interface SkillRunRecord {
+  at: number
+  ms: number
+  /** steps: steps.json without the model; steps+agent: the model took over after drift. */
+  how: 'steps' | 'agent' | 'steps+agent' | 'background'
+  status: 'done' | 'failed' | 'stopped' | 'denied' | 'cancelled' | 'paused'
+  summary: string
+  actions: number
+}
+
 /** Background tasks (CONTRACTS C11, 08 T26–T30). */
 export type BackgroundTaskPhase =
   | 'queued'

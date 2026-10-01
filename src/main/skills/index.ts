@@ -14,7 +14,7 @@ import type {
   SkillDetail,
   SkillInstallPreview
 } from '@shared/channels'
-import type { SkillSummary } from '@shared/types'
+import type { SkillRunRecord, SkillSummary } from '@shared/types'
 import { log } from '../logger'
 import { fetchPack, githubPackSource } from '../packs/fetch'
 import { ZIP_LIMITS } from '../packs/zip-read'
@@ -29,11 +29,20 @@ import {
 } from './manage'
 import { SKILL_FILE } from './manifest'
 import { SkillRegistry, readSkillText } from './registry'
+import { SkillRunLog } from './runs'
 import { SkillStateStore } from './state'
+import {
+  MAX_STEPS_FILE_BYTES,
+  STEPS_FILE,
+  StepsFileError,
+  parseStepsFile,
+  type StepsFile
+} from './steps'
 import { matchSkillTrigger, type TriggerContext, type TriggerMatch } from './triggers'
 
 let registry: SkillRegistry | null = null
 let state: SkillStateStore | null = null
+let runs: SkillRunLog | null = null
 
 /** Loads every skill and starts watching the user folder. Safe to call twice. */
 export function installSkills(): SkillRegistry {
@@ -41,6 +50,7 @@ export function installSkills(): SkillRegistry {
   const base = join(homedir(), '.ai-overlay')
   const appSkills = join(app.getAppPath(), 'skills')
   state = new SkillStateStore(join(base, 'skills-state.json'))
+  runs = new SkillRunLog(join(base, 'skills-runs.json'))
   registry = new SkillRegistry(
     { builtin: join(appSkills, 'builtin'), appPacks: appSkills, user: join(base, 'skills') },
     { state, log: (m) => log('fail', m) }
@@ -63,6 +73,25 @@ export function skillIndex(ctx?: SkillIndexContext): string {
 /** Trigger phrase → skill, locally (no model call). */
 export function matchTrigger(text: string, ctx?: TriggerContext): TriggerMatch | null {
   return registry ? matchSkillTrigger(text, registry, ctx) : null
+}
+
+/** A skill's steps.json, parsed; null when it has none. Throws StepsFileError when broken. */
+export function loadSkillSteps(name: string): StepsFile | null {
+  const s = registry?.get(name)
+  if (!s?.hasSteps) return null
+  const file = join(s.dir, STEPS_FILE)
+  if (statSync(file).size > MAX_STEPS_FILE_BYTES)
+    throw new StepsFileError('steps.json is too large')
+  return parseStepsFile(readFileSync(file, 'utf8'))
+}
+
+/** One finished run (foreground or background) for the skill's history. */
+export function recordSkillRun(name: string, run: SkillRunRecord): void {
+  runs?.add(name, run)
+}
+
+export function skillRuns(name: string): SkillRunRecord[] {
+  return runs?.list(name) ?? []
 }
 
 // ---- Settings ----
@@ -121,6 +150,7 @@ export function removeSkill(name: string): SkillActionResult {
   const r = deleteSkill(registry, name)
   if (r.ok) {
     state?.forget(name)
+    runs?.forget(name)
     log('done', `skill ${name} deleted`)
   }
   return r
