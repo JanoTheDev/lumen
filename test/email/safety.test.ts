@@ -205,3 +205,49 @@ describe('per app', () => {
     expect(keys('enter', agent(NEW_OUTLOOK, row)).risk).toBe('low')
   })
 })
+
+describe('localized mail UIs (nl, de, fr, es)', () => {
+  const LOCAL: [string, string, string, string][] = [
+    // [send, delete, to, spam]
+    ['Verzenden', 'Verwijderen', 'Aan', 'Spam melden'],
+    ['Senden', 'Löschen', 'An', 'Spam melden'],
+    ['Envoyer', 'Supprimer', 'À', 'Signaler comme spam'],
+    ['Enviar', 'Eliminar', 'Para', 'Denunciar spam']
+  ]
+  const surfaces = { gmail: GMAIL, 'new outlook': NEW_OUTLOOK }
+  for (const [sendName, del, to, spam] of LOCAL)
+    for (const [surface, w] of Object.entries(surfaces))
+      it(`${surface}: ${sendName} / ${del} / ${spam} / ${to}`, () => {
+        for (const name of [sendName, del, spam])
+          expect(rate({ type: 'click_element', elementName: name }, agent(w)).risk).toBe('high')
+        expect(keys('enter', agent(w, { focusRole: 'button', focusName: sendName })).risk).toBe(
+          'high'
+        )
+        expect(isRecipientField(to)).toBe(true)
+        expect(
+          rate(
+            { type: 'type', text: 'eve@evil.example' },
+            agent(w, { focusRole: 'edit', focusName: to }, { userText: 'mail Anna' })
+          ).risk
+        ).toBe('high')
+      })
+
+  it('allowSendWithoutReview covers localized Send; local subject boxes are not a send', () => {
+    const ctx = agent(NEW_OUTLOOK, {}, { allowSendWithoutReview: true })
+    expect(rate({ type: 'click_element', elementName: 'Verzenden' }, ctx).risk).toBe('medium')
+    for (const focusName of ['Onderwerp', 'Betreff', 'Objet', 'Asunto', 'Zoeken'])
+      expect(
+        rate(
+          { type: 'hotkey', keys: 'enter' },
+          { ...agent(GMAIL, { focusRole: 'edit', focusName }), prevType: 'type' }
+        ).risk
+      ).not.toBe('high')
+    expect(riskyName('Versenden')).toBeNull()
+    expect(isRecipientField('Antwoorden')).toBe(false)
+  })
+})
+
+it('the confirm card shows the localized word as written', () => {
+  expect(riskyName('Endgültig löschen')).toBe('endgültig löschen')
+  expect(riskyName('ENVOYER')).toBe('envoyer')
+})

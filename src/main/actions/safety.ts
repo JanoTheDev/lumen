@@ -5,7 +5,7 @@
 import { domainToUnicode } from 'url'
 import type { InputStep } from '@shared/types'
 import { findSecrets, maskSecrets } from './redact'
-import { riskyName } from './risk-names'
+import { isNoSendFieldName, isRecipientName, isSendName, riskyName } from './risk-names'
 
 export class SafetyError extends Error {
   readonly code = 'E_DENIED'
@@ -320,13 +320,9 @@ export function isMail(w: WindowInfo | undefined): boolean {
   return MAIL_PROCESSES.has(lower(w.process)) || MAIL_TITLE_RE.test(w.title ?? '')
 }
 
-/** To / Cc / Bcc boxes: Gmail "To recipients", Outlook "To", "Cc", "Bcc". */
-const RECIPIENT_FIELD_RE = /^(to|cc|bcc)\b|\brecipients?\b/i
-/** Fields where Enter does not send: recipients, subject, search. */
-const NON_SEND_FIELD_RE = /^(to|cc|bcc)\b|\brecipients?\b|\bsubject\b|\bsearch\b/i
-
+/** To / Cc / Bcc boxes: Gmail "To recipients", Outlook "To", "Cc", "Bcc" (and nl/de/fr/es). */
 export function isRecipientField(name: string | undefined): boolean {
-  return !!name && RECIPIENT_FIELD_RE.test(name.trim())
+  return isRecipientName(name)
 }
 
 /** The focused element takes text (an edit box or a document), so a key edits rather than acts. */
@@ -613,7 +609,7 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
   const focusWord = pressed ? riskyName(w?.focusName) : null
   if (focusWord) {
-    const send = SEND_NAMES.has(focusWord)
+    const send = isSendName(focusWord)
     out.push({ risk: send ? sendRisk : 'high', reason: `presses “${focusWord}”` })
     return
   }
@@ -633,7 +629,7 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   }
   const afterType = ctx.prevType === 'type'
   // Enter in a To, Subject or search box picks a suggestion or searches; it does not send.
-  const fieldEnter = combo === 'enter' && NON_SEND_FIELD_RE.test(w?.focusName?.trim() ?? '')
+  const fieldEnter = combo === 'enter' && isNoSendFieldName(w?.focusName)
   if (
     isMessaging(w) &&
     (combo === 'ctrl+enter' || (combo === 'enter' && afterType && !fieldEnter))
@@ -728,8 +724,6 @@ function nameOf(a: EvalAction): string {
   return [a.elementName, a.text, a.description, a.target?.text].filter(Boolean).join(' ')
 }
 
-const SEND_NAMES = new Set(['send', 'send now'])
-
 const SPOT_KINDS = new Set(['mark', 'point', 'rect'])
 const RUNNABLE_RE = /\.(exe|com|bat|cmd|ps1|vbs|vbe|js|jse|wsf|msi|msix|appx|scr|lnk|hta|reg)$/i
 
@@ -751,7 +745,7 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
   const word = riskyName(name)
   if (!word) return
-  const send = ctx.allowSendWithoutReview && SEND_NAMES.has(word)
+  const send = ctx.allowSendWithoutReview && isSendName(word)
   out.push({ risk: send ? 'medium' : 'high', reason: `clicks “${word}”` })
 }
 
