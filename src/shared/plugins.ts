@@ -40,11 +40,32 @@ export interface PluginConnectorPreview {
   url?: string
   /** Environment variables the user must fill in Settings → Connectors afterwards. */
   envNeeded: string[]
+  /** stdio: every env entry of the server, for the preview to ask or confirm. */
+  env?: PluginEnvPreview[]
   /** http: needs an access token pasted afterwards. */
   tokenNeeded: boolean
   /** A connector with this id exists: same command (kept as is) or different (updated). */
   exists?: 'same' | 'different'
   notes: string[]
+}
+
+/** One env entry of an offered stdio server. */
+export interface PluginEnvPreview {
+  name: string
+  /** ask: the plugin leaves the value to you (`${VAR}`); literal: the plugin wrote a value. */
+  kind: 'ask' | 'literal'
+  /** ask: the variable name the plugin used. */
+  placeholder?: string
+  /** literal: the value masked; it is stored only when ticked. */
+  masked?: string
+}
+
+/** Env choices for one ticked connector. */
+export interface PluginEnvChoice {
+  /** Values typed in the preview, by env name. */
+  values?: Record<string, string>
+  /** Literal env names whose plugin value the user ticked to keep. */
+  keep?: string[]
 }
 
 /** Something in the source that is not imported, and why. */
@@ -69,6 +90,8 @@ export interface PluginImportRequest {
   token: string
   /** Keys of the connectors the user ticked "I trust this command / server" for. */
   connectors: string[]
+  /** Env choices by connector key. */
+  env?: Record<string, PluginEnvChoice>
 }
 
 export type PluginImportResult =

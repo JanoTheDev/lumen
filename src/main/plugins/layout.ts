@@ -1,6 +1,7 @@
 // Claude Code plugin layout (code.claude.com/docs/en/plugins/manifest-reference, checked
 // 2026-10-01): which plugins a file tree holds and where their parts are. A tree is a
-// marketplace (.claude-plugin/marketplace.json listing plugins by path), one plugin
+// marketplace (.claude-plugin/marketplace.json listing plugins by path, or by an object source
+// that remote.ts resolves), one plugin
 // (.claude-plugin/plugin.json and/or the default folders), or bare skills (<name>/SKILL.md).
 // Component paths in plugin.json are "./"-relative and never leave the plugin. Pure: works on
 // an in-memory file list (from a zip or a folder read). No Electron.
@@ -78,7 +79,7 @@ function authorOf(v: unknown): string | undefined {
   return undefined
 }
 
-function pluginAt(
+export function pluginAt(
   files: readonly TreeFile[],
   prefix: string,
   entry: Record<string, unknown> = {}
@@ -98,18 +99,21 @@ function pluginAt(
   }
 }
 
-function sourceLabel(src: Record<string, unknown>): string {
-  const kind = str(src.source, 20) ?? 'unknown'
-  const where = str(src.repo, 200) ?? str(src.url, 200) ?? str(src.package, 200) ?? ''
-  return `${kind}${where ? ` ${where}` : ''}`
+/** A marketplace entry whose plugin lives in another place (an object `source`). */
+export interface RemoteEntry {
+  name: string
+  entry: Record<string, unknown>
+  source: Record<string, unknown>
 }
 
-/** The plugins in a tree, and what was left out (plugins that live elsewhere). */
+/** The plugins in a tree, the marketplace entries that live elsewhere, and what was left out. */
 export function findPlugins(files: readonly TreeFile[]): {
   plugins: FoundPlugin[]
   skipped: PluginSkipped[]
+  remote: RemoteEntry[]
 } {
   const skipped: PluginSkipped[] = []
+  const remote: RemoteEntry[] = []
   const market = readJson(files, MARKETPLACE)
   if (market && Array.isArray(market.plugins)) {
     const meta = (market.metadata ?? {}) as Record<string, unknown>
@@ -121,12 +125,9 @@ export function findPlugins(files: readonly TreeFile[]): {
       const name = str(entry.name, 64) ?? 'plugin'
       const src = entry.source
       if (typeof src !== 'string') {
-        const where =
-          src && typeof src === 'object' ? sourceLabel(src as Record<string, unknown>) : ''
-        skipped.push({
-          what: `plugin "${name}"`,
-          why: `it lives in another place (${where || 'unknown source'}); import that link on its own`
-        })
+        if (src && typeof src === 'object' && !Array.isArray(src))
+          remote.push({ name, entry, source: src as Record<string, unknown> })
+        else skipped.push({ what: `plugin "${name}"`, why: 'it has no usable source' })
         continue
       }
       const rel = src.startsWith('./') || src.startsWith('../') ? src : `${pluginRoot}/${src}`
@@ -142,18 +143,19 @@ export function findPlugins(files: readonly TreeFile[]): {
       }
       plugins.push(pluginAt(files, prefix, entry))
     }
-    return { plugins, skipped }
+    return { plugins, skipped, remote }
   }
   const isPlugin =
     files.some((f) => f.name === PLUGIN_JSON || f.name === '.mcp.json') ||
     files.some((f) => DEFAULT_PARTS.some((p) => f.name.startsWith(p)))
-  if (isPlugin) return { plugins: [pluginAt(files, '')], skipped }
+  if (isPlugin) return { plugins: [pluginAt(files, '')], skipped, remote }
   if (files.some((f) => f.name === 'SKILL.md' || /^[^/]+\/SKILL\.md$/.test(f.name)))
     return {
       plugins: [{ name: 'skills', prefix: '', manifest: { skills: ['./'] } }],
-      skipped
+      skipped,
+      remote
     }
-  return { plugins: [], skipped }
+  return { plugins: [], skipped, remote }
 }
 
 /** Plugin.json component paths: a string or a list of strings. */

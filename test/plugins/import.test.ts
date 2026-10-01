@@ -92,13 +92,19 @@ function convertAll(files: TreeFile[]): ReturnType<typeof planImport> {
 }
 
 describe('layout', () => {
-  it('reads a marketplace and leaves plugins that live elsewhere', () => {
+  it('reads a marketplace and hands plugins that live elsewhere to the remote fetch', () => {
     const r = findPlugins(stripTop(marketplace()))
     expect(r.plugins.map((p) => [p.name, p.prefix, p.version])).toEqual([
       ['dev-tools', 'plugins/dev-tools/', '2.1.0']
     ])
-    expect(r.skipped[0]).toMatchObject({ what: 'plugin "remote-one"' })
-    expect(r.skipped[0].why).toMatch(/github acme\/remote-one/)
+    expect(r.skipped).toEqual([])
+    expect(r.remote).toEqual([
+      {
+        name: 'remote-one',
+        entry: { name: 'remote-one', source: { source: 'github', repo: 'acme/remote-one' } },
+        source: { source: 'github', repo: 'acme/remote-one' }
+      }
+    ])
   })
 
   it('finds a single plugin and bare skill folders', () => {
@@ -143,7 +149,10 @@ describe('conversion', () => {
     const plan = convertAll(marketplace())
     const fix = plan.skills.find((s) => s.preview.name === 'fix-issue')!
     expect(fix.preview).toMatchObject({ from: 'command', triggers: ['fix issue'], kind: 'task' })
-    expect(fix.preview.notes.join(' ')).toMatch(/numbered arguments/)
+    expect(fix.preview.notes.join(' ')).toMatch(/values you can give: arg2/)
+    const fixMd = parseSkillFile(fix.skill.files[0].data.toString())
+    expect(fixMd.body).toContain('Fix issue {arguments} and {arg2}.')
+    expect(Object.keys(fixMd.manifest.params)).toEqual(['arguments', 'arg2'])
     const go = plan.skills.find((s) => s.preview.name === 'go')!
     expect(go.preview.triggers).toEqual([])
     expect(parseSkillFile(go.skill.files[0].data.toString()).manifest.description).toBe('Just go.')
@@ -166,7 +175,12 @@ describe('conversion', () => {
       commandLine: 'npx -y search-mcp --level info',
       envNeeded: ['API_KEY']
     })
-    expect(search.offer.input.env).toEqual({ MODE: 'fast' })
+    expect(search.offer.input).not.toHaveProperty('env')
+    expect(search.offer.envLiterals).toEqual({ MODE: 'fast' })
+    expect(search.preview.env).toEqual([
+      { name: 'API_KEY', kind: 'ask', placeholder: 'SEARCH_KEY' },
+      { name: 'MODE', kind: 'literal', masked: '•••• (4 characters)' }
+    ])
     expect(plan.servers[1].preview).toMatchObject({ transport: 'http', tokenNeeded: true })
     expect(plan.servers[1].preview.notes.join(' ')).toMatch(/X-Team/)
     const skipped = plan.skipped.map((s) => `${s.what}: ${s.why}`).join('\n')

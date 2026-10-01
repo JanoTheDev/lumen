@@ -3,7 +3,13 @@
 // lists every skill and connector Lumen would add, what it changes or leaves out (hooks never),
 // and each connector needs its own "I trust" tick. Imported skills start untrusted.
 import { useEffect, useRef, useState } from 'react'
-import type { ClaudeHomeScan, PluginPreviewResult, PluginSource } from '@shared/plugins'
+import type {
+  ClaudeHomeScan,
+  PluginEnvChoice,
+  PluginEnvPreview,
+  PluginPreviewResult,
+  PluginSource
+} from '@shared/plugins'
 import { Button, Card, announce, icons } from '../../../ui'
 import { invoke } from '../../../lib/ipc'
 
@@ -25,6 +31,58 @@ function homeLine(s: ClaudeHomeScan): string {
   return `Claude Code on this PC has ${parts.join(', ')}.`
 }
 
+/** One env entry of a connector: a value to type, or the plugin's own value to tick. */
+function EnvRow({
+  id,
+  e,
+  choice,
+  onChange
+}: {
+  id: string
+  e: PluginEnvPreview
+  choice: PluginEnvChoice
+  onChange: (next: PluginEnvChoice) => void
+}): JSX.Element {
+  if (e.kind === 'literal')
+    return (
+      <label className="panel-row">
+        <input
+          type="checkbox"
+          checked={choice.keep?.includes(e.name) ?? false}
+          onChange={(ev) => {
+            const keep = new Set(choice.keep ?? [])
+            if (ev.target.checked) keep.add(e.name)
+            else keep.delete(e.name)
+            onChange({ ...choice, keep: [...keep] })
+          }}
+        />
+        <span>
+          Use the plugin&apos;s value for <code>{e.name}</code>: <code>{e.masked}</code>
+        </span>
+      </label>
+    )
+  return (
+    <div className="ui-field">
+      <label htmlFor={id} className="ui-field__label">
+        {e.name}
+        {e.placeholder && e.placeholder !== e.name ? ` (the plugin calls it ${e.placeholder})` : ''}
+      </label>
+      <input
+        id={id}
+        className="ui-input"
+        type="password"
+        autoComplete="off"
+        spellCheck={false}
+        value={choice.values?.[e.name] ?? ''}
+        placeholder="Leave empty to set it later"
+        onChange={(ev) =>
+          onChange({ ...choice, values: { ...choice.values, [e.name]: ev.target.value } })
+        }
+      />
+    </div>
+  )
+}
+
 export function PluginImport({ onImported }: { onImported: () => void }): JSX.Element {
   const [scan, setScan] = useState<ClaudeHomeScan | null>(null)
   const [url, setUrl] = useState('')
@@ -33,6 +91,7 @@ export function PluginImport({ onImported }: { onImported: () => void }): JSX.El
   const [problems, setProblems] = useState<string[]>([])
   const [preview, setPreview] = useState<Ready | null>(null)
   const [trusted, setTrusted] = useState<Set<string>>(new Set())
+  const [env, setEnv] = useState<Record<string, PluginEnvChoice>>({})
   const headingRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
@@ -53,6 +112,7 @@ export function PluginImport({ onImported }: { onImported: () => void }): JSX.El
       if ('ok' in r && r.ok) {
         setPreview(r)
         setTrusted(new Set())
+        setEnv({})
       } else if ('ok' in r && r.error !== 'cancelled') {
         setMsg(`Nothing imported: ${r.error}`)
         setProblems(r.problems ?? [])
@@ -67,7 +127,13 @@ export function PluginImport({ onImported }: { onImported: () => void }): JSX.El
     if (!preview) return
     setBusy(true)
     try {
-      const r = await invoke('plugins:import', { token: preview.token, connectors: [...trusted] })
+      const chosen = Object.fromEntries(Object.entries(env).filter(([k]) => trusted.has(k)))
+      const r = await invoke('plugins:import', {
+        token: preview.token,
+        connectors: [...trusted],
+        ...(Object.keys(chosen).length ? { env: chosen } : {})
+      })
+      setEnv({})
       setPreview(null)
       if ('ok' in r && r.ok) {
         const failed = r.connectors.filter((c) => !c.ok)
@@ -180,6 +246,23 @@ export function PluginImport({ onImported }: { onImported: () => void }): JSX.El
                           </span>
                         )}
                       </label>
+                    )}
+                    {c.exists !== 'same' && c.env && c.env.length > 0 && trusted.has(c.key) && (
+                      <fieldset className="panel-fieldset">
+                        <legend className="ui-hint">
+                          Settings it runs with. Values are stored encrypted on this PC; the
+                          plugin&apos;s own values are used only when you tick them.
+                        </legend>
+                        {c.env.map((e) => (
+                          <EnvRow
+                            key={e.name}
+                            id={`plugin-env-${c.key}-${e.name}`}
+                            e={e}
+                            choice={env[c.key] ?? {}}
+                            onChange={(next) => setEnv({ ...env, [c.key]: next })}
+                          />
+                        ))}
+                      </fieldset>
                     )}
                     {c.notes.length > 0 && (
                       <ul className="ui-hint">

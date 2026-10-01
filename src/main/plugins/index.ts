@@ -6,6 +6,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { z } from 'zod'
 import type {
   ClaudeHomeScan,
+  PluginEnvChoice,
   PluginImportResult,
   PluginPreviewResult,
   PluginSource,
@@ -17,9 +18,11 @@ import { INVALID, safeParse } from '../ipc/validate'
 import { log } from '../logger'
 import { getSkillRegistry } from '../skills'
 import { installArchive, previewArchive, takenNames } from '../skills/manage'
-import { convertPlugin } from './convert'
-import { findPlugins, type FoundPlugin, type TreeFile } from './layout'
+import { chosenEnv, convertPlugin } from './convert'
+import { fetchPack } from '../packs/fetch'
+import { findPlugins, type FoundPlugin, type RemoteEntry, type TreeFile } from './layout'
 import { planImport, type ImportPlan, type NameOwner } from './plan'
+import { fetchRemotePlugins } from './remote'
 import { readClaudeHome, readFolder, readGithub, scanClaudeHome, SourceError } from './sources'
 
 const PENDING_MS = 10 * 60_000
@@ -66,19 +69,27 @@ function nameOwner(): NameOwner {
   }
 }
 
-function plugins(trees: Trees['trees']): {
+async function plugins(trees: Trees['trees']): Promise<{
   found: { plugin: FoundPlugin; converted: ReturnType<typeof convertPlugin> }[]
   skipped: ImportPlan['skipped']
-} {
+}> {
   const found: { plugin: FoundPlugin; converted: ReturnType<typeof convertPlugin> }[] = []
   const skipped: ImportPlan['skipped'] = []
+  const remote: RemoteEntry[] = []
   for (const t of trees) {
     const r = findPlugins(t.files)
     skipped.push(...r.skipped)
+    remote.push(...r.remote)
     for (const p of r.plugins) {
       const plugin = t.label && !p.manifest.name ? { ...p, name: t.label } : p
       found.push({ plugin, converted: convertPlugin(t.files, plugin) })
     }
+  }
+  if (remote.length) {
+    const r = await fetchRemotePlugins(remote, (url) => fetchPack(url))
+    skipped.push(...r.skipped)
+    for (const p of r.plugins)
+      found.push({ plugin: p.plugin, converted: convertPlugin(p.files, p.plugin) })
   }
   return { found, skipped }
 }
@@ -98,7 +109,7 @@ export async function previewPlugins(
     return { ok: false, error: e instanceof SourceError ? msg : `could not read it: ${msg}` }
   }
   if (!trees) return { ok: false, error: 'cancelled' }
-  const { found, skipped } = plugins(trees.trees)
+  const { found, skipped } = await plugins(trees.trees)
   if (!found.length)
     return { ok: false, error: 'no Claude Code plugin, marketplace or skills were found there' }
   const existing = connectors()
@@ -140,7 +151,11 @@ export async function previewPlugins(
   }
 }
 
-export function importPlugins(token: string, connectorKeys: string[]): PluginImportResult {
+export function importPlugins(
+  token: string,
+  connectorKeys: string[],
+  envChoices: Record<string, PluginEnvChoice> = {}
+): PluginImportResult {
   const p = pending.get(token)
   pending.delete(token)
   if (!p || Date.now() - p.at > PENDING_MS)
@@ -159,6 +174,7 @@ export function importPlugins(token: string, connectorKeys: string[]): PluginImp
   for (const s of p.plan.servers) {
     if (!chosen.has(s.preview.key) || s.preview.exists === 'same') continue
     const i = s.offer.input
+    const env = chosenEnv(s.offer, envChoices[s.preview.key])
     const r = connectors().add({
       id: s.preview.id,
       name: i.name,
@@ -168,7 +184,7 @@ export function importPlugins(token: string, connectorKeys: string[]): PluginImp
             command: i.command,
             args: i.args ?? [],
             trustCommand: true,
-            ...(i.env ? { env: i.env } : {})
+            ...(Object.keys(env).length ? { env } : {})
           }
         : { url: i.url })
     })
@@ -185,7 +201,20 @@ const sourceSchema = z.discriminatedUnion('kind', [
 const importSchema = z
   .object({
     token: z.string().regex(/^[0-9a-f]{24}$/),
-    connectors: z.array(z.string().max(200)).max(100)
+    connectors: z.array(z.string().max(200)).max(100),
+    env: z
+      .record(
+        z.string().max(200),
+        z
+          .object({
+            values: z
+              .record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,63}$/), z.string().max(4000))
+              .optional(),
+            keep: z.array(z.string().max(64)).max(30).optional()
+          })
+          .strict()
+      )
+      .optional()
   })
   .strict()
 
@@ -197,7 +226,7 @@ export function registerPluginsIpc(): void {
   })
   ipcMain.handle('plugins:import', (_e, raw: unknown) => {
     const req = safeParse('plugins:import', importSchema, raw)
-    return req ? importPlugins(req.token, req.connectors) : INVALID
+    return req ? importPlugins(req.token, req.connectors, req.env) : INVALID
   })
   ipcMain.handle('plugins:cancel', (_e, raw: unknown) => {
     const token = safeParse('plugins:cancel', importSchema.shape.token, raw)

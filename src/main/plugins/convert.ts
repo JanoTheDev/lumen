@@ -5,7 +5,12 @@
 // Fields Lumen cannot honor are dropped with a note. Hooks, agents and scripts are never
 // imported: they run code on the user's PC when Claude Code events fire, which Lumen does not
 // do for anything it did not write itself. Pure. No Electron.
-import type { PluginConnectorPreview, PluginSkillPreview, PluginSkipped } from '@shared/plugins'
+import type {
+  PluginConnectorPreview,
+  PluginEnvPreview,
+  PluginSkillPreview,
+  PluginSkipped
+} from '@shared/plugins'
 import { commandLine } from '@shared/connectors'
 import { splitFrontmatter, type YamlValue } from '../skills/frontmatter'
 import { SKILL_FILE_EXT } from '../skills/kind'
@@ -28,9 +33,10 @@ export interface OfferedServer {
     transport: 'stdio' | 'http'
     command?: string
     args?: string[]
-    env?: Record<string, string>
     url?: string
   }
+  /** Values the plugin wrote into its env, used only for the names the user ticks. */
+  envLiterals?: Record<string, string>
 }
 
 export interface ConvertedPlugin {
@@ -94,7 +100,7 @@ const FIELD_NOTES: Record<string, string> = {
   shell: 'the shell setting is dropped',
   'user-invocable': 'dropped: every Lumen skill can be started by voice',
   compatibility: 'its compatibility note is dropped',
-  arguments: 'named arguments become one "arguments" value',
+  arguments: '',
   'argument-hint': '',
   'disable-model-invocation': '',
   name: '',
@@ -117,8 +123,27 @@ function headerNotes(data: Record<string, YamlValue>): string[] {
   return notes
 }
 
-/** Claude body syntax Lumen does not run or fill. Returns the new body and notes. */
-export function convertBody(body: string): { body: string; notes: string[]; usesArgs: boolean } {
+const PARAM_NAME = /^[A-Za-z_]\w{0,31}$/
+/** Lumen skills take at most 20 params. */
+const MAX_PARAMS = 20
+
+/** Named arguments from the `arguments` header (a list, or names split by spaces / commas). */
+export function namedArgs(v: YamlValue | undefined): string[] {
+  const list = Array.isArray(v) ? v : typeof v === 'string' ? v.split(/[\s,]+/) : []
+  return list
+    .filter((x): x is string => typeof x === 'string' && x.trim() !== '')
+    .map((x) => x.trim())
+}
+
+/**
+ * Claude body syntax Lumen does not run, and arguments as Lumen params: `$ARGUMENTS` →
+ * {arguments}, `$ARGUMENTS[N]` / `$N` (0-based) → {argN+1}, `$name` from the `arguments` header
+ * → {name}. Returns the new body, notes and the params it uses (besides `arguments`) in order.
+ */
+export function convertBody(
+  body: string,
+  named: readonly string[] = []
+): { body: string; notes: string[]; usesArgs: boolean; params: string[] } {
   const notes: string[] = []
   let out = body
   // Dynamic context: !`command` and ```! blocks run shell commands when Claude loads a skill.
@@ -128,13 +153,50 @@ export function convertBody(body: string): { body: string; notes: string[]; uses
     notes.push('commands it ran while loading are kept as plain text; Lumen never runs them')
     out = out.replace(/(^|\s)!`([^`\n]*)`/g, '$1`$2`').replace(/^```!\s*$/gm, '```')
   }
+  const params: string[] = []
+  const use = (name: string): string => {
+    if (!params.includes(name)) params.push(name)
+    return `{${name}}`
+  }
+  // Indexed: $ARGUMENTS[N] and the $N shorthand (not "$5.00" or "$10").
+  const indexed = (n: string): string | null => {
+    const i = Number(n)
+    return i < MAX_PARAMS ? `arg${i + 1}` : null
+  }
+  out = out.replace(/\$ARGUMENTS\[(\d+)\]/g, (all, n: string) => {
+    const name = indexed(n)
+    return name ? use(name) : all
+  })
+  out = out.replace(/(^|[^\\\w$])\$(\d)(?!\d|[.,]\d)/g, (all, pre: string, n: string) => {
+    const name = indexed(n)
+    return name ? `${pre}${use(name)}` : all
+  })
   const usesArgs = /\$ARGUMENTS\b/.test(out)
   if (usesArgs) out = out.replace(/\$ARGUMENTS\b/g, '{arguments}')
-  if (/(^|[^\\\w])\$\d\b/.test(out))
-    notes.push('numbered arguments ($1, $2 …) are not filled in; say them in your request')
+  const bad: string[] = []
+  for (const n of named) {
+    if (!PARAM_NAME.test(n) || n === 'arguments' || /^arg\d+$/.test(n)) {
+      bad.push(n)
+      continue
+    }
+    const re = new RegExp(`(^|[^\\\\\\w$])\\$${n}\\b`, 'g')
+    if (re.test(out)) out = out.replace(re, (_all, pre: string) => `${pre}${use(n)}`)
+  }
+  if (bad.length) notes.push(`arguments it could not take by name: ${bad.join(', ')}`)
+  // Positional params by number, then named ones in header order.
+  const rank = (p: string): number => {
+    const m = /^arg(\d+)$/.exec(p)
+    return m ? Number(m[1]) : 100 + named.indexOf(p)
+  }
+  params.sort((a, b) => rank(a) - rank(b))
+  if (params.length + (usesArgs ? 1 : 0) > MAX_PARAMS) {
+    notes.push('it takes more arguments than a Lumen skill can; say the rest in your request')
+    params.length = MAX_PARAMS - (usesArgs ? 1 : 0)
+  }
+  if (params.length) notes.push(`its arguments become values you can give: ${params.join(', ')}`)
   if (/\$\{(?:CLAUDE_[A-Z_]+|user_config\.[\w.]+)\}/.test(out))
     notes.push('it refers to Claude Code folders or settings that Lumen does not have')
-  return { body: out, notes, usesArgs }
+  return { body: out, notes, usesArgs, params }
 }
 
 interface SkillHeader {
@@ -147,7 +209,34 @@ interface SkillHeader {
   triggers: string[]
   argHint?: string
   usesArgs: boolean
+  /** Other params in order: arg1, arg2 … and named arguments. */
+  params?: { name: string; description: string }[]
   style: boolean
+}
+
+/** "[pr-number] [priority]" → ["pr-number", "priority"]. */
+export function hintParts(hint: string | undefined): string[] {
+  if (!hint) return []
+  const out: string[] = []
+  for (const m of hint.matchAll(/\[([^\]]+)\]|<([^>]+)>|(\S+)/g))
+    out.push((m[1] ?? m[2] ?? m[3]).trim())
+  return out.filter(Boolean)
+}
+
+/** Descriptions for converted params: the matching argument-hint word, else its position. */
+export function paramDescriptions(
+  params: readonly string[],
+  named: readonly string[],
+  hint: string | undefined
+): { name: string; description: string }[] {
+  const parts = hintParts(hint)
+  return params.map((name) => {
+    const m = /^arg(\d+)$/.exec(name)
+    const pos = m ? Number(m[1]) - 1 : named.indexOf(name)
+    const word = pos >= 0 ? parts[pos] : undefined
+    const nth = pos >= 0 ? `Value ${pos + 1} of the request` : 'A value for the request'
+    return { name, description: clip(word ? `${nth}: ${word}` : nth, 200) }
+  })
 }
 
 /** A Lumen SKILL.md (the YAML subset Lumen reads: JSON-quoted strings). */
@@ -162,14 +251,22 @@ export function renderLumenSkill(h: SkillHeader, body: string): string {
     ...(h.license ? [`license: ${q(h.license)}`] : []),
     ...(h.style ? ['kind: style'] : []),
     ...(!h.style && h.triggers.length ? [`triggers: [${h.triggers.map(q).join(', ')}]`] : []),
+    ...(!h.style && (h.usesArgs || h.params?.length) ? ['params:'] : []),
     ...(!h.style && h.usesArgs
       ? [
-          'params:',
           '  arguments:',
           '    type: string',
           '    default: ""',
           `    description: ${q(clip(h.argHint ? `What to work on, e.g. ${h.argHint}` : 'What to work on', 200))}`
         ]
+      : []),
+    ...(!h.style
+      ? (h.params ?? []).flatMap((p) => [
+          `  ${p.name}:`,
+          '    type: string',
+          '    default: ""',
+          `    description: ${q(p.description)}`
+        ])
       : []),
     '---'
   ]
@@ -225,12 +322,17 @@ function convertMd(
   const h = header(data, fallbackName, body, plugin)
   const notes = headerNotes(data)
   if (h.rawDescription.length > MAX_DESC) notes.push('its description was shortened')
-  const conv = kind === 'output-style' ? { body, notes: [], usesArgs: false } : convertBody(body)
+  const named = namedArgs(data.arguments)
+  const conv =
+    kind === 'output-style'
+      ? { body, notes: [], usesArgs: false, params: [] }
+      : convertBody(body, named)
   notes.push(...conv.notes)
   const style = kind === 'output-style'
   const triggers =
     kind === 'command' || data['disable-model-invocation'] === true ? triggersFor(h.name) : []
-  const md = renderLumenSkill({ ...h, triggers, usesArgs: conv.usesArgs, style }, conv.body)
+  const params = paramDescriptions(conv.params, named, h.argHint)
+  const md = renderLumenSkill({ ...h, triggers, usesArgs: conv.usesArgs, params, style }, conv.body)
   return {
     name: h.name,
     files: [{ name: 'SKILL.md', data: Buffer.from(md, 'utf8') }, ...extra],
@@ -394,6 +496,71 @@ function expandDefaults(s: string): { text: string; needs: string[] } {
   return { text, needs }
 }
 
+/** "ab•••••• (12 characters)": enough to recognise a value without showing it. */
+export function maskValue(v: string): string {
+  const n = [...v].length
+  const shown = n > 8 ? [...v].slice(0, 2).join('') : ''
+  return `${shown}${'•'.repeat(Math.min(8, Math.max(4, n - shown.length)))} (${n} ${n === 1 ? 'character' : 'characters'})`
+}
+
+const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
+
+/**
+ * A server's env as the preview shows it: `${VAR}` values are asked for (the user types them, or
+ * fills them later in Settings → Connectors), literal values (and `${VAR:-default}` defaults)
+ * are shown masked and only used when the user ticks them. Nothing is stored silently.
+ */
+export function envOffer(
+  raw: unknown,
+  notes: string[]
+): { env: PluginEnvPreview[]; envLiterals: Record<string, string>; envNeeded: string[] } {
+  const env: PluginEnvPreview[] = []
+  const envLiterals: Record<string, string> = {}
+  const envNeeded: string[] = []
+  const map =
+    raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
+  for (const [k, v] of Object.entries(map).slice(0, 30)) {
+    if (!ENV_KEY.test(k) || typeof v !== 'string') continue
+    if (PLUGIN_VAR.test(v)) {
+      notes.push(`${k} pointed into the plugin folder and is left out`)
+      continue
+    }
+    const e = expandDefaults(v)
+    if (e.needs.length) {
+      envNeeded.push(k)
+      env.push({ name: k, kind: 'ask', placeholder: e.needs[0] })
+    } else if (e.text.length <= 4000) {
+      envLiterals[k] = e.text
+      env.push({ name: k, kind: 'literal', masked: maskValue(e.text) })
+    }
+  }
+  if (envNeeded.length)
+    notes.push(
+      `type ${envNeeded.join(', ')} here, or set ${envNeeded.length === 1 ? 'it' : 'them'} later under the connector in Settings → Connectors`
+    )
+  return { env, envLiterals, envNeeded }
+}
+
+/**
+ * The env stored with an added connector: the ticked literal values and the values the user
+ * typed, only for names the server's env has. Empty values are left out.
+ */
+export function chosenEnv(
+  offer: Pick<OfferedServer, 'preview' | 'envLiterals'>,
+  choice: { values?: Record<string, string>; keep?: readonly string[] } | undefined
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  const spec = new Map((offer.preview.env ?? []).map((e) => [e.name, e.kind]))
+  for (const k of choice?.keep ?? [])
+    if (spec.get(k) === 'literal' && offer.envLiterals?.[k] !== undefined)
+      out[k] = offer.envLiterals[k]
+  for (const [k, v] of Object.entries(choice?.values ?? {})) {
+    const t = typeof v === 'string' ? v.trim() : ''
+    if (spec.has(k) && t && t.length <= 4000) out[k] = t
+  }
+  return out
+}
+
 function serverMaps(files: readonly TreeFile[], p: FoundPlugin): Record<string, unknown>[] {
   const maps: Record<string, unknown>[] = []
   const take = (o: Record<string, unknown> | null): void => {
@@ -468,22 +635,7 @@ function offerServer(
       })
       return null
     }
-    const env: Record<string, string> = {}
-    const envNeeded: string[] = []
-    const rawEnv =
-      raw.env && typeof raw.env === 'object' ? (raw.env as Record<string, unknown>) : {}
-    for (const [k, v] of Object.entries(rawEnv)) {
-      if (!/^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(k) || typeof v !== 'string') continue
-      if (PLUGIN_VAR.test(v)) {
-        notes.push(`${k} pointed into the plugin folder and is left out`)
-        continue
-      }
-      const e = expandDefaults(v)
-      if (e.needs.length) envNeeded.push(k)
-      else env[k] = e.text
-    }
-    if (envNeeded.length)
-      notes.push(`set ${envNeeded.join(', ')} under the connector in Settings → Connectors`)
+    const { env, envLiterals, envNeeded } = envOffer(raw.env, notes)
     const argList = ex.map((e) => e.text)
     return {
       idBase,
@@ -491,9 +643,9 @@ function offerServer(
         name: clip(name, 60),
         transport: 'stdio',
         command: cmd.text,
-        args: argList,
-        ...(Object.keys(env).length ? { env } : {})
+        args: argList
       },
+      envLiterals,
       preview: {
         key,
         name: clip(name, 60),
@@ -501,6 +653,7 @@ function offerServer(
         transport: 'stdio',
         commandLine: commandLine(cmd.text, argList),
         envNeeded,
+        ...(env.length ? { env } : {}),
         tokenNeeded: false,
         notes
       }
