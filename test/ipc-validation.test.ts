@@ -47,6 +47,11 @@ describe('config patch', () => {
       }).success
     ).toBe(true)
   })
+  it('defaults to the llm router and accepts the legacy rollback flag', () => {
+    expect(DEFAULT_CONFIG.ai.router).toBe('llm')
+    expect(configPatchSchema.safeParse({ ai: { router: 'legacy' } }).success).toBe(true)
+    expect(configPatchSchema.safeParse({ ai: { router: 'regex' } }).success).toBe(false)
+  })
   it.each([
     { hotkey: 'x; calc.exe' },
     { unknownKey: 1 },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyQuery } from '../src/main/query/query-classifier'
+import { classifyQuery } from '../src/main/query/legacy/classifier'
 
 describe('classifyQuery', () => {
   it('classifies pure questions as answer mode', () => {

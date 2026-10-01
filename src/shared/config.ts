@@ -169,6 +169,8 @@ export const configV2Schema = z.object({
     maxInjectTokens: z.number().int().min(0).max(8000),
     privateMode: z.boolean()
   }),
+  /** router "legacy" = the old regex classifier + prompt overrides (rollback switch). */
+  ai: z.object({ router: z.enum(['llm', 'legacy']) }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -215,7 +217,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     retentionDays: 365,
     maxInjectTokens: 1200,
     privateMode: false
-  }
+  },
+  ai: { router: 'llm' }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -296,7 +299,8 @@ export const configPatchSchema = z
     agent: s2.agent.partial().strict(),
     privacy: s2.privacy.partial().strict(),
     teach: s2.teach.partial().strict(),
-    memory: s2.memory.partial().strict()
+    memory: s2.memory.partial().strict(),
+    ai: s2.ai.partial().strict()
   })
   .partial()
   .strict()

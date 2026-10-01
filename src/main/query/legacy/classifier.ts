@@ -1,3 +1,5 @@
+// Legacy regex intent classifier (config ai.router = "legacy"). The LLM router replaces it;
+// its only high-precision rule (continuation) lives on in the router prefilter.
 export type QueryMode = 'answer' | 'action' | 'guide' | 'locate'
 
 export interface QueryIntent {

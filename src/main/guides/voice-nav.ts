@@ -30,15 +30,16 @@ export function parseGuideNav(utterance: string): GuideNavCommand | null {
   return null
 }
 
+// Save / replay / play need the word "guide" and must be the whole utterance.
 export const REPLAY_RE =
-  /\b(replay (the )?(last )?guide|guide replay|(show|open|do|run|play) (me )?(the )?(last )?guide again|(show|open|play|run) (me )?the last guide|restart (the )?guide|last guide)\b/
+  /^(replay (the )?(last )?guide|guide replay|(show|open|do|run|play) (me )?(the )?(last )?guide again|(show|open|play|run) (me )?the last guide|restart (the )?guide|last guide)$/
 
 export function isReplayRequest(text: string): boolean {
   return REPLAY_RE.test(normalizeUtterance(text))
 }
 
 export const SAVE_GUIDE_RE =
-  /\b(save|remember)\s+(this\s+|the\s+)?guide(\s+as\s+(?<name>.{1,40}))?/i
+  /^(save|remember)\s+(this\s+|the\s+)?guide(\s+as\s+(?<name>.{1,40}?))?[.!?]*$/i
 
 function cleanName(name: string | undefined): string | undefined {
   const n = name
@@ -56,18 +57,11 @@ export function matchSaveGuide(text: string): { name?: string } | null {
 }
 
 export const PLAY_GUIDE_RE =
-  /\b(play|run|open)\s+(the\s+)?(saved\s+)?guide\s+(?:(?:named|called)\s+)?(?<name>.{2,40})/i
+  /^(play|run|open)\s+(the\s+)?(saved\s+)?guide\s+(?:(?:named|called)\s+)?(?<name>.{2,40})$/i
 
 export function matchPlayGuide(text: string): string | null {
   const m = PLAY_GUIDE_RE.exec(text.trim())
   const name = cleanName(m?.groups?.name)
   if (!name || /^again$/i.test(name)) return null
   return name
-}
-
-const HOW_TO_RE = /^(hows?|wheres?|whats?|why|can you show|show me how)\b/
-
-// Questions should stay as guides; the imperative auto-click fallback skips them.
-export function isHowToQuestion(prompt: string): boolean {
-  return HOW_TO_RE.test(normalizeUtterance(prompt))
 }

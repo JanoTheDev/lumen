@@ -4,7 +4,6 @@ import {
   isReplayRequest,
   matchSaveGuide,
   matchPlayGuide,
-  isHowToQuestion,
   normalizeUtterance
 } from '../src/main/guides/voice-nav'
 
@@ -71,7 +70,9 @@ describe('isReplayRequest', () => {
     ['one more time', false],
     ['replay that video', false],
     ['show me the last email', false],
-    ['do that again', false]
+    ['do that again', false],
+    ['what was the last guide about', false],
+    ['how do I replay the guide', false]
   ] as const)('%j -> %s', (text, expected) => {
     expect(isReplayRequest(text)).toBe(expected)
   })
@@ -86,6 +87,8 @@ describe('matchSaveGuide', () => {
     expect(matchSaveGuide('save guide as inbox zero')).toEqual({ name: 'inbox zero' })
     expect(matchSaveGuide('save this document')).toBeNull()
     expect(matchSaveGuide('what is a guide')).toBeNull()
+    expect(matchSaveGuide('can you save this guide somewhere')).toBeNull()
+    expect(matchSaveGuide('save this guide.')).toEqual({})
   })
 })
 
@@ -97,23 +100,6 @@ describe('matchPlayGuide', () => {
     expect(matchPlayGuide('play guide')).toBeNull()
     expect(matchPlayGuide('play guide again')).toBeNull()
     expect(matchPlayGuide('play some music')).toBeNull()
-  })
-})
-
-describe('isHowToQuestion', () => {
-  it.each([
-    ['how do I open settings', true],
-    ['Hey lumen, how do I open settings?', true],
-    ['where is the export button', true],
-    ["what's the shortcut for bold", true],
-    ['why is this greyed out', true],
-    ['can you show me where billing is', true],
-    ['show me how to add a filter', true],
-    ['open settings', false],
-    ['click the send button', false],
-    ['show me the settings', false],
-    ['go to gmail', false]
-  ] as const)('%j -> %s', (text, expected) => {
-    expect(isHowToQuestion(text)).toBe(expected)
+    expect(matchPlayGuide('how do I open the guide editor')).toBeNull()
   })
 })

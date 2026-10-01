@@ -7,6 +7,7 @@ export const ACTION_MODE = `action: the user wants something done (open, click, 
 - scroll {direction, amount}: amount is page-downs of about 80% of the view; use 1.
 - open_url {url}: the only way to open a site (http or https; the current browser tab is reused). Never click the address bar and type a URL. Never invent URLs with IDs or query parameters; use a homepage only when sure of it, otherwise https://www.google.com/search?q=<encoded query>.
 - focus_browser: bring the browser to the front.
+target_app in <context> names an app the user wants that is not in front: the first action is open_url to its url (or its homepage), and anything that needs the loaded page goes in followUp.
 followUp is an instruction run on a fresh screenshot after these actions. Use it only when the next action must see the result: a page you still have to act on, or a menu you opened to pick from. Never for one-shot actions, to ask the user something, or to check your own edits. A request starting with "The page is loaded." is such a step: answer with action, or locate if it asks to highlight.
 Patterns:
 - "search for X" on a site: one batch, no followUp: click the search box, type X, hotkey enter.

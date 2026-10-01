@@ -2,7 +2,7 @@
 // (save / replay).
 import type { GuideStep, SavedGuide } from '@shared/types'
 import { findGuideByName, loadSavedGuide, saveGuide } from './store'
-import { isReplayRequest, matchPlayGuide, matchSaveGuide, parseGuideNav } from './voice-nav'
+import type { GuideNavCommand } from './voice-nav'
 import { rectCenter } from '../actions/coords'
 import { log } from '../logger'
 import * as hud from '../windows/hud'
@@ -16,6 +16,11 @@ interface ActiveGuide {
 
 let activeGuide: ActiveGuide | null = null
 let lastGuide: { task: string; steps: GuideStep[]; savedAt: number } | null = null
+
+/** Whether a guide is on screen, and whether one can be saved or replayed. */
+export function guideState(): { guideActive: boolean; hasLastGuide: boolean } {
+  return { guideActive: !!activeGuide, hasLastGuide: !!lastGuide }
+}
 
 export function startGuide(task: string, steps: GuideStep[]): void {
   activeGuide = { steps, index: 0 }
@@ -47,10 +52,8 @@ export function replaySavedGuide(id: string): SavedGuide | null {
   return entry
 }
 
-function handleGuideNavCommand(prompt: string): { handled: boolean; response?: unknown } {
+function handleGuideNavCommand(cmd: GuideNavCommand): { handled: boolean; response?: unknown } {
   if (!activeGuide) return { handled: false }
-  const text = prompt.trim()
-  if (!text || text.length > 60) return { handled: false }
 
   const showStep = (idx: number): void => {
     if (!activeGuide) return
@@ -71,7 +74,6 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
     }
   }
 
-  const cmd = parseGuideNav(text)
   if (cmd === 'done') {
     dismissGuide()
     setStatus('idle', 'Guide closed', undefined, 900)
@@ -112,16 +114,21 @@ function handleGuideNavCommand(prompt: string): { handled: boolean; response?: u
   return { handled: false }
 }
 
-/** Guide voice commands handled before any model call; returns a response when handled. */
-export function interceptGuideCommand(prompt: string): unknown | undefined {
-  // Guide voice nav: "next step", "back", "repeat", "done"
-  const nav = handleGuideNavCommand(prompt)
-  if (nav.handled) return nav.response
+export type GuideCommand =
+  | { kind: 'guide-nav'; command: GuideNavCommand }
+  | { kind: 'guide-play'; name: string }
+  | { kind: 'guide-replay' }
+  | { kind: 'guide-save'; name?: string }
 
-  // Play-saved-guide voice: "play guide <name>" / "run guide <name>"
-  const playName = matchPlayGuide(prompt)
-  if (playName) {
-    const found = findGuideByName(playName)
+/** Runs a guide command the router prefilter matched; undefined when it does not apply. */
+export function handleGuideCommand(cmd: GuideCommand): unknown | undefined {
+  if (cmd.kind === 'guide-nav') {
+    const nav = handleGuideNavCommand(cmd.command)
+    return nav.handled ? nav.response : undefined
+  }
+
+  if (cmd.kind === 'guide-play') {
+    const found = findGuideByName(cmd.name)
     if (found) {
       replaySavedGuide(found.id)
       return {
@@ -129,34 +136,27 @@ export function interceptGuideCommand(prompt: string): unknown | undefined {
         text: `Playing "${found.name}" (${found.steps.length} steps). Say "next" to advance.`
       }
     }
-    return { mode: 'answer', text: `No saved guide matches "${playName}".` }
+    return { mode: 'answer', text: `No saved guide matches "${cmd.name}".` }
   }
 
-  // Save-guide voice command
-  const saveMatch = matchSaveGuide(prompt)
-  if (saveMatch && lastGuide) {
-    const name = saveMatch.name ?? lastGuide.task
+  if (!lastGuide) return undefined
+
+  if (cmd.kind === 'guide-save') {
+    const name = cmd.name ?? lastGuide.task
     const saved = saveLastAsGuide(name)
-    if (saved)
-      return {
-        mode: 'answer',
-        text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.`
-      }
+    if (!saved) return undefined
+    return { mode: 'answer', text: `Saved as "${saved.name}". Say "play guide ${name}" to replay.` }
   }
 
-  // Guide replay: "replay last guide", "do the guide again"
-  if (lastGuide && isReplayRequest(prompt)) {
-    activeGuide = { steps: lastGuide.steps, index: 0 }
-    setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', {
-      index: 1,
-      total: lastGuide.steps.length
-    })
-    highlight.send('screen:highlights', lastGuide.steps)
-    highlight.show()
-    return {
-      mode: 'answer',
-      text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.`
-    }
+  activeGuide = { steps: lastGuide.steps, index: 0 }
+  setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', {
+    index: 1,
+    total: lastGuide.steps.length
+  })
+  highlight.send('screen:highlights', lastGuide.steps)
+  highlight.show()
+  return {
+    mode: 'answer',
+    text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.`
   }
-  return undefined
 }

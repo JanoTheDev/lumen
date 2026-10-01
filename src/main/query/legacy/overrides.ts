@@ -1,7 +1,8 @@
-// Prompt steering the system prompt alone does not achieve reliably. Pure: prompt + context in,
-// effective prompt out.
-import { classifyQuery, type QueryIntent } from './query-classifier'
-import { detectRequestedApp } from '../ai/app-context'
+// Legacy prompt steering (config ai.router = "legacy"): regex intent + text blocks appended
+// to the prompt. The LLM router (query/router.ts) replaces this; delete with the legacy path.
+// Pure: prompt + context in, effective prompt out.
+import { classifyQuery, type QueryIntent } from './classifier'
+import { APP_URLS } from '../../ai/app-context'
 
 // Ordinal list requests (open my 3rd email, 2nd result, etc.) MUST use navigate_url+follow_up.
 const ORDINAL_RE =
@@ -42,6 +43,50 @@ const DIRECT_ACTION_BLOCK = `[SYSTEM OVERRIDE: Direct click/open request. You MU
 
 function locateBlock(prompt: string): string {
   return `[SYSTEM OVERRIDE: This is a highlight/locate request. TWO CASES:\n1. Target content IS visible in current screenshot → respond ONLY with {"mode":"locate","items":[...]}. The target must be the EXACT CONTENT asked about (e.g. actual email rows from a sender) — NOT shortcuts, icons, bookmarks, or launcher tiles that would navigate to that content. CLUSTER RULE: if matching elements appear in 2+ separate groups with unrelated rows between, return ONE item per group.\n2. Target is NOT visible (wrong page, wrong tab, new tab page, or only a shortcut/icon is visible but not the actual content) → use action mode to navigate_url to the correct page, with follow_up:"The page is loaded. Highlight where the user can find: ${prompt}. Respond ONLY with locate mode." NEVER return locate with an empty or zero-size bbox.]`
+}
+
+// Legacy app-switch detection. Returns { app, url } when the prompt explicitly names an app and the current active
+// window does NOT match it. Used to force a navigate action on the first step.
+export function detectRequestedApp(
+  prompt: string,
+  activeWindow: string
+): { app: string; url: string } | null {
+  const p = prompt.toLowerCase()
+  const w = activeWindow.toLowerCase()
+  const names: Array<[string, RegExp]> = [
+    ['gmail', /\bgmail\b/],
+    ['outlook', /\boutlook\b/],
+    ['linkedin', /\blinkedin\b/],
+    ['twitter', /\b(twitter|x\.com|my ?x)\b/],
+    ['notion', /\bnotion\b/],
+    ['discord', /\bdiscord\b/],
+    ['slack', /\bslack\b/],
+    ['youtube', /\byoutube\b/],
+    ['github', /\bgithub\b/],
+    ['reddit', /\breddit\b/],
+    ['spotify', /\bspotify\b/],
+    ['maps', /\b(google\s+)?maps\b/],
+    ['calendar', /\b(google\s+)?calendar\b/],
+    ['drive', /\b(google\s+)?drive\b/],
+    ['docs', /\b(google\s+)?docs\b/],
+    ['sheets', /\b(google\s+)?sheets\b/],
+    ['whatsapp', /\bwhatsapp\b/],
+    ['telegram', /\btelegram\b/]
+  ]
+  for (const [app, re] of names) {
+    if (!re.test(p)) continue
+    // Skip if active window already on that app (rough check).
+    const urlHost =
+      APP_URLS[app]
+        ?.replace(/^https?:\/\//, '')
+        .split('/')[0]
+        .toLowerCase() ?? ''
+    const bareHost = urlHost.replace(/^www\./, '')
+    if (urlHost && (w.includes(bareHost) || w.includes(app))) return null
+    const url = APP_URLS[app]
+    if (url) return { app, url }
+  }
+  return null
 }
 
 export function applyOverrides({

@@ -17,7 +17,7 @@ export function detectApp(activeWindow: string): string {
 }
 
 // Map of app IDs → canonical URL Lumen should navigate to on first action.
-const APP_URLS: Record<string, string> = {
+export const APP_URLS: Record<string, string> = {
   gmail: 'https://mail.google.com/',
   linkedin: 'https://www.linkedin.com/',
   twitter: 'https://x.com/',
@@ -39,48 +39,20 @@ const APP_URLS: Record<string, string> = {
   telegram: 'https://web.telegram.org/'
 }
 
-// Returns { app, url } when the prompt explicitly names an app and the current active
-// window does NOT match it. Used to force a navigate action on the first step.
-export function detectRequestedApp(
-  prompt: string,
-  activeWindow: string
-): { app: string; url: string } | null {
-  const p = prompt.toLowerCase()
-  const w = activeWindow.toLowerCase()
-  const names: Array<[string, RegExp]> = [
-    ['gmail', /\bgmail\b/],
-    ['outlook', /\boutlook\b/],
-    ['linkedin', /\blinkedin\b/],
-    ['twitter', /\b(twitter|x\.com|my ?x)\b/],
-    ['notion', /\bnotion\b/],
-    ['discord', /\bdiscord\b/],
-    ['slack', /\bslack\b/],
-    ['youtube', /\byoutube\b/],
-    ['github', /\bgithub\b/],
-    ['reddit', /\breddit\b/],
-    ['spotify', /\bspotify\b/],
-    ['maps', /\b(google\s+)?maps\b/],
-    ['calendar', /\b(google\s+)?calendar\b/],
-    ['drive', /\b(google\s+)?drive\b/],
-    ['docs', /\b(google\s+)?docs\b/],
-    ['sheets', /\b(google\s+)?sheets\b/],
-    ['whatsapp', /\bwhatsapp\b/],
-    ['telegram', /\btelegram\b/]
-  ]
-  for (const [app, re] of names) {
-    if (!re.test(p)) continue
-    // Skip if active window already on that app (rough check).
-    const urlHost =
-      APP_URLS[app]
-        ?.replace(/^https?:\/\//, '')
-        .split('/')[0]
-        .toLowerCase() ?? ''
-    const bareHost = urlHost.replace(/^www\./, '')
-    if (urlHost && (w.includes(bareHost) || w.includes(app))) return null
-    const url = APP_URLS[app]
-    if (url) return { app, url }
-  }
-  return null
+const APP_ALIASES: Record<string, string> = {
+  'x.com': 'x',
+  'google maps': 'maps',
+  'google calendar': 'calendar',
+  'google drive': 'drive',
+  'google docs': 'docs',
+  'google sheets': 'sheets',
+  'web whatsapp': 'whatsapp'
+}
+
+/** Canonical URL for a known web app name ("Gmail", "Google Drive"), or null. */
+export function appUrl(name: string): string | null {
+  const key = name.trim().toLowerCase()
+  return APP_URLS[APP_ALIASES[key] ?? key] ?? null
 }
 
 export function isBrowser(activeWindow: string): boolean {

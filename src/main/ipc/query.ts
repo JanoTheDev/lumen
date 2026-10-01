@@ -22,7 +22,7 @@ import { setStatus } from '../windows/status'
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
 
 export interface QueryIpcDeps {
-  /** Handles guide voice commands before a model call; returns a response when it did. */
+  /** Router stages 1 + 2 (local grammar, prefilter); returns a response when handled. */
   intercept: (prompt: string) => unknown | undefined
   runQuery: (prompt: string, opts: CallOptions, scope: CancelScope) => Promise<ModelResponse>
 }

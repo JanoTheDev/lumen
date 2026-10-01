@@ -8,6 +8,7 @@
   "scripts": {
     "test": "vitest run",
     "test:live": "vitest run test/live",
+    "eval:router": "vitest run --config eval/vitest.config.ts eval/router",
     "format": "prettier --write .",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

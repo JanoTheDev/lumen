@@ -21,6 +21,8 @@ export interface TurnContext {
   frame: { w: number; h: number } | null
   /** Mode chosen before the call (router or pipeline); the model does not re-decide it. */
   routedMode?: string
+  /** App to switch to first (router appSwitch); url when it is a known web app. */
+  targetApp?: { name: string; url?: string }
   now?: Date
 }
 
@@ -45,6 +47,10 @@ export function userTurn(ctx: TurnContext): string {
     ctx.frame ? `screen: frame "1", ${ctx.frame.w}x${ctx.frame.h} px` : 'screen: none sent'
   ]
   if (ctx.routedMode) lines.push(`routed_mode: ${ctx.routedMode}`)
+  if (ctx.targetApp)
+    lines.push(
+      `target_app: ${ctx.targetApp.name}${ctx.targetApp.url ? ` ${ctx.targetApp.url}` : ''} (not in front)`
+    )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
   return `<context>\n${lines.join('\n')}\n</context>\n<request>${ctx.prompt}</request>`
 }

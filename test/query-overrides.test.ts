@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyOverrides } from '../src/main/query/overrides'
+import { applyOverrides } from '../src/main/query/legacy/overrides'
 
 // Characterization of prompt steering: captured from the behaviour before the query
 // pipeline moved out of index.ts. Update snapshots only on purpose.

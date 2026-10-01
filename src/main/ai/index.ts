@@ -29,6 +29,10 @@ export interface CallOptions {
   signal?: AbortSignal
   /** Turn the streamed spoken text belongs to; without it nothing is published. */
   turnId?: string
+  /** Mode from the router; the model uses it instead of re-deciding. */
+  routedMode?: string
+  /** App the user wants that is not in front (router appSwitch). */
+  targetApp?: { name: string; url?: string }
 }
 
 /**
@@ -54,7 +58,9 @@ export async function callModel(
         content: userTurn({
           prompt,
           activeWindow,
-          frame: screenshotBase64 ? { w: imgW, h: imgH } : null
+          frame: screenshotBase64 ? { w: imgW, h: imgH } : null,
+          routedMode: opts.routedMode,
+          targetApp: opts.targetApp
         })
       }
     ],

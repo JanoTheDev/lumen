@@ -1,4 +1,4 @@
-import { classifyQuery } from './query-classifier'
+import { classifyQuery } from './legacy/classifier'
 
 const SPLIT_RE =
   /\s+(?:and\s+also|also\s+|and\s+then|and\s+|,\s*then\s+|,\s*and\s+|,\s+|;\s*|then\s+)/i

@@ -80,6 +80,19 @@ describe('user turn', () => {
     const turn = userTurn(explorer)
     expect(turn).toContain('screen: none sent')
     expect(turn).toContain('routed_mode: answer')
+    expect(turn).not.toContain('target_app')
+  })
+
+  it('names the app to switch to when the router asked for one', () => {
+    const turn = userTurn({
+      ...explorer,
+      routedMode: 'action',
+      targetApp: { name: 'Gmail', url: 'https://mail.google.com/' }
+    })
+    expect(turn).toContain('target_app: Gmail https://mail.google.com/ (not in front)')
+    expect(userTurn({ ...explorer, targetApp: { name: 'Figma' } })).toContain(
+      'target_app: Figma (not in front)'
+    )
   })
 
   it('keeps per-app writing rules', () => {
