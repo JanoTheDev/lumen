@@ -9,7 +9,7 @@ import {
 } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import type { ConnectorServer } from '@shared/connectors'
-import type { ServerSecrets } from './store'
+import { launchProblem, type ServerSecrets } from './store'
 
 export const CALL_TIMEOUT_MS = 30_000
 export const CONNECT_TIMEOUT_MS = 15_000
@@ -111,11 +111,23 @@ export class McpManager {
     if (e.conn) return e.conn
     if (e.pending) return e.pending
     if (!force && this.now() < e.retryAt) throw new Error(e.error ?? 'Waiting to reconnect.')
+    const problem = launchProblem(server)
+    if (problem) {
+      e.error = problem
+      throw new Error(problem)
+    }
     const ac = new AbortController()
     const timer = setTimeout(() => ac.abort(new Error('Connecting timed out.')), CONNECT_TIMEOUT_MS)
     const attempt = this.connectFn(server, this.deps.secrets(server.id), ac.signal)
       .then(async (conn) => {
-        const tools = await withTimeout(conn.listTools(), CONNECT_TIMEOUT_MS, 'Listing tools')
+        let tools: McpTool[]
+        try {
+          tools = await withTimeout(conn.listTools(), CONNECT_TIMEOUT_MS, 'Listing tools')
+        } catch (err) {
+          // Connected but no tool list: close it, or each retry leaves a server process behind.
+          void conn.close().catch(() => {})
+          throw err
+        }
         if (this.entries.get(server.id) !== e) {
           void conn.close().catch(() => {})
           throw new Error('Connector was removed.')

@@ -63,6 +63,18 @@ export function urlProblem(raw: string | undefined): string | null {
   return 'Use an https:// URL (http:// only for localhost).'
 }
 
+/**
+ * Why a saved server may not be started now, checked again at connect time: connectors.json
+ * can be edited outside Lumen, so a stdio command runs only with the user's trust mark and an
+ * http server only with an allowed URL.
+ */
+export function launchProblem(server: ConnectorServer): string | null {
+  if (server.transport === 'http') return urlProblem(server.url)
+  return server.trusted === true
+    ? null
+    : 'This command was not marked as trusted. Open Settings → Connectors and tick “I trust this command”.'
+}
+
 export interface Cipher {
   available(): boolean
   encrypt(text: string): Buffer
