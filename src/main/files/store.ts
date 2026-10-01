@@ -24,6 +24,12 @@ const KIND_BY_EXT: Record<string, FileKind> = {
   '.txt': 'text',
   '.md': 'text',
   '.csv': 'text',
+  '.tsv': 'text',
+  '.json': 'text',
+  '.html': 'text',
+  '.htm': 'text',
+  '.xlsx': 'sheet',
+  '.pptx': 'slides',
   '.png': 'image',
   '.jpg': 'image',
   '.jpeg': 'image'
@@ -42,7 +48,8 @@ const startsWith = (buf: Buffer, bytes: number[]): boolean => bytes.every((b, i)
 /** Does the head of the file match its extension (no renamed executables or archives)? */
 export function contentMatches(kind: FileKind, ext: string, head: Buffer): boolean {
   if (kind === 'pdf') return head.subarray(0, 1024).includes('%PDF-')
-  if (kind === 'docx') return startsWith(head, [0x50, 0x4b, 0x03, 0x04])
+  if (kind === 'docx' || kind === 'sheet' || kind === 'slides')
+    return startsWith(head, [0x50, 0x4b, 0x03, 0x04])
   if (kind === 'image')
     return ext === '.png'
       ? startsWith(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
@@ -82,7 +89,10 @@ export async function checkDroppedPath(raw: string): Promise<CheckResult> {
     return deny('Network and device paths are not supported. Copy the file to this PC first.')
   const ext = extname(path).toLowerCase()
   const kind = KIND_BY_EXT[ext]
-  if (!kind) return deny('I can read PDF, Word (.docx), text, Markdown, CSV, PNG and JPG files.')
+  if (!kind)
+    return deny(
+      'I can read PDF, Word (.docx), Excel (.xlsx), PowerPoint (.pptx), text, Markdown, CSV, PNG and JPG files.'
+    )
   let size: number
   try {
     const st = await stat(path)

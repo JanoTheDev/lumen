@@ -4,6 +4,7 @@
 import { readFile } from 'fs/promises'
 import type { ToolContent } from '../ai/providers/types'
 import { redactForModel } from '../actions/redact'
+import { csvWithStats, docxText, pptxText, xlsxText } from './office'
 import { checkDroppedPath, type SharedFile } from './store'
 
 /** Text sent per file (~25k tokens). */
@@ -47,12 +48,6 @@ export function prepareText(text: string, max = MAX_TEXT_CHARS): string {
   return cut ? `${body}\n[cut: only the first ${max.toLocaleString('en-US')} characters]` : body
 }
 
-async function docxText(buf: Buffer): Promise<string> {
-  const mammoth = await import('mammoth')
-  const r = await (mammoth.default ?? mammoth).extractRawText({ buffer: buf })
-  return r.value
-}
-
 async function nativeShrink(buf: Buffer): Promise<Buffer | null> {
   try {
     const { nativeImage } = await import('electron')
@@ -67,6 +62,22 @@ async function nativeShrink(buf: Buffer): Promise<Buffer | null> {
   } catch {
     return null
   }
+}
+
+const KIND_LABEL: Partial<Record<SharedFile['kind'], string>> = {
+  docx: 'Word',
+  sheet: 'Excel',
+  slides: 'PowerPoint',
+  text: 'text'
+}
+
+/** Word with headings, lists and tables; Excel sheets and CSV with a stats line; slide text. */
+export async function fileText(f: Pick<SharedFile, 'kind' | 'name'>, buf: Buffer): Promise<string> {
+  if (f.kind === 'docx') return docxText(buf)
+  if (f.kind === 'sheet') return xlsxText(buf)
+  if (f.kind === 'slides') return pptxText(buf)
+  const text = decodeText(buf)
+  return /\.(csv|tsv)$/i.test(f.name) ? csvWithStats(text) : text
 }
 
 const note = (f: SharedFile, text: string): ToolContent[] => [
@@ -114,9 +125,12 @@ export async function loadContent(f: SharedFile, opts: LoadOptions): Promise<Too
   }
   let text: string
   try {
-    text = f.kind === 'docx' ? await docxText(buf) : decodeText(buf)
+    text = await fileText(f, buf)
   } catch {
-    return note(f, 'The Word file could not be read (damaged or password protected).')
+    return note(
+      f,
+      `The ${KIND_LABEL[f.kind] ?? ''} file could not be read (damaged or password protected).`
+    )
   }
   if (!text.trim()) return note(f, 'The file has no text.')
   return [{ type: 'text', text: fenced(f, prepareText(text)) }]

@@ -6,7 +6,7 @@ import { loadContent, type LoadOptions } from './content'
 import { sharedFiles, type SharedFile } from './store'
 
 const FILE_WORDS =
-  /\b(files?|documents?|docs?|docx|pdfs?|attachments?|attached|dropped|shared|images?|pictures?|photos?|spreadsheets?|csv|markdown|reports?|contracts?|essays?|papers?|letters?|invoices?|resumes?|cv)\b/i
+  /\b(files?|documents?|docs?|docx|pdfs?|attachments?|attached|dropped|shared|images?|pictures?|photos?|spreadsheets?|workbooks?|sheets?|excel|xlsx|csv|tsv|slides?|presentations?|decks?|pptx|powerpoint|markdown|reports?|contracts?|essays?|papers?|letters?|invoices?|resumes?|cv)\b/i
 
 const READING =
   /\b(summari[sz]e|summary|tl;?dr|read|explain|translate|proofread|review|extract|key points|main points|outline|describe|analy[sz]e|check|what does (it|this|that) say|what('s| is) in (it|this|that)|about (it|this|that))\b/i

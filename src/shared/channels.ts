@@ -1561,7 +1561,7 @@ export interface DroppedFileView {
   id: string
   name: string
   size: number
-  kind: 'pdf' | 'docx' | 'text' | 'image'
+  kind: 'pdf' | 'docx' | 'text' | 'image' | 'sheet' | 'slides'
 }
 
 export type FileDropResult =
