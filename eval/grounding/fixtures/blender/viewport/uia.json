@@ -1,0 +1,4 @@
+{
+  "snapshotId": "blender-viewport",
+  "root": { "id": "e0", "role": "window", "name": "Blender", "rect": { "x": 0, "y": 0, "w": 2880, "h": 1740 }, "monitorId": 0, "enabled": true, "patterns": [] }
+}

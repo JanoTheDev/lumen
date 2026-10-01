@@ -1,0 +1,19 @@
+{
+  "snapshotId": "settings-system",
+  "root": {
+    "id": "e0", "role": "window", "name": "Settings", "rect": { "x": 0, "y": 0, "w": 2880, "h": 1740 },
+    "monitorId": 0, "enabled": true, "patterns": [],
+    "children": [
+      { "id": "e1", "role": "listitem", "name": "System", "rect": { "x": 24, "y": 300, "w": 540, "h": 72 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e2", "role": "listitem", "name": "Bluetooth & devices", "rect": { "x": 24, "y": 378, "w": 540, "h": 72 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e3", "role": "listitem", "name": "Network & internet", "rect": { "x": 24, "y": 456, "w": 540, "h": 72 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e4", "role": "listitem", "name": "Personalization", "rect": { "x": 24, "y": 534, "w": 540, "h": 72 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e5", "role": "listitem", "name": "Apps", "rect": { "x": 24, "y": 612, "w": 540, "h": 72 }, "monitorId": 0, "enabled": true, "patterns": ["selectionitem"] },
+      { "id": "e6", "role": "button", "name": "Display", "rect": { "x": 660, "y": 300, "w": 2100, "h": 120 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e7", "role": "button", "name": "Sound", "rect": { "x": 660, "y": 432, "w": 2100, "h": 120 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e8", "role": "hyperlink", "name": "Open", "rect": { "x": 2520, "y": 600, "w": 120, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e9", "role": "hyperlink", "name": "Open", "rect": { "x": 2520, "y": 720, "w": 120, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["invoke"] },
+      { "id": "e10", "role": "button", "name": "Rename", "rect": { "x": 2400, "y": 180, "w": 240, "h": 60 }, "monitorId": 0, "enabled": false, "patterns": ["invoke"] }
+    ]
+  }
+}

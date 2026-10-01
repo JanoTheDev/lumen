@@ -15,3 +15,7 @@ plans/
 
 # rust build output
 native/target/
+
+# generated eval output (commit milestone reports with -f)
+eval/cache/
+eval/reports/

@@ -1,0 +1,16 @@
+{
+  "snapshotId": "notepad-main",
+  "root": {
+    "id": "e0", "role": "window", "name": "Untitled - Notepad", "rect": { "x": 0, "y": 0, "w": 2880, "h": 1740 },
+    "monitorId": 0, "enabled": true, "patterns": [],
+    "children": [
+      { "id": "e1", "role": "menuitem", "name": "File", "rect": { "x": 12, "y": 60, "w": 66, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["expandcollapse"] },
+      { "id": "e2", "role": "menuitem", "name": "Edit", "rect": { "x": 84, "y": 60, "w": 66, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["expandcollapse"] },
+      { "id": "e3", "role": "menuitem", "name": "Format", "rect": { "x": 156, "y": 60, "w": 96, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["expandcollapse"] },
+      { "id": "e4", "role": "menuitem", "name": "View", "rect": { "x": 258, "y": 60, "w": 72, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["expandcollapse"] },
+      { "id": "e5", "role": "menuitem", "name": "Help", "rect": { "x": 336, "y": 60, "w": 72, "h": 48 }, "monitorId": 0, "enabled": true, "patterns": ["expandcollapse"] },
+      { "id": "e6", "role": "document", "name": "Text editor", "rect": { "x": 0, "y": 120, "w": 2880, "h": 1560 }, "monitorId": 0, "enabled": true, "patterns": ["value", "text"] },
+      { "id": "e7", "role": "text", "name": "Ln 1, Col 1", "rect": { "x": 2400, "y": 1692, "w": 180, "h": 42 }, "monitorId": 0, "enabled": true, "patterns": [] }
+    ]
+  }
+}

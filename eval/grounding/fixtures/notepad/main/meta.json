@@ -1,0 +1,10 @@
+{
+  "synthetic": true,
+  "app": "notepad",
+  "capturedAt": "2026-10-01",
+  "monitor": { "id": 0, "x": 0, "y": 0, "w": 2880, "h": 1800, "scaleFactor": 1.5, "primary": true },
+  "window": { "title": "Untitled - Notepad", "process": "notepad.exe", "rect": { "x": 0, "y": 0, "w": 2880, "h": 1740 } },
+  "frame": { "w": 2880, "h": 1800, "downscaled": { "w": 1280, "h": 800 } },
+  "theme": "light",
+  "locale": "en-US"
+}

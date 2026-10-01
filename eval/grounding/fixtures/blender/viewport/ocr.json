@@ -1,0 +1,16 @@
+{
+  "words": [
+    { "text": "File", "rect": { "x": 60, "y": 12, "w": 54, "h": 30 }, "conf": 0.95, "lineIndex": 0 },
+    { "text": "Edit", "rect": { "x": 132, "y": 12, "w": 54, "h": 30 }, "conf": 0.95, "lineIndex": 0 },
+    { "text": "Render", "rect": { "x": 204, "y": 12, "w": 90, "h": 30 }, "conf": 0.95, "lineIndex": 0 },
+    { "text": "Window", "rect": { "x": 312, "y": 12, "w": 96, "h": 30 }, "conf": 0.95, "lineIndex": 0 },
+    { "text": "View", "rect": { "x": 60, "y": 84, "w": 60, "h": 30 }, "conf": 0.95, "lineIndex": 1 },
+    { "text": "Select", "rect": { "x": 138, "y": 84, "w": 78, "h": 30 }, "conf": 0.95, "lineIndex": 1 },
+    { "text": "Add", "rect": { "x": 234, "y": 84, "w": 48, "h": 30 }, "conf": 0.95, "lineIndex": 1 },
+    { "text": "Object", "rect": { "x": 300, "y": 84, "w": 84, "h": 30 }, "conf": 0.95, "lineIndex": 1 }
+  ],
+  "lines": [
+    { "text": "File Edit Render Window", "rect": { "x": 60, "y": 12, "w": 348, "h": 30 }, "conf": 0.95 },
+    { "text": "View Select Add Object", "rect": { "x": 60, "y": 84, "w": 324, "h": 30 }, "conf": 0.95 }
+  ]
+}
