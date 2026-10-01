@@ -52,6 +52,7 @@ export async function getMicStream(): Promise<MediaStream> {
     .then((s) => {
       stream = s
       streamDevice = device
+      watchUnplug(s)
       return s
     })
     .finally(() => {
@@ -60,6 +61,29 @@ export async function getMicStream(): Promise<MediaStream> {
   const pending = opening
   if (stale) notifyChanged()
   return pending
+}
+
+/**
+ * The microphone went away (unplugged, disabled): drop the dead stream so the next use opens
+ * the default one, and say so. A recording in progress ends and sends what it has.
+ */
+function watchUnplug(s: MediaStream): void {
+  for (const track of s.getAudioTracks()) {
+    track.addEventListener('ended', () => {
+      if (stream !== s) return
+      console.warn('[mic] microphone disconnected')
+      release()
+      notifyChanged()
+      try {
+        window.lumen.send(
+          'assistant:error',
+          'Microphone disconnected. Using the default microphone.'
+        )
+      } catch {
+        /* window closing */
+      }
+    })
+  }
 }
 
 function release(): void {
