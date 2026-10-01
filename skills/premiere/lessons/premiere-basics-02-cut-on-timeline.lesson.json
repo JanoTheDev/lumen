@@ -1,0 +1,230 @@
+{
+  "id": "premiere-basics-02-cut-on-timeline",
+  "app": "premiere",
+  "title": "Cut clips on the Timeline",
+  "summary": "Split clips with the Razor tool, remove a piece without a gap, and cut at the playhead.",
+  "level": "beginner",
+  "minutes": 7,
+  "prereqs": ["premiere-basics-01-new-project-import"],
+  "appVersion": ">=25.0",
+  "tags": ["cut", "timeline"],
+  "steps": [
+    {
+      "id": "focus-timeline",
+      "say": "Click an empty spot in the Timeline at the bottom right so it has focus.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Timeline panel at the bottom right outlined in blue as the active panel, with clips on it?"
+        }
+      },
+      "hints": [
+        "The Timeline is the panel with the V1 and A1 track rows. A blue outline shows it is active.",
+        "If the Timeline is empty, drag a clip from the Project panel into it first."
+      ],
+      "why": "Premiere sends shortcuts to the panel with focus, so the Timeline must be active.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          }
+        ]
+      }
+    },
+    {
+      "id": "razor",
+      "say": "Press C to pick the Razor tool.",
+      "target": {
+        "shortcut": "C"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "C"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the razor blade tool highlighted in the Tools panel, or is the pointer a razor blade?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Razor tool looks like a razor blade in the thin Tools strip next to the Timeline.",
+        "Click the Timeline first if the key does nothing."
+      ],
+      "why": "The Razor tool cuts a clip wherever you click.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cut-clip",
+      "say": "Click on a clip in the Timeline where you want to split it.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a new cut line splitting a clip in the Timeline?"
+        }
+      },
+      "hints": [
+        "Hover over the clip; a line shows where the cut will go. Click once.",
+        "Hold Shift while clicking to cut every track at that point."
+      ],
+      "why": "Splitting a clip lets you remove or move part of it."
+    },
+    {
+      "id": "selection",
+      "say": "Press V to switch back to the Selection tool.",
+      "target": {
+        "shortcut": "V"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "V"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the arrow Selection tool highlighted in the Tools panel?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "V is the arrow at the top of the Tools strip.",
+        "With the Razor still active every click makes another cut, so switch now."
+      ],
+      "why": "The Selection tool lets you pick clips without cutting them.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "V"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-piece",
+      "say": "Click the piece of the clip you want to remove.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is one piece of the cut clip highlighted as selected in the Timeline?"
+        }
+      },
+      "hints": [
+        "A selected clip turns a lighter shade. Click once without dragging.",
+        "Click an empty area to clear the selection and try again."
+      ],
+      "why": "Premiere deletes only what is selected."
+    },
+    {
+      "id": "ripple-delete",
+      "say": "Press Shift Delete to remove it and close the gap. Control Z undoes it.",
+      "target": {
+        "shortcut": "Shift+Delete"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+Delete"
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the selected piece gone, with the later clips moved left so no gap remains?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Plain Delete leaves an empty gap. Holding Shift closes it.",
+        "You can also right click the clip and choose Ripple Delete."
+      ],
+      "why": "Ripple delete keeps the edit tight with no black gaps.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+Delete"
+          }
+        ]
+      }
+    },
+    {
+      "id": "add-edit",
+      "say": "Move the playhead to a new spot, then press Control K to cut without changing tools.",
+      "target": {
+        "shortcut": "Ctrl+K"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+K"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new cut on the clip exactly under the playhead?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click in the time ruler above the tracks to move the playhead.",
+        "Control K cuts the targeted tracks; Control Shift K cuts all tracks."
+      ],
+      "why": "Cutting at the playhead is faster than switching to the Razor tool each time.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+K"
+          }
+        ]
+      }
+    }
+  ]
+}

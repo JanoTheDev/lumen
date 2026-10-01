@@ -1,0 +1,57 @@
+{
+  "window": "main",
+  "layout": "Editing workspace (default)",
+  "notes": "Approximate fractions of the main window for the default Editing workspace at 1920 by 1080, Edit mode active.",
+  "regions": {
+    "menu-bar": { "x": 0, "y": 0, "w": 1, "h": 0.03, "desc": "Menu bar across the top" },
+    "header-bar": {
+      "x": 0,
+      "y": 0.03,
+      "w": 1,
+      "h": 0.04,
+      "desc": "Import, Edit and Export tabs on the left, workspaces on the right"
+    },
+    "source-monitor": {
+      "x": 0,
+      "y": 0.07,
+      "w": 0.45,
+      "h": 0.46,
+      "desc": "Source Monitor and Effect Controls tabs, top left"
+    },
+    "program-monitor": {
+      "x": 0.45,
+      "y": 0.07,
+      "w": 0.55,
+      "h": 0.46,
+      "desc": "Program Monitor showing the sequence, top right"
+    },
+    "project-panel": {
+      "x": 0,
+      "y": 0.53,
+      "w": 0.33,
+      "h": 0.47,
+      "desc": "Project panel with imported media, bottom left"
+    },
+    "tools-panel": {
+      "x": 0.33,
+      "y": 0.53,
+      "w": 0.02,
+      "h": 0.47,
+      "desc": "Tools strip with Selection, Razor and Type, between Project panel and Timeline"
+    },
+    "timeline": {
+      "x": 0.35,
+      "y": 0.53,
+      "w": 0.62,
+      "h": 0.47,
+      "desc": "Timeline with video and audio tracks, bottom right"
+    },
+    "audio-meters": {
+      "x": 0.97,
+      "y": 0.53,
+      "w": 0.03,
+      "h": 0.47,
+      "desc": "Audio meters, far right of the Timeline"
+    }
+  }
+}

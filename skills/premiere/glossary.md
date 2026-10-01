@@ -1,0 +1,33 @@
+# Adobe Premiere glossary
+
+- **Project** — the .prproj file that keeps track of your media, sequences and edits.
+- **Sequence** — a timeline with a set frame size and frame rate; a project can hold many.
+- **Timeline** — the panel where a sequence's clips are arranged on tracks.
+- **Track** — a row in the Timeline; V1, V2 for video and A1, A2 for audio.
+- **Clip** — a piece of video, audio or graphics placed in the Timeline.
+- **Playhead** — the blue marker showing the current frame.
+- **Source Monitor** — the viewer for previewing a clip before editing it in.
+- **Program Monitor** — the viewer showing the sequence as it will play.
+- **Project panel** — the list of imported media, sequences and bins.
+- **Bin** — a folder inside the Project panel.
+- **Selection tool** — the arrow for selecting, moving and trimming clips (V).
+- **Razor tool** — cuts a clip in two wherever you click (C).
+- **Type tool** — adds text by clicking in the Program Monitor (T).
+- **Add edit** — a cut at the playhead without changing tools (Control K).
+- **Ripple delete** — removing a clip and closing the gap it leaves.
+- **Trim** — moving the start or end of a clip.
+- **Edit point** — the join between two clips.
+- **Transition** — a blend between clips, such as Cross Dissolve.
+- **Graphic clip** — a Timeline clip holding text or shapes.
+- **Properties panel** — the panel for styling text and changing the selected clip's settings.
+- **Effect Controls** — panel for an effect's settings and keyframes on the selected clip.
+- **Audio Gain** — dialog that raises or lowers a clip's loudness in decibels.
+- **Normalize** — setting a clip's loudest peak to a chosen level automatically.
+- **Decibel (dB)** — the unit for loudness; raising it by about 10 dB sounds roughly twice as loud.
+- **Audio meters** — bars showing loudness while playing; red at the top means clipping.
+- **Workspace** — a saved arrangement of panels, such as Editing or Color.
+- **Import mode** — the screen for choosing media when starting a project.
+- **Export mode** — the screen for export settings, opened with Control M.
+- **Preset** — saved export settings, such as Match Source with H.264.
+- **H.264** — the most common video format for sharing online, saved as an MP4 file.
+- **Offline media** — a clip whose source file has moved or been deleted.

@@ -1,0 +1,179 @@
+{
+  "id": "premiere-basics-04-audio-levels",
+  "app": "premiere",
+  "title": "Set audio levels",
+  "summary": "Raise or lower a clip's volume with Audio Gain and check the meters.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["premiere-basics-01-new-project-import"],
+  "appVersion": ">=25.0",
+  "tags": ["audio"],
+  "steps": [
+    {
+      "id": "focus-timeline",
+      "say": "Click an empty spot in the Timeline at the bottom right so it has focus.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Timeline panel at the bottom right outlined in blue as the active panel, with clips on it?"
+        }
+      },
+      "hints": [
+        "The Timeline is the panel with the V1 and A1 track rows. A blue outline shows it is active.",
+        "If the Timeline is empty, drag a clip from the Project panel into it first."
+      ],
+      "why": "Premiere sends shortcuts to the panel with focus, so the Timeline must be active.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-clip",
+      "say": "Click the clip whose sound you want to change.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a clip highlighted as selected in the Timeline?"
+        }
+      },
+      "hints": [
+        "Clicking the audio part on an A track selects it, and its video if they are linked.",
+        "Select several clips with Shift click to change them together."
+      ],
+      "why": "Audio Gain works on the selected clips."
+    },
+    {
+      "id": "open-gain",
+      "say": "Press G to open Audio Gain.",
+      "target": {
+        "shortcut": "G"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "G"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Audio Gain"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Audio Gain window open?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click the clip first so the Timeline has focus, then press G.",
+        "You can also right click the clip and choose Audio Gain."
+      ],
+      "why": "Audio Gain changes loudness by a number you type, which is precise and repeatable.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "G"
+          }
+        ]
+      }
+    },
+    {
+      "id": "adjust-gain",
+      "say": "Choose Adjust Gain by, type a number such as 3 or minus 3, then click OK.",
+      "target": {
+        "text": "Adjust Gain by"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the Audio Gain window closed, with the clip waveform taller or shorter than before?"
+        }
+      },
+      "hints": [
+        "Positive numbers make it louder, negative numbers quieter. The unit is decibels.",
+        "Choose Normalize Max Peak to, with minus 3, to set loudness automatically."
+      ],
+      "why": "Small changes of a few decibels are usually all a clip needs."
+    },
+    {
+      "id": "listen",
+      "say": "Press Space to play and watch the audio meters at the right of the Timeline.",
+      "target": {
+        "region": "audio-meters"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Space"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the video playing with the audio meters moving?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The meters are two narrow bars at the far right. Press Space again to stop.",
+        "If you see no meters, open the Window menu and choose Audio Meters."
+      ],
+      "why": "The meters show whether the sound is too quiet or too loud.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "Space"
+          }
+        ]
+      }
+    },
+    {
+      "id": "check-peaks",
+      "say": "If the meters touch red at the top, lower the gain a little and play again.",
+      "target": {
+        "region": "audio-meters"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "Aim for loud parts peaking a little below zero, around minus 6.",
+        "Select the clip, press G, and type a negative number to lower it."
+      ],
+      "why": "Red at the top means distortion, which sounds harsh to viewers."
+    }
+  ]
+}

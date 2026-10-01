@@ -1,0 +1,213 @@
+{
+  "id": "premiere-basics-03-add-text",
+  "app": "premiere",
+  "title": "Add text to your video",
+  "summary": "Type a title on the video with the Type tool and style it in the Properties panel.",
+  "level": "beginner",
+  "minutes": 7,
+  "prereqs": ["premiere-basics-01-new-project-import"],
+  "appVersion": ">=25.0",
+  "tags": ["text", "titles", "graphics"],
+  "steps": [
+    {
+      "id": "focus-timeline",
+      "say": "Click an empty spot in the Timeline at the bottom right so it has focus.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Timeline panel at the bottom right outlined in blue as the active panel, with clips on it?"
+        }
+      },
+      "hints": [
+        "The Timeline is the panel with the V1 and A1 track rows. A blue outline shows it is active.",
+        "If the Timeline is empty, drag a clip from the Project panel into it first."
+      ],
+      "why": "Premiere sends shortcuts to the panel with focus, so the Timeline must be active.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          }
+        ]
+      }
+    },
+    {
+      "id": "place-playhead",
+      "say": "Click in the time ruler where the text should start.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the playhead moved to a new position in the Timeline?"
+        }
+      },
+      "hints": [
+        "The ruler is the strip with timecode numbers at the top of the Timeline.",
+        "Press Space to play and Space again to stop at the right moment."
+      ],
+      "why": "New text starts at the playhead."
+    },
+    {
+      "id": "type-tool",
+      "say": "Press T to pick the Type tool.",
+      "target": {
+        "shortcut": "T"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "T"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Type tool, a capital T icon, highlighted in the Tools panel?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Type tool is the T icon in the Tools strip.",
+        "Click the Program Monitor first if the key does nothing."
+      ],
+      "why": "The Type tool adds text right on the video picture.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "program-monitor"
+          },
+          {
+            "t": "keys",
+            "combo": "T"
+          }
+        ]
+      }
+    },
+    {
+      "id": "click-monitor",
+      "say": "Click in the Program Monitor at the top right where the text should go.",
+      "target": {
+        "region": "program-monitor"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a text cursor or a red text box in the Program Monitor?"
+        }
+      },
+      "hints": [
+        "The Program Monitor is the larger viewer on the right showing your edit.",
+        "A new graphic clip appears in the Timeline above your video when you click."
+      ],
+      "why": "Clicking places a new text layer at that spot."
+    },
+    {
+      "id": "type-words",
+      "say": "Type your title.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the Program Monitor now show the typed words on top of the video?"
+        }
+      },
+      "hints": [
+        "If nothing appears, click inside the red box first, then type.",
+        "Press Control Z to undo a typo, or use Backspace."
+      ],
+      "why": "These words appear on screen when the video plays."
+    },
+    {
+      "id": "back-to-selection",
+      "say": "Press Escape, then V, to finish typing and return to the Selection tool.",
+      "target": {
+        "shortcut": "V"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "V"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the arrow Selection tool highlighted in the Tools panel?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Escape leaves the text box; V picks the arrow tool.",
+        "With the arrow, drag the text in the Program Monitor to move it."
+      ],
+      "why": "Leaving the Type tool stops you from adding new text by accident.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Escape"
+          },
+          {
+            "t": "keys",
+            "combo": "V"
+          }
+        ]
+      }
+    },
+    {
+      "id": "style-text",
+      "say": "Open the Window menu, choose Properties, then change the font, size or color.",
+      "target": {
+        "text": "Window"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Properties panel open, and does the text in the Program Monitor look different from before?"
+        }
+      },
+      "hints": [
+        "Select the text clip in the Timeline first so Properties shows the text settings.",
+        "Fill sets the text color; Font and the size slider are near the top."
+      ],
+      "why": "The Properties panel holds every text style option in version 25 and later."
+    },
+    {
+      "id": "set-duration",
+      "say": "In the Timeline, drag the right end of the text clip to set how long it stays.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the length of the text clip on the upper video track changed?"
+        }
+      },
+      "hints": [
+        "The text clip is on the track above your video. Drag its right edge.",
+        "Or select it, press Control R and type a duration."
+      ],
+      "why": "The clip length decides how long viewers see the text."
+    }
+  ]
+}

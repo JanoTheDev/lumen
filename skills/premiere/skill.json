@@ -1,0 +1,16 @@
+{
+  "id": "premiere",
+  "name": "Adobe Premiere",
+  "version": "1.0.0",
+  "description": "Video editing in Adobe Premiere (called Premiere Pro before version 26): projects, cutting, text, audio levels and export.",
+  "match": {
+    "process": ["Adobe Premiere Pro.exe", "Adobe Premiere.exe"],
+    "title": ["^Adobe Premiere"]
+  },
+  "uiaQuality": "partial",
+  "appVersion": ">=25.0",
+  "appVersionTested": "Premiere Pro 25.x and Premiere 26.x on Windows, checked against Adobe help pages and shortcut lists",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Version 26 renamed the app from Premiere Pro to Premiere; the executable kept its old name at launch, so both are matched. Text styling moved from Essential Graphics to the Properties panel in 25.0. UIA quality is an estimate: menus and dialogs are exposed, panels and the timeline are custom drawn. Regions assume the default Editing workspace at 1920 by 1080."
+}

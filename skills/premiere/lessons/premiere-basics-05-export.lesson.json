@@ -1,0 +1,181 @@
+{
+  "id": "premiere-basics-05-export",
+  "app": "premiere",
+  "title": "Export your video",
+  "summary": "Export the sequence to an MP4 file from Export mode.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["premiere-basics-01-new-project-import"],
+  "appVersion": ">=25.0",
+  "tags": ["export"],
+  "steps": [
+    {
+      "id": "focus-timeline",
+      "say": "Click an empty spot in the Timeline at the bottom right so it has focus.",
+      "target": {
+        "region": "timeline"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Timeline panel at the bottom right outlined in blue as the active panel, with clips on it?"
+        }
+      },
+      "hints": [
+        "The Timeline is the panel with the V1 and A1 track rows. A blue outline shows it is active.",
+        "If the Timeline is empty, drag a clip from the Project panel into it first."
+      ],
+      "why": "Premiere sends shortcuts to the panel with focus, so the Timeline must be active.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-export",
+      "say": "Press Control M to open Export mode.",
+      "target": {
+        "shortcut": "Ctrl+M"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+M"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is Export mode showing, with export settings in the middle and a preview on the right?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You can also click Export in the header bar at the top left.",
+        "If nothing happens, click the Timeline first so a sequence is selected."
+      ],
+      "why": "Export mode turns your sequence into a video file you can share.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "click",
+            "region": "timeline"
+          },
+          {
+            "t": "keys",
+            "combo": "Ctrl+M"
+          }
+        ]
+      }
+    },
+    {
+      "id": "format",
+      "say": "Check that Format reads H.264 and Preset reads Match Source, Adaptive High Bitrate.",
+      "target": {
+        "text": "Format"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "Click the Format menu and choose H.264 if it shows something else.",
+        "Match Source keeps the size and frame rate of your sequence."
+      ],
+      "why": "H.264 makes an MP4 file that plays almost everywhere and uploads well."
+    },
+    {
+      "id": "file-name",
+      "say": "Click File Name and type a name for your video.",
+      "target": {
+        "text": "File Name"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the File Name field been changed to a new name?"
+        }
+      },
+      "hints": [
+        "File Name is near the top of the settings, above Location.",
+        "Leave the extension .mp4 at the end."
+      ],
+      "why": "A clear name helps you find the right version later."
+    },
+    {
+      "id": "location",
+      "say": "Click the blue Location text to choose the folder for the file.",
+      "target": {
+        "text": "Location"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the Location field show the folder that was chosen?"
+        }
+      },
+      "hints": [
+        "The blue text is the current folder path. Clicking it opens a folder picker.",
+        "Pick a folder you can find later, such as Videos or Desktop."
+      ],
+      "why": "Choosing the folder now saves searching for the file later."
+    },
+    {
+      "id": "export",
+      "say": "Click Export at the bottom right.",
+      "target": {
+        "text": "Export"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is an export progress window or progress bar showing?"
+        }
+      },
+      "hints": [
+        "Use the blue Export button in the lower right corner, not the Export tab at the top.",
+        "If the button is hidden, make the Premiere window larger."
+      ],
+      "why": "This starts writing the video file."
+    },
+    {
+      "id": "wait",
+      "say": "Wait for the progress bar to finish, then open the folder to find your video.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Has the export progress window closed with no error message showing?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Exporting takes longer for long or high resolution videos.",
+        "Open File Explorer and go to the folder you chose in Location."
+      ],
+      "why": "Playing the finished file confirms the export worked before you share it.",
+      "timeoutSec": 600
+    }
+  ]
+}

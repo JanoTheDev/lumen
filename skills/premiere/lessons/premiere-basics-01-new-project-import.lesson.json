@@ -1,0 +1,219 @@
+{
+  "id": "premiere-basics-01-new-project-import",
+  "app": "premiere",
+  "title": "Start a project and import media",
+  "summary": "Create a new project, bring in video clips and save.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": ">=25.0",
+  "tags": ["project", "import"],
+  "steps": [
+    {
+      "id": "new-project",
+      "say": "Press Control Alt N, or click New project on the Home screen, to start a project.",
+      "target": {
+        "text": "New project"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+Alt+N"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Import mode screen showing, with a Project name field at the top left and a media browser?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Home screen appears when Premiere starts. New project is a button near the top left.",
+        "If a project is already open, use the File menu, then New, then Project."
+      ],
+      "why": "Every edit lives inside a project, which remembers your media and timelines.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Alt+N"
+          }
+        ]
+      }
+    },
+    {
+      "id": "name-project",
+      "say": "Click Project name at the top left and type a name for your project.",
+      "target": {
+        "text": "Project name"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the Project name field at the top left been changed from Untitled to a new name?"
+        }
+      },
+      "hints": [
+        "The field reads Untitled until you change it. Click it and type.",
+        "Below the name, Project location lets you choose the folder for the project file."
+      ],
+      "why": "A clear name helps you find the project later."
+    },
+    {
+      "id": "pick-media",
+      "say": "In the browser on the left, open a folder, then tick the clips you want to use.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are one or more clip thumbnails ticked, with a selection tray showing them at the bottom?"
+        }
+      },
+      "hints": [
+        "Each thumbnail has a checkbox in its corner. Ticked clips appear in the tray along the bottom.",
+        "Your Videos folder and Desktop are listed on the left under Local."
+      ],
+      "why": "Ticked clips are imported and placed in a new sequence for you.",
+      "timeoutSec": 180
+    },
+    {
+      "id": "create",
+      "say": "Click Create at the bottom right.",
+      "target": {
+        "text": "Create"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "\\.prproj"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Edit workspace open with the clips in the Project panel and a sequence in the Timeline?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Create is the blue button in the lower right corner of the Import screen.",
+        "If Create is greyed out, give the project a name first."
+      ],
+      "why": "Creating the project opens the editing workspace with your clips ready."
+    },
+    {
+      "id": "check-project-panel",
+      "say": "Look at the Project panel at the bottom left and check your clips are listed.",
+      "target": {
+        "region": "project-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are clip names or thumbnails visible in the Project panel at the bottom left?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Project panel tab shows the project name. Click it if another tab is in front.",
+        "Switch between list and thumbnail view with the small icons at the bottom of the panel."
+      ],
+      "why": "The Project panel is your library; everything you edit comes from here."
+    },
+    {
+      "id": "import-more",
+      "say": "To add more files later, press Control I and choose them.",
+      "target": {
+        "shortcut": "Ctrl+I"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+I"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Import"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is an Import file window open?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click Cancel in the window if you have nothing else to add right now.",
+        "You can also drag files from File Explorer straight into the Project panel."
+      ],
+      "why": "Control I works at any time, not only when the project is created.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+I"
+          }
+        ]
+      }
+    },
+    {
+      "id": "save",
+      "say": "Press Control S to save the project.",
+      "target": {
+        "shortcut": "Ctrl+S"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+S"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Close the Import window first if it is still open, then press Control S.",
+        "You can also use the File menu, then Save."
+      ],
+      "why": "Saving records your work in the project file.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+S"
+          }
+        ]
+      }
+    }
+  ]
+}
