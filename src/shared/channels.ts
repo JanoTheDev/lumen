@@ -1,5 +1,14 @@
 // IPC channel names and payload types (CONTRACTS C5). Zod-free so the sandboxed preload can
 // import it; the matching validators live in ./ipc.ts and run in main.
+import type {
+  ClaudeCliStatus,
+  ClaudeCodeSettings,
+  ClaudeHooksPreview,
+  ClaudeProject,
+  ClaudeProjectEntry,
+  ClaudeSessionView,
+  ClaudeSettingsPatch
+} from './claude-code'
 import type { ConfigPatch } from './config'
 import type {
   ConnectorInput,
@@ -24,6 +33,27 @@ import type {
 } from './types'
 
 type Confidence = 'high' | 'medium' | 'low'
+
+export interface ClaudeResult {
+  ok: boolean
+  error?: string
+}
+
+export interface ClaudeStatus {
+  cli: ClaudeCliStatus
+  settings: ClaudeCodeSettings
+  hookPort: number
+  sessions: ClaudeSessionView[]
+  pending: {
+    id: string
+    sessionKey: string
+    projectName: string
+    tool: string
+    what: string
+    reason: string
+    hard: boolean
+  }[]
+}
 
 /** Settings, Smart helpers: what the shortcut coach and fatigue proposals remember. */
 export interface CoachStatus {
@@ -114,6 +144,31 @@ export interface InvokeChannels {
   'usage:get': { args: []; result: UsageOverview }
   /** Which OS agent is running (Settings shows it read-only). */
   'agent:info': { args: []; result: AgentImplInfo }
+  /** Claude Code copilot (08 T33–T40): CLI, settings, live sessions, waiting permissions. */
+  'claude:status': { args: []; result: ClaudeStatus }
+  'claude:settings-set': { args: [patch: ClaudeSettingsPatch]; result: ClaudeCodeSettings }
+  'claude:projects': { args: []; result: ClaudeProject[] }
+  'claude:project-set': { args: [entry: ClaudeProjectEntry]; result: ClaudeResult }
+  'claude:project-remove': { args: [path: string]; result: ClaudeResult }
+  'claude:pick-folder': { args: []; result: string | null }
+  'claude:open': {
+    args: [req: { project: string; prompt?: string; resume?: boolean }]
+    result: ClaudeResult & { session?: ClaudeSessionView }
+  }
+  'claude:send': { args: [req: { id: string; text: string }]; result: ClaudeResult }
+  'claude:interrupt': { args: [id: string]; result: ClaudeResult }
+  'claude:close': { args: [id: string]; result: ClaudeResult }
+  'claude:permission-answer': {
+    args: [req: { id: string; answer: 'once' | 'always' | 'deny' }]
+    result: ClaudeResult
+  }
+  /** The exact ~/.claude/settings.json change for the opt-in global hooks (T38). */
+  'claude:hooks-preview': {
+    args: [install: boolean]
+    result: ClaudeHooksPreview | { error: string }
+  }
+  /** Writes it only if the file still has the previewed hash. */
+  'claude:hooks-apply': { args: [install: boolean, hash: string]; result: ClaudeResult }
   /** Stored "always" grants for medium-risk actions (08 T03). */
   'agent:grants-list': { args: []; result: AgentGrant[] }
   'agent:grants-revoke': { args: [scope: string]; result: { ok: boolean } }
@@ -894,6 +949,19 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:delete-all',
   'usage:get',
   'agent:info',
+  'claude:status',
+  'claude:settings-set',
+  'claude:projects',
+  'claude:project-set',
+  'claude:project-remove',
+  'claude:pick-folder',
+  'claude:open',
+  'claude:send',
+  'claude:interrupt',
+  'claude:close',
+  'claude:permission-answer',
+  'claude:hooks-preview',
+  'claude:hooks-apply',
   'agent:grants-list',
   'agent:grants-revoke',
   'tasks:list',

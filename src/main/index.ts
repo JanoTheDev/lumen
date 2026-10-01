@@ -33,6 +33,7 @@ import { interceptLocal } from './query/local'
 import { installHelpers, interceptHelpers } from './coach'
 import { registerHelpersIpc } from './coach/ipc'
 import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
+import { installClaudeCode, interceptClaudeCode, shutdownClaudeCode } from './claude-code'
 import { runQuery } from './query/pipeline'
 import { setAnswerAnnouncer, speakAnswer, warmTts } from './speech/tts'
 import { prepareStt, transcribe } from './speech/stt'
@@ -58,6 +59,7 @@ import { registerWakeIpc } from './ipc/wake'
 import { registerMemoryIpc } from './ipc/memory'
 import { registerUsageIpc } from './ipc/usage'
 import { registerAgentIpc } from './ipc/agent'
+import { registerClaudeCodeIpc } from './ipc/claude-code'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
@@ -124,6 +126,7 @@ function registerIpc(): void {
   registerAgentIpc()
   registerAgentModeIpc()
   registerRoutinesIpc()
+  registerClaudeCodeIpc()
   registerKeysIpc()
   registerFirstRunIpc()
   registerDiagnosticsIpc()
@@ -136,6 +139,7 @@ function registerIpc(): void {
   })
   registerQueryIpc({
     intercept: (prompt) =>
+      interceptClaudeCode(prompt) ??
       interceptAgentMode(prompt) ??
       interceptRoutines(prompt) ??
       interceptHelpers(prompt) ??
@@ -186,6 +190,7 @@ app.whenReady().then(() => {
   installAgentMode()
   installRoutines()
   installUserActivityPause()
+  void installClaudeCode()
   registerIpc()
   installA11y()
   installLessonOutput()
@@ -216,6 +221,7 @@ app.on('before-quit', (event) => {
 app.on('will-quit', () => {
   resetEscape()
   getAgent()?.stop()
+  shutdownClaudeCode()
   void shutdownConnectors()
 })
 
