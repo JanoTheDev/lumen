@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lumen/regions.schema.json",
+  "title": "Named screen regions (skills/<app-id>/regions.json)",
+  "description": "Fractions of the main window client area, measured on a 1920x1080 window with the default layout.",
+  "type": "object",
+  "required": ["window", "layout", "regions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "window": { "type": "string", "minLength": 1 },
+    "layout": { "type": "string", "minLength": 1 },
+    "notes": { "type": "string" },
+    "regions": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+      "additionalProperties": { "$ref": "#/$defs/region" }
+    }
+  },
+  "$defs": {
+    "region": {
+      "type": "object",
+      "required": ["x", "y", "w", "h", "desc"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "w": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "h": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "desc": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "page": {
+          "type": "string",
+          "description": "Page, workspace or mode this region belongs to when the app has several layouts."
+        }
+      }
+    }
+  }
+}
