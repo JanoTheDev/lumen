@@ -302,7 +302,11 @@ export const configV2Schema = z.object({
     dictionary: z.array(shortText(60)).max(500)
   }),
   /** v2 = assistant bar, per-display screen layer and panel window instead of the old windows. */
-  ui: z.object({ v2: z.boolean() }),
+  ui: z.object({
+    v2: z.boolean(),
+    /** Opens the Home flyout from anywhere; "" = no shortcut. Optional so patches never reset it. */
+    homeHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional()
+  }),
   /** First-run setup finished (or skipped). */
   onboarding: z.object({ done: z.boolean() }),
   legacy: z.record(z.string(), z.unknown()).optional()
@@ -380,7 +384,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     terminal: 'type-no-enter',
     dictionary: []
   },
-  ui: { v2: false },
+  ui: { v2: false, homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false }
 }
 

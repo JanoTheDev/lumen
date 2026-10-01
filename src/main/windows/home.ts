@@ -1,11 +1,13 @@
 // Home flyout: the panel entry at #/home in a small window anchored to the tray icon.
 // Created hidden at startup so opening it is instant; closes on blur or Escape.
-import { screen, type BrowserWindow, type Rectangle } from 'electron'
+import { globalShortcut, screen, type BrowserWindow, type Rectangle } from 'electron'
 import type { EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { clampScale, live, registerWindow, sendTo } from './registry'
 import { loadConfig } from '../config'
 import { themeBackground } from './settings'
+import { onConfigPatched } from '../ipc/settings'
+import { log } from '../logger'
 
 const WIDTH_CSS = 352
 const HEIGHT_CSS = 520
@@ -67,6 +69,7 @@ export function create(): void {
     }
   })
   loadRenderer(win, 'panel', '/home')
+  applyHotkey(loadConfig().ui.homeHotkey)
 }
 
 export function show(anchor: Rectangle | null = null): void {
@@ -97,5 +100,32 @@ export function toggle(anchor: Rectangle | null = null): void {
   // Clicking the tray icon while Home is open blurs it first; that click means "close".
   else if (Date.now() - blurredAt > 300) show(anchor)
 }
+
+let shortcut = ''
+
+/** Electron accelerator for a config hotkey ("Win" is "Super" there). */
+export function toAccelerator(hotkey: string): string {
+  return hotkey
+    .split('+')
+    .map((k) => (/^win$/i.test(k) ? 'Super' : k))
+    .join('+')
+}
+
+/** (Re)binds the global shortcut that toggles Home; "" removes it. */
+export function applyHotkey(hotkey: string | undefined): void {
+  const next = hotkey ? toAccelerator(hotkey) : ''
+  if (next === shortcut) return
+  if (shortcut) globalShortcut.unregister(shortcut)
+  shortcut = ''
+  if (!next) return
+  try {
+    if (globalShortcut.register(next, () => toggle())) shortcut = next
+    else log('fail', `home shortcut ${next} is taken by another app`)
+  } catch (e) {
+    log('fail', `home shortcut ${next} rejected: ${(e as Error).message}`)
+  }
+}
+
+onConfigPatched((next) => applyHotkey(next.ui.homeHotkey))
 
 registerWindow(get, { interactive: true })

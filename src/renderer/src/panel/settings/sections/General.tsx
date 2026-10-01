@@ -11,6 +11,12 @@ export function General({ cfg, patch }: SectionProps): JSX.Element {
           onCommit={(hotkey) => patch({ hotkey })}
           hint="Must include Ctrl, Alt or Shift, or be F1 to F12. Hold or tap it: choose under Voice."
         />
+        <HotkeyField
+          label="Open Home"
+          value={cfg.ui.homeHotkey ?? ''}
+          onCommit={(homeHotkey) => patch({ ui: { homeHotkey } })}
+          hint="Opens the Lumen panel next to the clock, from any app."
+        />
       </Card>
 
       <Card title="Conversation" description="What Lumen keeps between questions.">
