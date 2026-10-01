@@ -49,6 +49,15 @@ export function General({ cfg, patch }: SectionProps): JSX.Element {
           hint="Turn off to keep them until you say “done”."
         />
       </Card>
+
+      <Card title="Windows">
+        <Switch
+          checked={cfg.system.startAtLogin}
+          onChange={(startAtLogin) => patch({ system: { startAtLogin } })}
+          label="Start Lumen when I sign in"
+          hint="Starts quietly in the tray. Not available in the portable version."
+        />
+      </Card>
     </>
   )
 }
