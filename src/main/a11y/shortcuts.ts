@@ -3,7 +3,6 @@
 // Electron's globalShortcut in step with the plan. install-shortcuts.ts supplies the actions.
 import type { A11yShortcutAction, A11yShortcuts, ConfigV2 } from '@shared/config'
 import type { ShortcutStatus } from '@shared/channels'
-import { AT_HOTKEYS } from './coexist'
 
 export interface ShortcutGates {
   dwellOn: boolean
@@ -73,7 +72,7 @@ type ShortcutConfig = Pick<ConfigV2, 'hotkey' | 'dictation' | 'ui'> & {
   a11y: Pick<ConfigV2['a11y'], 'helpHotkey' | 'shortcuts' | 'switch'>
 }
 
-/** Lumen's other global keys and assistive tech's, which an a11y shortcut must not reuse. */
+/** Lumen's other global keys, which an a11y shortcut must not reuse. */
 function reserved(cfg: ShortcutConfig): Map<string, string> {
   const out = new Map<string, string>()
   const add = (key: string | undefined, what: string): void => {
@@ -84,7 +83,6 @@ function reserved(cfg: ShortcutConfig): Map<string, string> {
   add(cfg.a11y.helpHotkey, 'the "what can I say" shortcut')
   add(cfg.ui.homeHotkey, 'the Home shortcut')
   if (cfg.a11y.switch.enabled) for (const k of cfg.a11y.switch.keys) add(k, 'a switch key')
-  for (const [key, what] of AT_HOTKEYS) if (!out.has(key)) out.set(key, what)
   return out
 }
 

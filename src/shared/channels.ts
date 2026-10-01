@@ -672,7 +672,16 @@ export type VoiceStartMode = 'hold' | 'hands-free' | 'dictation'
 
 /** Spoken reply playback in the voice renderer: Windows voice text, or cloud audio (base64). */
 export type TtsMessage =
-  | { op: 'say'; turnId: string; seq: number; text: string; voice: string; rate: number }
+  | {
+      op: 'say'
+      turnId: string
+      seq: number
+      text: string
+      voice: string
+      rate: number
+      /** Voice language: a voice of another language is swapped for one that fits. */
+      lang?: string
+    }
   | { op: 'audio'; turnId: string; seq: number; mime: string; data: string }
   | { op: 'stop' }
 

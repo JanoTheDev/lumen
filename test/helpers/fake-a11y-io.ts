@@ -2,13 +2,7 @@
 // every agent call, scene and feedback; physical px = logical px × scale.
 import type { ElementNode, InputStep, Point, Rect, UiaAction } from '../../src/shared/types'
 import type { OcrWord } from '../../src/main/agent/commands'
-import type {
-  A11yIo,
-  A11yScene,
-  MonitorBounds,
-  TextScope,
-  UiaText
-} from '../../src/main/a11y/dispatch'
+import type { A11yIo, A11yScene, MonitorBounds } from '../../src/main/a11y/dispatch'
 import type { MarksTable } from '../../src/main/a11y/marks'
 
 export interface FakeA11yOptions {
@@ -30,15 +24,6 @@ export interface FakeA11yOptions {
   answer?: boolean
   /** openHelp result (false = the sheet cannot open, a text answer is used). */
   help?: boolean
-  /** uia_text replies by scope (missing = the agent cannot read text). */
-  text?: Partial<Record<TextScope, UiaText>>
-  /** OCR text around the pointer / of the window. */
-  ocrText?: { cursor?: string; window?: string }
-  /** A screen reader or Lumen's voice can read aloud (default true). */
-  canSpeak?: boolean
-  simple?: boolean
-  /** Voice control Lumen yields to ("Voice Access"). */
-  voiceControl?: string | null
 }
 
 export interface FakeA11yCalls {
@@ -54,13 +39,6 @@ export interface FakeA11yCalls {
   settings: number
   answer: string[]
   help: number
-  /** Text shown and voiced at once (descriptions, short reads). */
-  said: string[]
-  /** Parts of a long reading, in order. */
-  parts: string[]
-  silenced: number
-  textScopes: TextScope[]
-  describes: string[]
 }
 
 let seq = 0
@@ -101,12 +79,7 @@ export function fakeA11yIo(opts: FakeA11yOptions = {}): FakeA11y {
     keep: [],
     settings: 0,
     answer: [],
-    help: 0,
-    said: [],
-    parts: [],
-    silenced: 0,
-    textScopes: [],
-    describes: []
+    help: 0
   }
   const scene: A11yScene = {}
   const io: A11yIo = {
@@ -172,30 +145,7 @@ export function fakeA11yIo(opts: FakeA11yOptions = {}): FakeA11y {
       calls.answer.push(op)
       return opts.answer ?? false
     },
-    log: () => {},
-    describe: async (detail) => {
-      calls.describes.push(detail)
-      return `A ${detail} description.`
-    },
-    explainCursor: async () => 'Send, a button.',
-    readText: async (scope) => {
-      calls.textScopes.push(scope)
-      return opts.text?.[scope] ?? null
-    },
-    ocrText: async (where) => opts.ocrText?.[where] ?? '',
-    say: (text) => {
-      calls.said.push(text)
-    },
-    speakPart: (text) => {
-      calls.parts.push(text)
-    },
-    silence: () => {
-      calls.silenced++
-    },
-    canSpeak: () => opts.canSpeak ?? true,
-    speechRate: () => 1,
-    simpleMode: () => opts.simple ?? false,
-    voiceControl: () => opts.voiceControl ?? null
+    log: () => {}
   }
   return {
     io,

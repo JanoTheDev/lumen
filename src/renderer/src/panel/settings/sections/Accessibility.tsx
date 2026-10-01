@@ -47,17 +47,6 @@ const CONFIRM_TRANSCRIPT = [
   { value: 'off', label: 'Never' }
 ] as const
 
-const RING_SIZES = [
-  { value: 's', label: 'Small' },
-  { value: 'm', label: 'Medium' },
-  { value: 'l', label: 'Large' },
-  { value: 'xl', label: 'Extra large' }
-] as const
-
-/** Eye trackers and head pointers (T19): they move the system pointer, but never hold still. */
-const GAZE_DWELL = { radiusPx: 30, smoothing: 0.5, snapToElement: true, ringSize: 'xl' } as const
-const GAZE_DWELL_MS = 1200
-
 const TRISTATE = [
   { value: 'system', label: 'Match Windows' },
   { value: 'on', label: 'On' },
@@ -70,62 +59,9 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
   const switchKeys = sw.keys.join(',')
   const keyChoice = SWITCH_KEYS.some((k) => k.value === switchKeys) ? switchKeys : 'Space'
   const shortcuts = useShortcuts(cfg)
-  const [showAll, setShowAll] = useState(false)
-  // Simple mode (T18): only the essentials until the user asks for everything.
-  const brief = cfg.a11y.simpleMode && !showAll
-  // Nested objects are patched whole (saveConfig merges one level deep).
+  // Timings are patched as a whole object (saveConfig merges one level deep).
   const patchTimings = (next: Partial<typeof cfg.a11y.timings>): Promise<boolean> =>
     patch({ a11y: { timings: { ...cfg.a11y.timings, ...next } } })
-  const dwell = cfg.a11y.dwell
-  const patchDwell = (next: Partial<typeof dwell>): Promise<boolean> =>
-    patch({ a11y: { dwell: { ...dwell, ...next } } })
-  const gazeOn =
-    dwell.radiusPx >= GAZE_DWELL.radiusPx &&
-    dwell.smoothing >= GAZE_DWELL.smoothing &&
-    dwell.snapToElement
-  const simpleCard = (
-    <Card title="Simple mode" description="Fewer choices, plain words and one step at a time.">
-      <Switch
-        checked={cfg.a11y.simpleMode}
-        onChange={(simpleMode) => patch({ a11y: { simpleMode } })}
-        label="Keep things simple"
-        hint="Plainer words and fewer choices. This page shows only the main options."
-      />
-      {cfg.a11y.simpleMode && (
-        <div className="panel-row">
-          <Button onClick={() => setShowAll((v) => !v)} aria-expanded={showAll}>
-            {showAll ? 'Show fewer options' : 'Show all options'}
-          </Button>
-        </div>
-      )}
-    </Card>
-  )
-  if (brief) {
-    return (
-      <>
-        {simpleCard}
-        <Card title="Size" description="Make Lumen bigger or smaller.">
-          <Slider
-            label="Interface size"
-            value={cfg.a11y.uiScale}
-            min={0.75}
-            max={2}
-            step={0.05}
-            format={(v) => `${Math.round(v * 100)}%`}
-            onChange={(uiScale) => patch({ a11y: { uiScale } })}
-          />
-        </Card>
-        <Card title="Before Lumen acts" description="Lumen can wait for you to say yes.">
-          <Switch
-            checked={cfg.a11y.timings.confirmCountdownMs === 0}
-            onChange={(wait) => patchTimings({ confirmCountdownMs: wait ? 0 : undefined })}
-            label="Wait for me before acting"
-            hint="Lumen waits for “yes” before it does anything."
-          />
-        </Card>
-      </>
-    )
-  }
   return (
     <>
       <Card
@@ -209,8 +145,6 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
         />
       </Card>
 
-      {simpleCard}
-
       <Card
         title="Thinking and focus"
         description="More time, fewer surprises, and Lumen explains itself."
@@ -281,54 +215,6 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           unit="ms"
           onCommit={(cooldownMs) => patch({ dwellClick: { cooldownMs } })}
         />
-        <Slider
-          label="Allowed wobble"
-          value={dwell.radiusPx}
-          min={4}
-          max={80}
-          step={2}
-          format={(v) => `${v} px`}
-          onChange={(radiusPx) => patchDwell({ radiusPx })}
-          hint="How far the pointer may drift while resting. Raise it for shaky hands or eye gaze."
-        />
-        <Slider
-          label="Smooth the pointer"
-          value={dwell.smoothing}
-          min={0}
-          max={0.9}
-          step={0.1}
-          format={(v) => (v === 0 ? 'Off' : `${Math.round(v * 100)}%`)}
-          onChange={(smoothing) => patchDwell({ smoothing })}
-          hint="Evens out jitter before Lumen decides the pointer is resting."
-        />
-        <Switch
-          checked={dwell.snapToElement}
-          onChange={(snapToElement) => patchDwell({ snapToElement })}
-          label="Snap to the nearest button"
-          hint="Clicks the middle of the control under the pointer, so small targets are easier."
-        />
-        <SegmentedControl
-          label="Ring size"
-          value={dwell.ringSize}
-          options={RING_SIZES}
-          onChange={(ringSize) => patchDwell({ ringSize })}
-        />
-        <div className="panel-row">
-          <Button
-            onClick={() =>
-              void patch({
-                dwellClick: {
-                  enabled: true,
-                  dwellMs: Math.max(cfg.dwellClick.dwellMs, GAZE_DWELL_MS)
-                },
-                a11y: { dwell: { ...dwell, ...GAZE_DWELL, palette: true } }
-              })
-            }
-            disabled={gazeOn}
-          >
-            {gazeOn ? 'Eye gaze settings are on' : 'Set up for eye gaze or head pointer'}
-          </Button>
-        </div>
       </Card>
 
       <Card

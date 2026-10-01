@@ -6,8 +6,7 @@ import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { appUrl } from '../ai/app-context'
-import { describeScreen, explainTarget } from '../ai/describe'
-import { currentFrame, logicalToPhys, physRectToLogical, physToImage } from '../actions/coords'
+import { logicalToPhys, physRectToLogical } from '../actions/coords'
 import { assertSafeUrl, isSafeUrl } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent, requireAgent } from '../agent/instance'
@@ -18,19 +17,16 @@ import { onBroadcast } from '../windows/registry'
 import { currentContext } from '../query/context'
 import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
-import { speakAnswer, stopSpeaking } from '../speech/tts'
+import { speakAnswer } from '../speech/tts'
 import * as assistant from '../windows/assistant'
 import * as commandSheet from '../windows/command-sheet'
 import * as screenLayer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
 import { Announcer, type AnnounceOptions } from './announce'
-import { atState, screenReaderActive } from './at-state'
-import { installCoexist } from './coexist-install'
-import { voiceControlName } from './coexist'
+import { screenReaderActive } from './at-state'
 import { focusEventsWanted, pushFocusSubscription, wantFocusEvents } from './focus-events'
 import { FocusNarrator } from './focus-narration'
-import { A11yCommands, type A11yIo, type A11yScene, type TextScope, type UiaText } from './dispatch'
-import { phrase } from './phrases'
+import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
 import { dwellController } from './dwell'
 import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
 import { installDwell } from './install-dwell'
@@ -43,11 +39,6 @@ const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
 const ACT_TIMEOUT_MS = 3000
 const INPUT_TIMEOUT_MS = 15_000
-const TEXT_TIMEOUT_MS = 4000
-/** Page text asked of the agent (about an hour of listening). */
-const PAGE_MAX_CHARS = 60_000
-/** OCR box around the pointer for "read this", physical px. */
-const OCR_BOX = { w: 640, h: 180 }
 
 let announcer: Announcer | null = null
 let a11y: A11yCommands | null = null
@@ -120,74 +111,6 @@ function feedback(text: string, ok: boolean): void {
     loadConfig().a11y.timings.statusHoldMs
   )
   announce(text, { kind: ok ? 'command' : 'error' })
-}
-
-/** Voices `text` through the screen reader, else Lumen's voice; false when neither can. */
-function voice(text: string): boolean {
-  const agent = getAgent()
-  if (screenReaderActive() && agent?.hasCapability('announce')) {
-    commands.announce(agent, text, 'polite', { timeoutMs: 2000 }).catch(() => {})
-    return true
-  }
-  if (loadConfig().voice.tts === 'off') return false
-  speakAnswer(text).catch(() => {})
-  return true
-}
-
-async function readText(scope: TextScope): Promise<UiaText | null> {
-  const agent = getAgent()
-  if (!agent?.hasCapability('uia-text')) return null
-  const args: Record<string, unknown> = {
-    scope,
-    maxChars: scope === 'document' ? PAGE_MAX_CHARS : 20_000
-  }
-  if (scope === 'point') Object.assign(args, logicalToPhys(screen.getCursorScreenPoint()))
-  try {
-    return await agent.request<UiaText>('uia_text', args, { timeoutMs: TEXT_TIMEOUT_MS })
-  } catch (e) {
-    log('fail', `uia_text ${scope} failed (${(e as Error).message})`)
-    return null
-  }
-}
-
-async function ocrText(where: 'cursor' | 'window'): Promise<string> {
-  const agent = getAgent()
-  if (!agent) return ''
-  let region: Rect
-  if (where === 'cursor') {
-    const c = logicalToPhys(screen.getCursorScreenPoint())
-    region = { x: c.x - OCR_BOX.w / 2, y: c.y - OCR_BOX.h / 2, ...OCR_BOX }
-  } else {
-    const w = await commands.activeWindow(agent, { timeoutMs: 1000 }).catch(() => null)
-    if (!w || w.rect.w <= 0 || w.rect.h <= 0) return ''
-    region = w.rect
-  }
-  const r = await commands.ocr(agent, { region }, { timeoutMs: OCR_TIMEOUT_MS }).catch(() => null)
-  return r ? r.lines.map((l) => l.text).join('\n') : ''
-}
-
-/** "What's under my cursor": 05 explainTarget at the pointer, UIA name/role when off-frame. */
-async function explainCursor(): Promise<string> {
-  const phys = logicalToPhys(screen.getCursorScreenPoint())
-  const g = currentFrame()
-  const onFrame =
-    phys.x >= g.originX &&
-    phys.y >= g.originY &&
-    phys.x < g.originX + g.width &&
-    phys.y < g.originY + g.height
-  if (onFrame) {
-    const p = physToImage(g, phys)
-    const r = await explainTarget({
-      kind: 'point',
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      frame: '1'
-    })
-    return r.spoken
-  }
-  const at = await readText('point')
-  if (at?.name) return `${at.name}, ${at.role ?? 'control'}.`
-  return "I can't tell what is there."
 }
 
 function createIo(): A11yIo {
@@ -283,38 +206,7 @@ function createIo(): A11yIo {
       assistant.close()
       return true
     },
-    log: (msg) => log('plan', msg),
-    describe: async (detail) => (await describeScreen({ detail, focus: 'window' })).spoken,
-    explainCursor,
-    readText,
-    ocrText,
-    say: (text) => {
-      assistant.showAnswer(text)
-      voice(text)
-    },
-    speakPart: (text, index, total) => {
-      assistant.showAnswer(text)
-      // An 'answer' status line is shown, not announced: the part itself is what is heard.
-      const simple = loadConfig().a11y.simpleMode
-      assistant.status(
-        'answer',
-        index === 0
-          ? `${phrase('reading', simple)} (1 of ${total})`
-          : `Part ${index + 1} of ${total}`
-      )
-      stopSpeaking()
-      voice(text)
-    },
-    silence: () => stopSpeaking(),
-    canSpeak: () =>
-      (screenReaderActive() && !!getAgent()?.hasCapability('announce')) ||
-      loadConfig().voice.tts !== 'off',
-    speechRate: () => (screenReaderActive() ? 1 : loadConfig().voice.ttsRate),
-    readingChanged: (state) => {
-      if (state === 'idle') assistant.settle()
-    },
-    simpleMode: () => loadConfig().a11y.simpleMode,
-    voiceControl: () => voiceControlName(atState(), loadConfig())
+    log: (msg) => log('plan', msg)
   }
 }
 
@@ -354,10 +246,6 @@ export function installA11y(): void {
     commandsImpl.reset()
     dwellController()?.reset()
   })
-  // Talking to Lumen pauses a reading ("continue" goes on); a new request ends it.
-  bus.on('voice.started', () => commandsImpl.reader.pause())
-  bus.on('query.started', () => commandsImpl.reader.stop())
-  installCoexist({ announce: (text) => feedback(text, true) })
   installFocusNarration()
   const dwell = installDwell({
     announce: (text) => announce(text, { kind: 'command' }),

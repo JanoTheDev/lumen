@@ -27,6 +27,16 @@ describe('pickWinVoice', () => {
     expect(pickWinVoice(VOICES.slice(0, 1), '')?.id).toBe('ar')
     expect(pickWinVoice([], 'x')).toBeNull()
   })
+  it('swaps a voice of another language for one of the voice language', () => {
+    const es: WinVoice = { id: 'helena', name: 'Microsoft Helena', lang: 'es-ES' }
+    const all = [...VOICES, es]
+    expect(pickWinVoice(all, 'Microsoft Zira', 'es')?.id).toBe('helena')
+    expect(pickWinVoice(all, 'Microsoft Helena', 'es')?.id).toBe('helena')
+    expect(pickWinVoice(all, 'Microsoft Zira', 'en')?.id).toBe('zira')
+    expect(pickWinVoice(all, 'Microsoft Zira', 'auto')?.id).toBe('zira')
+    // No Spanish voice installed: keep the chosen one.
+    expect(pickWinVoice(VOICES, 'Microsoft Zira', 'es')?.id).toBe('zira')
+  })
 })
 
 describe('winRate', () => {

@@ -4,7 +4,8 @@ import { audioSchema, textSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
 import { onRecordingEnded, onSpeakingChanged, onTurnEnded } from '../speech/hotkey'
-import { sttStatus } from '../speech/stt'
+import { prepareStt, sttStatus } from '../speech/stt'
+import { onConfigPatched } from './settings'
 import { installLocalModel } from '../speech/stt/local-model'
 import { onWakePcm, wakeFeedWanted } from '../speech/wake'
 import { handleBargeIn } from '../speech/wake/handlers'
@@ -40,6 +41,11 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
     if (!audio) return ''
     const opts = safeParse('voice:transcribe', transcribeOptsSchema, rawOpts) ?? {}
     return deps.transcribe(audio, opts)
+  })
+  // A new voice language may need the other offline model.
+  onConfigPatched((next, prev) => {
+    if (next.voice.language !== prev.voice.language || next.voice.stt !== prev.voice.stt)
+      prepareStt()
   })
   ipcMain.on('voice:ended', () => onRecordingEnded())
   ipcMain.on('voice:wake-pcm', (_e, raw: unknown) => onWakePcm(raw))

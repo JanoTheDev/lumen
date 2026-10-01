@@ -21,10 +21,19 @@ export function windowsVoices(): Promise<SpeechSynthesisVoice[]> {
 /** The chosen voice by name, else the first local English one, else the system default. */
 export function pickVoice(
   voices: readonly SpeechSynthesisVoice[],
-  name: string
+  name: string,
+  lang?: string
 ): SpeechSynthesisVoice | null {
+  const chosen = voices.find((v) => v.name === name)
+  const base = lang && lang !== 'auto' ? lang.toLowerCase().split('-')[0] : ''
+  if (base) {
+    const speaks = (v: SpeechSynthesisVoice): boolean => v.lang.toLowerCase().split('-')[0] === base
+    if (chosen && speaks(chosen)) return chosen
+    const match = voices.find((v) => v.localService && speaks(v)) ?? voices.find(speaks)
+    if (match) return match
+  }
   return (
-    voices.find((v) => v.name === name) ??
+    chosen ??
     voices.find((v) => v.localService && v.lang.toLowerCase().startsWith('en')) ??
     voices.find((v) => v.default) ??
     null
@@ -77,7 +86,7 @@ async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void
   const voices = await windowsVoices()
   if (gen !== stopGeneration) return
   const u = new SpeechSynthesisUtterance(msg.text)
-  const voice = pickVoice(voices, msg.voice)
+  const voice = pickVoice(voices, msg.voice, msg.lang)
   if (voice) {
     u.voice = voice
     u.lang = voice.lang

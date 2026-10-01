@@ -55,3 +55,12 @@ describe('wantsLocalModel', () => {
     )
   })
 })
+
+describe('voice language without an offline model', () => {
+  it('uses cloud with a key, else reports the language', () => {
+    const it_ = { localLanguage: false }
+    expect(chooseStt('local', avail({ ...it_, openaiKey: true }))).toEqual({ engine: 'cloud' })
+    expect(chooseStt('local', avail(it_))).toEqual({ engine: null, reason: 'language' })
+    expect(wantsLocalModel('local', avail({ ...it_, localInstalled: false }))).toBe(false)
+  })
+})

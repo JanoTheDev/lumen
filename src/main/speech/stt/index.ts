@@ -1,57 +1,69 @@
 // Speech-to-text entry point: local (sherpa-onnx, free, offline) by default, OpenAI Whisper when
 // the user prefers cloud and has a key. Audio arrives as 16 kHz mono WAV from the renderer.
+// The voice language (config voice.language) picks the offline model and tells Whisper what
+// it hears.
 import { toFile } from 'openai'
 import type { SttStatus } from '@shared/channels'
 import { openaiClient } from '../../ai/providers/openai'
-import { loadConfig } from '../../config'
+import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
+import { voiceLatency } from '../latency'
 import { chooseStt, wantsLocalModel, type SttAvailability } from './engine'
+import { foregroundTerms } from './foreground-vocab'
 import { localEngineSupported, transcribeLocal, warmLocalStt } from './local'
 import {
-  LOCAL_STT_MODEL,
+  currentSttModel,
   installLocalModel,
   localModelInstalled,
-  localModelProgress
+  localModelProgress,
+  offlineLanguage
 } from './local-model'
+import { mergeVocabulary, splitTerms } from './vocabulary'
 import { isWav, parseWav } from './wav'
 
 // Under ~0.3s there is no word to recognise and Whisper tends to hallucinate.
 const MIN_AUDIO_SECONDS = 0.3
 const MIN_WEBM_BYTES = 6000
 
-export function whisperPrompt(userVocab: string): string {
-  const vocab = userVocab.trim()
-  const vocabList = vocab
-    ? `, ${vocab
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .join(', ')}`
-    : ''
-  return `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
+const BASE_TERMS = ['Lumen', 'Claude', 'Anthropic', 'GitHub', 'Gmail']
+
+/** The language Whisper is told (undefined = detect). */
+export function whisperLanguage(lang: string): string | undefined {
+  return lang === 'auto' ? undefined : lang
 }
 
-// Whisper reads the prompt as preceding text: a punctuated sample nudges it to punctuate,
-// and listed names nudge their spelling. Kept well under its 224-token prompt window.
-const MAX_PROMPT_TERMS = 60
+/**
+ * Prompt for a spoken request. Whisper reads it as preceding text, so outside English it only
+ * lists names (an English sentence would pull the transcript towards English).
+ */
+export function whisperPrompt(terms: readonly string[], lang = 'en'): string {
+  const names = mergeVocabulary([terms, BASE_TERMS])
+  if (lang !== 'en') return `${names.join(', ')}.`
+  return `AI assistant voice command. User speaks English. Common words: open, click, email, drafts, inbox, reply, compose, send, navigate, ${names.join(', ')}.`
+}
 
-export function dictationPrompt(dictionary: readonly string[], userVocab = ''): string {
-  const extra = userVocab
-    .split(/[,\n]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-  const terms = [...new Set([...dictionary.map((d) => d.trim()), ...extra])]
-    .filter(Boolean)
-    .slice(0, MAX_PROMPT_TERMS)
-  const names = terms.length ? ` Names and terms: ${terms.join(', ')}.` : ''
+/** Dictation: a punctuated sample nudges Whisper to punctuate; listed names nudge spelling. */
+export function dictationPrompt(terms: readonly string[], lang = 'en'): string {
+  const list = mergeVocabulary([terms])
+  if (lang !== 'en') return list.length ? `${list.join(', ')}.` : ''
+  const names = list.length ? ` Names and terms: ${list.join(', ')}.` : ''
   return `Dictated text, written out with normal punctuation and capital letters.${names}`
+}
+
+/** User vocabulary, then the personal dictionary, then the glossary of the app in front. */
+export function sttTerms(
+  cfg: Pick<AppConfig, 'voiceVocab' | 'dictation'>,
+  appTerms: readonly string[] = foregroundTerms()
+): string[] {
+  return mergeVocabulary([splitTerms(cfg.voiceVocab), cfg.dictation.dictionary, appTerms])
 }
 
 function availability(): SttAvailability {
   return {
     openaiKey: !!process.env.OPENAI_API_KEY,
     localSupported: localEngineSupported(),
-    localInstalled: localModelInstalled()
+    localInstalled: localModelInstalled(),
+    localLanguage: offlineLanguage(loadConfig().voice.language)
   }
 }
 
@@ -66,7 +78,7 @@ export function sttStatus(): SttStatus {
     localInstalled: a.localInstalled,
     installing: !!progress,
     percent: progress?.percent,
-    modelSizeMb: LOCAL_STT_MODEL.sizeMb
+    modelSizeMb: currentSttModel().sizeMb
   }
 }
 
@@ -91,9 +103,18 @@ function settingUpMessage(): string {
   return `Setting up offline voice${pct}. Try again in a moment.`
 }
 
+const LANGUAGE_NAMES: Record<string, string> = { it: 'Italian', pt: 'Portuguese', nl: 'Dutch' }
+
+function languageMessage(): string {
+  const name = LANGUAGE_NAMES[loadConfig().voice.language] ?? 'this language'
+  return `Offline voice does not understand ${name} yet. Add an OpenAI key, or pick English, Spanish, German or French in Settings.`
+}
+
 async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<string> {
   const wav = isWav(audio)
   const cfg = loadConfig()
+  const lang = cfg.voice.language
+  const terms = sttTerms(cfg)
   const t0 = Date.now()
   const result = await openaiClient().audio.transcriptions.create(
     {
@@ -102,10 +123,8 @@ async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<
         type: wav ? 'audio/wav' : 'audio/webm'
       }),
       model: 'whisper-1',
-      language: 'en',
-      prompt: dictation
-        ? dictationPrompt(cfg.dictation.dictionary, cfg.voiceVocab)
-        : whisperPrompt(cfg.voiceVocab)
+      language: whisperLanguage(lang),
+      prompt: dictation ? dictationPrompt(terms, lang) : whisperPrompt(terms, lang)
     },
     { timeout: 60000 }
   )
@@ -117,6 +136,12 @@ export async function transcribe(
   audio: ArrayBuffer,
   opts: { dictation?: boolean } = {}
 ): Promise<string> {
+  const text = await transcribeAudio(audio, opts)
+  voiceLatency.mark('stt-final')
+  return text
+}
+
+async function transcribeAudio(audio: ArrayBuffer, opts: { dictation?: boolean }): Promise<string> {
   const pcm = isWav(audio) ? parseWav(audio) : null
   const seconds = pcm ? pcm.samples.length / pcm.sampleRate : undefined
   if (seconds !== undefined ? seconds < MIN_AUDIO_SECONDS : audio.byteLength < MIN_WEBM_BYTES) {
@@ -131,9 +156,11 @@ export async function transcribe(
       installLocalModel().catch(() => {})
       throw new Error(settingUpMessage())
     }
+    if (decision.reason === 'language') throw new Error(languageMessage())
     throw new Error('Offline voice is not available on this PC. Add an OpenAI key to use voice.')
   }
 
+  const localReady = a.localSupported && a.localInstalled && a.localLanguage !== false
   if (decision.engine === 'local' && pcm) {
     try {
       return await transcribeLocal(pcm.samples, pcm.sampleRate)
@@ -143,5 +170,12 @@ export async function transcribe(
     }
   }
   if (!a.openaiKey) throw new Error('Speech recognition needs the offline model or an OpenAI key.')
-  return transcribeCloud(audio, !!opts.dictation)
+  try {
+    return await transcribeCloud(audio, !!opts.dictation)
+  } catch (e) {
+    // Network gone mid-request: the offline model still has the audio.
+    if (decision.engine !== 'cloud' || !localReady || !pcm) throw e
+    log('fail', `stt cloud failed, using the offline model: ${(e as Error).message}`)
+    return transcribeLocal(pcm.samples, pcm.sampleRate)
+  }
 }

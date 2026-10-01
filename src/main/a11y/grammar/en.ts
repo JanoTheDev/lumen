@@ -19,10 +19,6 @@ export type Gate =
   | 'answer'
   /** Help sheet only: guide voice navigation (guides/voice-nav.ts) runs before the grammar. */
   | 'guide'
-  /** "Read the page" is reading or paused. */
-  | 'reading'
-  /** A screen description was just given ("more detail"). */
-  | 'described'
 
 export type Category =
   | 'numbers'
@@ -34,7 +30,6 @@ export type Category =
   | 'windows'
   | 'lumen'
   | 'guide'
-  | 'reading'
 
 export interface GrammarEntry {
   id: string
@@ -50,59 +45,6 @@ export interface GrammarEntry {
 }
 
 export const GRAMMAR: GrammarEntry[] = [
-  // ---- Reading aloud (gated, first: "stop" while reading stops the reading) ----
-  {
-    id: 'read.stop',
-    category: 'reading',
-    patterns: ['(stop|stop reading|stop it|be quiet|quiet|thats enough|enough)'],
-    gate: 'reading',
-    say: 'stop reading',
-    does: 'Stop reading'
-  },
-  {
-    id: 'read.pause',
-    category: 'reading',
-    patterns: ['(pause|pause reading|wait|hold on)'],
-    gate: 'reading',
-    say: 'pause',
-    does: 'Pause the reading'
-  },
-  {
-    id: 'read.continue',
-    category: 'reading',
-    patterns: ['(continue|continue reading|resume|resume reading|keep reading|go on|carry on)'],
-    gate: 'reading',
-    say: 'continue',
-    does: 'Go on reading'
-  },
-  {
-    id: 'read.skip',
-    category: 'reading',
-    patterns: ['(next|skip|skip that|next part|next paragraph)'],
-    args: { by: 1 },
-    gate: 'reading',
-    say: 'next',
-    does: 'Skip to the next part'
-  },
-  {
-    id: 'read.skip',
-    category: 'reading',
-    patterns: ['(back|go back|previous|previous part|previous paragraph|repeat|say that again)'],
-    args: { by: -1 },
-    gate: 'reading',
-    say: 'repeat',
-    does: 'Read the last part again'
-  },
-  {
-    id: 'describe.screen',
-    category: 'reading',
-    patterns: ['(more detail|more details|tell me more|in detail|describe it in detail)'],
-    args: { detail: 'full' },
-    gate: 'described',
-    say: 'more detail',
-    does: 'Describe the screen in full'
-  },
-
   // ---- Mouse grid (gated, so it runs before numbers and pointer) ----
   {
     id: 'grid.select',
@@ -666,51 +608,6 @@ export const GRAMMAR: GrammarEntry[] = [
     args: { combo: 'alt+tab' },
     say: 'switch window',
     does: 'Switch to the previous window'
-  },
-
-  // ---- Describe and read ----
-  {
-    id: 'describe.screen',
-    category: 'reading',
-    patterns: [
-      '(describe|describe [the |my |this ]screen|describe the window|describe this window)[ in (full|detail)]',
-      '(what is|whats) on [the |my ]screen',
-      '(where am i|what am i looking at|what do you see)'
-    ],
-    args: { detail: 'brief' },
-    say: 'describe screen',
-    does: 'Say what is on the screen (say "more detail" after it)'
-  },
-  {
-    id: 'describe.cursor',
-    category: 'reading',
-    patterns: [
-      '(what is|whats) under [my |the ](cursor|mouse|pointer)',
-      '(what is|whats) (this|that)[ (button|thing|icon|control)]',
-      '(explain|describe) (this|that)[ (button|thing|icon|control)]'
-    ],
-    say: "what's under my cursor",
-    does: 'Explain the control under the pointer'
-  },
-  {
-    id: 'read.selection',
-    category: 'reading',
-    patterns: [
-      '(read|read out|read aloud) (this|that|it|the selection|selection|the selected text|selected text|what i selected)'
-    ],
-    say: 'read this',
-    does: 'Read the selected text (or the field with focus, or what is under the pointer)'
-  },
-  {
-    id: 'read.page',
-    category: 'reading',
-    patterns: [
-      '(read|read out|read aloud) (the|this) (page|document|article|email|message)',
-      '(read|read out) (the whole thing|everything|all of it)',
-      'read page'
-    ],
-    say: 'read the page',
-    does: 'Read the page aloud in parts ("pause", "continue", "next", "stop")'
   },
 
   // ---- Lumen ----

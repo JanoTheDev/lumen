@@ -103,3 +103,12 @@ describe('prepareVoiceText', () => {
     expect(prepareVoiceText('Para.', deps(true, 'es').d)).toBe('stop')
   })
 })
+
+describe('replyLanguageLine', () => {
+  it('names the language for the answer prompt', async () => {
+    const { replyLanguageLine } = await import('../../src/main/speech/language')
+    expect(replyLanguageLine('es')).toContain('Spanish')
+    expect(replyLanguageLine('en')).toBe('')
+    expect(replyLanguageLine('auto')).toBe('')
+  })
+})

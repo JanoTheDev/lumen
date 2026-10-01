@@ -11,13 +11,6 @@ export interface AtState {
 const READERS = new Set(['nvda', 'jaws', 'narrator', 'other'])
 
 let state: AtState = { screenReader: null, voiceControl: [] }
-const listeners = new Set<(next: AtState, prev: AtState) => void>()
-
-/** Runs `fn` whenever the assistive-tech state changes; returns an unsubscribe. */
-export function onAtStateChange(fn: (next: AtState, prev: AtState) => void): () => void {
-  listeners.add(fn)
-  return () => listeners.delete(fn)
-}
 
 export function atState(): AtState {
   return state
@@ -39,9 +32,7 @@ export function setAtState(raw: unknown): boolean {
     ? r.voiceControl.filter((v): v is string => typeof v === 'string')
     : []
   const next: AtState = { screenReader: reader, voiceControl: voice }
-  const prev = state
-  const changed = JSON.stringify(next) !== JSON.stringify(prev)
+  const changed = JSON.stringify(next) !== JSON.stringify(state)
   state = next
-  if (changed) for (const fn of listeners) fn(next, prev)
   return changed
 }

@@ -7,6 +7,7 @@ import { captureContext } from '../query/capture'
 import * as assistant from '../windows/assistant'
 import { AssistantActivation, realTimers } from './activation'
 import { Conversation } from './conversation'
+import { voiceLatency } from './latency'
 
 let recordingOpen = false
 
@@ -41,6 +42,7 @@ const activation = new AssistantActivation(
       assistant.setStatus('listening', 'Listening… pause or tap to send')
     },
     stop() {
+      voiceLatency.speechEnded()
       bus.emit({ type: 'voice.stopped' })
       assistant.setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
       // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
@@ -97,6 +99,7 @@ export function onAssistantHotkeyUp(): void {
  * barge-in recordings the hotkey never started: tray, teach and others see it stop.
  */
 export function onRecordingEnded(): void {
+  voiceLatency.speechEnded()
   activation.reset()
   bus.emit({ type: 'voice.stopped', ended: true })
 }

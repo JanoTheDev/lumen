@@ -14,6 +14,7 @@ import { loadConfig } from '../../config'
 import { log } from '../../logger'
 import { screenReaderActive } from '../../a11y/at-state'
 import * as assistant from '../../windows/assistant'
+import { voiceLatency } from '../latency'
 import { forTheEar } from './ear'
 import { openAiTtsAvailable, synthOpenAi } from './openai'
 import { OutputGate, ttsAllowed } from './output'
@@ -92,11 +93,12 @@ function synth(
   text: string,
   voice: string,
   rate: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  lang: string
 ): Promise<{ mime: string; data: string }> {
   return engine === 'cloud'
     ? synthOpenAi(text, voice, rate).then((data) => ({ mime: 'audio/mpeg', data }))
-    : helper.synth(text, voice, rate, signal).then((data) => ({ mime: 'audio/wav', data }))
+    : helper.synth(text, voice, rate, signal, lang).then((data) => ({ mime: 'audio/wav', data }))
 }
 
 function say(text: string, turnId: string): void {
@@ -105,22 +107,26 @@ function say(text: string, turnId: string): void {
   const clean = forTheEar(text)
   if (!engine || !clean) return
   const n = seq++
-  const { ttsVoice: voice, ttsRate: rate } = cfg.voice
-  const fallback: TtsMessage = { op: 'say', turnId, seq: n, text: clean, voice, rate }
+  const { ttsVoice: voice, ttsRate: rate, language: lang } = cfg.voice
+  const fallback: TtsMessage = { op: 'say', turnId, seq: n, text: clean, voice, rate, lang }
   const checkOutput = helper.canCheckOutput
   if (engine === 'windows' && !helper.usable) {
     send(fallback)
+    voiceLatency.mark('tts-first-audio', turnId)
     return
   }
   // Synthesis starts now; playback order is kept by chaining the sends.
   const gen = generation
-  const audio = synth(engine, clean, voice, rate, aborter.signal)
+  const audio = synth(engine, clean, voice, rate, aborter.signal, lang)
   audio.catch(() => {})
   chain = chain.then(async () => {
     if (checkOutput && (await output.mutedFor(turnId))) return
     try {
       const data = await audio
-      if (gen === generation) send({ op: 'audio', turnId, seq: n, ...data })
+      if (gen === generation) {
+        send({ op: 'audio', turnId, seq: n, ...data })
+        voiceLatency.mark('tts-first-audio', turnId)
+      }
     } catch (e) {
       log('fail', `tts ${engine} failed, using speechSynthesis: ${(e as Error).message}`)
       if (gen === generation) send(fallback)

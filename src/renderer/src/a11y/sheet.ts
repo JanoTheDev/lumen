@@ -9,7 +9,6 @@ const CATEGORY_LABEL: Record<string, string> = {
   keyboard: 'Keyboard and typing',
   navigation: 'Apps and browsing',
   windows: 'Windows',
-  reading: 'Describe and read',
   lumen: 'Lumen',
   guide: 'Guides'
 }

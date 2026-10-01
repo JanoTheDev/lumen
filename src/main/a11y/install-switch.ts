@@ -23,6 +23,7 @@ import * as commandSheet from '../windows/command-sheet'
 import * as scanKeyboard from '../windows/scan-keyboard'
 import * as screenLayer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
+import { uiV2 } from '../windows/ui-mode'
 import type { A11yCommands } from './dispatch'
 import { ScanKeyboardModel, keyboardScanLevel } from './keyboard'
 import { ScanTree } from './scan-tree'
@@ -247,7 +248,7 @@ export function installSwitch(deps: SwitchInstallDeps): SwitchControl {
       const out: { label: string; run(): void }[] = [
         { label: 'Ask by voice', run: () => handleWake('switch') }
       ]
-      if (assistant.answerShown()) {
+      if (uiV2() && assistant.answerShown()) {
         out.push(
           { label: 'Repeat answer', run: () => assistant.command({ type: 'repeat' }) },
           { label: 'Pin answer', run: () => assistant.pinAnswer(true) },

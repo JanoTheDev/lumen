@@ -18,20 +18,34 @@ export type OutputState = AudioOutputState
 
 /**
  * The installed voice for a configured name. Chromium lists "Microsoft David - English (United
- * States)" where WinRT says "Microsoft David", so a prefix match counts. Else the first English
- * voice, else the first one (null = the system default).
+ * States)" where WinRT says "Microsoft David", so a prefix match counts. When the voice language
+ * is set and the chosen voice speaks another one, the first voice of that language is used
+ * instead (if one is installed). Else the first English voice, else the first one (null = the
+ * system default).
  */
-export function pickWinVoice(voices: readonly WinVoice[], name: string): WinVoice | null {
+export function pickWinVoice(
+  voices: readonly WinVoice[],
+  name: string,
+  lang?: string
+): WinVoice | null {
   const want = name.trim().toLowerCase()
+  let chosen: WinVoice | null = null
   if (want) {
-    const exact = voices.find((v) => v.name.toLowerCase() === want)
-    if (exact) return exact
-    const prefixed = voices
-      .filter((v) => want.startsWith(v.name.toLowerCase()))
-      .sort((a, b) => b.name.length - a.name.length)[0]
-    if (prefixed) return prefixed
+    chosen =
+      voices.find((v) => v.name.toLowerCase() === want) ??
+      voices
+        .filter((v) => want.startsWith(v.name.toLowerCase()))
+        .sort((a, b) => b.name.length - a.name.length)[0] ??
+      null
   }
-  return voices.find((v) => v.lang.toLowerCase().startsWith('en')) ?? voices[0] ?? null
+  const base = lang && lang !== 'auto' ? lang.toLowerCase().split('-')[0] : ''
+  if (base) {
+    const speaks = (v: WinVoice): boolean => v.lang.toLowerCase().split('-')[0] === base
+    if (chosen && speaks(chosen)) return chosen
+    const match = voices.find(speaks)
+    if (match) return match
+  }
+  return chosen ?? voices.find((v) => v.lang.toLowerCase().startsWith('en')) ?? voices[0] ?? null
 }
 
 /** WinRT SpeakingRate range is 0.5–6. */
@@ -59,10 +73,11 @@ export class WinVoices {
     text: string,
     voiceName: string,
     rate: number,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    lang?: string
   ): Promise<string> {
     const bridge = this.bridge()
-    const voice = pickWinVoice(await this.voices(), voiceName)
+    const voice = pickWinVoice(await this.voices(), voiceName, lang)
     const r = await ttsSynthesize(
       bridge,
       { text, voice: voice?.id ?? '', rate: winRate(rate) },

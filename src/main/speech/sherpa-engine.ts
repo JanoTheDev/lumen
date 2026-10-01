@@ -11,6 +11,43 @@ export type Sherpa = typeof import('sherpa-onnx-node')
 export interface SttModel {
   dir: string
   threads: number
+  /** nemo-ctc (Parakeet, default) or canary (needs `lang`). */
+  kind?: 'nemo-ctc' | 'canary'
+  /** Spoken language for canary: en, es, de or fr. */
+  lang?: string
+}
+
+/** Recognizer config for a model folder. Pure. */
+export function recognizerConfig(m: SttModel): Record<string, unknown> {
+  const common = {
+    tokens: join(m.dir, 'tokens.txt'),
+    numThreads: m.threads,
+    provider: 'cpu',
+    debug: 0
+  }
+  if (m.kind === 'canary') {
+    const lang = m.lang ?? 'en'
+    return {
+      // Canary uses 128 mel bins; source = target language means transcribe, not translate.
+      featConfig: { sampleRate: 16000, featureDim: 128 },
+      modelConfig: {
+        canary: {
+          encoder: join(m.dir, 'encoder.int8.onnx'),
+          decoder: join(m.dir, 'decoder.int8.onnx'),
+          srcLang: lang,
+          tgtLang: lang,
+          usePnc: 1
+        },
+        ...common
+      },
+      decodingMethod: 'greedy_search'
+    }
+  }
+  return {
+    featConfig: { sampleRate: 16000, featureDim: 80 },
+    modelConfig: { nemoCtc: { model: join(m.dir, 'model.int8.onnx') }, ...common },
+    decodingMethod: 'greedy_search'
+  }
 }
 
 /** Main → worker. Requests with an `id` get exactly one `reply`. */
@@ -59,20 +96,10 @@ export function createEngine(lib: Sherpa | null, post: Post): Engine {
 
   function getRecognizer(m: SttModel): Promise<OfflineRecognizer> {
     if (!lib) return Promise.reject(new Error('Offline speech engine is not available'))
-    const key = `${m.dir}|${m.threads}`
+    const key = `${m.dir}|${m.threads}|${m.kind ?? 'nemo-ctc'}|${m.lang ?? ''}`
     if (recognizer?.key === key) return recognizer.rec
     const t0 = Date.now()
-    const rec = lib.OfflineRecognizer.createAsync({
-      featConfig: { sampleRate: 16000, featureDim: 80 },
-      modelConfig: {
-        nemoCtc: { model: join(m.dir, 'model.int8.onnx') },
-        tokens: join(m.dir, 'tokens.txt'),
-        numThreads: m.threads,
-        provider: 'cpu',
-        debug: 0
-      },
-      decodingMethod: 'greedy_search'
-    })
+    const rec = lib.OfflineRecognizer.createAsync(recognizerConfig(m))
     const entry = { key, rec }
     recognizer = entry
     rec.then(

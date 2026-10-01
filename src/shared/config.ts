@@ -171,14 +171,6 @@ const a11yMarksSchema = z.object({
   badgeSize: z.enum(['s', 'm', 'l']).default('m')
 })
 
-/** Living with Voice Access / Dragon (06 T20). */
-const a11yCoexistSchema = z.object({
-  /** While Voice Access or Dragon runs, Lumen leaves shared commands to it unless "Lumen …". */
-  yieldToVoiceControl: z.boolean().default(true),
-  /** Keep the wake word listening while Dragon runs (off: Dragon owns the microphone). */
-  wakeWithDragon: z.boolean().default(false)
-})
-
 const shortcut = z.union([z.literal(''), z.string().regex(HOTKEY_RE)])
 
 /**
@@ -318,8 +310,7 @@ export const configV2Schema = z.object({
     profiles: z.array(z.string().max(30)).max(12).default([]),
     /** Opens the "what can I say" sheet; "" = no shortcut. Filled from the defaults on load. */
     helpHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional(),
-    shortcuts: a11yShortcutsSchema.default(A11Y_DEFAULTS.shortcuts),
-    coexist: a11yCoexistSchema.default({ yieldToVoiceControl: true, wakeWithDragon: false })
+    shortcuts: a11yShortcutsSchema.default(A11Y_DEFAULTS.shortcuts)
   }),
   buddy: z.object({
     enabled: z.boolean(),
@@ -436,8 +427,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     simpleMode: false,
     profiles: [],
     helpHotkey: 'Ctrl+Shift+F1',
-    shortcuts: { ...A11Y_DEFAULTS.shortcuts },
-    coexist: { yieldToVoiceControl: true, wakeWithDragon: false }
+    shortcuts: { ...A11Y_DEFAULTS.shortcuts }
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },

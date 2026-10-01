@@ -65,3 +65,17 @@ describe('speaker sayWindows', () => {
     expect(speak).not.toHaveBeenCalled()
   })
 })
+
+describe('pickVoice', () => {
+  const v = (name: string, lang: string, localService = true): SpeechSynthesisVoice =>
+    ({ name, lang, localService, default: false }) as SpeechSynthesisVoice
+
+  it('swaps the chosen voice for one of the voice language', async () => {
+    const { pickVoice } = await import('../../src/renderer/src/voice/speaker')
+    const voices = [v('Zira', 'en-US'), v('Helena', 'es-ES')]
+    expect(pickVoice(voices, 'Zira', 'es')?.name).toBe('Helena')
+    expect(pickVoice(voices, 'Zira', 'en')?.name).toBe('Zira')
+    expect(pickVoice(voices, 'Zira')?.name).toBe('Zira')
+    expect(pickVoice([v('Zira', 'en-US')], 'Zira', 'de')?.name).toBe('Zira')
+  })
+})
