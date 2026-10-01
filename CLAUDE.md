@@ -37,7 +37,7 @@ API keys are read at runtime from `.env` in the working directory, then `<userDa
 **Three processes:**
 
 1. **Electron main** (`src/main/`) — query pipeline, AI calls, action execution, config, windows.
-2. **Renderers** (`src/renderer/`) — entries `index` (HUD), `highlight`, `answeroverlay`, `status`, `dwellring`, `settings`. All windows are sandboxed with CSP; `highlight`/`answeroverlay`/`dwellring` scripts live in `src/renderer/src/legacy/*.ts`.
+2. **Renderers** (`src/renderer/`) — React entries, one html file each: `assistant` (bottom-centre assistant bar; also hosts the voice controller `assistant/VoiceHost.tsx`), `screen` (one click-through layer per display: guide highlights, locate dim-and-reveal, buddy, marks, grid, dwell ring), `panel` (Settings, onboarding and the Home tray flyout, hash routes in `panel/routes.ts`), `a11y` (command sheet, dwell palette, scan keyboard). All windows are sandboxed with CSP and use `window.lumen` only. Shared code: `theme/` (tokens, built-in themes + accent presets, `applyTheme` writes CSS variables and `data-theme` / `data-reduce-motion` on `:root`, WCAG contrast helpers), `ui/` (components, icons, `motion.ts` springs), `voice/` (mic, `useVoice`, VAD, speaker, wake feed), `lib/ipc.ts`.
 3. **Agent** — the Rust sidecar `lumen-native` (`native/`), spawned subprocess, protocol v2 NDJSON over stdio.
 
 ### Shared contracts (`src/shared/`, alias `@shared`)
@@ -49,17 +49,16 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 - `ipc.ts` — zod validators for renderer → main payloads.
 - `config.ts` — config v1/v2 zod schemas, defaults, `migrateV1toV2`, `configPatchSchema`.
 - `events.ts` — internal bus events, `AssistantState`, `ScreenScene`.
-- `legacy-api.ts` — builds the deprecated `window.api` on top of `window.lumen`.
 
 ### Preload
 
-`window.lumen = { invoke(channel, ...args), send(channel, ...args), on(channel, cb) → unsubscribe }`, typed from `channels.ts`. Channels not in the table are rejected. `window.api` is a deprecated compatibility layer built on it.
+`window.lumen = { invoke(channel, ...args), send(channel, ...args), on(channel, cb) → unsubscribe }`, typed from `channels.ts`. Channels not in the table are rejected. Nothing else is exposed.
 
 ### Main process (`src/main/`)
 
 - `index.ts` — lifecycle and wiring only.
 - `bus.ts` — typed event bus. Features emit; `windows/*` subscribe. Only `windows/*` call `webContents.send`.
-- `windows/` — `factory` (secure prefs, `loadRenderer`, navigation guards), one module per window (`hud`, `status`, `answer`, `highlight`, `dwell-ring`, `settings`, `tray`), `registry`.
+- `windows/` — `factory` (secure prefs, `loadRenderer`, navigation guards), `registry`, one module per window: `assistant` (bar state `AssistantView`, status, answer, confirm, caption), `screen-layer`, `settings` (panel window), `home`, `tray`, `command-sheet`, `dwell-palette`, `scan-keyboard`. `hud` (voice start/stop), `status` (`setStatus`), `answer`, `highlight` and `dwell-ring` are entry points that forward to the assistant bar and the screen layer; `lesson` draws lesson scenes.
 - `ipc/` — one `registerXxxIpc()` per area; every payload validated (`validate.ts`). Invalid payload → `{ error: 'E_INVALID' }`.
 - `query/` — `pipeline` (runQuery), `context` (speculative capture as a promise cache), `overrides` (pure prompt steering, composes flags), `present` (guide/locate output), `research`, `cancel` (`CancelScope` per turn; Escape / voice cancel / `assistant:cancel` cancel all), planner (`task-planner`, `step-verifier`, `task-queue`, `task-splitter`, `query-classifier`, `nth`).
 - `actions/` — `executor` (single `executeActions` for renderer, plan and research paths), `coords` (the only image ↔ physical ↔ logical conversions), `agent-action` (model action → agent wire format), `safety` (`evaluate(action, ctx)` → low / medium / high / blocked per origin `user-direct|agent|lesson|routine|mcp`: URL schemes, hotkey denylist, terminal and password typing, element-name risk, injection bump), `risk-names`, `redact` (secret detection for typed text, logs and model input), `policy` (`gate`: evaluate → confirm → audit; the executor and lesson do-it call it for every action).
@@ -91,13 +90,13 @@ Model bboxes are `Rect` in screenshot image px. `actions/coords.ts` converts ima
 
 ### Query flow
 
-Hold hotkey → agent `hotkey-down` → HUD starts recording → release → `hotkey-up` starts a speculative capture while Whisper transcribes → `assistant:query` → overrides → model call (cancellable) → response routed: `answer` card, `guide` highlights, `action` via `executeActions` (safety policy per action), `text_insert`, `locate` dim-and-reveal.
+Hold hotkey → agent `hotkey-down` → assistant bar opens and its VoiceHost starts recording → release → `hotkey-up` starts a speculative capture while Whisper transcribes → `assistant:query` → overrides → model call (cancellable) → response routed: `answer` card, `guide` highlights, `action` via `executeActions` (safety policy per action), `text_insert`, `locate` dim-and-reveal.
 
 Wake word: agent emits `wake-detected` → same recording flow with client-side VAD auto-stop.
 
 ## Settings
 
-Tray icon → Settings window (`src/renderer/src/settings/`). Panels: General, Voice, Accessibility, Interface, Library, Models, Appearance (8 themes incl. custom). Text and number fields save on blur / after a short pause.
+Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/renderer/src/panel/settings/`, sections registered in `meta.ts` + `SettingsPage.tsx`): General, Voice, Accessibility (grouped Seeing / Hearing / Speaking / Thinking and focus / Moving, plus shortcuts), Buddy & look, Models & keys, Memory, Lessons, App helpers, Privacy, About. Text and number fields save on blur / Enter. Config `ui.v2` is retired (accepted in old files, ignored).
 
 ## Config
 
