@@ -1,0 +1,232 @@
+//! Agent protocol v2 (plans CONTRACTS C2): NDJSON framing, error codes.
+//!
+//! Requests may use either framing, like the Python agent: `{v:2, id, cmd, args}`
+//! or the flat v1 shape `{id, cmd, ...args}`. Responses and events are always v2.
+
+pub mod router;
+pub mod writer;
+
+use serde_json::{Map, Value, json};
+
+pub type Args = Map<String, Value>;
+pub type CmdResult = Result<Value, AgentError>;
+
+pub const E_TIMEOUT: &str = "E_TIMEOUT";
+pub const E_CANCELLED: &str = "E_CANCELLED";
+pub const E_NOT_FOUND: &str = "E_NOT_FOUND";
+pub const E_DENIED: &str = "E_DENIED";
+pub const E_UNSUPPORTED: &str = "E_UNSUPPORTED";
+pub const E_INVALID: &str = "E_INVALID";
+pub const E_INTERNAL: &str = "E_INTERNAL";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentError {
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl AgentError {
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
+        Self { code, message: message.into() }
+    }
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::new(E_INVALID, message)
+    }
+    pub fn unsupported(message: impl Into<String>) -> Self {
+        Self::new(E_UNSUPPORTED, message)
+    }
+    pub fn not_found(message: impl Into<String>) -> Self {
+        Self::new(E_NOT_FOUND, message)
+    }
+    pub fn denied(message: impl Into<String>) -> Self {
+        Self::new(E_DENIED, message)
+    }
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::new(E_INTERNAL, message)
+    }
+}
+
+impl std::fmt::Display for AgentError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl std::error::Error for AgentError {}
+
+#[cfg(windows)]
+impl From<windows::core::Error> for AgentError {
+    fn from(e: windows::core::Error) -> Self {
+        AgentError::internal(format!("{} (0x{:08X})", e.message(), e.code().0))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Request {
+    pub id: Value,
+    pub cmd: Option<String>,
+    pub args: Args,
+}
+
+/// Longest prefix of an unparseable line echoed back in `protocol-error`.
+const ERROR_ECHO_CHARS: usize = 200;
+
+/// Parses one stdin line. `None` for blank lines; `Err(echo)` when the line is
+/// not a JSON object (the caller emits `protocol-error {line: echo}`).
+pub fn parse_line(line: &str) -> Option<Result<Request, String>> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    let Ok(Value::Object(mut msg)) = serde_json::from_str::<Value>(line) else {
+        return Some(Err(line.chars().take(ERROR_ECHO_CHARS).collect()));
+    };
+    let id = msg.get("id").cloned().unwrap_or(json!(0));
+    let cmd = msg.get("cmd").and_then(Value::as_str).map(str::to_owned);
+    let args = if msg.get("v").and_then(Value::as_i64) == Some(2) {
+        match msg.remove("args") {
+            Some(Value::Object(args)) => args,
+            _ => Args::new(),
+        }
+    } else {
+        msg.remove("id");
+        msg.remove("cmd");
+        msg
+    };
+    Some(Ok(Request { id, cmd, args }))
+}
+
+pub fn response_line(id: &Value, result: &CmdResult) -> String {
+    let frame = match result {
+        Ok(result) => json!({"v": 2, "id": id, "ok": true, "result": result}),
+        Err(e) => json!({"v": 2, "id": id, "ok": false, "error": {"code": e.code, "message": e.message}}),
+    };
+    frame.to_string()
+}
+
+pub fn event_line(event: &str, data: Value) -> String {
+    let data = if data.is_null() { json!({}) } else { data };
+    json!({"v": 2, "event": event, "data": data}).to_string()
+}
+
+/// Typed argument accessors that fail with E_INVALID.
+pub mod arg {
+    use super::{AgentError, Args};
+    use serde_json::Value;
+
+    pub fn opt_str<'a>(args: &'a Args, key: &str) -> Result<Option<&'a str>, AgentError> {
+        match args.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s)),
+            Some(_) => Err(AgentError::invalid(format!("{key} must be a string"))),
+        }
+    }
+
+    pub fn str<'a>(args: &'a Args, key: &str) -> Result<&'a str, AgentError> {
+        opt_str(args, key)?.ok_or_else(|| AgentError::invalid(format!("{key} is required")))
+    }
+
+    pub fn opt_bool(args: &Args, key: &str) -> Result<Option<bool>, AgentError> {
+        match args.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Bool(b)) => Ok(Some(*b)),
+            Some(_) => Err(AgentError::invalid(format!("{key} must be a boolean"))),
+        }
+    }
+
+    /// Integer (JSON numbers with no fractional part; floats are truncated like Python's int()).
+    pub fn opt_i64(args: &Args, key: &str) -> Result<Option<i64>, AgentError> {
+        match args.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Number(n)) => n
+                .as_i64()
+                .or_else(|| n.as_f64().filter(|f| f.is_finite()).map(|f| f as i64))
+                .map(Some)
+                .ok_or_else(|| AgentError::invalid(format!("{key} must be a number"))),
+            Some(_) => Err(AgentError::invalid(format!("{key} must be a number"))),
+        }
+    }
+
+    pub fn opt_f64(args: &Args, key: &str) -> Result<Option<f64>, AgentError> {
+        match args.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::Number(n)) => Ok(n.as_f64()),
+            Some(_) => Err(AgentError::invalid(format!("{key} must be a number"))),
+        }
+    }
+
+    pub fn i64(args: &Args, key: &str) -> Result<i64, AgentError> {
+        opt_i64(args, key)?.ok_or_else(|| AgentError::invalid(format!("{key} is required")))
+    }
+
+    pub fn obj<'a>(args: &'a Args, key: &str) -> Option<&'a Args> {
+        args.get(key).and_then(Value::as_object)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    #[test]
+    fn parses_v2_framing() {
+        let r = parse_line(r#"{"v":2,"id":7,"cmd":"ping","args":{"a":1}}"#).unwrap().unwrap();
+        assert_eq!(r.id, json!(7));
+        assert_eq!(r.cmd.as_deref(), Some("ping"));
+        assert_eq!(r.args.get("a"), Some(&json!(1)));
+    }
+
+    #[test]
+    fn parses_v1_framing_as_flat_args() {
+        let r = parse_line(r#"{"id":1,"cmd":"set_hotkey","combo":"Ctrl+A"}"#).unwrap().unwrap();
+        assert_eq!(r.args.len(), 1);
+        assert_eq!(r.args.get("combo"), Some(&json!("Ctrl+A")));
+    }
+
+    #[test]
+    fn v2_with_non_object_args_gets_empty_args() {
+        let r = parse_line(r#"{"v":2,"id":1,"cmd":"ping","args":[1]}"#).unwrap().unwrap();
+        assert!(r.args.is_empty());
+    }
+
+    #[test]
+    fn missing_id_defaults_to_zero() {
+        let r = parse_line(r#"{"cmd":"ping"}"#).unwrap().unwrap();
+        assert_eq!(r.id, json!(0));
+    }
+
+    #[test]
+    fn blank_and_garbage() {
+        assert!(parse_line("   \r").is_none());
+        assert_eq!(parse_line("garbage").unwrap().unwrap_err(), "garbage");
+        assert_eq!(parse_line("[1,2]").unwrap().unwrap_err(), "[1,2]");
+        let long = "x".repeat(500);
+        assert_eq!(parse_line(&long).unwrap().unwrap_err().chars().count(), 200);
+    }
+
+    #[test]
+    fn frames() {
+        assert_eq!(response_line(&json!(3), &Ok(json!({}))), r#"{"v":2,"id":3,"ok":true,"result":{}}"#);
+        assert_eq!(
+            response_line(&json!(4), &Err(AgentError::invalid("bad"))),
+            r#"{"v":2,"id":4,"ok":false,"error":{"code":"E_INVALID","message":"bad"}}"#
+        );
+        assert_eq!(event_line("x", Value::Null), r#"{"v":2,"event":"x","data":{}}"#);
+        assert_eq!(event_line("x", json!({"s":"é"})), "{\"v\":2,\"event\":\"x\",\"data\":{\"s\":\"é\"}}");
+    }
+
+    proptest! {
+        #[test]
+        fn parser_never_panics(s in "\\PC*") {
+            let _ = parse_line(&s);
+        }
+
+        #[test]
+        fn parser_never_panics_on_json_like(s in r#"\{("[a-z]{0,4}":(-?[0-9]{1,20}(\.[0-9]+)?|"[^"]{0,8}"|null|true|\[\]|\{\}),?){0,6}\}"#) {
+            if let Some(Ok(r)) = parse_line(&s) {
+                let _ = response_line(&r.id, &Ok(Value::Object(r.args)));
+            }
+        }
+    }
+}
