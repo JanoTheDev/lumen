@@ -22,7 +22,7 @@ vi.mock('../../../src/main/ai/providers', () => ({
 }))
 
 vi.mock('../../../src/main/claude-code', () => ({
-  focusedProject: () => undefined,
+  focusedProject: () => (h.session ? 'Z:/no-such-project' : undefined),
   projectForTitle: () => undefined,
   sendDictation: (text: string) => {
     if (!h.session) return { ok: false, notice: 'No Claude session is open.' }
@@ -192,6 +192,7 @@ describe('dictate', () => {
   })
 
   it('sends "to Claude, …" to the Claude Code session instead of typing (T42)', async () => {
+    h.focus = { ...h.focus, process: 'windowsterminal.exe', title: 'claude' }
     const res = await dictate('to Claude, fix camel case get user in at file user dot ts')
     expect(res).toEqual({ ok: true, notice: 'Sent to Claude in lumen.' })
     expect(h.claude).toEqual(['fix getUser in @user.ts'])
@@ -199,11 +200,26 @@ describe('dictate', () => {
     expect(reports[0]).toMatchObject({ app: 'claude-code', ok: true })
   })
 
-  it('keeps the text when no Claude session is open', async () => {
+  it('types "to Claude, …" when no Claude session is open', async () => {
     h.session = false
-    const res = await dictate('dictate to Claude add a test')
-    expect(res.ok).toBe(false)
-    expect(h.executed).toEqual([])
+    h.focus = { ...h.focus, process: 'code.exe', title: 'app.ts - demo - Visual Studio Code' }
+    await dictate('dictate to Claude add a test')
+    expect(h.claude).toEqual([])
+    expect(h.executed).toHaveLength(1)
+  })
+
+  it('types "To Claude, …" in a mail to a person named Claude (M3)', async () => {
+    h.focus = { ...h.focus, process: 'outlook.exe', title: 'Message - Outlook' }
+    const res = await dictate('To Claude, thanks for yesterday, the report is attached.')
+    expect(res.ok).toBe(true)
+    expect(h.claude).toEqual([])
+    expect(h.executed).toEqual([
+      {
+        type: 'type',
+        text: 'To Claude, thanks for yesterday, the report is attached.',
+        allowTerminal: false
+      }
+    ])
   })
 
   it('edits the selection in an editable field', async () => {

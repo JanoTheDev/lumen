@@ -39,7 +39,13 @@ import { takeScreenNames } from './screen-names'
 import { shapeDictation, type ShapeExtras } from './shape'
 import { expandSnippet, loadSnippets, matchSnippet } from './snippets'
 import type { FocusTarget } from './terminal-guard'
-import { claudeResolver, matchClaudeDictation, sendToClaude, titleResolver } from './to-claude'
+import {
+  claudeResolver,
+  claudeTargetReady,
+  matchClaudeDictation,
+  sendToClaude,
+  titleResolver
+} from './to-claude'
 
 type DictationConfig = AppConfig['dictation']
 
@@ -327,9 +333,10 @@ ${text}`)
         return { ok: edited.ok, notice: edited.notice }
       }
     }
-    // "To Claude, …" goes to the Claude Code session (T42).
+    // "To Claude, …" goes to the Claude Code session (T42), only from a terminal, an editor
+    // or Lumen with a session focused; anywhere else the words are typed (M3).
     const toClaude = cfg.codingMode ? matchClaudeDictation(text) : null
-    if (toClaude)
+    if (toClaude && (await claudeTargetReady(await focus)))
       return await dictateToClaude(toClaude, text, pendingId, cfg, scope.signal, durationMs)
     const snippet = cfg.snippets ? snippetFor(text, false) : null
     if (snippet)

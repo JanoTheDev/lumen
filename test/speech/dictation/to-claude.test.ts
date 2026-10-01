@@ -6,7 +6,10 @@ import {
   pickFile,
   projectResolver
 } from '../../../src/main/speech/dictation/file-resolve'
-import { matchClaudeDictation } from '../../../src/main/speech/dictation/to-claude'
+import {
+  claudeTargetAllowed,
+  matchClaudeDictation
+} from '../../../src/main/speech/dictation/to-claude'
 import { tempDir } from '../../helpers/fixtures'
 
 describe('matchClaudeDictation', () => {
@@ -20,6 +23,28 @@ describe('matchClaudeDictation', () => {
     expect(matchClaudeDictation('I wrote to Claude yesterday')).toBeNull()
     expect(matchClaudeDictation('to Claude')).toBeNull()
     expect(matchClaudeDictation('Claude said hi')).toBeNull()
+  })
+})
+
+describe('claudeTargetAllowed (M3)', () => {
+  const at = (process: string, title = ''): { process: string; title: string; name: string } => ({
+    process,
+    title,
+    name: ''
+  })
+  const ctx = { sessionFocused: true, ownProcess: 'Lumen.exe' }
+
+  it('sends from a terminal, a code editor or Lumen with a session focused', () => {
+    expect(claudeTargetAllowed(at('windowsterminal.exe'), ctx)).toBe(true)
+    expect(claudeTargetAllowed(at('code.exe'), ctx)).toBe(true)
+    expect(claudeTargetAllowed(at('lumen.exe'), ctx)).toBe(true)
+  })
+
+  it('types it in mail, documents and browser tabs, or without a session', () => {
+    expect(claudeTargetAllowed(at('outlook.exe', 'Inbox - Outlook'), ctx)).toBe(false)
+    expect(claudeTargetAllowed(at('winword.exe'), ctx)).toBe(false)
+    expect(claudeTargetAllowed(at('chrome.exe', 'Issue #12 · GitHub'), ctx)).toBe(false)
+    expect(claudeTargetAllowed(at('code.exe'), { ...ctx, sessionFocused: false })).toBe(false)
   })
 })
 

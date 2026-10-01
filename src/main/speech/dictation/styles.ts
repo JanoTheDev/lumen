@@ -57,6 +57,11 @@ const TITLE_KINDS: [RegExp, DictationAppKind][] = [
   [/\b(?:github|gitlab|codesandbox|replit|stack ?blitz)\b/i, 'code']
 ]
 
+/** A code editor or IDE by its process (never by a window title). */
+export function isCodeProcess(proc: string): boolean {
+  return PROCESS_KINDS[proc.trim().toLowerCase()] === 'code'
+}
+
 /** The kind of app dictation is typing into; the user's own mapping wins. */
 export function appKindOf(
   target: Pick<FocusTarget, 'process' | 'title' | 'name'>,
