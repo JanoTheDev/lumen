@@ -1,8 +1,10 @@
 // Readers for shared Office files and tables: Excel (.xlsx) sheets as CSV text, PowerPoint
 // (.pptx) slide text, Word (.docx) text with headings, lists and tables kept, and a short
 // statistics line for CSV / sheets. The zip is read with the strict pack reader (no zip
-// bombs: sizes and CRCs checked). Pure apart from mammoth.
+// bombs: sizes and CRCs checked), Word files too before mammoth sees them. Pure apart from
+// mammoth.
 import { readZip, type ZipFile } from '../packs/zip-read'
+import { writeZip } from '../docs-out/zip'
 import { parseCsv, rowsToCsv, sniffSeparator } from '../docs-out/text'
 import { asNumber } from '../docs-out/xlsx'
 import { xmlDecode } from '../docs-out/xml'
@@ -234,11 +236,27 @@ export function htmlToText(html: string): string {
     .trim()
 }
 
+/**
+ * A Word file rebuilt from the entries the strict reader checked (count, total size, each
+ * entry's real inflated size and CRC), images emptied (they are never read): mammoth's zip
+ * library has no size limit, so it never sees the original archive. Throws ZipError on a bomb
+ * or a broken zip.
+ */
+export function checkedDocx(buf: Buffer): Buffer {
+  const files = readZip(buf, OFFICE_LIMITS)
+  if (!files.some((f) => f.name.toLowerCase() === 'word/document.xml'))
+    throw new Error('not a Word document')
+  return writeZip(
+    files.map((f) => (/^word\/media\//i.test(f.name) ? { name: f.name, data: Buffer.alloc(0) } : f))
+  )
+}
+
 export async function docxText(buf: Buffer): Promise<string> {
+  const checked = checkedDocx(buf)
   const mod = await import('mammoth')
   const mammoth = (mod.default ?? mod) as typeof mod
   const r = await mammoth.convertToHtml(
-    { buffer: buf },
+    { buffer: checked },
     { convertImage: mammoth.images.imgElement(async () => ({ src: '' })) }
   )
   return htmlToText(r.value)
