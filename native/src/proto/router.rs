@@ -42,6 +42,9 @@ fn lane_index(lane: Lane) -> usize {
     }
 }
 
+/// Upper bound for a caller-supplied `timeoutMs`.
+pub const MAX_TIMEOUT: Duration = Duration::from_secs(600);
+
 pub type Handler = Arc<dyn Fn(&Args, &CancelToken) -> CmdResult + Send + Sync>;
 
 #[derive(Default)]
@@ -130,6 +133,15 @@ pub struct Router {
 
 fn key_of(id: &Value) -> String {
     id.to_string()
+}
+
+/// Per-call `timeoutMs`, clamped to [`MAX_TIMEOUT`]. None when absent, not positive or not a number.
+fn timeout_of(args: &Args) -> Option<Duration> {
+    let ms = args.get("timeoutMs")?.as_f64()?;
+    if ms.is_nan() || ms <= 0.0 {
+        return None;
+    }
+    Some(Duration::from_secs_f64(ms.min(MAX_TIMEOUT.as_millis() as f64) / 1000.0))
 }
 
 fn run_handler(cmd: &str, handler: &Handler, args: &Args, token: &CancelToken) -> CmdResult {
@@ -224,16 +236,19 @@ impl Router {
         }
 
         let call = Arc::new(Call { key: key_of(&id), id, cmd, token: CancelToken::new() });
-        self.inflight.lock().unwrap().insert(call.key.clone(), call.clone());
-        let timeout = match args.get("timeoutMs") {
-            Some(Value::Number(n)) => {
-                n.as_f64().filter(|ms| *ms > 0.0).map(|ms| Duration::from_secs_f64(ms / 1000.0))
+        {
+            let mut inflight = self.inflight.lock().unwrap();
+            if inflight.contains_key(&call.key) {
+                drop(inflight);
+                let msg = format!("{}: request id {} is already in flight", call.cmd, call.key);
+                self.out.respond(&call.id, &Err(AgentError::internal(msg)));
+                return;
             }
-            _ => None,
+            inflight.insert(call.key.clone(), call.clone());
         }
-        .or(default_timeout);
-        if let Some(t) = timeout {
-            let _ = self.timer.send((Instant::now() + t, call.clone()));
+        let timeout = timeout_of(&args).or(default_timeout);
+        if let Some(at) = timeout.and_then(|t| Instant::now().checked_add(t)) {
+            let _ = self.timer.send((at, call.clone()));
         }
 
         let stats = &self.stats[lane_index(lane)];
@@ -423,6 +438,40 @@ mod tests {
         r.dispatch(req(6, "sleep", json!({"ms": 60_000, "timeoutMs": 100})));
         let l = wait_for(&r, &s, 1);
         assert_eq!(l[0]["error"]["code"], "E_TIMEOUT");
+    }
+
+    #[test]
+    fn timeout_ms_is_clamped() {
+        let t = |v: Value| timeout_of(json!({"timeoutMs": v}).as_object().unwrap());
+        assert_eq!(t(json!(250)), Some(Duration::from_millis(250)));
+        assert_eq!(t(json!(1e300)), Some(MAX_TIMEOUT));
+        assert_eq!(t(json!(u64::MAX)), Some(MAX_TIMEOUT));
+        assert_eq!(t(json!(-5)), None);
+        assert_eq!(t(json!(0)), None);
+        assert_eq!(t(json!("100")), None);
+        assert_eq!(timeout_of(&Args::new()), None);
+    }
+
+    #[test]
+    fn huge_timeout_does_not_panic() {
+        let (r, s) = setup();
+        r.dispatch(req(9, "sleep", json!({"ms": 10, "timeoutMs": 1e300})));
+        let l = wait_for(&r, &s, 1);
+        assert_eq!(l[0]["result"]["slept"], true);
+    }
+
+    #[test]
+    fn duplicate_inflight_id_is_rejected() {
+        let (r, s) = setup();
+        r.dispatch(req(10, "sleep", json!({"ms": 300})));
+        r.dispatch(req(10, "sleep", json!({"ms": 10})));
+        let l = wait_for(&r, &s, 2);
+        assert_eq!(l.len(), 2, "{l:?}");
+        assert_eq!(l[0]["id"], 10);
+        assert_eq!(l[0]["error"]["code"], "E_INTERNAL");
+        assert_eq!(l[1]["result"]["slept"], true);
+        r.dispatch(req(10, "sleep", json!({"ms": 1})));
+        assert_eq!(wait_for(&r, &s, 3)[2]["result"]["slept"], true, "id is free again once answered");
     }
 
     #[test]
