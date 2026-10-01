@@ -7,6 +7,8 @@ import type { SkillRunRecord, SkillSummary } from '@shared/types'
 import { Button, Card, IconButton, Switch, announce, icons } from '../../../ui'
 import { SkillsCompose } from './SkillsCompose'
 import { SkillsInstall } from './SkillsInstall'
+import { SkillsStyles } from './SkillsStyles'
+import { PluginImport } from './PluginImport'
 import { TRUST_LABEL, filterSkills, permissionLines, runLine, skillMeta } from './SkillsText'
 
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
@@ -371,6 +373,7 @@ export function Skills(): JSX.Element {
           before every action.
         </p>
       </Card>
+      <SkillsStyles refreshKey={skills} />
       <SkillsCompose
         onSaved={(name) => {
           refresh()
@@ -384,6 +387,7 @@ export function Skills(): JSX.Element {
         }}
       />
       <SkillsInstall onInstalled={refresh} />
+      <PluginImport onImported={refresh} />
     </>
   )
 }
