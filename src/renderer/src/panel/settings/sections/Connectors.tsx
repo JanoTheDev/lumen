@@ -12,6 +12,7 @@ import {
 import { Button, Card, Field, SegmentedControl, Select, Switch, announce, icons } from '../../../ui'
 import { invoke } from '../../../lib/ipc'
 import { idFromName, parseArgs, parseEnv } from './connectors-form'
+import { ConnectorsCatalog } from './ConnectorsCatalog'
 
 const STATE_TEXT: Record<ConnectorView['state'], string> = {
   off: 'Off',
@@ -34,6 +35,7 @@ function inputOf(c: ConnectorView): {
   command?: string
   args?: string[]
   url?: string
+  auth?: 'oauth'
   enabled: boolean
   toolPolicy: Record<string, ToolPolicy>
 } {
@@ -41,7 +43,9 @@ function inputOf(c: ConnectorView): {
     id: c.id,
     name: c.name,
     transport: c.transport,
-    ...(c.transport === 'stdio' ? { command: c.command, args: c.args ?? [] } : { url: c.url }),
+    ...(c.transport === 'stdio'
+      ? { command: c.command, args: c.args ?? [] }
+      : { url: c.url, ...(c.auth ? { auth: c.auth } : {}) }),
     enabled: c.enabled,
     toolPolicy: c.toolPolicy
   }
@@ -89,6 +93,24 @@ function ServerCard({ c, onChanged }: { c: ConnectorView; onChanged: () => void 
     }
   }
 
+  const signIn = async (): Promise<void> => {
+    setBusy(true)
+    say('Your browser opens the sign-in page. Come back here when it says you are signed in.')
+    try {
+      const r = await invoke('connectors:sign-in', c.id)
+      say(r.ok ? 'Signed in.' : `Not signed in: ${r.error}`, !r.ok)
+    } finally {
+      setBusy(false)
+      onChanged()
+    }
+  }
+
+  const signOut = async (): Promise<void> => {
+    const r = await invoke('connectors:sign-out', c.id)
+    say(r.ok ? 'Signed out. The saved sign-in was deleted.' : r.error, !r.ok)
+    onChanged()
+  }
+
   const loadTools = async (): Promise<void> => {
     setBusy(true)
     try {
@@ -128,6 +150,7 @@ function ServerCard({ c, onChanged }: { c: ConnectorView; onChanged: () => void 
           <>
             URL: <code>{c.url}</code>
             {c.hasBearer ? ' (token saved)' : ''}
+            {c.auth === 'oauth' ? (c.signedIn ? ' (signed in)' : ' (not signed in)') : ''}
           </>
         )}
       </p>
@@ -166,6 +189,24 @@ function ServerCard({ c, onChanged }: { c: ConnectorView; onChanged: () => void 
           Remove
         </Button>
       </div>
+      {c.transport === 'http' && (c.auth === 'oauth' || !c.hasBearer) && (
+        <div className="panel-row">
+          <Button
+            icon={icons.key}
+            variant={c.auth === 'oauth' ? 'secondary' : 'quiet'}
+            busy={busy}
+            disabled={busy}
+            onClick={() => void signIn()}
+          >
+            {c.auth !== 'oauth' ? 'Sign in with OAuth' : c.signedIn ? 'Sign in again' : 'Sign in'}
+          </Button>
+          {c.auth === 'oauth' && c.signedIn && (
+            <Button variant="quiet" disabled={busy} onClick={() => void signOut()}>
+              Sign out
+            </Button>
+          )}
+        </div>
+      )}
       {c.transport === 'http' && (
         <Field
           label="Access token"
@@ -430,12 +471,13 @@ export function Connectors(): JSX.Element {
       {list === null && <p className="ui-hint">Loading connectors…</p>}
       {list?.length === 0 && (
         <p className="ui-hint">
-          No connectors yet. See docs/connectors.md for examples (a folder, a calendar, email).
+          No connectors yet. Pick one under Browse integrations, or add any MCP server by hand.
         </p>
       )}
       {list?.map((c) => (
         <ServerCard key={c.id} c={c} onChanged={refresh} />
       ))}
+      {list && <ConnectorsCatalog list={list} onAdded={refresh} />}
       <AddForm taken={list?.map((c) => c.id) ?? []} onAdded={refresh} />
     </>
   )
