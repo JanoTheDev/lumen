@@ -15,6 +15,17 @@ describe('learning journal', () => {
   const dirs: { cleanup(): void }[] = []
   afterEach(() => dirs.splice(0).forEach((d) => d.cleanup()))
 
+  it('questions are written redacted (review low)', () => {
+    const key = ['sk', 'proj', 'A'.repeat(40)].join('-')
+    let day = emptyDay('2026-10-01')
+    day = addEntry(day, { kind: 'question', text: `type my key ${key} into this field` })
+    day = addEntry(day, { kind: 'question', text: 'my password is hunter22' })
+    const all = JSON.stringify(day) + dayMarkdown(day)
+    expect(all).not.toContain(key)
+    expect(all).not.toContain('hunter22')
+    expect(day.questions[0]).toContain('type my key')
+  })
+
   it('adds de-duplicated entries and renders a markdown note', () => {
     let day = emptyDay('2026-10-01')
     day = addEntry(day, { kind: 'lesson', title: 'Add an object' })

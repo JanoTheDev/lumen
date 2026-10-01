@@ -4,6 +4,7 @@
 // markdown is regenerated on each change; "what did I learn this week?" reads the data.
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { redactForLog } from '../actions/redact'
 
 export interface JournalDay {
   date: string
@@ -44,7 +45,8 @@ export function addEntry(day: JournalDay, e: JournalEntry): JournalDay {
     !v || list.includes(v) || list.length >= max ? list : [...list, v]
   switch (e.kind) {
     case 'question': {
-      const q = e.text.replace(/\s+/g, ' ').trim()
+      // Spoken passwords and pasted keys never reach the plain-text note.
+      const q = redactForLog(e.text).replace(/\s+/g, ' ').trim()
       const text = q.length > MAX_QUESTION ? `${q.slice(0, MAX_QUESTION - 1)}…` : q
       const questions = push(day.questions, text, MAX_QUESTIONS)
       return questions === day.questions ? day : { ...day, questions }
