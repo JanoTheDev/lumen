@@ -150,8 +150,8 @@ export class AgentBridge {
   private pending = new Map<number, PendingCall>()
   private idCounter = 0
   private decoder = new StringDecoder('utf8')
-  private buffer = ''
-  private scanFrom = 0
+  /** Pieces of the line still waiting for its newline; joined once it arrives. */
+  private partial: string[] = []
   private eventHandlers: Record<string, EventHandler[]> = {}
   private stopping = false
   private restartTimer: ReturnType<typeof setTimeout> | null = null
@@ -414,22 +414,27 @@ export class AgentBridge {
 
   private resetStream(): void {
     this.decoder = new StringDecoder('utf8')
-    this.buffer = ''
-    this.scanFrom = 0
+    this.partial = []
   }
 
+  // Only the new chunk is scanned, and a long line is kept as pieces until its newline:
+  // appending to one growing string made V8 flatten it on every chunk (quadratic).
   private onData(chunk: Buffer | string): void {
-    this.buffer += typeof chunk === 'string' ? chunk : this.decoder.write(chunk)
+    const text = typeof chunk === 'string' ? chunk : this.decoder.write(chunk)
     let start = 0
-    let nl = this.buffer.indexOf('\n', this.scanFrom)
+    let nl = text.indexOf('\n')
     while (nl !== -1) {
-      const line = this.buffer.slice(start, nl)
+      let line = text.slice(start, nl)
+      if (this.partial.length) {
+        this.partial.push(line)
+        line = this.partial.join('')
+        this.partial = []
+      }
       start = nl + 1
       this.handleLine(line)
-      nl = this.buffer.indexOf('\n', start)
+      nl = text.indexOf('\n', start)
     }
-    this.buffer = this.buffer.slice(start)
-    this.scanFrom = this.buffer.length
+    if (start < text.length) this.partial.push(text.slice(start))
   }
 
   private handleLine(raw: string): void {

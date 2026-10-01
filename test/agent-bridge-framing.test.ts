@@ -78,6 +78,35 @@ describe('AgentBridge framing', () => {
     bridge.stop()
   })
 
+  it('a 4 MB line in 1 KB chunks stays linear', async () => {
+    const { bridge, child } = await started()
+    let got = 0
+    bridge.onEvent('update', (d) => (got = String(d.text).length))
+    const text = 'z'.repeat(4 * 1024 * 1024)
+    const bytes = Buffer.from(JSON.stringify({ v: 2, event: 'update', data: { text } }) + '\n')
+    const chunks: Buffer[] = []
+    for (let i = 0; i < bytes.length; i += 1024) chunks.push(bytes.subarray(i, i + 1024))
+    const t0 = performance.now()
+    child.emitRaw(chunks)
+    // 4096 small chunks: re-scanning or flattening the whole buffer per chunk took ~3 s.
+    expect(performance.now() - t0).toBeLessThan(750)
+    expect(got).toBe(text.length)
+    bridge.stop()
+  })
+
+  it('keeps lines split across many chunks intact, with several lines per chunk', async () => {
+    const { bridge, child } = await started()
+    const seen: string[] = []
+    bridge.onEvent('update', (d) => seen.push(String(d.text)))
+    const texts = ['a', 'bb'.repeat(500), 'ccc', 'd'.repeat(3000)]
+    const raw = texts
+      .map((t) => JSON.stringify({ v: 2, event: 'update', data: { text: t } }) + '\n')
+      .join('')
+    child.emitRaw(raw.match(/[\s\S]{1,7}/g)!)
+    expect(seen).toEqual(texts)
+    bridge.stop()
+  })
+
   it('routes interleaved events and responses in one chunk', async () => {
     const { bridge, child } = await started()
     const events: unknown[] = []
