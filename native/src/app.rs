@@ -154,6 +154,20 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("capture", Lane::Read, None, |_, args, _| crate::capture::cmd_capture(args));
     app.cmd("monitors", Lane::Read, None, |_, _, _| crate::capture::cmd_monitors());
 
+    app.cmd("active_window", Lane::Read, None, |_, _, _| {
+        Ok(crate::window::info(crate::window::foreground()))
+    });
+    app.cmd("focus_window", Lane::Input, None, |_, args, token| {
+        let hwnd = match (arg::opt_i64(args, "hwnd")?, arg::opt_str(args, "process")?) {
+            (Some(h), _) => h as isize,
+            (None, Some(p)) => crate::window::find_process_window(p)
+                .ok_or_else(|| AgentError::not_found(format!("no window for process {p}")))?,
+            (None, None) => return Err(AgentError::invalid("focus_window needs hwnd or process")),
+        };
+        crate::window::focus(hwnd, token)?;
+        Ok(json!({"done": true, "hwnd": hwnd}))
+    });
+
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")
             .ok()

@@ -49,6 +49,23 @@ async function find(query: Record<string, unknown>): Promise<Node[]> {
   return r.elements
 }
 
+describe('focus_window', () => {
+  it('brings the fixture to the front by hwnd and by process', async (ctx) => {
+    const probe = await agent.request('focus_window', { hwnd: fixture.hwnd })
+    if (probe.error?.code === 'E_UNSUPPORTED') ctx.skip()
+    expect(probe.ok).toBe(true)
+    const w = await agent.ok('active_window')
+    expect(w.hwnd).toBe(fixture.hwnd)
+    expect(w.title).toBe('LumenFixture')
+    expect(w.process).toBe('powershell.exe')
+    expect(w.isBrowser).toBe(false)
+    expect((await agent.request('focus_window', { hwnd: 1 })).error?.code).toBe('E_NOT_FOUND')
+    const none = await agent.request('focus_window', { process: 'no-such-app' })
+    expect(none.error?.code).toBe('E_NOT_FOUND')
+    expect((await agent.request('focus_window', {})).error?.code).toBe('E_INVALID')
+  })
+})
+
 describe('uia', () => {
   it('snapshot has the C3 node shape and the fixture controls', async (ctx) => {
     if (!agent.has('uia')) ctx.skip()

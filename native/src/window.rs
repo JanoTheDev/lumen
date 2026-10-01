@@ -174,6 +174,100 @@ mod win {
 #[cfg(windows)]
 pub use win::*;
 
+/// C2 `active_window` record for one window (zeros when `hwnd` is 0).
+#[cfg(windows)]
+pub fn info(hwnd: isize) -> serde_json::Value {
+    use serde_json::json;
+    if hwnd == 0 {
+        return json!({"hwnd": 0, "title": "", "process": "", "exe": "", "pid": 0,
+            "rect": Rect::default().to_json(), "monitor": 0, "isBrowser": false});
+    }
+    let pid = pid_of(hwnd);
+    let exe = exe_path(pid);
+    let process = basename_lower(&exe);
+    let mons = crate::monitors::enumerate();
+    let monitor = crate::monitors::from_window(&mons, hwnd).map(|m| m.id).unwrap_or(0);
+    json!({
+        "hwnd": hwnd,
+        "title": title(hwnd),
+        "process": process,
+        "exe": exe,
+        "pid": pid,
+        "rect": rect(hwnd).to_json(),
+        "monitor": monitor,
+        "isBrowser": is_browser_process(&process),
+    })
+}
+
+/// Front-most app window of a process ("chrome" or "chrome.exe", case-insensitive).
+#[cfg(windows)]
+pub fn find_process_window(process: &str) -> Option<isize> {
+    let mut want = process.trim().to_lowercase();
+    if !want.ends_with(".exe") {
+        want.push_str(".exe");
+    }
+    top_level_windows().into_iter().find(|&h| is_app_window(h) && process_name(h) == want)
+}
+
+/// Brings `hwnd` to the foreground and verifies it got there.
+#[cfg(windows)]
+pub fn focus(hwnd: isize, token: &crate::proto::router::CancelToken) -> Result<(), crate::proto::AgentError> {
+    use crate::proto::AgentError;
+    use std::time::{Duration, Instant};
+    use windows::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_0, INPUT_KEYBOARD, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput, VK_MENU,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow,
+    };
+
+    if !is_window(hwnd) {
+        return Err(AgentError::not_found(format!("no window {hwnd}")));
+    }
+    if foreground() == hwnd {
+        return Ok(());
+    }
+    let h = win::hwnd(hwnd);
+    // SAFETY: plain Win32 calls; thread input is detached again before returning.
+    unsafe {
+        if IsIconic(h).as_bool() {
+            let _ = ShowWindow(h, SW_RESTORE);
+        }
+        let fg_thread = thread_of(foreground());
+        let me = GetCurrentThreadId();
+        let attached = fg_thread != 0 && fg_thread != me && AttachThreadInput(me, fg_thread, true).as_bool();
+        let _ = BringWindowToTop(h);
+        let mut ok = SetForegroundWindow(h).as_bool();
+        if !ok {
+            // The foreground lock lifts after a keypress; a lone Alt tap has no side effects.
+            let key = |flags| INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT { wVk: VK_MENU, wScan: 0, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+                },
+            };
+            SendInput(
+                &[key(KEYBD_EVENT_FLAGS(0)), key(KEYEVENTF_KEYUP)],
+                std::mem::size_of::<INPUT>() as i32,
+            );
+            ok = SetForegroundWindow(h).as_bool();
+        }
+        if attached {
+            let _ = AttachThreadInput(me, fg_thread, false);
+        }
+        let _ = ok;
+    }
+    let deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < deadline {
+        if foreground() == hwnd {
+            return Ok(());
+        }
+        token.sleep(Duration::from_millis(20))?;
+    }
+    Err(AgentError::denied("Windows refused to bring the window to the front"))
+}
+
 /// Front-most browser window, by process image name.
 #[cfg(windows)]
 pub fn find_browser() -> Option<isize> {

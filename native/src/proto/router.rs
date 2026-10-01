@@ -273,7 +273,8 @@ impl Router {
         let call = self.inflight.lock().unwrap().get(&key_of(target)).cloned();
         let Some(call) = call else { return false };
         // Claim the response before waking the worker, or its own E_CANCELLED could win the race.
-        let answered = self.finish(&call, Err(AgentError::new(E_CANCELLED, format!("{} cancelled", call.cmd))));
+        let answered =
+            self.finish(&call, Err(AgentError::new(E_CANCELLED, format!("{} cancelled", call.cmd))));
         call.token.cancel(E_CANCELLED);
         answered
     }
