@@ -1,0 +1,165 @@
+{
+  "id": "figma-basics-04-prototype-link",
+  "app": "figma",
+  "title": "Link two screens in a prototype",
+  "summary": "Copy a screen and link the two with an On click interaction.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["figma-basics-01-frame-shapes"],
+  "appVersion": "UI3",
+  "tags": ["prototype"],
+  "steps": [
+    {
+      "id": "copy-frame",
+      "say": "Select the Home frame and press Control D to make a copy.",
+      "target": {
+        "shortcut": "Ctrl+D"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are there two frames on the canvas, the Home frame and a copy?"
+        }
+      },
+      "hints": [
+        "Click the Home name in the layers list to select the whole frame.",
+        "Drag the copy to the side if it covers the original."
+      ],
+      "why": "A prototype needs at least two screens to move between.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+D"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rename-copy",
+      "say": "Rename the copy to Details in the layers list.",
+      "target": {
+        "region": "layers-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a frame named Details in the layers list?"
+        }
+      },
+      "hints": ["Double-click the name to edit it.", "Control R renames the selected layer too."],
+      "why": "Clear names make the link destination obvious."
+    },
+    {
+      "id": "prototype-tab",
+      "say": "Press Shift E to open the Prototype tab on the right.",
+      "target": {
+        "shortcut": "Shift+E"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+E"
+            },
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "Prototype"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Prototype tab active in the right sidebar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The tab sits next to Design at the top of the right sidebar.",
+        "Click the word Prototype if the shortcut does nothing."
+      ],
+      "why": "Links between screens are made in the Prototype tab.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+E"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-source",
+      "say": "On the Home frame, click the text or shape people should tap.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a layer inside the Home frame selected, with a small circle on its edge?"
+        }
+      },
+      "hints": [
+        "Double-click to reach a layer nested inside the frame.",
+        "Pick the layers list row if the canvas keeps selecting the frame."
+      ],
+      "why": "The tapped element is where the link starts."
+    },
+    {
+      "id": "draw-link",
+      "say": "Drag the circle on its edge onto the Details frame and let go.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there an arrow linking the selected layer to the Details frame?"
+        }
+      },
+      "hints": [
+        "The circle shows a plus sign when you hover over the selected layer's edge.",
+        "The panel should then read On click, Navigate to Details."
+      ],
+      "why": "On click, Navigate to is the most common prototype link."
+    },
+    {
+      "id": "preview",
+      "say": "Press Shift Space to preview, then click the linked layer.",
+      "target": {
+        "shortcut": "Shift+Space"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+Space"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a prototype preview showing the Home or Details screen?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The play button at the top of the right sidebar, called Present, also runs it.",
+        "Press Escape to close the preview."
+      ],
+      "why": "Testing the link shows the flow the way users will see it."
+    }
+  ]
+}

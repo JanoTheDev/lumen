@@ -1,0 +1,17 @@
+{
+  "id": "figma",
+  "name": "Figma",
+  "version": "1.0.0",
+  "description": "Interface design basics in Figma Design: frames and shapes, auto layout, components, prototype links and export.",
+  "match": {
+    "process": ["Figma.exe"],
+    "url": ["figma.com/design/*", "figma.com/file/*"],
+    "title": ["– Figma"]
+  },
+  "uiaQuality": "partial",
+  "appVersion": "UI3",
+  "appVersionTested": "Figma Design UI3, web and desktop app, October 2026",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Canvas is WebGL with no per-layer accessibility nodes; toolbar, sidebars and menus are partly exposed through the browser or Electron accessibility tree. Regions assume the desktop app."
+}

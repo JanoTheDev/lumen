@@ -1,0 +1,144 @@
+{
+  "id": "figma-basics-01-frame-shapes",
+  "app": "figma",
+  "title": "Frames, shapes and text",
+  "summary": "Make a frame and draw shapes and text inside it.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": "UI3",
+  "tags": ["frames", "shapes"],
+  "steps": [
+    {
+      "id": "check-file-open",
+      "say": "Open a Figma design file you can edit, for example a new blank design file.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "– Figma"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a Figma design file open, with the canvas and the bottom toolbar showing?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "From the file browser, use the new design file button at the top right.",
+        "View-only files hide editing tools; duplicate them to your drafts first."
+      ],
+      "why": "Editing needs a file where you have edit access."
+    },
+    {
+      "id": "add-frame",
+      "say": "Press F for the Frame tool, then pick Desktop from the sizes in the right sidebar.",
+      "target": {
+        "shortcut": "F"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a new frame on the canvas that is also listed in the layers list?"
+        }
+      },
+      "hints": [
+        "You can also drag on the canvas to draw a frame of any size.",
+        "The Frame tool is the hash-shaped icon in the bottom toolbar."
+      ],
+      "why": "A frame is the screen or artboard everything else sits in.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "F"
+          }
+        ]
+      }
+    },
+    {
+      "id": "add-rectangle",
+      "say": "Press R, then drag inside the frame to draw a rectangle.",
+      "target": {
+        "shortcut": "R"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a rectangle inside the frame, nested under it in the layers list?"
+        }
+      },
+      "hints": [
+        "Start dragging inside the frame's border so the shape belongs to it.",
+        "The rectangle tool is in the shape menu of the bottom toolbar."
+      ],
+      "why": "Shapes drawn inside a frame move and resize with it."
+    },
+    {
+      "id": "add-ellipse",
+      "say": "Press O and drag to draw a circle. Hold Shift while dragging for a perfect circle.",
+      "target": {
+        "shortcut": "O"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there an ellipse or circle inside the frame?"
+        }
+      },
+      "hints": [
+        "O picks the Ellipse tool from the same shape menu as the rectangle.",
+        "Let go of the mouse before releasing Shift to keep it round."
+      ],
+      "why": "Most icons and buttons start from simple shapes."
+    },
+    {
+      "id": "add-text",
+      "say": "Press T, click inside the frame, and type Hello. Press Escape when finished.",
+      "target": {
+        "shortcut": "T"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a text layer that reads Hello inside the frame?"
+        }
+      },
+      "hints": [
+        "Single-letter shortcuts do not work while you are typing in a text box.",
+        "The Text tool is the T icon in the bottom toolbar."
+      ],
+      "why": "Text layers hold labels, headings and button captions."
+    },
+    {
+      "id": "rename-frame",
+      "say": "Double-click the frame's name in the layers list and type Home, then press Enter.",
+      "target": {
+        "region": "layers-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a frame named Home in the layers list?"
+        }
+      },
+      "hints": [
+        "The frame is the top row of the group, with your shapes indented below it.",
+        "Control R renames the selected layer too."
+      ],
+      "why": "Named frames are easier to link in prototypes and find later."
+    }
+  ]
+}

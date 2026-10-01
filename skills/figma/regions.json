@@ -1,0 +1,63 @@
+{
+  "window": "main",
+  "layout": "UI3 desktop app",
+  "notes": "Estimated for the desktop app at 1920x1080. In a browser the tab and address bars push everything down; hidden panels or browser zoom also break these, and the engine falls back to OCR or vision.",
+  "regions": {
+    "file-tabs": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.035,
+      "desc": "Open file tabs along the top of the desktop app"
+    },
+    "left-sidebar": {
+      "x": 0.0,
+      "y": 0.035,
+      "w": 0.125,
+      "h": 0.965,
+      "desc": "File and Assets tabs, pages and layers, left side"
+    },
+    "layers-list": {
+      "x": 0.0,
+      "y": 0.25,
+      "w": 0.125,
+      "h": 0.75,
+      "desc": "Layers list in the lower part of the left sidebar"
+    },
+    "canvas": {
+      "x": 0.125,
+      "y": 0.035,
+      "w": 0.75,
+      "h": 0.965,
+      "desc": "Infinite canvas in the middle"
+    },
+    "toolbar": {
+      "x": 0.37,
+      "y": 0.92,
+      "w": 0.26,
+      "h": 0.06,
+      "desc": "Floating tool bar at the bottom center of the canvas"
+    },
+    "right-header": {
+      "x": 0.875,
+      "y": 0.035,
+      "w": 0.125,
+      "h": 0.045,
+      "desc": "Avatars, Present and Share, top of the right sidebar"
+    },
+    "right-tabs": {
+      "x": 0.875,
+      "y": 0.08,
+      "w": 0.125,
+      "h": 0.04,
+      "desc": "Design and Prototype tabs"
+    },
+    "right-sidebar": {
+      "x": 0.875,
+      "y": 0.12,
+      "w": 0.125,
+      "h": 0.88,
+      "desc": "Properties of the selection, right side"
+    }
+  }
+}

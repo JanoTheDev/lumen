@@ -1,0 +1,26 @@
+# Figma glossary
+
+- **File** — one Figma document, saved in the cloud; it can hold many pages.
+- **Page** — a separate canvas inside a file, listed at the top of the left sidebar.
+- **Canvas** — the endless work area where you design.
+- **Frame** — a container layer, often one screen of an app; can clip and hold other layers.
+- **Section** — a large labelled area that groups frames on the canvas.
+- **Layer** — any object on the canvas, shown in the layers list.
+- **Group** — layers bundled together without frame features.
+- **Auto layout** — frame setting that arranges children in a row, column or grid with set spacing.
+- **Gap** — the space auto layout keeps between children.
+- **Padding** — the space between an auto layout frame's edge and its content.
+- **Hug contents** — sizing that makes a frame shrink or grow to fit what is inside.
+- **Fill container** — sizing that stretches a child to the free space in its parent.
+- **Constraints** — rules for how a layer moves when its parent frame is resized.
+- **Component** — a reusable main design element; changes reach all its instances.
+- **Instance** — a linked copy of a component.
+- **Variant** — one version of a component inside a component set, such as a hover state.
+- **Style / Variable** — saved color, text or number values shared across a file.
+- **Prototype** — a clickable mock-up made by linking frames.
+- **Connection** — the arrow from a layer to a destination in the Prototype tab.
+- **Trigger** — what starts an interaction, such as On click.
+- **Action** — what happens, such as Navigate to another frame.
+- **Present** — plays the prototype full screen.
+- **Export settings** — format and scale chosen for exporting a layer.
+- **Dev Mode** — a view for developers with measurements and code.

@@ -1,0 +1,181 @@
+{
+  "id": "figma-basics-05-export",
+  "app": "figma",
+  "title": "Export a frame as an image",
+  "summary": "Add export settings to a frame and save it as a PNG.",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": ["figma-basics-01-frame-shapes"],
+  "appVersion": "UI3",
+  "tags": ["export"],
+  "steps": [
+    {
+      "id": "select-frame",
+      "say": "Click the Home frame name in the layers list to select it.",
+      "target": {
+        "region": "layers-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Home frame selected, with a blue outline around the whole frame?"
+        }
+      },
+      "hints": [
+        "Click the frame's name label above it on the canvas.",
+        "Press Escape until only the frame is selected."
+      ],
+      "why": "Export settings belong to the selected layer."
+    },
+    {
+      "id": "design-tab",
+      "say": "Make sure the Design tab is open in the right sidebar.",
+      "target": {
+        "element": {
+          "name": "Design"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "Design"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Design tab active in the right sidebar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Press Shift E if the Prototype tab is showing.",
+        "Design is the first tab under the Share button."
+      ],
+      "why": "Export settings live in the Design tab.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Design"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "add-export",
+      "say": "Scroll down the right sidebar to Export and click its plus button.",
+      "target": {
+        "region": "right-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is an export setting row, such as 1x PNG, shown in the Export section?"
+        }
+      },
+      "hints": [
+        "Export is the last section of the Design tab.",
+        "If a row is already there, you can use it as is."
+      ],
+      "why": "Each row is one file Figma will create."
+    },
+    {
+      "id": "set-scale",
+      "say": "Change 1x to 2x for a sharper image.",
+      "target": {
+        "region": "right-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does the export row show 2x?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click the scale box on the left of the row to see the options.",
+        "Leave the format as PNG for screens."
+      ],
+      "why": "2x looks crisp on high-resolution displays."
+    },
+    {
+      "id": "export",
+      "say": "Click the Export Home button under the export row.",
+      "target": {
+        "text": "Export Home"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Save As"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a save dialog open, or has a download started?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Control Shift E exports every layer with export settings.",
+        "In a browser the file lands in your Downloads folder."
+      ],
+      "why": "Exporting turns the design into a file you can share."
+    },
+    {
+      "id": "save",
+      "say": "If a save window opens, pick a folder and click Save.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Save",
+                "role": "Button"
+              }
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Say done if the file downloaded without a window.",
+        "Pictures is a good folder to find it later."
+      ],
+      "why": "The image is ready to share or drop into a document."
+    }
+  ]
+}

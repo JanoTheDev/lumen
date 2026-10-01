@@ -1,0 +1,125 @@
+{
+  "id": "figma-basics-02-auto-layout",
+  "app": "figma",
+  "title": "Make a button with auto layout",
+  "summary": "Wrap text in an auto layout frame with padding and a fill.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["figma-basics-01-frame-shapes"],
+  "appVersion": "UI3",
+  "tags": ["auto-layout"],
+  "steps": [
+    {
+      "id": "select-text",
+      "say": "Click the Hello text on the canvas so it is selected.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Hello text layer selected, with a blue box around it?"
+        }
+      },
+      "hints": [
+        "Click the Hello row in the layers list if clicking the canvas selects the frame.",
+        "Finish the Frames, shapes and text lesson first if you have no Hello text."
+      ],
+      "why": "Auto layout wraps whatever is selected."
+    },
+    {
+      "id": "add-auto-layout",
+      "say": "Press Shift A to wrap the text in an auto layout frame.",
+      "target": {
+        "shortcut": "Shift+A"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the text now inside a new frame, with an Auto layout section in the right sidebar?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The right sidebar also has a plus button next to Auto layout.",
+        "Make sure only the text is selected, not the whole Home frame."
+      ],
+      "why": "Auto layout sizes the frame from its content.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+A"
+          }
+        ]
+      }
+    },
+    {
+      "id": "set-padding",
+      "say": "In the right sidebar, under Auto layout, set the horizontal padding to 24.",
+      "target": {
+        "region": "right-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the new frame have visible space on the left and right of the text?"
+        }
+      },
+      "hints": [
+        "The padding fields show small icons for left and right spacing.",
+        "Click in the field, type the number, and press Enter."
+      ],
+      "why": "Padding gives a button breathing room around its label."
+    },
+    {
+      "id": "add-fill",
+      "say": "Under Fill, click the plus button and pick a color for the frame.",
+      "target": {
+        "region": "right-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the auto layout frame now have a visible fill color behind the text?"
+        }
+      },
+      "hints": [
+        "Click the color square to open the color picker.",
+        "Choose a light color if the text is dark."
+      ],
+      "why": "A fill makes the frame look like a real button."
+    },
+    {
+      "id": "grow-text",
+      "say": "Double-click the text and add a few more words. Watch the frame grow.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the frame widened to fit the longer text?"
+        }
+      },
+      "hints": [
+        "Press Escape when done typing.",
+        "If the frame does not grow, set its width to Hug in the right sidebar."
+      ],
+      "why": "Auto layout resizes with its content, so buttons fit any label."
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+{
+  "id": "figma-basics-03-components",
+  "app": "figma",
+  "title": "Create and reuse a component",
+  "summary": "Turn a button into a component and update every copy at once.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["figma-basics-02-auto-layout"],
+  "appVersion": "UI3",
+  "tags": ["components"],
+  "steps": [
+    {
+      "id": "select-button",
+      "say": "Select the button frame you made, the one around your text, in the layers list.",
+      "target": {
+        "region": "layers-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the auto layout button frame selected?"
+        }
+      },
+      "hints": [
+        "Its row in the layers list has an auto layout icon.",
+        "Finish the auto layout lesson first if you have no button yet."
+      ],
+      "why": "Components start from an existing design."
+    },
+    {
+      "id": "create-component",
+      "say": "Press Control Alt K to turn it into a component.",
+      "target": {
+        "shortcut": "Ctrl+Alt+K"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+Alt+K"
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the selected layer now show a component icon, four diamonds, in the layers list?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The toolbar shows a Create component button while the frame is selected.",
+        "Right-click the layer and choose Create component."
+      ],
+      "why": "A component is a reusable main design.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Alt+K"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rename-component",
+      "say": "Double-click its name in the layers list and type Button.",
+      "target": {
+        "region": "layers-list"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a component named Button in the layers list?"
+        }
+      },
+      "hints": ["Control R renames the selected layer too.", "Press Enter to confirm the name."],
+      "why": "The name is how you find the component in Assets."
+    },
+    {
+      "id": "open-assets",
+      "say": "Click the Assets tab at the top of the left sidebar.",
+      "target": {
+        "element": {
+          "name": "Assets"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Assets tab open in the left sidebar, showing a Button component?"
+        }
+      },
+      "hints": [
+        "It sits next to the File tab.",
+        "Use the search box in Assets if the list is long."
+      ],
+      "why": "Assets lists every component you can reuse.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Assets"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "place-instance",
+      "say": "Drag Button from Assets onto the canvas.",
+      "target": {
+        "region": "left-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a second copy of the button on the canvas, shown with a hollow diamond instance icon?"
+        }
+      },
+      "hints": [
+        "Drop it anywhere on the canvas, inside or outside a frame.",
+        "Alt drag the original button on the canvas also makes a copy."
+      ],
+      "why": "Each copy is an instance that follows the main component."
+    },
+    {
+      "id": "edit-main",
+      "say": "Select the original Button and change its fill color.",
+      "target": {
+        "region": "right-sidebar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Did the fill color change on both the original button and its copy?"
+        }
+      },
+      "hints": [
+        "The original has the solid four-diamond icon.",
+        "Change the color under Fill in the right sidebar."
+      ],
+      "why": "Editing the main component updates every instance at once."
+    }
+  ]
+}
