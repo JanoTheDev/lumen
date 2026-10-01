@@ -7,6 +7,8 @@ import { safeParse } from './validate'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
+import { activeWindow } from '../agent/commands'
+import { agentCommand, agentRunning, hasPausedTask } from '../agent-mode/session'
 import { screenReaderActive } from '../a11y/at-state'
 import { reportError } from '../a11y/live-feedback'
 import { openEditor, submitEdit } from '../a11y/transcript'
@@ -28,11 +30,51 @@ const commandSchema = z
       'deny',
       'unmute',
       'edit',
-      'edit-cancel'
+      'edit-cancel',
+      'retry',
+      'go',
+      'answer',
+      'help',
+      'leave'
     ]),
-    turnId: z.string().max(64).optional()
+    turnId: z.string().max(64).optional(),
+    step: z.number().int().min(1).max(1000).optional(),
+    text: z.string().trim().min(1).max(200).optional()
   })
   .strict()
+
+type BarCommand = z.infer<typeof commandSchema>
+
+/** The phrase the pipeline resumes a paused agent task with (agent-mode RESUME_RE). */
+const RESUME_PROMPT = 'resume the task'
+
+/**
+ * Agent step list buttons (08 T13). Start now and the question's choices go to the running
+ * task. Retry has no step-level path in the runner yet: a paused task resumes, else the
+ * request runs again from the start. Returns false for every other command.
+ */
+export function agentBarCommand(
+  cmd: BarCommand,
+  run: (prompt: string) => void,
+  task = assistant.state().agentTask
+): boolean {
+  switch (cmd.type) {
+    case 'go':
+      agentCommand({ type: 'go' })
+      return true
+    case 'answer':
+      if (cmd.text) agentCommand({ type: 'answer', text: cmd.text })
+      return true
+    case 'retry': {
+      if (agentRunning()) return true
+      const prompt = hasPausedTask() ? RESUME_PROMPT : task?.prompt
+      if (prompt) run(prompt)
+      return true
+    }
+    default:
+      return false
+  }
+}
 const errorSchema = z.string().trim().min(1).max(500)
 const sizeSchema = z.object({
   w: z.number().finite().min(0).max(10_000),
@@ -78,10 +120,19 @@ export function registerUiIpc(deps: UiIpcDeps): void {
   getAgent()?.onEvent('agent-down', () => (agentReady = false))
   bus.on('query.started', (e) => remember(e.prompt))
   assistant.setCommandDeps({ cancel: deps.cancel, edit: openEditor })
+  // Focused mode: the window to give focus back to, found and refocused by the agent.
+  assistant.setForegroundIo({
+    current: async () => {
+      const a = getAgent()
+      return a ? (await activeWindow(a, { timeoutMs: 250 })).hwnd || null : null
+    },
+    focus: async (hwnd) => getAgent()?.request('focus_window', { hwnd }, { timeoutMs: 1000 })
+  })
+  const runQuery = (prompt: string): void => assistant.send('assistant:run-query', prompt)
 
   ipcMain.on('assistant:command', (_e, raw: unknown) => {
     const cmd = safeParse('assistant:command', commandSchema, raw)
-    if (cmd) assistant.command(cmd)
+    if (cmd && !agentBarCommand(cmd, runQuery)) assistant.command(cmd)
   })
   ipcMain.on('assistant:error', (_e, raw: unknown) => {
     const message = safeParse('assistant:error', errorSchema, raw)

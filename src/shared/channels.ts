@@ -361,6 +361,10 @@ export type AssistantCommand = {
     | 'retry'
     | 'go'
     | 'answer'
+    /** Opens the "What can I say" sheet (simple mode's Help button). */
+    | 'help'
+    /** Escape in focused mode: give focus back, and close unless the answer is pinned. */
+    | 'leave'
   turnId?: string
   /** retry: the step number (from 1). */
   step?: number

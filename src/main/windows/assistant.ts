@@ -13,6 +13,8 @@ import { clipboard, screen, type BrowserWindow, type Rectangle } from 'electron'
 import type { AssistantCommand, AssistantView, EventChannel, EventChannels } from '@shared/channels'
 import type { AppEvent, AssistantPhase } from '@shared/events'
 import { createWindow, loadRenderer } from './factory'
+import { FocusReturn, hwndOf, type ForegroundIo } from './focus-return'
+import * as commandSheet from './command-sheet'
 import { currentZoom, live, registerWindow, sendTo } from './registry'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
@@ -96,7 +98,14 @@ function captionsKept(): boolean {
 }
 
 function hasContent(): boolean {
-  return !!(view.answer || view.confirm || view.notice || view.captionEdit || captionsKept())
+  return !!(
+    view.answer ||
+    view.confirm ||
+    view.notice ||
+    view.captionEdit ||
+    view.agentTask ||
+    captionsKept()
+  )
 }
 
 /** Nothing left to show and nothing running: the bar may close. */
@@ -150,6 +159,7 @@ function reveal(): void {
 
 /** Plays the exit, then hides the window so it never steals clicks while idle. */
 export function close(): void {
+  releaseFocus()
   statusTimer.clear()
   captionTimer.clear()
   liveTimer.clear()
@@ -177,7 +187,9 @@ export function open(phase: AssistantPhase = view.phase): void {
     ...empty(),
     phase,
     confirm: pendingConfirm ? view.confirm : undefined,
-    captionEdit: view.captionEdit
+    captionEdit: view.captionEdit,
+    // A running agent task stays on the bar while the user answers or says stop.
+    agentTask: view.agentTask
   }
   patch({})
 }
@@ -239,6 +251,7 @@ export function settle(): void {
 /** The voice/query turn finished in the renderer (old `assistant:close`). */
 export function turnEnded(): void {
   if (statusTimer.running || liveTimer.running || view.confirm || view.answer) return
+  if (view.agentTask) return
   if (view.captionEdit || captionsKept()) return
   close()
 }
@@ -364,7 +377,20 @@ export function command(cmd: AssistantCommand): void {
         if (deps.speak) deps.speak(view.answer.markdown)
         else say(plainText(view.answer.markdown), { kind: 'answer' })
         patch({})
+        break
       }
+      {
+        // Simple mode keeps Repeat on screen: without an answer it says what the bar shows.
+        const line = repeatLine(view)
+        if (line) say(line, { kind: 'status', priority: 'assertive' })
+      }
+      break
+    case 'help':
+      commandSheet.show()
+      break
+    case 'leave':
+      releaseFocus()
+      if (!view.answer?.pinned && !view.agentTask && !view.captionEdit) close()
       break
     case 'edit':
       deps.edit?.(true)
@@ -387,6 +413,21 @@ export function command(cmd: AssistantCommand): void {
       else close()
       break
   }
+}
+
+/** What Repeat says when there is no answer: the most important line on the bar. */
+export function repeatLine(v: AssistantView): string | undefined {
+  const task = v.agentTask
+  const running = task?.steps.find((s) => s.status === 'running')
+  return (
+    v.confirm?.summary ??
+    v.error?.message ??
+    task?.question?.text ??
+    running?.label ??
+    v.live?.text ??
+    v.statusText?.replace(/…$/, '') ??
+    v.caption
+  )
 }
 
 /** Markdown to a line a screen reader can read. */
@@ -514,31 +555,60 @@ export function setInteractive(on: boolean): void {
   else w.setIgnoreMouseEvents(true, { forward: true })
 }
 
+// ---- T10 focused mode ----
+
+const focusReturn = new FocusReturn()
+
+/** How main finds and refocuses the user's window (the agent's active_window/focus_window). */
+export function setForegroundIo(io: ForegroundIo | null): void {
+  focusReturn.setIo(io)
+}
+
 /**
- * Keyboard focus into the bar (06 T17 shortcut): the window is made focusable until it loses
- * focus again, so it never steals focus otherwise. False when the bar is not showing.
+ * Keyboard focus into the bar (06 T17 shortcut, confirms with a screen reader, the caption
+ * editor): the window the user was in is recorded first, then the bar is made focusable
+ * until it loses focus again, so it never steals focus otherwise. False when the bar is not
+ * showing.
  */
 export function focusBar(): boolean {
   const w = get()
   if (!w || !view.visible) return false
+  if (w.isFocused()) {
+    send('assistant:focus')
+    return true
+  }
+  const own = hwndOf(w.getNativeWindowHandle?.())
+  void focusReturn.remember(own === null ? [] : [own]).then(() => takeFocus(w))
+  return true
+}
+
+function takeFocus(w: BrowserWindow): void {
+  if (w.isDestroyed() || !view.visible) return
   w.setFocusable(true)
   w.setIgnoreMouseEvents(false)
   w.focus()
   send('assistant:focus')
   w.once('blur', () => {
     if (w.isDestroyed()) return
+    // Clicked into another window: that is where the user wants to be.
+    focusReturn.forget()
     w.setFocusable(false)
     w.setIgnoreMouseEvents(true, { forward: true })
   })
-  return true
 }
 
-/** Gives keyboard focus back (to the window below) when the bar has it. */
+/** Gives keyboard focus back to the window the user was in, when the bar has it. */
 export function releaseFocus(): void {
   const w = get()
-  if (!w || !w.isFocused()) return
+  if (!w || !w.isFocused()) {
+    focusReturn.forget()
+    return
+  }
+  const back = focusReturn.take()
   w.blur()
   w.setFocusable(false)
+  w.setIgnoreMouseEvents(true, { forward: true })
+  if (back !== null) focusReturn.focus(back)
 }
 
 /** Screen rect of the visible card, for dwell suppression. */
@@ -614,6 +684,20 @@ bus.on('query.failed', (e) => {
   patch({ phase: 'error', error: { message: e.error } })
   say(e.error, { kind: 'error' })
 })
+// ---- 08 agent step list ----
+
+bus.on('agent.task', (e) => {
+  if (e.task) {
+    patch({ agentTask: e.task })
+    return
+  }
+  if (!view.agentTask) return
+  view = { ...view, agentTask: undefined }
+  if (!view.visible) return
+  emit()
+  if (idleNow() && view.phase === 'idle') close()
+})
+
 bus.on('query.cancelled', (e) => {
   if (inFlight === e.turnId) inFlight = null
   close()

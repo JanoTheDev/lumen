@@ -1,10 +1,11 @@
 // Agent-mode step list (08 T13): the announced plan with each step's status, the tool calls of
 // a step behind a disclosure, Retry on a failed step, the countdown's "Start now" and the
 // answer buttons of a question. Main owns the task; buttons only send assistant:command.
+// Simple mode (06 T18) shows only the step in progress: the next appears once it is done.
 import type { AgentStepStatus, AgentTask } from '@shared/events'
 import { Button, icons, type IconComponent } from '../ui'
 import { send } from '../lib/ipc'
-import { progressLabel } from './model'
+import { currentStep, progressLabel } from './model'
 
 const STATUS_ICON: Record<AgentStepStatus, IconComponent> = {
   pending: icons.minus,
@@ -22,13 +23,23 @@ const STATUS_TEXT: Record<AgentStepStatus, string> = {
   skipped: 'skipped'
 }
 
-export function StepList({ task }: { task: AgentTask }): JSX.Element {
+export function StepList({ task, simple }: { task: AgentTask; simple?: boolean }): JSX.Element {
+  const current = simple ? currentStep(task) : undefined
+  const steps = simple ? (current ? [current] : []) : task.steps
   return (
     <div className="as-row as-steps">
-      <p className="as-steps__summary">I&apos;ll {task.summary}</p>
-      {task.steps.length > 0 && (
+      {simple ? (
+        current && (
+          <p className="as-steps__count">
+            Step {current.i} of {task.steps.length}
+          </p>
+        )
+      ) : (
+        <p className="as-steps__summary">I&apos;ll {task.summary}</p>
+      )}
+      {steps.length > 0 && (
         <ol className="as-steps__list" aria-label={progressLabel(task)}>
-          {task.steps.map((s) => {
+          {steps.map((s) => {
             const Icon = STATUS_ICON[s.status]
             return (
               <li key={s.i} className={`as-steps__item is-${s.status}`}>

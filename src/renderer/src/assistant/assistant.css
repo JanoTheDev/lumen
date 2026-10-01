@@ -154,18 +154,6 @@ body,
   border-radius: var(--radius-sm);
 }
 
-.as-answer__stream {
-  white-space: pre-wrap;
-}
-
-.as-chunk {
-  animation: as-opacity-in 120ms var(--ease-out) both;
-}
-
-.as-fade-in {
-  animation: as-opacity-in var(--dur-fast) var(--ease-out) both;
-}
-
 .as-answer__meta {
   margin-top: var(--space-1);
   font-size: var(--text-sm);
@@ -318,9 +306,41 @@ body,
   color: var(--warning);
 }
 
+.as-status__line {
+  display: grid;
+  min-width: 0;
+}
+
 .as-status__text {
   display: grid;
   min-width: 0;
+}
+
+.as-private {
+  display: inline-flex;
+  flex: none;
+  color: var(--fg-muted);
+}
+
+/* Memory review chip (05): calm, one line, its button on the right. */
+.as-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+}
+
+.as-chip__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Focused mode: how to get around and back out. */
+.as-focus-hint {
+  margin-top: calc(-1 * var(--space-1));
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  text-align: right;
 }
 
 .as-xfade {
@@ -442,6 +462,11 @@ body,
 
 .as-steps__summary {
   font-size: var(--text-lg);
+}
+
+.as-steps__count {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
 }
 
 .as-steps__list {
