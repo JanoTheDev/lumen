@@ -21,7 +21,7 @@ import type { EvalAction } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
 import { keyComboEvents, uiaEvents } from '../agent/subscriptions'
-import { announce } from '../a11y'
+import { announce, setLessonActiveProbe } from '../a11y'
 import { wantFocusEvents } from '../a11y/focus-events'
 import { LOCAL_HANDLED as HANDLED } from '../a11y/dispatch'
 import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
@@ -1016,6 +1016,7 @@ export function installTeach(): void {
   runner = new LessonRunner(realPorts(), { progress: store })
   wireAgentEvents()
   setLessonContextProvider(() => runner?.context() ?? null)
+  setLessonActiveProbe(() => !!runner?.running())
   setTeachHandler(makeShowMeHow({ registry: () => registry, start: startGenerated }))
 
   bus.on('lesson.command', (e) => {

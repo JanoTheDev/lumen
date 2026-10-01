@@ -92,6 +92,8 @@ export interface A11yIo {
   setKeepMarks(on: boolean): void
   keepMarks(): boolean
   guideActive(): boolean
+  /** A lesson runs (its words come before the grammar). */
+  lessonActive?(): boolean
   /** An answer card is on screen. */
   answerShown(): boolean
   /** Answer card / timer commands; false when there is nothing to act on. */
@@ -248,6 +250,7 @@ export class A11yCommands {
       gridShown: this.grid.shown,
       dragStarted: !!this.grid.dragFrom,
       guideActive: this.io.guideActive(),
+      lessonActive: this.io.lessonActive?.() ?? false,
       autoScrolling: !!this.autoScroll,
       answerShown: this.io.answerShown(),
       reading: this.reader.active,

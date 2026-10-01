@@ -16,7 +16,7 @@ vi.mock('../../src/main/config', async () => {
   // Slow pace: the "do it" offer comes after two minutes, past the one-minute focus pause.
   return { loadConfig: () => makeConfig({ a11y: { timings: { statusHoldMs: 12_000 } } }) }
 })
-vi.mock('../../src/main/a11y', () => ({ announce: vi.fn() }))
+vi.mock('../../src/main/a11y', () => ({ announce: vi.fn(), setLessonActiveProbe: vi.fn() }))
 vi.mock('../../src/main/a11y/focus-events', () => ({ wantFocusEvents: vi.fn() }))
 vi.mock('../../src/main/query/pipeline', () => ({ setTeachHandler: vi.fn() }))
 vi.mock('../../src/main/ai/providers', () => ({

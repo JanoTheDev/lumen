@@ -23,6 +23,8 @@ export type Gate =
   | 'reading'
   /** A screen description was just given ("more detail"). */
   | 'described'
+  /** Help sheet only: lesson commands (teach/commands.ts) run before the grammar in a lesson. */
+  | 'lesson'
 
 export type Category =
   | 'numbers'

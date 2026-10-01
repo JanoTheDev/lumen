@@ -7,6 +7,9 @@ import {
   type CommandContext
 } from '../../src/main/a11y/voice-commands'
 import { A11yCommands } from '../../src/main/a11y/dispatch'
+import { lessonSheetEntries } from '../../src/main/a11y/lesson-sheet'
+import { LESSON_COMMANDS } from '../../src/shared/events'
+import { parseLessonCommand } from '../../src/main/teach/commands'
 import { buildSections, filterRows } from '../../src/renderer/src/a11y/sheet'
 import { fakeA11yIo } from '../helpers/fake-a11y-io'
 
@@ -34,6 +37,21 @@ describe('command sheet rows', () => {
     expect(idle.find((r) => r.say === 'show numbers')?.now).toBe(true)
     const guide = commandSheetRows({ ...IDLE_CONTEXT, guideActive: true })
     expect(guide.find((r) => r.category === 'guide' && r.say === 'next')?.now).toBe(true)
+  })
+})
+
+describe('lesson words on the sheet (07 T16)', () => {
+  it('has one row per lesson command, applying only during a lesson', () => {
+    const entries = lessonSheetEntries()
+    expect(entries.map((e) => e.id.slice('lesson.'.length)).sort()).toEqual(
+      [...LESSON_COMMANDS].sort()
+    )
+    for (const e of entries) expect(parseLessonCommand(e.say), e.say).toBe(e.id.slice(7))
+    const idle = commandSheetRows(IDLE_CONTEXT, entries).filter((r) => r.when === 'during a lesson')
+    expect(idle).toHaveLength(entries.length)
+    expect(idle.every((r) => !r.now)).toBe(true)
+    const inLesson = commandSheetRows({ ...IDLE_CONTEXT, lessonActive: true }, entries)
+    expect(inLesson.find((r) => r.say === 'do it for me')).toMatchObject({ now: true })
   })
 })
 

@@ -52,6 +52,7 @@ const OCR_BOX = { w: 640, h: 180 }
 
 let announcer: Announcer | null = null
 let beforeChange: (() => Promise<void>) | null = null
+let lessonRunning: () => boolean = () => false
 let a11y: A11yCommands | null = null
 let narrator: FocusNarrator | null = null
 let switchCtl: SwitchControl | null = null
@@ -178,6 +179,11 @@ async function explainCursor(): Promise<string> {
   return r.spoken
 }
 
+/** Tells the help sheet whether a lesson runs (teach sets it; a11y cannot import teach). */
+export function setLessonActiveProbe(fn: () => boolean): void {
+  lessonRunning = fn
+}
+
 /** A hook run (and awaited) before a local command that may change the screen; null clears. */
 export function setBeforeLocalChange(fn: (() => Promise<void>) | null): void {
   beforeChange = fn
@@ -274,6 +280,7 @@ function createIo(): A11yIo {
     },
     keepMarks: () => loadConfig().a11y.marks.keep,
     guideActive: () => guideState().guideActive,
+    lessonActive: () => lessonRunning(),
     answerShown: () => assistant.answerShown(),
     answer: (op) => {
       if (op === 'pin') return assistant.pinAnswer(true)

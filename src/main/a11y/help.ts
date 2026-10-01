@@ -5,10 +5,11 @@ import { loadConfig } from '../config'
 import { log } from '../logger'
 import { onConfigPatched } from '../ipc/settings'
 import * as sheet from '../windows/command-sheet'
+import { lessonSheetEntries } from './lesson-sheet'
 import { commandSheetRows, type CommandContext } from './voice-commands'
 
 export function commandSheetData(ctx: CommandContext, hotkey: string): CommandSheetData {
-  return { rows: commandSheetRows(ctx), hotkey }
+  return { rows: commandSheetRows(ctx, lessonSheetEntries()), hotkey }
 }
 
 let bound = ''

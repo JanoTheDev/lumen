@@ -19,6 +19,8 @@ export interface CommandContext {
   reading?: boolean
   /** A screen description was given a moment ago ("more detail"). */
   described?: boolean
+  /** A lesson is running (its words come first). */
+  lessonActive?: boolean
 }
 
 export const IDLE_CONTEXT: CommandContext = {
@@ -151,6 +153,8 @@ function gateHolds(gate: Gate | undefined, ctx: CommandContext): boolean {
       return !!ctx.reading
     case 'described':
       return !!ctx.described
+    case 'lesson':
+      return !!ctx.lessonActive
     case 'busy-target':
       return false
   }
@@ -316,7 +320,8 @@ export const GATE_WHEN: Record<Gate, string> = {
   answer: 'while an answer is shown',
   guide: 'during a guide',
   reading: 'while Lumen reads aloud',
-  described: 'right after a description'
+  described: 'right after a description',
+  lesson: 'during a lesson'
 }
 
 export interface SheetRow {
@@ -332,10 +337,13 @@ export interface SheetRow {
  * Every command for the "what can I say" sheet (T21), generated from the grammar table so the
  * sheet never drifts from what is matched. One row per phrase and gate.
  */
-export function commandSheetRows(ctx: CommandContext): SheetRow[] {
+export function commandSheetRows(
+  ctx: CommandContext,
+  extra: readonly GrammarEntry[] = []
+): SheetRow[] {
   const seen = new Set<string>()
   const out: SheetRow[] = []
-  for (const e of [...GRAMMAR, ...SHEET_EXTRAS]) {
+  for (const e of [...GRAMMAR, ...SHEET_EXTRAS, ...extra]) {
     const key = `${e.say}|${e.gate ?? ''}`
     if (seen.has(key)) continue
     seen.add(key)
