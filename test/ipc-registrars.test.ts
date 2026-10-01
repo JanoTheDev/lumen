@@ -18,7 +18,7 @@ vi.mock('../src/main/actions/executor', () => ({ executeActions: vi.fn(async () 
 vi.mock('../src/main/agent/escape', () => ({ armEscape: vi.fn(), disarmEscape: vi.fn() }))
 vi.mock('../src/main/a11y/transcript', () => ({
   beforeUtterance: vi.fn((prompt: string) => ({ prompt })),
-  confirmActions: vi.fn(async () => true),
+  confirmBatch: vi.fn(async () => ({ ok: true, approved: false })),
   explainBeforeDo: vi.fn(async () => {})
 }))
 vi.mock('../src/main/agent-mode/confirm', () => ({
@@ -270,5 +270,18 @@ describe('assistant:query / assistant:execute', () => {
       [expect.objectContaining({ type: 'scroll' })],
       expect.objectContaining({ origin: 'user-direct' })
     )
+  })
+
+  it('execute: approved comes from the card the user answered, not from config (review high)', async () => {
+    const { confirmBatch } = await import('../src/main/a11y/transcript')
+    await invokeHandler('assistant:execute', [{ type: 'hotkey', keys: ['enter'] }])
+    expect(executeActions).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ approved: false })
+    )
+    vi.mocked(confirmBatch).mockResolvedValueOnce({ ok: false, approved: false })
+    vi.mocked(executeActions).mockClear()
+    await invokeHandler('assistant:execute', [{ type: 'hotkey', keys: ['enter'] }])
+    expect(executeActions).not.toHaveBeenCalled()
   })
 })

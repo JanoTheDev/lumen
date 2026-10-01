@@ -14,6 +14,7 @@ import {
   CaptionSession,
   VocabLearner,
   actionRisk,
+  cardCoversBatch,
   confirmAnswer,
   describeActions,
   mergeVocab,
@@ -122,11 +123,23 @@ export async function explainBeforeDo(
 
 /** Before an action batch runs: waits for yes when the policy asks; false = do not run. */
 export async function confirmActions(actions: readonly RiskAction[]): Promise<boolean> {
-  if (!actions.length) return true
+  return (await confirmBatch(actions)).ok
+}
+
+/**
+ * confirmActions plus whether the yes pre-approves the batch for the safety gate. Only a
+ * card that showed these very actions counts (not a yes to the model's summary earlier in
+ * the turn), and only when it listed all of them (cardCoversBatch); otherwise the gate still
+ * asks for each high-risk action with its own reason.
+ */
+export async function confirmBatch(
+  actions: readonly RiskAction[]
+): Promise<{ ok: boolean; approved: boolean }> {
+  if (!actions.length) return { ok: true, approved: false }
   const policy = loadConfig().a11y.confirmTranscript
   const risk = actionRisk(actions)
-  if (!needsTranscriptConfirm(policy, risk)) return true
-  if (policy === 'always' && confirmedTurn) return true
+  if (!needsTranscriptConfirm(policy, risk)) return { ok: true, approved: false }
+  if (policy === 'always' && confirmedTurn) return { ok: true, approved: false }
   const what = describeActions(actions)
   const ok = await assistant.requestConfirm({
     summary: `${heardLine()}I’ll ${what.charAt(0).toLowerCase()}${what.slice(1)}`,
@@ -134,5 +147,5 @@ export async function confirmActions(actions: readonly RiskAction[]): Promise<bo
   })
   if (ok) confirmedTurn = true
   else log('skip', `actions not confirmed (${policy}, ${risk})`)
-  return ok
+  return { ok, approved: ok && cardCoversBatch(actions) }
 }

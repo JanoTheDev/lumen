@@ -15,6 +15,7 @@ import * as assistant from '../../src/main/windows/assistant'
 import {
   beforeUtterance,
   confirmActions,
+  confirmBatch,
   explainBeforeDo,
   openEditor,
   submitEdit
@@ -152,5 +153,54 @@ describe('transcript confirmation and corrections (06 T14)', () => {
     setPolicy('off')
     beforeUtterance('send it')
     expect(await confirmActions([{ type: 'hotkey', keys: ['enter'] }])).toBe(true)
+  })
+
+  it('a yes to the model summary does not pre-approve the batch for the gate (review high)', async () => {
+    setPolicy('always')
+    beforeUtterance('say hi in the chat')
+    const p = explainBeforeDo('Open the chat and say hi', 'low', 2000)
+    await flush()
+    assistant.command({ type: 'confirm' })
+    await p
+    const r = await confirmBatch([
+      { type: 'click_element', text: 'Chat' },
+      { type: 'type', text: 'rm -rf x' },
+      { type: 'hotkey', keys: ['enter'] }
+    ])
+    expect(r).toEqual({ ok: true, approved: false })
+  })
+
+  it('risky: a yes pre-approves only a batch the card fully listed, without typing', async () => {
+    beforeUtterance('close it')
+    const shown = confirmBatch([{ type: 'hotkey', keys: ['alt', 'f4'] }])
+    await flush()
+    assistant.command({ type: 'confirm' })
+    expect(await shown).toEqual({ ok: true, approved: true })
+
+    beforeUtterance('reply hi')
+    const typed = confirmBatch([
+      { type: 'type', text: 'hi' },
+      { type: 'hotkey', keys: ['enter'] }
+    ])
+    await flush()
+    assistant.command({ type: 'confirm' })
+    expect(await typed).toEqual({ ok: true, approved: false })
+
+    beforeUtterance('do lots')
+    const many = confirmBatch([
+      { type: 'scroll' },
+      { type: 'scroll' },
+      { type: 'scroll' },
+      { type: 'hotkey', keys: ['delete'] }
+    ])
+    await flush()
+    expect(assistant.state().confirm?.summary).toContain('1 more')
+    assistant.command({ type: 'confirm' })
+    expect(await many).toEqual({ ok: true, approved: false })
+  })
+
+  it('a batch that needs no card is not pre-approved', async () => {
+    beforeUtterance('scroll down')
+    expect(await confirmBatch([{ type: 'scroll' }])).toEqual({ ok: true, approved: false })
   })
 })

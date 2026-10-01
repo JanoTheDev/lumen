@@ -19,8 +19,7 @@ import { armEscape, disarmEscape } from '../agent/escape'
 import { setStatus } from '../windows/status'
 import * as assistant from '../windows/assistant'
 import { confirmCountdownMs } from '../a11y/timings'
-import { beforeUtterance, confirmActions, explainBeforeDo } from '../a11y/transcript'
-import { actionRisk, needsTranscriptConfirm } from '../a11y/captions'
+import { beforeUtterance, confirmBatch, explainBeforeDo } from '../a11y/transcript'
 import { LOCAL_HANDLED } from '../a11y/dispatch'
 import { answerAlways, lastUserRequest } from '../agent-mode/confirm'
 import { agentRunning, interceptAgentUtterance } from '../agent-mode/session'
@@ -150,12 +149,10 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       return { done: false, cancelled: true }
     }
     // a11y.confirmTranscript: always / risky batches wait for an explicit yes.
-    if (!(await confirmActions(actions))) return { done: false, cancelled: true }
-    // That batch confirm was an explicit yes, so the policy does not ask again (08 T05).
-    const approved = needsTranscriptConfirm(
-      loadConfig().a11y.confirmTranscript,
-      actionRisk(actions)
-    )
+    // Only a card that listed these actions and got a yes pre-approves them for the gate
+    // (08 T05); otherwise the gate still asks for each high-risk action.
+    const { ok, approved } = await confirmBatch(actions)
+    if (!ok) return { done: false, cancelled: true }
     const scope = beginScope()
     armEscape()
     const execTimer = startTimer(`execute-action [${actions.map((a) => a.type).join(', ')}]`)

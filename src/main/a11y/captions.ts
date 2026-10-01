@@ -291,6 +291,18 @@ export function actionRisk(actions: readonly RiskAction[]): ActionRisk {
   return risk
 }
 
+/** Action kinds whose real risk depends on the focused window (password field, terminal). */
+const WINDOW_RISK = new Set(['type', 'input', 'uia_act', 'text_insert'])
+
+/**
+ * Whether a yes on the transcript card can stand in for the safety gate's own confirm: the
+ * card listed every action (describeActions shows 3), and none of them is one whose high
+ * reason only shows up with the window (typing into a terminal or a password field).
+ */
+export function cardCoversBatch(actions: readonly RiskAction[]): boolean {
+  return actions.length <= 3 && !actions.some((a) => WINDOW_RISK.has(a.type))
+}
+
 /** Whether a batch waits for an explicit yes before it runs. */
 export function needsTranscriptConfirm(policy: TranscriptPolicy, risk: ActionRisk): boolean {
   if (policy === 'always') return true
