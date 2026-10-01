@@ -2,11 +2,12 @@
 // on any background, a progress arc (a filling pie under reduced motion), the click type in
 // the middle, and a box around the snapped control. Grey and a pause glyph while paused.
 // Also draws the dwell scroll arrows and the drag start marker from the scene.
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { DwellRingData } from '@shared/channels'
 import type { ScreenScene } from '@shared/events'
 import { useIpc } from '../lib/ipc'
 import { prefersReducedMotion } from '../ui/motion'
+import { addSample, displayed, initialInterp, type DwellInterp } from '../screen/dwell-interp'
 
 const GLYPH: Record<string, string> = {
   left: 'L',
@@ -33,9 +34,49 @@ function piePath(cx: number, cy: number, r: number, p: number): string {
   return `M ${cx} ${cy} L ${cx} ${cy - r} A ${r} ${r} 0 ${t > 0.5 ? 1 : 0} 1 ${x} ${y} Z`
 }
 
+/**
+ * Smooths the arc between ~25 Hz samples by writing stroke-dashoffset per frame (no React
+ * render per frame). Drops retract over 120ms.
+ */
+function useSmoothArc(
+  progress: number,
+  active: boolean,
+  circ: number
+): React.RefObject<SVGCircleElement | null> {
+  const arc = useRef<SVGCircleElement>(null)
+  const state = useRef<DwellInterp>(initialInterp())
+  const shown = useRef(0)
+  // Layout effect: the first value lands before paint, so the arc never flashes full.
+  useLayoutEffect(() => {
+    if (!active) {
+      state.current = initialInterp()
+      shown.current = 0
+      return
+    }
+    const now = performance.now()
+    state.current = addSample(state.current, progress, now, shown.current)
+    let raf = 0
+    const tick = (): void => {
+      raf = 0
+      const t = performance.now()
+      const v = displayed(state.current, t)
+      shown.current = v
+      arc.current?.setAttribute('stroke-dashoffset', String(circ * (1 - v)))
+      // Keep going while extrapolating (until the next sample) or retracting.
+      if (t - state.current.t < 160) raf = requestAnimationFrame(tick)
+    }
+    tick()
+    return () => cancelAnimationFrame(raf)
+  }, [progress, active, circ])
+  return arc
+}
+
 export function DwellRing(): JSX.Element | null {
   const [ring, setRing] = useState<DwellRingData | null>(null)
   useIpc('screen:dwell', setRing)
+  const size0 = ring?.size ?? 48
+  const circ0 = 2 * Math.PI * (size0 / 2 - 4)
+  const arcRef = useSmoothArc(ring?.progress ?? 0, !!ring?.active, circ0)
 
   if (!ring || !ring.active) return null
   // Read per frame: the ring updates ~25 times a second, so a setting change shows at once.
@@ -73,12 +114,12 @@ export function DwellRing(): JSX.Element | null {
           <path className="a11y-dwell__pie" d={piePath(c, c, r - 3, p)} />
         ) : (
           <circle
+            ref={arcRef}
             className="a11y-dwell__arc"
             cx={c}
             cy={c}
             r={r}
             strokeDasharray={circ}
-            strokeDashoffset={circ * (1 - p)}
             transform={`rotate(-90 ${c} ${c})`}
           />
         )}

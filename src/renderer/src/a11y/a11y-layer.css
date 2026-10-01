@@ -33,6 +33,25 @@
   /* Light ring outside the black border keeps the badge visible on dark backgrounds. */
   box-shadow: 0 0 0 2px #fff;
   white-space: nowrap;
+  /* Staggered in (delay set per badge), out all at once. */
+  animation: a11y-mark-in 140ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.a11y-marks.is-exit {
+  animation: a11y-marks-out 100ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes a11y-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes a11y-marks-out {
+  to {
+    opacity: 0;
+  }
 }
 
 .a11y-grid {

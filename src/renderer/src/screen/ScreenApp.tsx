@@ -1,32 +1,144 @@
-import { useState } from 'react'
+// Screen layer renderer: draws one display's ScreenScene. Highlights, buddy, labels and
+// annotations are one scene, so a pointer label can never erase a guide box (audit #13).
+// Rects arrive in this display's DIP; the SVG viewBox is the window size, so there is no
+// scaling maths here (CONTRACTS C4).
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { ScreenScene } from '@shared/events'
-import { useIpc } from '../lib/ipc'
+import type { Point } from '@shared/types'
+import { invoke, useIpc } from '../lib/ipc'
 import { GridLayer } from '../a11y/GridLayer'
 import { MarksLayer } from '../a11y/MarksLayer'
 import { DwellRing, DwellUi } from '../a11y/DwellRing'
+import { HighlightLabels, HighlightsSvg, type Highlight } from './Highlights'
+import { Buddy, type BuddyConfig } from './Buddy'
+import { AnnotationTexts, AnnotationsSvg, CaptureLayer } from './Annotations'
+import { usePresence } from './usePresence'
+import { containsPoint } from './geometry'
 import '../a11y/a11y-layer.css'
+
+const HIGHLIGHT_EXIT_MS = 140
+const MARKS_EXIT_MS = 100
+
+const DEFAULT_BUDDY: BuddyConfig = {
+  enabled: false,
+  size: 'm',
+  color: 'accent',
+  followCursor: true
+}
+
+function readBuddy(cfg: unknown): BuddyConfig {
+  const b = (cfg as { buddy?: Partial<BuddyConfig> } | null)?.buddy
+  return { ...DEFAULT_BUDDY, ...b }
+}
+
+function rootFontPx(): number {
+  const px = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  return Number.isFinite(px) && px > 0 ? px : 16
+}
+
+function useView(): { w: number; h: number } {
+  const [view, setView] = useState({ w: window.innerWidth, h: window.innerHeight })
+  useEffect(() => {
+    const on = (): void => setView({ w: window.innerWidth, h: window.innerHeight })
+    window.addEventListener('resize', on)
+    return () => window.removeEventListener('resize', on)
+  }, [])
+  return view
+}
+
+/** Buddy settings and the root font size (uiScale), kept in sync with settings. */
+function useLayerConfig(): { buddy: BuddyConfig; fontPx: number } {
+  const [buddy, setBuddy] = useState(DEFAULT_BUDDY)
+  const [fontPx, setFontPx] = useState(16)
+  const apply = (cfg: unknown): void => {
+    setBuddy(readBuddy(cfg))
+    // The theme engine writes the root font size in its own listener; read it after.
+    requestAnimationFrame(() => setFontPx(rootFontPx()))
+  }
+  useEffect(() => {
+    invoke('settings:get')
+      .then(apply)
+      .catch(() => {})
+  }, [])
+  useIpc('settings:changed', apply)
+  return { buddy, fontPx }
+}
+
+type MarksState = { marks: ScreenScene['marks']; exiting: boolean }
+
+/** Marks stay mounted for a short fade-out after "hide numbers". */
+function nextMarks(prev: MarksState, marks: ScreenScene['marks']): MarksState {
+  if (marks?.length) return { marks, exiting: false }
+  if (prev.marks?.length && !prev.exiting) return { marks: prev.marks, exiting: true }
+  return prev
+}
+
+const highlightKey = (h: Highlight): string => h.id
 
 export function ScreenApp(): JSX.Element {
   const [scene, setScene] = useState<ScreenScene | null>(null)
-  useIpc('screen:render', setScene)
+  const [cursor, setCursor] = useState<Point | null>(null)
+  const view = useView()
+  const { buddy: buddyCfg, fontPx } = useLayerConfig()
+  const [highlights, updateHighlights] = usePresence<Highlight>(highlightKey, HIGHLIGHT_EXIT_MS)
+  const [marks, setMarks] = useState<MarksState>({ marks: undefined, exiting: false })
+  useIpc('screen:render', (s) => {
+    performance.mark?.('screen:render-start')
+    setScene(s)
+    updateHighlights(s.highlights)
+    setMarks((prev) => nextMarks(prev, s.marks))
+  })
+  useEffect(() => {
+    if (!marks.exiting) return
+    const id = setTimeout(() => setMarks({ marks: undefined, exiting: false }), MARKS_EXIT_MS)
+    return () => clearTimeout(id)
+  }, [marks])
+  useIpc('screen:cursor', setCursor)
+
+  useLayoutEffect(() => {
+    try {
+      const m = performance.measure('screen:render', 'screen:render-start')
+      if (m.duration > 16) console.warn(`[screen] scene render took ${m.duration.toFixed(1)}ms`)
+    } catch {
+      /* first paint, no mark yet */
+    }
+  }, [scene])
+
+  const b = scene?.buddy
+  const live = useMemo(() => scene?.highlights ?? [], [scene])
+  const targetRect = b ? live.find((h) => containsPoint(h.rect, b.to))?.rect : undefined
+  const avoid = live.map((h) => h.rect).filter((r) => r !== targetRect)
+  const annotations = scene?.annotations ?? []
+  const props = { list: highlights, buddyLabel: b?.label, view, fontPx, spotFrom: b?.to }
+
   return (
     <>
-      <svg className="sl-root" width="100%" height="100%" aria-hidden="true">
-        {scene?.highlights.map((h) => (
-          <rect
-            key={h.id}
-            x={h.rect.x}
-            y={h.rect.y}
-            width={h.rect.w}
-            height={h.rect.h}
-            className="sl-ring"
-          />
-        ))}
+      <svg
+        className="sl-root"
+        width={view.w}
+        height={view.h}
+        viewBox={`0 0 ${view.w} ${view.h}`}
+        aria-hidden="true"
+      >
+        <HighlightsSvg {...props} />
+        <AnnotationsSvg list={annotations} />
       </svg>
+      <HighlightLabels {...props} />
+      <AnnotationTexts list={annotations} />
       {scene?.grid && <GridLayer grid={scene.grid} />}
-      {scene?.marks?.length ? <MarksLayer marks={scene.marks} /> : null}
+      {marks.marks?.length ? <MarksLayer marks={marks.marks} exiting={marks.exiting} /> : null}
       {scene?.dwellUi && <DwellUi ui={scene.dwellUi} />}
+      <Buddy
+        buddy={b}
+        targetRect={targetRect}
+        avoid={avoid}
+        cursor={cursor}
+        view={view}
+        cfg={buddyCfg}
+        fontPx={fontPx}
+      />
       <DwellRing />
+      <CaptureLayer />
     </>
   )
 }

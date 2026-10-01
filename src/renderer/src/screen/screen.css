@@ -7,14 +7,383 @@ body,
   overflow: hidden;
 }
 
+/* Everything on the layer is drawn on top of other apps: fixed colours from the theme
+   tokens, never system-adjusted, halos so it reads on any background. */
 .sl-root {
   position: fixed;
   inset: 0;
+  overflow: visible;
+  pointer-events: none;
   forced-color-adjust: none;
 }
 
-.sl-ring {
+/* ---- Rings (target, ring, dim-reveal, success, failure) ---- */
+
+.sl-ring__halo,
+.sl-ring__main,
+.sl-ring__inner,
+.sl-hole {
+  transition-property: x, y, width, height, rx;
+  transition-duration: var(--spring-snappy-dur, 300ms);
+  transition-timing-function: var(--spring-snappy, ease-out);
+}
+
+.sl-ring__halo {
+  fill: none;
+  stroke: var(--ring-halo-outer);
+  stroke-width: 7;
+}
+
+.sl-ring__main {
   fill: none;
   stroke: var(--accent);
   stroke-width: 3;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: sl-draw 300ms var(--ease-out) both;
+}
+
+.sl-ring__inner {
+  fill: none;
+  stroke: var(--ring-halo-inner);
+  stroke-width: 1;
+}
+
+.sl-tone-success {
+  stroke: var(--success);
+  fill: var(--success);
+}
+
+.sl-ring__main.sl-tone-success,
+.sl-ring__main.sl-tone-danger {
+  fill: none;
+  transition: stroke var(--dur-base) var(--ease-in-out);
+}
+
+.sl-tone-danger {
+  stroke: var(--danger);
+  fill: var(--danger);
+}
+
+.sl-hl {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    sl-enter var(--dur-base) var(--ease-out) both,
+    sl-pulse 520ms var(--ease-in-out) var(--dur-base) 1;
+}
+
+.sl-hl.is-exit,
+.sl-badge.is-exit,
+.sl-hl-label.is-exit,
+.sl-scrim.is-exit {
+  animation: sl-exit 140ms var(--ease-in) forwards;
+}
+
+.sl-hl--success,
+.sl-hl--failure {
+  animation: sl-enter var(--dur-base) var(--ease-out) both;
+}
+
+.sl-status__disc {
+  stroke: var(--ring-halo-outer);
+  stroke-width: 2;
+}
+
+.sl-status__mark {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  animation: sl-draw 220ms var(--ease-out) 80ms both;
+}
+
+.sl-scrim {
+  fill: var(--scrim);
+  animation: sl-fade-in var(--dur-base) var(--ease-out) both;
+}
+
+.sl-hole {
+  fill: #000;
+}
+
+@keyframes sl-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes sl-enter {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sl-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes sl-exit {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sl-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- Badges and label pills (HTML) ---- */
+
+.sl-labels {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+
+.sl-badge,
+.sl-pill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  transition: transform var(--spring-snappy-dur, 300ms) var(--spring-snappy, ease-out);
+}
+
+.sl-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: 700 0.875rem/1 var(--font-text);
+  font-variant-numeric: tabular-nums;
+  box-shadow:
+    0 0 0 1.5px var(--ring-halo-inner),
+    0 0 0 3px var(--ring-halo-outer);
+  animation: sl-enter var(--dur-base) var(--ease-out) both;
+}
+
+.sl-pill {
+  max-width: 22rem;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: max(14px, var(--text-md));
+  font-weight: 600;
+  line-height: 1.3;
+  box-shadow:
+    0 0 0 1px var(--ring-halo-outer),
+    var(--shadow);
+}
+
+.sl-pill > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.sl-hl-label,
+.sl-ann-text {
+  animation: sl-fade-in var(--dur-fast) var(--ease-out) both;
+}
+
+.sl-ann-text {
+  font-size: var(--text-lg);
+}
+
+/* ---- Buddy ---- */
+
+.sl-buddy,
+.sl-buddy-pulse {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  forced-color-adjust: none;
+  will-change: transform;
+  transform-origin: 0 0;
+}
+
+.sl-buddy {
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.sl-buddy.is-off svg {
+  visibility: hidden;
+}
+
+.sl-buddy svg {
+  position: absolute;
+  overflow: visible;
+}
+
+.sl-buddy__halo {
+  fill: none;
+  stroke: var(--ring-halo-outer);
+  stroke-width: 4;
+  stroke-linejoin: round;
+}
+
+.sl-buddy__fill {
+  stroke: var(--ring-halo-inner);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.sl-buddy-pulse span {
+  position: absolute;
+  border-radius: 50%;
+  border: 3px solid var(--accent);
+  opacity: 0;
+}
+
+.sl-buddy-label > span {
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+
+.sl-buddy-label.is-in > span {
+  opacity: 1;
+  transform: none;
+}
+
+/* The pill background only shows once its text is in. */
+.sl-buddy-label {
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.sl-buddy-label > span {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px var(--ring-halo-outer),
+    var(--shadow);
+}
+
+/* ---- Annotations ---- */
+
+.sl-ann path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sl-ann__halo {
+  stroke: var(--ring-halo-outer);
+  stroke-width: 8;
+}
+
+.sl-ann__light {
+  stroke: var(--ring-halo-inner);
+  stroke-width: 5;
+}
+
+.sl-ann__ink {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.sl-ann:not(.sl-ann--fill) path {
+  stroke-dasharray: 1;
+  animation: sl-draw 300ms var(--ease-out) both;
+}
+
+.sl-ann--fill .sl-ann__halo {
+  fill: var(--ring-halo-outer);
+  stroke-width: 3;
+}
+
+.sl-ann--fill .sl-ann__ink {
+  fill: var(--accent);
+  stroke: none;
+}
+
+.sl-ann--fill:not(.is-live) {
+  animation: sl-fade-in 300ms var(--ease-out) both;
+}
+
+.sl-capture {
+  position: fixed;
+  inset: 0;
+  cursor: crosshair;
+  pointer-events: auto;
+  /* Nearly transparent: Windows passes clicks through fully transparent pixels. */
+  background: rgba(0, 0, 0, 0.01);
+}
+
+.sl-capture__hint {
+  left: 50%;
+  top: 1.5rem;
+  transform: translateX(-50%);
+}
+
+/* ---- High contrast: yellow on black, thicker strokes ---- */
+
+:root[data-theme='high-contrast'] .sl-buddy__fill {
+  fill: #ffd800 !important;
+  stroke: #000;
+  stroke-width: 3;
+}
+
+:root[data-theme='high-contrast'] .sl-ring__halo {
+  stroke: #000;
+  stroke-width: 9;
+}
+
+:root[data-theme='high-contrast'] .sl-ring__main {
+  stroke-width: 4;
+}
+
+:root[data-theme='high-contrast'] .sl-pill,
+:root[data-theme='high-contrast'] .sl-buddy-label > span {
+  box-shadow: 0 0 0 2px var(--fg);
+}
+
+/* Reduced motion: no scale, no draw-on, no pulse; fades stay short (theme.css caps them). */
+:root[data-reduce-motion='true'] .sl-hl,
+:root[data-reduce-motion='true'] .sl-ring__main,
+:root[data-reduce-motion='true'] .sl-ann path,
+:root[data-reduce-motion='true'] .sl-status__mark {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion='false']) .sl-hl,
+  :root:not([data-reduce-motion='false']) .sl-ring__main,
+  :root:not([data-reduce-motion='false']) .sl-ann path,
+  :root:not([data-reduce-motion='false']) .sl-status__mark {
+    animation: none;
+  }
 }

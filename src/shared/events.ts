@@ -34,7 +34,7 @@ export interface ScreenScene {
   highlights: {
     id: string
     rect: Rect
-    style: 'target' | 'ring' | 'dim-reveal' | 'success'
+    style: 'target' | 'ring' | 'dim-reveal' | 'success' | 'failure'
     label?: string
     n?: number
   }[]
