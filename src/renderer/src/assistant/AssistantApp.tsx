@@ -180,7 +180,9 @@ export function AssistantApp(): JSX.Element {
   const v = shown ?? EMPTY
   const pinned = !!v.answer?.pinned
   const closable = !!(v.answer && !v.answer.streaming) || (!!v.error && v.phase === 'error')
-  const resetKey = `${v.answer?.turnId}|${v.answer?.streaming}|${v.error?.message}`
+  // A new non-streamed answer in the same turn restarts the countdown too.
+  const answerKey = v.answer?.streaming ? '' : v.answer?.markdown
+  const resetKey = `${v.answer?.turnId}|${v.answer?.streaming}|${answerKey}|${v.error?.message}`
   const lineRef = useAutoClose(
     view.visible && closable && !BUSY.has(v.phase) && !pinned,
     v.autoCloseMs,

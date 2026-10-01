@@ -14,9 +14,16 @@ export function get(): BrowserWindow | null {
   return live(win)
 }
 
+/** v2: a different answer is a new card; it does not inherit the pin of the one before. */
+function showV2(text: string): void {
+  const cur = assistant.state().answer
+  if (cur?.pinned && cur.markdown !== text) assistant.pinAnswer(false)
+  assistant.showAnswer(text)
+}
+
 export function send<C extends EventChannel>(channel: C, ...args: EventChannels[C]): void {
   if (uiV2()) {
-    if (channel === 'answer:text') assistant.showAnswer(args[0] as string)
+    if (channel === 'answer:text') showV2(args[0] as string)
     else assistant.send(channel, ...args)
     return
   }
@@ -45,7 +52,7 @@ export function create(): void {
 }
 
 export function showText(text: string): void {
-  if (uiV2()) return assistant.showAnswer(text)
+  if (uiV2()) return showV2(text)
   send('answer:text', text)
   get()?.show()
 }
