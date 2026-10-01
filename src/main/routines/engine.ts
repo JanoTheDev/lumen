@@ -221,7 +221,9 @@ export class AutomationScheduler {
   /** Task Scheduler started this run (`--run-automation <id>`). */
   runWake(id: string): boolean {
     const a = this.get(id)
-    if (!a || !a.enabled || this.running.has(id) || this.duplicate(a)) return false
+    // Only what a wake task exists for: a time automation with "wake Lumen" on.
+    if (!a || !a.wake || !isTimeTrigger(a.trigger)) return false
+    if (!a.enabled || this.running.has(id) || this.duplicate(a)) return false
     this.trigger(a, 'wake')
     return true
   }

@@ -260,9 +260,21 @@ describe('AutomationScheduler: start, catch-up, wake', () => {
     expect(a.runs?.some((r) => r.result === 'skipped')).toBe(false)
   })
 
+  it('a wake request runs only a time automation with wake on', async () => {
+    const { s, runs } = setup()
+    s.start([
+      base({ id: 'au_ev01', trigger: { kind: 'app', app: 'Excel', on: 'open' }, wake: true }),
+      base({ id: 'au_nowake1', trigger: { kind: 'daily', at: '13:00' } })
+    ])
+    expect(s.runWake('au_ev01')).toBe(false)
+    expect(s.runWake('au_nowake1')).toBe(false)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(runs).toEqual([])
+  })
+
   it('a timer run right after a wake run of the same time is skipped', async () => {
     const { s, runs } = setup()
-    s.start([base({ id: 'au_dup1', trigger: { kind: 'daily', at: '12:30' } })])
+    s.start([base({ id: 'au_dup1', trigger: { kind: 'daily', at: '12:30' }, wake: true })])
     vi.setSystemTime(new Date(2026, 9, 1, 12, 29, 58))
     s.runWake('au_dup1')
     await vi.advanceTimersByTimeAsync(60 * MIN)
