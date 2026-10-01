@@ -1,10 +1,11 @@
 import { spawn, ChildProcess, SpawnOptions } from 'child_process'
 import { StringDecoder } from 'string_decoder'
-import { join } from 'path'
+import { existsSync } from 'fs'
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import type { AgentAction } from '../actions/agent-action'
 import type { AgentInitArgs } from './state'
+import { ImplSelector, type AgentImplPref, type AgentPathEnv, type LaunchSpec } from './impl'
 
 export type AgentErrorCode =
   | 'E_AGENT_EXIT'
@@ -56,6 +57,10 @@ export interface AgentBridgeOptions {
   // v2 only: state sent as the `init` command after every ready handshake.
   initArgs?: () => AgentInitArgs | Promise<AgentInitArgs>
   restart?: Partial<RestartPolicy>
+  // Which binary to run; read on every (re)start. Default 'python'.
+  impl?: () => AgentImplPref
+  // Overrides for path resolution (tests).
+  paths?: Partial<AgentPathEnv>
 }
 
 export interface RequestOptions {
@@ -152,12 +157,37 @@ export class AgentBridge {
   private info: AgentInfo | null = null
   private onReady: (() => void) | null = null
   private handshakePingId: number | null = null
+  private implPref: () => AgentImplPref
+  private selector: ImplSelector
+  private spec: LaunchSpec | null = null
 
   constructor(opts: AgentBridgeOptions = {}) {
     this.spawnFn = opts.spawnFn ?? (spawn as SpawnFn)
     this.initState = opts.initState
     this.initArgs = opts.initArgs
     this.restartPolicy = { ...DEFAULT_RESTART, ...opts.restart }
+    this.implPref = opts.impl ?? (() => 'python')
+    const paths = opts.paths ?? {}
+    this.selector = new ImplSelector(
+      () => this.implPref(),
+      () => ({
+        dev: is.dev,
+        appPath: app.getAppPath(),
+        resourcesPath: process.resourcesPath,
+        platform: process.platform,
+        exists: existsSync,
+        ...paths
+      })
+    )
+  }
+
+  setImpl(fn: () => AgentImplPref): void {
+    this.implPref = fn
+  }
+
+  /** Why the native agent was dropped for this session, or null. */
+  get implFallback(): string | null {
+    return this.selector.fallenBack
   }
 
   setInitState(fn: () => Promise<void>): void {
@@ -290,19 +320,16 @@ export class AgentBridge {
   }
 
   private async launch(): Promise<void> {
-    const agentDir = is.dev ? join(app.getAppPath(), 'agent') : join(process.resourcesPath, 'agent')
-    const venvPython =
-      process.platform === 'win32'
-        ? join(agentDir, '.venv', 'Scripts', 'python.exe')
-        : join(agentDir, '.venv', 'bin', 'python3')
+    const spec = this.selector.choose()
+    this.spec = spec
 
     this.resetStream()
     this.proto = 1
     this.info = null
-    const proc = this.spawnFn(venvPython, [join(agentDir, 'main.py')], {
-      cwd: agentDir,
+    const proc = this.spawnFn(spec.command, spec.args, {
+      cwd: spec.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' }
+      env: { ...process.env, ...spec.env }
     })
     this.proc = proc
 
@@ -339,6 +366,10 @@ export class AgentBridge {
         )
       })
     } catch (err) {
+      if (spec.impl === 'native' && this.implPref() === 'auto' && !this.stopping) {
+        this.selector.fallBack(`native agent failed to start (${(err as Error).message})`)
+        return this.switchToPython(proc)
+      }
       if (this.proc === proc) proc.kill()
       throw err
     } finally {
@@ -347,6 +378,12 @@ export class AgentBridge {
     }
 
     if (this.proc !== proc) throw new AgentError('E_AGENT_EXIT', 'Agent exited during start')
+
+    const reject = this.selector.check(spec, this.capabilities)
+    if (reject) {
+      this.selector.fallBack(reject)
+      return this.switchToPython(proc)
+    }
 
     try {
       if (this.protocol === 2 && this.initArgs) {
@@ -360,6 +397,21 @@ export class AgentBridge {
     if (this.proc === proc) this.emit('agent-ready', { protocol: this.protocol, ...this.agentInfo })
   }
 
+  /** Drops the native child for this session and starts the Python agent in its place. */
+  private async switchToPython(proc: ChildProcess): Promise<void> {
+    if (this.proc === proc) this.proc = null
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
+    this.restartTimes = []
+    this.resetStream()
+    this.rejectAll('E_AGENT_EXIT', 'Agent replaced')
+    proc.kill()
+    this.emit('agent-impl-fallback', { from: 'native', to: 'python', reason: this.implFallback })
+    await this.launch()
+  }
+
   private handleDown(proc: ChildProcess, info: Record<string, unknown>): void {
     if (this.proc !== proc) return
     this.proc = null
@@ -367,6 +419,11 @@ export class AgentBridge {
     this.rejectAll('E_AGENT_EXIT', 'Agent exited')
 
     if (this.stopping) return
+
+    if (this.spec && this.selector.crashed(this.spec)) {
+      this.restartTimes = []
+      this.emit('agent-impl-fallback', { from: 'native', to: 'python', reason: this.implFallback })
+    }
 
     const { baseMs, maxMs, maxRestarts, windowMs } = this.restartPolicy
     const now = Date.now()

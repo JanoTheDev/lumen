@@ -15,6 +15,7 @@ let agentFailed = false
 
 /** Starts the agent without blocking IPC registration; failures show in the status bubble. */
 export function startAgent(agent: AgentBridge): void {
+  agent.setImpl(() => loadConfig().agentImpl)
   agent.start().catch((e) => {
     agentFailed = true
     log('fail', `agent failed to start: ${(e as Error).message}`)
@@ -26,6 +27,9 @@ export function wireAgentEvents(agent: AgentBridge): void {
   agent.onEvent('agent-down', (data) => {
     if (data?.gaveUp) setStatus('error', 'Agent stopped responding — see logs', undefined, 8000)
     else setStatus('error', 'Agent restarting…', undefined, 3000)
+  })
+  agent.onEvent('agent-impl-fallback', (data) => {
+    log('skip', `native agent dropped for this session: ${String(data?.reason ?? 'unknown')}`)
   })
   agent.onEvent('agent-ready', () => {
     if (agentFailed) setStatus('answer', 'Agent back online', undefined, 1500)
