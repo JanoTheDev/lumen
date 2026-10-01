@@ -19,6 +19,7 @@ import { armEscape, disarmEscape } from '../agent/escape'
 import { setStatus } from '../windows/status'
 import * as assistant from '../windows/assistant'
 import { uiV2 } from '../windows/ui-mode'
+import { confirmCountdownMs } from '../a11y/timings'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
 
@@ -91,7 +92,10 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
         await assistant.requestConfirm({
           summary: summary.trim(),
           risk: conf === 'low' ? 'medium' : 'low',
-          countdownMs: conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
+          countdownMs: confirmCountdownMs(
+            cfg,
+            conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
+          )
         })
         return { delayMs: 0 }
       }

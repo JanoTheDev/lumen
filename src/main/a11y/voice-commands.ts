@@ -13,6 +13,8 @@ export interface CommandContext {
   dragStarted: boolean
   guideActive: boolean
   autoScrolling: boolean
+  /** An answer card is on screen (pin, dismiss). */
+  answerShown?: boolean
 }
 
 export const IDLE_CONTEXT: CommandContext = {
@@ -137,6 +139,8 @@ function gateHolds(gate: Gate | undefined, ctx: CommandContext): boolean {
       return !ctx.guideActive
     case 'autoscroll':
       return ctx.autoScrolling
+    case 'answer':
+      return !!ctx.answerShown
     case 'busy-target':
       return false
   }

@@ -20,6 +20,8 @@ export interface FakeA11yOptions {
   recent?: { table: MarksTable; at: number } | null
   /** Result of uiaAct (true = the pattern took). */
   uiaOk?: boolean
+  /** An answer card is showing. */
+  answer?: boolean
 }
 
 export interface FakeA11yCalls {
@@ -33,6 +35,8 @@ export interface FakeA11yCalls {
   wake: boolean[]
   keep: boolean[]
   settings: number
+  answer: string[]
+  help: number
 }
 
 let seq = 0
@@ -71,7 +75,9 @@ export function fakeA11yIo(opts: FakeA11yOptions = {}): FakeA11y {
     dwellPaused: [],
     wake: [],
     keep: [],
-    settings: 0
+    settings: 0,
+    answer: [],
+    help: 0
   }
   const scene: A11yScene = {}
   const io: A11yIo = {
@@ -128,6 +134,11 @@ export function fakeA11yIo(opts: FakeA11yOptions = {}): FakeA11y {
     },
     keepMarks: () => keep,
     guideActive: () => opts.guide ?? false,
+    answerShown: () => opts.answer ?? false,
+    answer: (op) => {
+      calls.answer.push(op)
+      return opts.answer ?? false
+    },
     log: () => {}
   }
   return {

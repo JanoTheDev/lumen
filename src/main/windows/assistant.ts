@@ -12,6 +12,7 @@ import { createWindow, loadRenderer } from './factory'
 import { currentZoom, live, registerWindow, sendTo } from './registry'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
+import { PausableTimer, answerAutoCloseMs, captionHoldMs } from '../a11y/timings'
 
 /** Bar max width (40rem) plus room for the shadow, in CSS px before zoom. */
 const BAR_WIDTH_CSS = 640 + 48
@@ -32,7 +33,11 @@ export type StatusKind =
 let win: BrowserWindow | null = null
 let card: { w: number; h: number } | null = null
 let hideTimer: ReturnType<typeof setTimeout> | null = null
-let statusTimer: ReturnType<typeof setTimeout> | null = null
+// Pauses while the pointer (or a dwell) is on the card; "longer" extends it.
+const statusTimer = new PausableTimer()
+const captionTimer = new PausableTimer()
+/** "Longer" multiplier for the answer auto-close; back to 1 on every new turn. */
+let closeFactor = 1
 let inFlight: string | null = null
 let pendingConfirm: { actionId: string; resolve: (ok: boolean) => void } | null = null
 let denyNextExecute = false
@@ -46,7 +51,7 @@ const empty = (): AssistantView => ({
 let view: AssistantView = empty()
 
 function autoCloseMs(): number {
-  return loadConfig().answerAutoCloseMs
+  return answerAutoCloseMs(loadConfig(), closeFactor)
 }
 
 export function get(): BrowserWindow | null {
@@ -106,8 +111,9 @@ function reveal(): void {
 
 /** Plays the exit, then hides the window so it never steals clicks while idle. */
 export function close(): void {
-  if (statusTimer) clearTimeout(statusTimer)
-  statusTimer = null
+  statusTimer.clear()
+  captionTimer.clear()
+  closeFactor = 1
   if (pendingConfirm) resolveConfirm(false)
   view = empty()
   emit()
@@ -121,8 +127,9 @@ export function close(): void {
 
 /** A new turn starts: drop the previous answer, error and caption. */
 export function open(phase: AssistantPhase = view.phase): void {
-  if (statusTimer) clearTimeout(statusTimer)
-  statusTimer = null
+  statusTimer.clear()
+  captionTimer.clear()
+  closeFactor = 1
   view = { ...empty(), phase }
   patch({})
 }
@@ -145,8 +152,7 @@ export function status(
   step?: { index: number; total: number },
   autoHideMs?: number
 ): void {
-  if (statusTimer) clearTimeout(statusTimer)
-  statusTimer = null
+  statusTimer.clear()
   const phase = kind === 'step' && inFlight ? 'acting' : PHASE[kind]
   patch({
     phase,
@@ -154,13 +160,12 @@ export function status(
     step: kind === 'step' && step ? { ...step, label: text } : view.step,
     error: kind === 'error' ? { message: text } : view.error
   })
-  if (autoHideMs && autoHideMs > 0) statusTimer = setTimeout(settle, autoHideMs)
+  if (autoHideMs && autoHideMs > 0) statusTimer.start(autoHideMs, settle)
 }
 
 /** The status line is done: keep showing content, else close. */
 export function settle(): void {
-  if (statusTimer) clearTimeout(statusTimer)
-  statusTimer = null
+  statusTimer.clear()
   if (!view.visible) return
   if (hasContent()) patch({ phase: view.confirm ? 'confirm' : 'idle', statusText: undefined })
   else close()
@@ -168,7 +173,7 @@ export function settle(): void {
 
 /** The voice/query turn finished in the renderer (old `assistant:close`). */
 export function turnEnded(): void {
-  if (statusTimer || view.confirm || view.answer) return
+  if (statusTimer.running || view.confirm || view.answer) return
   close()
 }
 
@@ -258,7 +263,37 @@ export function setCard(size: { w: number; h: number }): void {
   card = size
 }
 
+/** "Longer": doubles what is left of the status line and the answer auto-close. */
+export function extendTimers(): boolean {
+  const status = statusTimer.extend()
+  const answer = !!view.answer && !view.answer.pinned && autoCloseMs() > 0
+  if (answer) closeFactor *= 2
+  if (status || answer) patch({})
+  return status || answer
+}
+
+/** Pins (or unpins) the answer card; false when no answer is showing. */
+export function pinAnswer(on = true): boolean {
+  if (!view.answer || !view.visible) return false
+  patch({ answer: { ...view.answer, pinned: on } })
+  return true
+}
+
+/** An answer card is on screen (voice "pin", "longer", "dismiss" apply). */
+export function answerShown(): boolean {
+  return view.visible && !!view.answer
+}
+
+/** Dwell / hover on the card pauses timed dismissal (renderer pauses its own countdowns). */
+export function holdTimers(reason: string, on: boolean): void {
+  for (const t of [statusTimer, captionTimer]) {
+    if (on) t.pause(reason)
+    else t.resume(reason)
+  }
+}
+
 export function setInteractive(on: boolean): void {
+  holdTimers('hover', on)
   const w = get()
   if (!w) return
   if (on) w.setIgnoreMouseEvents(false)
@@ -299,7 +334,14 @@ registerWindow(get, { zoom: true, interactive: true, hitRect })
 bus.on('query.started', (e) => {
   inFlight = e.turnId
   if (!view.visible) return
-  if (!view.caption) patch({ caption: e.prompt })
+  if (view.caption) return
+  patch({ caption: e.prompt })
+  // captionHoldMs 0 = the caption stays until the next utterance.
+  const hold = captionHoldMs(loadConfig())
+  if (hold > 0)
+    captionTimer.start(hold, () => {
+      if (view.visible && view.caption) patch({ caption: undefined })
+    })
 })
 bus.on('query.delta', (e) => {
   if (!view.visible) return

@@ -254,7 +254,8 @@ describe('voice command grammar', () => {
       gridShown: false,
       dragStarted: false,
       guideActive: false,
-      autoScrolling: false
+      autoScrolling: false,
+      answerShown: true
     }
     for (const e of GRAMMAR) {
       const example = e.id === 'grid.select' ? '5' : e.say.split(',')[0].trim()

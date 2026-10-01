@@ -9,7 +9,14 @@
 //   <app>      app name            <amount> a little|a lot
 
 /** State a command needs before it applies; outside it the utterance falls through. */
-export type Gate = 'marks' | 'grid' | 'grid-drag' | 'no-guide' | 'autoscroll' | 'busy-target'
+export type Gate =
+  | 'marks'
+  | 'grid'
+  | 'grid-drag'
+  | 'no-guide'
+  | 'autoscroll'
+  | 'busy-target'
+  | 'answer'
 
 export type Category =
   | 'numbers'
@@ -601,6 +608,29 @@ export const GRAMMAR: GrammarEntry[] = [
   },
 
   // ---- Lumen ----
+  {
+    id: 'answer.pin',
+    category: 'lumen',
+    patterns: ['(pin|pin it|pin that|pin the answer|keep it|keep that|keep this)'],
+    gate: 'answer',
+    say: 'pin',
+    does: 'Keep the answer on screen'
+  },
+  {
+    id: 'answer.longer',
+    category: 'lumen',
+    patterns: ['(longer|wait longer|more time|give me more time)'],
+    say: 'longer',
+    does: 'Give me twice as long before things close'
+  },
+  {
+    id: 'answer.close',
+    category: 'lumen',
+    patterns: ['(close|dismiss|close that|close it|close the answer|hide the answer)'],
+    gate: 'answer',
+    say: 'dismiss',
+    does: 'Close the answer'
+  },
   {
     id: 'dwell.set',
     category: 'lumen',

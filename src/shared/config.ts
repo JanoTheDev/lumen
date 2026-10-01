@@ -134,8 +134,11 @@ const a11yTimingsSchema = z.object({
   statusHoldMs: z.number().int().min(4000).max(600_000).default(4000),
   /** "I heard: …" caption; 0 = until the next utterance or dismissed. */
   captionHoldMs: z.number().int().min(0).max(600_000).default(0),
-  /** Confirm countdown before an action runs by itself; 0 = wait forever. */
-  confirmCountdownMs: z.number().int().min(0).max(120_000).default(0)
+  /**
+   * Confirm countdown before an action runs by itself; 0 = wait forever, unset = the app's
+   * own countdown (2-4 s by confidence). Optional so the a11y profiles can set 0.
+   */
+  confirmCountdownMs: z.number().int().min(0).max(120_000).optional()
 })
 
 const a11yDwellSchema = z.object({
@@ -165,7 +168,7 @@ const a11yMarksSchema = z.object({
 })
 
 export const A11Y_DEFAULTS = {
-  timings: { statusHoldMs: 4000, captionHoldMs: 0, confirmCountdownMs: 0 },
+  timings: { statusHoldMs: 4000, captionHoldMs: 0 },
   dwell: {
     clickType: 'left',
     sticky: false,

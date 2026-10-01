@@ -76,6 +76,10 @@ export interface A11yIo {
   setKeepMarks(on: boolean): void
   keepMarks(): boolean
   guideActive(): boolean
+  /** An answer card is on screen. */
+  answerShown(): boolean
+  /** Answer card / timer commands; false when there is nothing to act on. */
+  answer(op: 'pin' | 'longer' | 'close'): boolean
   log(msg: string): void
 }
 
@@ -176,7 +180,8 @@ export class A11yCommands {
       gridShown: this.grid.shown,
       dragStarted: !!this.grid.dragFrom,
       guideActive: this.io.guideActive(),
-      autoScrolling: !!this.autoScroll
+      autoScrolling: !!this.autoScroll,
+      answerShown: this.io.answerShown()
     }
   }
 
@@ -334,6 +339,17 @@ export class A11yCommands {
         if (!this.io.setScanning(!!a.on))
           throw new UserError('Switch scanning is not available yet')
         this.io.feedback(a.on ? 'Scanning' : 'Scanning stopped', true)
+        return
+      case 'answer.pin':
+        if (!this.io.answer('pin')) throw new UserError('No answer to pin')
+        this.io.feedback('Pinned', true)
+        return
+      case 'answer.longer':
+        if (!this.io.answer('longer')) throw new UserError('Nothing is closing')
+        this.io.feedback('Twice as long', true)
+        return
+      case 'answer.close':
+        this.io.answer('close')
         return
       case 'lumen.settings':
         this.io.openSettings()

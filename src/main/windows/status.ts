@@ -5,6 +5,7 @@ import { createWindow, loadRenderer } from './factory'
 import { live, registerWindow, sendTo } from './registry'
 import { loadConfig } from '../config'
 import * as assistant from './assistant'
+import { statusHoldMs } from '../a11y/timings'
 import { uiV2 } from './ui-mode'
 
 export type StatusKind =
@@ -57,8 +58,10 @@ export function setStatus(
   kind: StatusKind,
   text: string,
   step?: { index: number; total: number },
-  autoHideMs?: number
+  requestedHideMs?: number
 ): void {
+  // Timed lines stay at least a11y.timings.statusHoldMs (WCAG 2.2.1).
+  const autoHideMs = statusHoldMs(loadConfig(), requestedHideMs)
   if (uiV2()) return assistant.status(kind, text, step, autoHideMs)
   if (!loadConfig().statusBubble.enabled) return
   const w = get()

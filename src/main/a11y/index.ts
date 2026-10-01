@@ -13,15 +13,19 @@ import { getAgent, requireAgent } from '../agent/instance'
 import { applyListenerState } from '../agent/sync'
 import { guideState } from '../guides/session'
 import { broadcastConfig } from '../ipc/settings'
+import { onBroadcast } from '../windows/registry'
 import { currentContext } from '../query/context'
 import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
 import { speakAnswer } from '../speech/tts'
+import * as assistant from '../windows/assistant'
 import * as screenLayer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
 import { setStatus } from '../windows/status'
+import { uiV2 } from '../windows/ui-mode'
 import { Announcer, type AnnounceOptions } from './announce'
-import { screenReaderActive } from './at-state'
+import { screenReaderActive, setAtState } from './at-state'
+import { FocusNarrator } from './focus-narration'
 import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
@@ -29,8 +33,11 @@ const OCR_TIMEOUT_MS = 4000
 const ACT_TIMEOUT_MS = 3000
 const INPUT_TIMEOUT_MS = 15_000
 
+const AT_POLL_MS = 60_000
+
 let announcer: Announcer | null = null
 let a11y: A11yCommands | null = null
+let narrator: FocusNarrator | null = null
 
 /** One short message to the user through the announce policy (screen reader, TTS or visual). */
 export function announce(text: string, opts?: AnnounceOptions): void {
@@ -187,8 +194,68 @@ export function createIo(): A11yIo {
     },
     keepMarks: () => loadConfig().a11y.marks.keep,
     guideActive: () => guideState().guideActive,
+    answerShown: () => uiV2() && assistant.answerShown(),
+    answer: (op) => {
+      // The v1 answer window keeps its own timer (hover pauses it); only the bar is driven here.
+      if (!uiV2()) return false
+      if (op === 'pin') return assistant.pinAnswer(true)
+      if (op === 'longer') return assistant.extendTimers()
+      assistant.close()
+      return true
+    },
     log: (msg) => log('plan', msg)
   }
+}
+
+// focus-changed is a subscribed agent event; several features may want it.
+const focusOwners = new Set<string>()
+
+function pushFocusSubscription(): void {
+  const agent = getAgent()
+  if (!agent || agent.protocol !== 2) return
+  agent
+    .request('subscribe', { events: ['focus-changed'], enabled: focusOwners.size > 0 })
+    .catch((e: Error) => log('skip', `focus-changed subscribe failed (${e.message})`))
+}
+
+/** Asks for (or releases) the agent's focus-changed events on behalf of `owner`. */
+export function wantFocusEvents(owner: string, on: boolean): void {
+  const before = focusOwners.size > 0
+  if (on) focusOwners.add(owner)
+  else focusOwners.delete(owner)
+  if (before !== focusOwners.size > 0) pushFocusSubscription()
+}
+
+/** Asks the agent which assistive tech runs; agents without a11y_state keep the last state. */
+async function refreshAtState(): Promise<void> {
+  const agent = getAgent()
+  if (!agent || agent.protocol !== 2) return
+  try {
+    if (setAtState(await agent.request('a11y_state', {}, { timeoutMs: 2000 }))) narrator?.sync()
+  } catch {
+    /* E_UNSUPPORTED on the native agent until 02 adds it */
+  }
+}
+
+function installFocusNarration(): void {
+  narrator = new FocusNarrator({
+    enabled: () => loadConfig().a11y.focusNarration,
+    screenReaderActive,
+    announce: (text) => announce(text, { kind: 'focus' }),
+    subscribe: (on) => wantFocusEvents('narration', on),
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>)
+  })
+  onBroadcast('settings:changed', () => narrator?.sync())
+  const agent = getAgent()
+  agent?.onEvent('focus-changed', (data) => narrator?.onFocusChanged(data))
+  agent?.onEvent('agent-ready', () => {
+    // A fresh agent has no subscriptions; ask again and re-read the screen reader.
+    if (focusOwners.size) pushFocusSubscription()
+    void refreshAtState()
+  })
+  setInterval(() => void refreshAtState(), AT_POLL_MS).unref?.()
+  narrator.sync()
 }
 
 /** Installs the local grammar ahead of the LLM router and the announcer. Call once. */
@@ -202,4 +269,5 @@ export function installA11y(): void {
   )
   // Escape / voice cancel also takes numbers and the grid away and stops auto-scroll.
   bus.on('voice.cancelled', () => commandsImpl.reset())
+  installFocusNarration()
 }

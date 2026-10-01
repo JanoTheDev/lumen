@@ -32,7 +32,8 @@ export const THROTTLE_MS: Record<AnnounceKind, number> = {
   step: 0,
   error: 0,
   confirm: 0,
-  focus: 400,
+  // FocusNarrator already waits for focus to settle.
+  focus: 200,
   command: 300
 }
 

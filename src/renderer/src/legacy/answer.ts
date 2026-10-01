@@ -49,12 +49,12 @@ async function loadThemeAndConfig(): Promise<void> {
     const cfg = (await api?.getConfig?.()) as AnswerConfig | undefined
     if (cfg) {
       applyThemeVars(cfg.theme, cfg.themeCustom)
-      if (cfg.answerAutoCloseMs) CLOSE_MS = cfg.answerAutoCloseMs
+      if (typeof cfg.answerAutoCloseMs === 'number') CLOSE_MS = cfg.answerAutoCloseMs
     }
     api?.onConfigChanged?.((raw) => {
       const c = raw as AnswerConfig
       applyThemeVars(c.theme, c.themeCustom)
-      if (c.answerAutoCloseMs) CLOSE_MS = c.answerAutoCloseMs
+      if (typeof c.answerAutoCloseMs === 'number') CLOSE_MS = c.answerAutoCloseMs
     })
   } catch {
     applyThemeVars('dark')
@@ -117,6 +117,13 @@ function scheduleClose(ms: number): void {
 }
 
 function startAutoClose(): void {
+  // 0 = never close by itself (a11y timing); the card stays until clicked.
+  if (CLOSE_MS <= 0) {
+    clearTimers()
+    paused = false
+    barEl.style.width = '0'
+    return
+  }
   barEl.style.width = '100%'
   remainingMs = CLOSE_MS
   if (hovering) {
@@ -129,7 +136,7 @@ function startAutoClose(): void {
 }
 
 function pauseAutoClose(): void {
-  if (paused || !card.classList.contains('visible')) return
+  if (paused || !card.classList.contains('visible') || CLOSE_MS <= 0) return
   paused = true
   remainingMs = Math.max(0, deadline - Date.now())
   clearTimers()
@@ -137,7 +144,7 @@ function pauseAutoClose(): void {
 }
 
 function resumeAutoClose(): void {
-  if (!paused || !card.classList.contains('visible')) return
+  if (!paused || !card.classList.contains('visible') || CLOSE_MS <= 0) return
   paused = false
   scheduleClose(Math.max(remainingMs, 1500))
 }
