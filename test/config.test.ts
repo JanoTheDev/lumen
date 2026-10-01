@@ -243,6 +243,32 @@ describe('config', () => {
     expect(cfg.models).toEqual({ provider: 'auto', main: 'gpt-5', verify: 'gpt-5-nano' })
   })
 
+  it('saveConfig deep-merges nested partial patches and replaces arrays', () => {
+    saveConfig(
+      configPatchSchema.parse({
+        a11y: {
+          uiScale: 1.5,
+          dwell: { sticky: true, radiusPx: 20 },
+          switch: { enabled: true, keys: ['F1', 'F2'] }
+        }
+      })
+    )
+    saveConfig(
+      configPatchSchema.parse({
+        a11y: { dwell: { palette: true }, switch: { enabled: true, keys: ['Enter'] } }
+      })
+    )
+    const a11y = loadConfig().a11y
+    expect(a11y.uiScale).toBe(1.5)
+    expect(a11y.dwell).toEqual({
+      ...DEFAULT_CONFIG.a11y.dwell,
+      sticky: true,
+      radiusPx: 20,
+      palette: true
+    })
+    expect(a11y.switch.keys).toEqual(['Enter'])
+  })
+
   it('saveConfig rejects an invalid result and leaves the file untouched', () => {
     saveConfig({ theme: 'ocean' })
     const before = readFileSync(configPath(), 'utf8')

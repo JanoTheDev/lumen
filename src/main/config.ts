@@ -120,22 +120,22 @@ export function loadConfig(): AppConfig {
   return cached
 }
 
-/** Merges a patch one level deep into the current config, validates, and writes it. Throws on invalid result. */
-export function saveConfig(update: ConfigPatch | Partial<AppConfig>): AppConfig {
-  const current = loadConfig()
-  const next: Record<string, unknown> = { ...current }
-  for (const [key, value] of Object.entries(update)) {
-    if (value === undefined) continue
-    const prev = next[key]
-    next[key] =
-      value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      prev &&
-      typeof prev === 'object'
-        ? { ...prev, ...value }
-        : value
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v)
+
+/** Deep-merges plain objects; arrays and scalars replace, undefined keeps the old value. */
+function mergeDeep(prev: unknown, patch: unknown): unknown {
+  if (!isPlainObject(patch) || !isPlainObject(prev)) return patch
+  const out: Record<string, unknown> = { ...prev }
+  for (const [key, value] of Object.entries(patch)) {
+    if (value !== undefined) out[key] = mergeDeep(prev[key], value)
   }
+  return out
+}
+
+/** Deep-merges a patch into the current config, validates, and writes it. Throws on invalid result. */
+export function saveConfig(update: ConfigPatch | Partial<AppConfig>): AppConfig {
+  const next = mergeDeep(loadConfig(), update) as Record<string, unknown>
   const merged = configV2Schema.parse(withV2Defaults(next))
   if (!existsSync(dir())) mkdirSync(dir(), { recursive: true })
   const path = configPath()
@@ -148,9 +148,4 @@ export function saveConfig(update: ConfigPatch | Partial<AppConfig>): AppConfig 
   cached = merged
   log('done', `config saved to ${path}`)
   return merged
-}
-
-export function resetConfig(): AppConfig {
-  cached = clone(DEFAULT_CONFIG)
-  return cached
 }
