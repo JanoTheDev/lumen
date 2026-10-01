@@ -1,9 +1,10 @@
 import OpenAI from 'openai'
 import { parseJsonAs } from '../json'
-import { openaiStrictSchema } from './structured'
+import { anthropicJsonSchema, openaiStrictSchema } from './structured'
 import {
   EMPTY_USAGE,
   LlmError,
+  looseToolSchema,
   REFUSAL_MESSAGE,
   retryBudget,
   type AgentMessage,
@@ -193,7 +194,10 @@ function inputItems(m: AgentMessage): InputItem[] {
   return items
 }
 
-/** Strict function tools (every field required, optional ones nullable), auto tool choice. */
+/**
+ * Strict function tools (every field required, optional ones nullable) unless a tool says
+ * `strict: false` (best-effort, its schema as is); auto tool choice.
+ */
 export function buildToolParams(req: ToolTurnRequest): CreateParams {
   const params: CreateParams = {
     model: req.model,
@@ -204,8 +208,10 @@ export function buildToolParams(req: ToolTurnRequest): CreateParams {
       type: 'function',
       name: t.name,
       description: t.description,
-      parameters: openaiStrictSchema(t.schema),
-      strict: true
+      ...(t.strict === false
+        ? // Responses normalises to strict unless told otherwise.
+          { parameters: looseToolSchema(t, anthropicJsonSchema), strict: false }
+        : { parameters: openaiStrictSchema(t.schema), strict: true })
     })),
     tool_choice: 'auto'
   }

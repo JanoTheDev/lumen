@@ -109,11 +109,30 @@ export const EMPTY_USAGE: Usage = {
 
 // ---- Tool use (agent mode) ----
 
-/** One tool the model may call. The zod schema becomes each provider's strict JSON schema. */
+/**
+ * One tool the model may call. The zod schema becomes each provider's strict JSON schema.
+ * `strict: false` sends a best-effort tool instead: any JSON Schema (`jsonSchema` when given,
+ * else the zod one), outside the strict limits (Anthropic: 20 strict tools, 24 optional and 16
+ * union parameters across all strict schemas of a request), but inputs are not guaranteed to
+ * match, so the handler must check them.
+ */
 export interface ToolDef {
   name: string
   description: string
   schema: ZodType
+  /** Default true. */
+  strict?: boolean
+  /** Non-strict only: the input JSON Schema as is (an object schema), e.g. an MCP tool's. */
+  jsonSchema?: Record<string, unknown>
+}
+
+/** The schema of a non-strict tool: the raw one when given, else the zod one, as an object. */
+export function looseToolSchema(
+  t: ToolDef,
+  fromZod: (s: ZodType) => Record<string, unknown>
+): Record<string, unknown> {
+  const s = t.jsonSchema ?? fromZod(t.schema)
+  return { ...s, type: 'object', properties: s.properties ?? {} }
 }
 
 export type ToolContent =

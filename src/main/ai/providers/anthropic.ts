@@ -4,6 +4,7 @@ import { anthropicJsonSchema } from './structured'
 import {
   EMPTY_USAGE,
   LlmError,
+  looseToolSchema,
   REFUSAL_MESSAGE,
   retryBudget,
   type AgentMessage,
@@ -165,8 +166,14 @@ export function buildToolParams(req: ToolTurnRequest): CreateParams {
   const tools: Anthropic.Tool[] = req.tools.map((t, i) => ({
     name: t.name,
     description: t.description,
-    input_schema: anthropicJsonSchema(t.schema) as Anthropic.Tool.InputSchema,
-    strict: true,
+    ...(t.strict === false
+      ? {
+          input_schema: looseToolSchema(t, anthropicJsonSchema) as Anthropic.Tool.InputSchema
+        }
+      : {
+          input_schema: anthropicJsonSchema(t.schema) as Anthropic.Tool.InputSchema,
+          strict: true
+        }),
     ...(i === req.tools.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {})
   }))
   const messages = req.messages.map(messageParam)

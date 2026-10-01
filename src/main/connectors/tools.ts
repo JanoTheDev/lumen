@@ -1,5 +1,6 @@
 // MCP tools for the agent loop (08 T18). Each server tool becomes `mcp__<serverId>__<tool>`
-// with its input schema turned into the strict subset (schema.ts). Tools set to "deny" are
+// with its input schema turned into the strict subset (schema.ts), or sent as a non-strict
+// tool with its own (compacted) schema when it does not fit. Tools set to "deny" are
 // never offered. Every call goes through the policy gate with origin "mcp" (annotations →
 // risk, first use → medium, "always" grants per tool), and results come back fenced as
 // <observed source="mcp:<id>"> data with secrets redacted.
@@ -20,6 +21,11 @@ const MAX_DESC = 800
 /** Optional parameters MCP tools may add on top of the built-in tools (Anthropic caps 24). */
 export const DEFAULT_OPTIONAL_BUDGET = 4
 const MAX_OBSERVED = 20_000
+/** A non-strict tool's compacted schema above this many characters takes JSON text instead. */
+const MAX_LOOSE_SCHEMA = 6000
+
+/** Placeholder zod schema of a non-strict tool (the provider sends `jsonSchema`). */
+const looseSchema = z.record(z.string(), z.unknown())
 
 const argsSchema = z.object({
   arguments: z
@@ -31,8 +37,15 @@ export interface McpToolEntry {
   def: ToolDef
   server: ConnectorServer
   tool: McpTool
-  /** true: the model sends {arguments: "<json>"} (schema outside the strict subset). */
+  /** true: the model sends {arguments: "<json>"} (schema neither strict nor sendable as is). */
   jsonArgs: boolean
+}
+
+/** The schema of a non-strict tool, or null when it is not an object schema or too large. */
+function looseSchemaOf(inputSchema: unknown): Record<string, unknown> | null {
+  const s = compactSchema(inputSchema ?? { type: 'object' }) as Record<string, unknown>
+  if (!s || typeof s !== 'object' || (s.type !== undefined && s.type !== 'object')) return null
+  return JSON.stringify(s).length <= MAX_LOOSE_SCHEMA ? s : null
 }
 
 function policyOf(server: ConnectorServer, tool: string): ToolPolicy | undefined {
@@ -66,7 +79,9 @@ function describeTool(server: ConnectorServer, tool: McpTool, jsonArgs: boolean)
 /**
  * The definitions for every allowed tool, in a stable order (server, then tool name). Tools
  * whose schema is outside the strict subset, or whose optional fields would pass the budget,
- * take one JSON-text "arguments" field instead.
+ * go as non-strict tools with their own schema (inputs then unchecked by the provider; the
+ * server validates). Only a schema that is not an object or is very large takes one JSON-text
+ * "arguments" field instead.
  */
 export function mcpToolDefs(
   list: { server: ConnectorServer; tools: McpTool[] }[],
@@ -83,17 +98,21 @@ export function mcpToolDefs(
       const conv = fromToolSchema(tool.inputSchema)
       const typed = !!conv && conv.optional <= budget
       if (typed) budget -= conv.optional
+      const loose = typed ? null : looseSchemaOf(tool.inputSchema)
+      const jsonArgs = !typed && !loose
       const name = safeName(server.id, tool.name, taken)
-      out.push({
-        def: {
-          name,
-          description: describeTool(server, tool, !typed),
-          schema: typed ? conv.schema : argsSchema
-        },
-        server,
-        tool,
-        jsonArgs: !typed
-      })
+      const def: ToolDef = typed
+        ? { name, description: describeTool(server, tool, false), schema: conv.schema }
+        : loose
+          ? {
+              name,
+              description: describeTool(server, tool, false),
+              schema: looseSchema,
+              strict: false,
+              jsonSchema: loose
+            }
+          : { name, description: describeTool(server, tool, true), schema: argsSchema }
+      out.push({ def, server, tool, jsonArgs })
     }
   }
   return out

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ConnectorServer } from '@shared/connectors'
 import { anthropicJsonSchema, openaiStrictSchema } from '../../src/main/ai/providers/structured'
+import { buildToolParams as anthropicParams } from '../../src/main/ai/providers/anthropic'
+import { buildToolParams as openaiParams } from '../../src/main/ai/providers/openai'
 import { evaluate, type EvalAction } from '../../src/main/actions/safety'
 import type { GateCtx } from '../../src/main/actions/policy'
 import type { ToolCtx } from '../../src/main/agent-mode/runner'
@@ -120,7 +122,7 @@ describe('mcpToolDefs', () => {
     for (const n of names) expect(n).toMatch(/^[a-zA-Z0-9_-]{1,64}$/)
   })
 
-  it('falls back to JSON arguments past the optional budget or outside the subset', () => {
+  it('goes non-strict with its own schema past the optional budget or outside the subset', () => {
     const opt = { type: 'object', properties: { a: { type: 'string' }, b: { type: 'string' } } }
     const union = { type: 'object', properties: { a: { anyOf: [{ type: 'string' }] } } }
     const tools = [
@@ -129,11 +131,47 @@ describe('mcpToolDefs', () => {
       tool('u', { inputSchema: union })
     ]
     const defs = mcpToolDefs([{ server: server(), tools }], 3)
-    expect(defs.map((d) => d.jsonArgs)).toEqual([false, true, true])
-    expect(defs[2].def.description).toContain('Arguments JSON Schema')
-    for (const d of defs)
-      for (const j of [anthropicJsonSchema(d.def.schema), openaiStrictSchema(d.def.schema)])
-        expect(j).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(defs.map((d) => d.jsonArgs)).toEqual([false, false, false])
+    expect(defs.map((d) => d.def.strict)).toEqual([undefined, false, false])
+    expect(defs[2].def.jsonSchema).toEqual(union)
+    expect(defs[2].def.description).not.toContain('Arguments JSON Schema')
+    for (const j of [
+      anthropicJsonSchema(defs[0].def.schema),
+      openaiStrictSchema(defs[0].def.schema)
+    ])
+      expect(j).toMatchObject({ type: 'object', additionalProperties: false })
+
+    const req = {
+      model: 'm',
+      system: [],
+      tools: defs.map((d) => d.def),
+      messages: [],
+      maxTokens: 1
+    }
+    const a = anthropicParams(req).tools as Record<string, unknown>[]
+    expect(a.map((t) => t.strict)).toEqual([true, undefined, undefined])
+    expect(a[2].input_schema).toEqual(union)
+    const o = openaiParams(req).tools as Record<string, unknown>[]
+    expect(o.map((t) => t.strict)).toEqual([true, false, false])
+    expect(o[2].parameters).toEqual(union)
+  })
+
+  it('a huge or non-object schema still takes JSON text arguments', () => {
+    const props = Object.fromEntries(
+      Array.from({ length: 200 }, (_, i) => [
+        `field${i}`,
+        { anyOf: [{ type: 'string' }], description: 'x'.repeat(40) }
+      ])
+    )
+    const defs = mcpToolDefs([
+      {
+        server: server(),
+        tools: [tool('big', { inputSchema: { type: 'object', properties: props } })]
+      }
+    ])
+    expect(defs[0].jsonArgs).toBe(true)
+    expect(defs[0].def.strict).toBeUndefined()
+    expect(defs[0].def.description).toContain('Arguments JSON Schema')
   })
 })
 
@@ -197,10 +235,28 @@ describe('MCP tool handlers', () => {
     expect(finish).toHaveBeenCalledWith('ok')
   })
 
-  it('parses JSON arguments for fallback tools', async () => {
+  it('passes a non-strict tool input through as is', async () => {
     const union = { type: 'object', properties: { a: { anyOf: [{ type: 'string' }] } } }
     const entries = mcpToolDefs([
       { server: server(), tools: [tool('u', { inputSchema: union, readOnly: true })] }
+    ])
+    const { gate } = fakeGate(true)
+    const call = vi.fn(async () => ok(''))
+    const h = createMcpToolHandlers(entries, env(), { manager: { call }, gate })
+    await h.mcp__notes__u({ a: 'b' }, ctx())
+    expect(call).toHaveBeenCalledWith(expect.anything(), 'u', { a: 'b' }, expect.anything())
+  })
+
+  it('parses JSON arguments for fallback tools', async () => {
+    const props = Object.fromEntries(
+      Array.from({ length: 200 }, (_, i) => [
+        `f${i}`,
+        { type: 'string', description: 'y'.repeat(40) }
+      ])
+    )
+    const big = { type: 'object', properties: { a: { anyOf: [{ type: 'string' }] }, ...props } }
+    const entries = mcpToolDefs([
+      { server: server(), tools: [tool('u', { inputSchema: big, readOnly: true })] }
     ])
     const { gate } = fakeGate(true)
     const call = vi.fn(async () => ok(''))
