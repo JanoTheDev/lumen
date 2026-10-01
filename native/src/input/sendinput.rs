@@ -139,6 +139,17 @@ mod win {
         }
     }
 
+    /// The INPUT structs `send_keys` would hand to SendInput (used by `--bench`).
+    pub fn key_inputs(keys: &[Key]) -> Vec<INPUT> {
+        keys.iter().map(kb).collect()
+    }
+
+    /// Injects one zero-delta relative mouse move: harmless, measures the SendInput call itself.
+    pub fn nudge() -> Result<(), AgentError> {
+        use windows::Win32::UI::Input::KeyboardAndMouse::MOUSEEVENTF_MOVE;
+        send(&[mouse(MOUSEEVENTF_MOVE, 0)])
+    }
+
     fn send(inputs: &[INPUT]) -> Result<(), AgentError> {
         if inputs.is_empty() {
             return Ok(());

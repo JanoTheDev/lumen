@@ -4,6 +4,7 @@
 
 mod announce;
 mod app;
+mod bench;
 mod capture;
 mod dpi;
 mod dwell;
@@ -52,6 +53,9 @@ fn main() {
         }
     };
     tracing::info!("lumen-native {} dpi awareness={awareness}", app::VERSION);
+    if opts.bench {
+        std::process::exit(bench::run(sink));
+    }
 
     let (out, writer) = proto::writer::start(sink);
     let router = Router::new(out.clone(), READ_WORKERS, com_init);
