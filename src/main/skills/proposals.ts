@@ -2,9 +2,10 @@
 // task finishes, Lumen offers once to keep it as a skill when the same kind of task has now
 // worked twice, or when the user had to correct the agent on the way. No nagging: each
 // pattern is offered at most once, a "no" is remembered, "stop offering skills" turns it off.
-// Runs are kept as hashed signatures only (no prompt words, no typed text), in
-// ~/.ai-overlay/skills-proposals.json. Pure apart from the small store.
-import { createHash } from 'crypto'
+// Runs are kept as keyed hashes only (HMAC with a per-install secret, so a word list cannot
+// turn them back into words; no typed text), in ~/.ai-overlay/skills-proposals.json, and not
+// at all while memory is off or private. Pure apart from the small store.
+import { createHmac, randomBytes } from 'crypto'
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import type { AgentRunTrace } from './authoring'
@@ -22,7 +23,11 @@ const STOP = new Set(
   )
 )
 
-const h = (s: string): string => createHash('sha256').update(s).digest('hex').slice(0, 10)
+type Hash = (s: string) => string
+const keyed =
+  (key: Buffer): Hash =>
+  (s) =>
+    createHmac('sha256', key).update(s).digest('hex').slice(0, 12)
 
 export interface RunSignature {
   /** Hashed content words of the request. */
@@ -61,7 +66,7 @@ function safeHost(url: string): string {
   }
 }
 
-export function runSignature(run: AgentRunTrace): RunSignature {
+export function runSignature(run: AgentRunTrace, h: Hash): RunSignature {
   return {
     words: requestWords(run.prompt).map(h),
     actions: [...new Set(run.steps.map(stepKey))].map(h)
@@ -95,9 +100,24 @@ export interface ProposalData {
   off: boolean
   /** Skills told "needs an update" (cleared when the skill is changed). */
   noticed: string[]
+  /** Signatures are keyed hashes (older files had plain ones, dropped on load). */
+  keyed?: true
 }
 
-const empty = (): ProposalData => ({ runs: [], patterns: [], off: false, noticed: [] })
+const empty = (): ProposalData => ({
+  runs: [],
+  patterns: [],
+  off: false,
+  noticed: [],
+  keyed: true
+})
+
+export interface ProposalStoreOptions {
+  /** The per-install HMAC key; a random one per store when left out (tests). */
+  key?: Buffer
+  /** Runs may be kept (memory on, not private); offers are made only then. */
+  canRecord?: () => boolean
+}
 
 export type ProposalReason = 'repeated' | 'corrected'
 
@@ -108,8 +128,13 @@ export interface ProposalVerdict {
 
 export class ProposalStore {
   data: ProposalData
+  private readonly h: Hash
 
-  constructor(private readonly file: string | null) {
+  constructor(
+    private readonly file: string | null,
+    private readonly opts: ProposalStoreOptions = {}
+  ) {
+    this.h = keyed(opts.key ?? randomBytes(32))
     this.data = empty()
     if (!file) return
     try {
@@ -118,12 +143,16 @@ export class ProposalStore {
         !!s &&
         Array.isArray((s as RunSignature).words) &&
         Array.isArray((s as RunSignature).actions)
+      // Plain hashes from older files can be reversed with a word list: not kept.
+      const old = raw.keyed !== true
       this.data = {
-        runs: (raw.runs ?? []).filter((r) => sigOk(r?.sig)).slice(-RUNS_MAX),
-        patterns: (raw.patterns ?? []).filter((p) => sigOk(p?.sig)).slice(-PATTERNS_MAX),
+        runs: old ? [] : (raw.runs ?? []).filter((r) => sigOk(r?.sig)).slice(-RUNS_MAX),
+        patterns: old ? [] : (raw.patterns ?? []).filter((p) => sigOk(p?.sig)).slice(-PATTERNS_MAX),
         off: raw.off === true,
-        noticed: (raw.noticed ?? []).filter((n) => typeof n === 'string').slice(0, 300)
+        noticed: (raw.noticed ?? []).filter((n) => typeof n === 'string').slice(0, 300),
+        keyed: true
       }
+      if (old) this.save()
     } catch {
       // Missing or broken: start empty.
     }
@@ -137,7 +166,8 @@ export class ProposalStore {
     run: AgentRunTrace,
     opts: { corrected: boolean; covered: boolean; now: number }
   ): ProposalVerdict | null {
-    const sig = runSignature(run)
+    if (this.opts.canRecord && !this.opts.canRecord()) return null
+    const sig = this.signature(run)
     const earlier = this.data.runs.filter((r) => similarity(sig, r.sig) >= SIMILAR_AT).length
     this.data.runs = [...this.data.runs, { sig, at: opts.now }].slice(-RUNS_MAX)
     this.save()
@@ -148,8 +178,14 @@ export class ProposalStore {
     return null
   }
 
+  /** This store's keyed signature of a run. */
+  signature(run: AgentRunTrace): RunSignature {
+    return runSignature(run, this.h)
+  }
+
   /** The offer was made (or answered): this pattern is never offered again. */
   answered(sig: RunSignature, answer: Pattern['answer'], now: number): void {
+    if (this.opts.canRecord && !this.opts.canRecord()) return
     const rest = this.data.patterns.filter((p) => similarity(sig, p.sig) < 0.999)
     this.data.patterns = [...rest, { sig, at: now, answer }].slice(-PATTERNS_MAX)
     this.save()

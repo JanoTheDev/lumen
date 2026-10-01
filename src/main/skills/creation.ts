@@ -60,7 +60,15 @@ import {
 } from './edit'
 import { setSkillAuthoringHost } from './agent-tools'
 import { needsUpdate, needsUpdateLine } from './health'
-import { connectorChoices, getSkillRegistry, matchTrigger, onSkillRun, skillRuns } from './index'
+import {
+  connectorChoices,
+  getSkillRegistry,
+  matchTrigger,
+  onSkillRun,
+  proposalKey,
+  proposalsMayRecord,
+  skillRuns
+} from './index'
 import { saveSkillFiles, writeNewSkill } from './manage'
 import { SKILL_FILE } from './manifest'
 import {
@@ -760,7 +768,10 @@ export function installSkillCreation(
       const r = saveSkillFiles(registry, name, files)
       return r.ok ? { ok: true } : { ok: false, error: r.error }
     },
-    proposals: new ProposalStore(join(homedir(), '.ai-overlay', 'skills-proposals.json')),
+    proposals: new ProposalStore(join(homedir(), '.ai-overlay', 'skills-proposals.json'), {
+      key: proposalKey(join(homedir(), '.ai-overlay', 'skills-proposals.key')),
+      canRecord: proposalsMayRecord
+    }),
     covered: (prompt) => matchTrigger(prompt)?.kind === 'skill',
     ...(host.canSpeakUp ? { canSpeakUp: host.canSpeakUp } : {}),
     ...(host.notice ? { notice: host.notice } : {}),

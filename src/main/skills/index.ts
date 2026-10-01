@@ -3,11 +3,11 @@
 // and serves Settings → Skills (file dialogs, GitHub links, the two-step install with a
 // permissions screen). The pure parts live next to it: registry, disclosure (L1/L2/L3 tools),
 // triggers, manage, kind.
-import { app, BrowserWindow, dialog } from 'electron'
+import { app, BrowserWindow, dialog, safeStorage } from 'electron'
 import { randomBytes } from 'crypto'
-import { readFileSync, statSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { homedir } from 'os'
-import { basename, join } from 'path'
+import { basename, dirname, join } from 'path'
 import type {
   PackInstallResult,
   SkillActionResult,
@@ -16,6 +16,7 @@ import type {
   SkillInstallPreview
 } from '@shared/channels'
 import type { SkillRunRecord, SkillSummary } from '@shared/types'
+import { loadConfig } from '../config'
 import { log } from '../logger'
 import { fetchPack, githubPackSource } from '../packs/fetch'
 import { ZIP_LIMITS } from '../packs/zip-read'
@@ -177,6 +178,48 @@ export function removeSkill(name: string): SkillActionResult {
     log('done', `skill ${name} deleted`)
   }
   return r
+}
+
+// ---- skill offers (proposals.ts) ----
+
+/**
+ * The per-install HMAC key for skill-offer signatures: random, kept DPAPI-encrypted next to
+ * the offers file (plain hex only when encryption is not available). A lost key starts over.
+ */
+export function proposalKey(file: string): Buffer {
+  const enc = (): boolean => {
+    try {
+      return safeStorage.isEncryptionAvailable()
+    } catch {
+      return false
+    }
+  }
+  try {
+    const raw = readFileSync(file)
+    const hex = enc() ? safeStorage.decryptString(raw) : raw.toString('utf8')
+    if (/^[0-9a-f]{64}$/.test(hex)) return Buffer.from(hex, 'hex')
+  } catch {
+    // Missing or unreadable: a new key.
+  }
+  const key = randomBytes(32)
+  try {
+    mkdirSync(dirname(file), { recursive: true })
+    const hex = key.toString('hex')
+    writeFileSync(file, enc() ? safeStorage.encryptString(hex) : hex)
+  } catch (e) {
+    log('fail', `skill offers key not saved: ${(e as Error).message}`)
+  }
+  return key
+}
+
+/** Runs may be kept for offers: memory on and not private. */
+export function proposalsMayRecord(): boolean {
+  try {
+    const m = loadConfig().memory
+    return m.enabled && !m.privateMode
+  } catch {
+    return false
+  }
 }
 
 // ---- "Write it for me" (11 F9) ----

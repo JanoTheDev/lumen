@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { SkillRunRecord } from '@shared/types'
@@ -10,7 +10,6 @@ import {
   isCorrection,
   matchOfferAnswer,
   requestWords,
-  runSignature,
   similarity
 } from '../../src/main/skills/proposals'
 
@@ -25,9 +24,10 @@ const opts = { corrected: false, covered: false, now: 1 }
 
 describe('skill proposals', () => {
   it('says alike runs are alike and others are not', () => {
-    const a = runSignature(run('export the image as png', ['File', 'Export As', 'Export']))
-    const b = runSignature(run('export this picture as a png', ['File', 'Export As', 'Export']))
-    const c = runSignature(run('mail the report to anna', ['New mail', 'Send']))
+    const st = new ProposalStore(null)
+    const a = st.signature(run('export the image as png', ['File', 'Export As', 'Export']))
+    const b = st.signature(run('export this picture as a png', ['File', 'Export As', 'Export']))
+    const c = st.signature(run('mail the report to anna', ['New mail', 'Send']))
     expect(similarity(a, b)).toBeGreaterThanOrEqual(0.6)
     expect(similarity(a, c)).toBeLessThan(0.3)
   })
@@ -36,15 +36,50 @@ describe('skill proposals', () => {
     const dir = mkdtempSync(join(tmpdir(), 'lumen-prop-'))
     try {
       const file = join(dir, 'p.json')
-      const s = new ProposalStore(file)
+      const key = Buffer.alloc(32, 7)
+      const s = new ProposalStore(file, { key })
       s.consider(run('mail the secret plan to anna@example.com', ['Send']), opts)
       const raw = readFileSync(file, 'utf8')
       expect(raw).not.toMatch(/secret|anna|Send/)
-      expect(new ProposalStore(file).data.runs).toHaveLength(1)
+      expect(new ProposalStore(file, { key }).data.runs).toHaveLength(1)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
     expect(requestWords('Mail "Q3 plan" to bob@x.com at https://x.com now')).toEqual(['mail'])
+  })
+
+  it('hashes with a per-install key, drops plain hashes and keeps nothing in private mode', () => {
+    const r = run('export the image as png', ['File', 'Export As'])
+    const one = new ProposalStore(null, { key: Buffer.alloc(32, 1) }).signature(r)
+    const two = new ProposalStore(null, { key: Buffer.alloc(32, 2) }).signature(r)
+    expect(one.words.some((w) => two.words.includes(w))).toBe(false)
+    const dir = mkdtempSync(join(tmpdir(), 'lumen-prop-'))
+    try {
+      const file = join(dir, 'p.json')
+      writeFileSync(
+        file,
+        JSON.stringify({
+          runs: [{ sig: { words: ['ab'], actions: [] }, at: 1 }],
+          patterns: [],
+          off: true,
+          noticed: []
+        })
+      )
+      const upgraded = new ProposalStore(file)
+      expect(upgraded.data.runs).toEqual([])
+      expect(upgraded.data.off).toBe(true)
+      rmSync(file)
+      let record = false
+      const priv = new ProposalStore(file, { canRecord: () => record })
+      expect(priv.consider(r, opts)).toBeNull()
+      expect(priv.consider(r, opts)).toBeNull()
+      expect(existsSync(file)).toBe(false)
+      record = true
+      expect(priv.consider(r, opts)).toBeNull()
+      expect(priv.consider(r, opts)?.reason).toBe('repeated')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   it('offers on the second alike success, once per pattern', () => {
