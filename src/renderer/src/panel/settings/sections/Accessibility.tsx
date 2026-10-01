@@ -13,6 +13,7 @@ import {
   icons
 } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { FaceGestures } from './FaceGestures'
 
 // Keys a commercial switch interface usually sends; two keys = step scanning (move, pick).
 const SWITCH_KEYS = [
@@ -384,6 +385,8 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           onCommit={(scanIntervalMs) => patch({ a11y: { switch: { ...sw, scanIntervalMs } } })}
         />
       </Card>
+
+      <FaceGestures cfg={cfg} patch={patch} />
 
       <Card
         title="Keyboard shortcuts"
