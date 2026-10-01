@@ -22,6 +22,10 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 | _"In the background, find internships at Exness."_     | Works on it as a background task while you keep using the PC, and tells you when it's done. |
 | _"Show numbers"_ → _"click 5"_                         | Numbers every clickable thing and clicks it, instantly, without calling the AI.             |
 | _"Read this aloud"_ / _"Summarize this page"_          | Built-in skills that run on whatever is on screen.                                          |
+| _"Click this… move this there"_ (while pointing)       | Point and say: combines your words with where the pointer or gaze was.                      |
+| _"Every weekday at 9, read me my calendar."_           | Creates a routine that runs on that schedule.                                               |
+| _"Undo that."_                                         | Reverses Lumen's last actions where possible, and says what can't be undone.                |
+| _"What changed?"_                                      | Describes what's different on screen since your last command.                               |
 | _"What did you just do?"_                              | Reads back the last actions from the local audit log.                                       |
 | _"Stop"_ or Escape                                     | Cancels whatever is running, including the model call and pending clicks.                   |
 
@@ -32,6 +36,14 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Background tasks.** Say "in the background…" or "keep an eye on…" and the work runs in parallel without touching your mouse or keyboard. Results land in the Tasks list on Home with a tray badge.
 - **Safety first.** Every action is rated low / medium / high risk. Risky ones need your OK ("yes", "always" for this site, or "no"), sending, deleting and buying always ask, dangerous shortcuts (Run dialog, terminals) are blocked, passwords and secrets are redacted, and text on screen is treated as data, never as instructions. Every action is written to a local audit log.
 - **Multi-monitor and any display scaling.** Highlights and clicks land in the right place on every screen.
+- **Drop a file** (PDF, Word, text, CSV, image) on the assistant bar and ask about it.
+
+### Connectors, routines and Claude Code
+
+- **Connectors:** add any MCP server by URL or command in Settings, and Lumen can use its tools in agent mode and background tasks. Every tool call goes through the same safety gate; secrets are stored encrypted.
+- **Routines:** "every weekday at 9…" or "every 30 minutes…" runs a task on a schedule while Lumen is running. Risky steps are skipped unless you approved them for that routine, and three failures in a row turn it off.
+- **Proactive reminders** (opt-in): "when I open Excel, remind me to save a copy".
+- **Claude Code by voice:** open a project, give Claude Code a task, hear what it's doing and answer its questions hands-free, using your own `claude` login. An optional autopilot answers routine questions for you, with a hard deny list.
 
 ### Voice
 
@@ -45,6 +57,8 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 ### Accessibility
 
 - **Local voice commands:** "show numbers", "click 5", "show grid", "scroll down" and more run instantly, with no AI call. Lumen steps aside when Windows Voice Access or Dragon is running.
+- **Point and say:** "click this", "move this… there", "what's that?" use where your pointer or gaze was as you spoke.
+- **Community labels:** unnamed buttons get a clear name your screen reader can use, shareable with others.
 - **Mouse grid**, **dwell clicking** with a click-type palette (left, right, double, drag) and tremor smoothing that suits eye-gaze and head pointers, plus an on-screen keyboard.
 - **Switch scanning** with a scan ring, menu and scan keyboard for one- or two-switch users.
 - **Screen reader output** through NVDA, JAWS or Narrator, focus narration, "describe the screen" and "read this".
@@ -57,18 +71,32 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Lessons** with a hint ladder: point, wait, check, explain _why_, and "do it for me" when you'd rather watch.
 - **"Show me how"** generates a lesson on the spot for anything a pack doesn't cover.
 - **Record my steps:** do a task once and Lumen turns it into a lesson you can replay or share.
-- **Progress is saved**, so "continue where we left off" works across sessions.
-- **Share packs** as a single `.lumen` file; install community packs from a file or link.
+- **Practice challenges** per app, with feedback and a streak.
+- **App helpers** for Blender and OBS read the app's real state, so lesson checks don't have to guess from the screen.
+- **Progress is saved**, so "continue where we left off" works across sessions. A local **learning journal** answers "what did I learn this week?"
+- **Share packs and lessons** as a single `.lumen` file, e.g. a teacher or helper sending one to a learner; install community packs from a file or link.
+- **Reading level:** plain, standard or expert explanations; say "explain simpler" or "more detail".
 
 ### Skills
 
-Skills are small, shareable abilities written as a `SKILL.md`. Lumen ships starter skills (read this aloud, summarize this page, reply to this email, screenshot and explain, make text bigger here, morning briefing, clean downloads, export for YouTube, fill this form from my profile), triggers them by phrase or app, and lets you install, write and share your own from Settings.
+Skills are small, shareable abilities written as a `SKILL.md`, optionally with fixed steps that run without the AI. Lumen ships starter skills (read this aloud, summarize this page, reply to this email, screenshot and explain, make text bigger here, morning briefing, clean downloads, export for YouTube, fill this form from my profile) and triggers them by phrase or app. Make your own by saying it ("when I say 'morning', open my mail and calendar"), by doing it once while Lumen records, or with "save that as a skill" after a task went well. Install and share them from Settings, which also shows each skill's run history.
+
+### Smart helpers
+
+Optional, local, and off by default (Settings → Smart helpers), except undo:
+
+- **Focus mode:** dims everything in a busy app except what you need right now. "Only show the timeline", "show everything".
+- **Undo:** "undo that" or "undo the last 3 things" reverses Lumen's actions newest first and says honestly what can't be undone (like a sent email).
+- **Shortcut coach:** notices when you keep using a menu for something with a shortcut and suggests it once, or a voice command if keys are hard for you.
+- **Comfort:** notices when you seem tired and offers slower timings or bigger targets. It never changes a setting without asking.
+- **Error rescue:** spots error dialogs and offers to explain them in plain words, and fix them with your OK.
+- **What changed?** describes the difference since your last command, for blind and low-vision users.
 
 ### Everything else
 
 - **Home flyout** with an ask box, suggestions, recent questions, background tasks and quick toggles.
 - **First-run setup** with profiles, one API key, voice files and a practice round.
-- **Settings** for hotkeys, voice, accessibility, interface, library, models, skills, memory and appearance (eight themes including a custom one); no JSON editing.
+- **Settings** for voice, accessibility, buddy and look, models and keys, memory, lessons, skills, connectors, background and routines, smart helpers, app helpers, Claude Code and privacy (eight themes including a custom one); no JSON editing.
 - **Memory** you can see, edit and delete, plus a private mode.
 - **Usage and cost** per day, shown in Settings.
 - **Automatic updates** from GitHub Releases (installed build; the portable build tells you when one is out).
@@ -195,39 +223,33 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 **Done**
 
-- [x] Security: sandboxed windows, validated settings and IPC, risk-rated safety gate, local audit log
+- [x] Security: sandboxed windows, validated settings and IPC, risk-rated safety gate, local audit log, redaction
 - [x] Rust native helper, no Python needed; one-click per-user installer, portable build, auto-update
 - [x] Accurate pointing: UI Automation, numbered marks, OCR, zoom-in second look
 - [x] AI intent router, agent mode with plan, countdown, ghost cursor and caps
-- [x] Background tasks running in parallel, with a Tasks list on Home
+- [x] Background tasks, routines and opt-in proactive reminders
+- [x] MCP connectors with per-tool permissions
+- [x] Claude Code by voice, with optional autopilot
+- [x] File drop on the assistant bar (PDF, Word, text, images)
 - [x] Local speech recognition, Windows voices, barge-in, conversation mode, seven reply languages
 - [x] Dictation anywhere with a learning dictionary
 - [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning
-- [x] Screen reader output (NVDA, JAWS, Narrator), simple mode, text scale, reduced motion, high contrast
-- [x] App packs for ten apps, 50+ lessons, show me how, record my steps, saved progress, `.lumen` sharing
-- [x] Skills: `SKILL.md` format, built-in starter skills, install and share
+- [x] Point and say ("click this", "move this there")
+- [x] Screen reader output (NVDA, JAWS, Narrator), community labels, simple mode, text scale, reduced motion, high contrast
+- [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress
+- [x] Blender and OBS app helpers for exact lesson checks
+- [x] Sharing packs and lessons as `.lumen` files
+- [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording or "save that as a skill"
+- [x] Smart helpers: focus mode, undo, shortcut coach, comfort, error rescue, what changed, reading level, learning journal
 - [x] Assistant bar, screen layer, cursor buddy, Home, first-run setup, rebuilt Settings, memory
 - [x] Experimental local models (Ollama, LM Studio)
 
 **In progress**
 
-- [ ] **Connectors:** add MCP servers (by URL or command) and let Lumen use their tools, with per-tool permissions
-- [ ] **Routines:** run a task on a schedule, paused automatically after repeated failures
-- [ ] **Focus mode:** dim everything in a complex app except what the current step needs
-- [ ] **Undo what you just did:** "undo that" reverses Lumen's last actions where possible, and says what can't be undone
-- [ ] **Coach:** shortcut tips, error rescue ("want me to explain this error?"), fatigue-aware pacing, reading level
-- [ ] **"What changed?"** after an action, for blind and low-vision users
-- [ ] **Learning journal:** "what did I learn this week?"
-- [ ] **Claude Code by voice:** open a project, start and answer a coding session hands-free
+- [ ] Turn a YouTube or web tutorial into a step-by-step lesson in the real app
 
 **Next**
 
-- [ ] Drop a file (PDF, Word, image) on the assistant bar to ask about it
-- [ ] Turn a YouTube or web tutorial into a step-by-step lesson in the real app
-- [ ] Community accessibility labels for unlabeled buttons
-- [ ] "Put that there": voice plus pointer or gaze for click and drag
-- [ ] Skills by voice, by demonstration ("watch me") and "save that as a skill"
-- [ ] Practice challenges per app
 - [ ] Face-gesture input (webcam, local)
 - [ ] Browser research through the page itself, not screenshots
 - [ ] Optional streaming cloud voices (paid, opt-in)
