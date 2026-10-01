@@ -36,8 +36,18 @@ let lastCursor: Point | null = null
 let cursorDisplay: number | null = null
 let captureDisplay: number | null = null
 
+let created = false
+
 const emptyScene = (s: Scene): boolean =>
   !s.highlights.length && !s.buddy && !s.marks?.length && !s.grid && !s.annotations?.length
+
+/**
+ * What is drawn right now. While hidden for a screenshot, the a11y numbers and grid stay up:
+ * the user is choosing from them, and the model may as well see what the user sees.
+ */
+function visibleScene(): Scene {
+  return suppressed ? { highlights: [], marks: scene.marks, grid: scene.grid } : scene
+}
 
 function intersects(r: Rect, b: Electron.Rectangle): boolean {
   return r.x < b.x + b.width && r.x + r.w > b.x && r.y < b.y + b.height && r.y + r.h > b.y
@@ -79,7 +89,7 @@ function showLayer(l: Layer): void {
     clearTimeout(l.hideTimer)
     l.hideTimer = null
   }
-  if (suppressed || !l.ready) return
+  if (!l.ready || (suppressed && !l.hasScene)) return
   if (!l.win.isVisible()) {
     l.win.showInactive()
     if (!l.placed) {
@@ -106,7 +116,7 @@ function needsLayer(l: Layer): boolean {
 
 function renderLayer(l: Layer): void {
   if (!l.ready) return
-  const local = localize(scene, l.display)
+  const local = localize(visibleScene(), l.display)
   l.hasScene = !emptyScene(local)
   l.hasBuddy = !!local.buddy
   if (local.buddy) sendCursorTo(l)
@@ -220,7 +230,10 @@ function syncDisplays(): void {
   }
 }
 
+/** Creates the layers once; later calls do nothing (the a11y overlay also needs them in v1). */
 export function create(): void {
+  if (created) return
+  created = true
   syncDisplays()
   screen.on('display-added', syncDisplays)
   screen.on('display-removed', syncDisplays)
@@ -275,18 +288,29 @@ export function flashSuccess(rect: Rect): void {
   setTimeout(() => setScene({ highlights: scene.highlights.filter((h) => h.id !== id) }), 1100)
 }
 
+/** Drops highlights, buddy and annotations. Numbers and the grid belong to a11y and stay. */
 export function clear(): void {
-  scene = { highlights: [] }
+  scene = { highlights: [], marks: scene.marks, grid: scene.grid }
   render()
 }
 
-/** Hides every layer at once (screenshots). The scene comes back on show(). */
+/**
+ * Hides every layer at once (screenshots). The scene comes back on show(). Layers with a11y
+ * numbers or the grid stay up with only those.
+ */
 export function hide(): void {
   suppressed = true
   for (const l of layers.values()) {
     if (l.hideTimer) clearTimeout(l.hideTimer)
     l.hideTimer = null
-    if (!l.win.isDestroyed()) l.win.hide()
+    if (l.win.isDestroyed()) continue
+    if (l.ready) {
+      const local = localize(visibleScene(), l.display)
+      l.hasScene = !emptyScene(local)
+      l.hasBuddy = false
+      l.win.webContents.send('screen:render', local)
+    }
+    if (!l.hasScene) l.win.hide()
   }
   syncCursorPolling()
 }
