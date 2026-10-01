@@ -16,6 +16,7 @@ import type {
   SkillInstallPreview
 } from '@shared/channels'
 import type { SkillRunRecord, SkillSummary } from '@shared/types'
+import { findSecrets } from '../actions/redact'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { fetchPack, githubPackSource } from '../packs/fetch'
@@ -34,7 +35,7 @@ import {
 import { SKILL_FILE, parseSkillFile } from './manifest'
 import { SkillRegistry, readSkillText } from './registry'
 import { needsUpdate } from './health'
-import { SkillRunLog } from './runs'
+import { GoodRunStore, SkillRunLog } from './runs'
 import { SkillStateStore } from './state'
 import {
   MAX_STEPS_FILE_BYTES,
@@ -48,6 +49,7 @@ import { matchSkillTrigger, type TriggerContext, type TriggerMatch } from './tri
 let registry: SkillRegistry | null = null
 let state: SkillStateStore | null = null
 let runs: SkillRunLog | null = null
+let goodRuns: GoodRunStore | null = null
 
 /** Loads every skill and starts watching the user folder. Safe to call twice. */
 export function installSkills(): SkillRegistry {
@@ -56,6 +58,16 @@ export function installSkills(): SkillRegistry {
   const appSkills = join(app.getAppPath(), 'skills')
   state = new SkillStateStore(join(base, 'skills-state.json'))
   runs = new SkillRunLog(join(base, 'skills-runs.json'))
+  // Written only with memory on and not private, and never a run that typed a secret.
+  goodRuns = new GoodRunStore(
+    join(base, 'skills-good-runs.json'),
+    (run) =>
+      proposalsMayRecord() &&
+      !findSecrets(run.prompt).length &&
+      !run.steps.some(
+        (s) => (s.value && findSecrets(s.value).length) || (s.text && findSecrets(s.text).length)
+      )
+  )
   registry = new SkillRegistry(
     { builtin: join(appSkills, 'builtin'), appPacks: appSkills, user: join(base, 'skills') },
     { state, log: (m) => log('fail', m) }
@@ -108,6 +120,11 @@ export function recordSkillRun(name: string, run: SkillRunRecord): void {
       log('fail', `skill run listener: ${(e as Error).message}`)
     }
   }
+}
+
+/** The latest run that worked per skill (null before install). */
+export function skillGoodRuns(): GoodRunStore | null {
+  return goodRuns
 }
 
 export function skillRuns(name: string): SkillRunRecord[] {
@@ -175,6 +192,7 @@ export function removeSkill(name: string): SkillActionResult {
   if (r.ok) {
     state?.forget(name)
     runs?.forget(name)
+    goodRuns?.forget(name)
     log('done', `skill ${name} deleted`)
   }
   return r

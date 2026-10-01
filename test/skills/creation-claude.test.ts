@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../../src/main/a11y', () => ({ announce: vi.fn() }))
@@ -16,6 +19,7 @@ import {
 import { skillAuthoringHandlers } from '../../src/main/skills/agent-tools'
 import type { EditOutput } from '../../src/main/skills/edit'
 import { ProposalStore } from '../../src/main/skills/proposals'
+import { GoodRunStore } from '../../src/main/skills/runs'
 import { parseSkillFile } from '../../src/main/skills/manifest'
 
 const MORNING = `---
@@ -214,6 +218,37 @@ describe('voice edits', () => {
     expect((t.deps.editWords as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatch(
       /<observed>[\s\S]*Export As/
     )
+  })
+
+  it('"update the X skill" still has the last good run after a restart', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'lumen-good-'))
+    try {
+      const file = join(dir, 'good.json')
+      const first = setup({ hasSteps: true })
+      const store = new GoodRunStore(file)
+      first.deps.goodRuns = () => store
+      first.c.rememberRun(trace('export as png'))
+      first.c.skillRan(
+        'export-png',
+        { at: 1_000_000 - 10, ms: 100, how: 'agent', status: 'done', summary: '', actions: 2 },
+        []
+      )
+      // A new app start: a fresh instance and a store read back from the file.
+      const t = setup({ hasSteps: true })
+      const reread = new GoodRunStore(file)
+      t.deps.goodRuns = () => reread
+      t.setEdit({
+        skill_md: after.replace('good-morning', 'export-png'),
+        summary: 'Rewritten from the last run.',
+        steps_still_match: true
+      })
+      expect(await t.text('update the export png skill')).toMatch(
+        /replaced with 2 from the last run that worked/
+      )
+      expect(vi.mocked(t.deps.editWords!).mock.calls[0][0]).toMatch(/<observed>[\s\S]*Export As/)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
 

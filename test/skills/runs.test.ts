@@ -3,7 +3,8 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { SkillRunRecord } from '@shared/types'
-import { RUNS_PER_SKILL, SkillRunLog } from '../../src/main/skills/runs'
+import type { AgentRunTrace } from '../../src/main/skills/authoring'
+import { GoodRunStore, RUNS_PER_SKILL, SkillRunLog } from '../../src/main/skills/runs'
 import { runLine } from '../../src/renderer/src/panel/settings/sections/SkillsText'
 
 let dir: string
@@ -53,5 +54,28 @@ describe('skill run history', () => {
     expect(runLine(run(now, { how: 'steps+agent', status: 'denied', actions: 1 }), now)).toBe(
       'Blocked · just now · recorded steps, then the AI · 1 action · 3 s'
     )
+  })
+})
+
+describe('last good run per skill', () => {
+  const trace = (prompt: string): AgentRunTrace => ({
+    prompt,
+    summary: 'Done.',
+    at: 5,
+    steps: [{ tool: 'keys', combo: 'ctrl+s' }]
+  })
+
+  it('reads back what was kept and keeps the rest in memory only', () => {
+    const file = join(dir, 'good.json')
+    const s = new GoodRunStore(file, (r) => !r.prompt.includes('private'))
+    s.set('save-file', trace('save the file'))
+    s.set('secret-one', trace('private thing'))
+    expect(s.get('secret-one')?.prompt).toBe('private thing')
+    expect(readFileSync(file, 'utf8')).not.toContain('private')
+    const again = new GoodRunStore(file)
+    expect(again.get('save-file')?.steps).toEqual([{ tool: 'keys', combo: 'ctrl+s' }])
+    expect(again.get('secret-one')).toBeNull()
+    again.forget('save-file')
+    expect(new GoodRunStore(file).get('save-file')).toBeNull()
   })
 })

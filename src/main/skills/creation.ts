@@ -67,10 +67,12 @@ import {
   onSkillRun,
   proposalKey,
   proposalsMayRecord,
+  skillGoodRuns,
   skillRuns
 } from './index'
 import { saveSkillFiles, writeNewSkill } from './manage'
 import { SKILL_FILE } from './manifest'
+import { GoodRunStore } from './runs'
 import {
   OFFERS_ON_RE,
   ProposalStore,
@@ -129,6 +131,8 @@ export interface CreationDeps {
     name: string,
     files: { skillMd: string; stepsJson?: string | null }
   ): { ok: true } | { ok: false; error: string }
+  /** The latest run that worked per skill (memory only when left out). */
+  goodRuns?(): GoodRunStore | null
   /** The once-per-pattern offers and needs-update notices. */
   proposals?: ProposalStore
   /** The user is around and not in quiet mode (presence rule). */
@@ -210,8 +214,9 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
   let offered: { sig: RunSignature; run: AgentRunTrace; at: number } | null = null
   /** A needs-update notice, for "update it". */
   let stale: { name: string; at: number } | null = null
-  /** The latest run that worked, per skill (memory only), for "update the X skill". */
-  const goodRuns = new Map<string, AgentRunTrace>()
+  /** The latest run that worked, per skill, for "update the X skill" (kept across restarts). */
+  const memoryRuns = new GoodRunStore(null)
+  const goodRuns = (): GoodRunStore => deps.goodRuns?.() ?? memoryRuns
   let task: { prompt: string; phase: string; corrected: boolean } | null = null
   let failed: { words: string[]; at: number }[] = []
   let corrected = false
@@ -505,7 +510,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
     'The recorded steps keep drifting. Make the instructions sturdier: describe each control by its visible name and what to check after each step, and ask the user when something is not where expected.'
 
   async function updateSkill(name: string): Promise<ModelResponse> {
-    const run = goodRuns.get(name)
+    const run = goodRuns().get(name)
     const e = await makeEdit(name, run ? REFRESH_CHANGE : HARDEN_CHANGE, {
       ...(run ? { run } : {}),
       refresh: true
@@ -582,7 +587,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       const run = lastRun
       if (run && run.at >= rec.at - 1000 && run.at <= rec.at + rec.ms + 5000) {
         run.skill = name
-        if (rec.status === 'done') goodRuns.set(name, run)
+        if (rec.status === 'done') goodRuns().set(name, run)
       }
       if (!needsUpdate(history) || !deps.proposals) return
       if (deps.canSpeakUp && !deps.canSpeakUp()) return
@@ -795,6 +800,7 @@ export function installSkillCreation(
       const r = saveSkillFiles(registry, name, files)
       return r.ok ? { ok: true } : { ok: false, error: r.error }
     },
+    goodRuns: skillGoodRuns,
     proposals: new ProposalStore(join(homedir(), '.ai-overlay', 'skills-proposals.json'), {
       key: proposalKey(join(homedir(), '.ai-overlay', 'skills-proposals.key')),
       canRecord: proposalsMayRecord
