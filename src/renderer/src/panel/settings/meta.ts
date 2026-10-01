@@ -17,6 +17,7 @@ export type SectionId =
   | 'memory'
   | 'lessons'
   | 'skills'
+  | 'background'
   | 'helpers'
   | 'bridges'
   | 'connectors'
@@ -87,6 +88,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.sparkles,
     keywords:
       'skills abilities automations install share export import lumen file community trust permissions triggers'
+  },
+  {
+    id: 'background',
+    label: 'Background & routines',
+    icon: icons.repeat,
+    keywords:
+      'background tasks routines schedule every day weekday limits cost calls quiet proactive reminders when i open'
   },
   {
     id: 'helpers',

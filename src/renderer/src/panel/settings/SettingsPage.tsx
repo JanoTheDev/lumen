@@ -3,6 +3,7 @@ import { Button, NavList, Toast, icons } from '../../ui'
 import { filterSections, SECTIONS, type SectionId, type SectionProps } from './meta'
 import { useConfig } from './useConfig'
 import { About } from './sections/About'
+import { Background } from './sections/Background'
 import { Bridges } from './sections/Bridges'
 import { Connectors } from './sections/Connectors'
 import { Accessibility } from './sections/Accessibility'
@@ -25,6 +26,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   memory: Memory,
   lessons: Lessons,
   skills: Skills,
+  background: Background,
   helpers: Helpers,
   bridges: Bridges,
   connectors: Connectors,
