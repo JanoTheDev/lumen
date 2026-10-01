@@ -60,6 +60,8 @@ export class ClaudeSession extends EventEmitter {
   private controlSeq = 0
   private stopping = false
   private interrupting = false
+  /** User turns written and not ended by a `result` yet. */
+  private inFlight = 0
   private stderrTail = ''
 
   constructor(
@@ -100,6 +102,7 @@ export class ClaudeSession extends EventEmitter {
   send(text: string): void {
     if (!this.child) this.spawn()
     this.write(userLine(text))
+    this.inFlight++
     this.update({
       phase: 'thinking',
       pending: undefined,
@@ -110,7 +113,8 @@ export class ClaudeSession extends EventEmitter {
 
   /** Stops the current turn. true = the CLI confirmed; false = the process had to be killed. */
   async interrupt(): Promise<boolean> {
-    if (!this.child) return true
+    // Nothing running: an acknowledged interrupt would leave no result to match.
+    if (!this.child || this.inFlight === 0) return true
     const id = `lumen-int-${++this.controlSeq}`
     this.interrupting = true
     const answered = new Promise<boolean>((resolve) => {
@@ -177,6 +181,7 @@ export class ClaudeSession extends EventEmitter {
     this.procCost = 0
     this.stopping = false
     this.interrupting = false
+    this.inFlight = 0
     this.stderrTail = ''
     const child = this.deps.spawn(cmd, this.init.project, { ...process.env, ...this.init.env })
     this.child = child
@@ -226,6 +231,7 @@ export class ClaudeSession extends EventEmitter {
     if (this.view.pending && patch.phase && !fx.turnEnded) delete patch.phase
     const interrupted = !!fx.turnEnded && this.interrupting
     if (fx.turnEnded) {
+      this.inFlight = Math.max(0, this.inFlight - 1)
       this.interrupting = false
       if (interrupted) patch.lastLine = 'Interrupted'
       if (fx.turnEnded.costUsd !== undefined) this.procCost = fx.turnEnded.costUsd

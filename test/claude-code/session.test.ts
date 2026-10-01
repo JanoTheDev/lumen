@@ -151,6 +151,27 @@ describe('ClaudeSession with a fake claude', () => {
     s.stop()
   })
 
+  it('runs a follow-up turn on the same process after an interrupt', async () => {
+    const s = newSession()
+    s.send('SLOW')
+    await until(s, (v) => v.phase === 'running-tool')
+    const end = nextTurn(s)
+    expect(await s.interrupt()).toBe(true)
+    expect((await end).interrupted).toBe(true)
+    const next = nextTurn(s)
+    s.send('follow up')
+    const t = await next
+    expect(t).toEqual({ text: 'done: follow up', isError: false, interrupted: false })
+    expect(s.view.lastAnswer).toBe('done: follow up')
+    expect(spawnedArgs()).toHaveLength(1)
+    // Nothing running: an interrupt is a no-op and does not taint the next turn.
+    expect(await s.interrupt()).toBe(true)
+    const again = nextTurn(s)
+    s.send('third')
+    expect((await again).interrupted).toBe(false)
+    s.stop()
+  })
+
   it('kills a CLI that ignores the interrupt and resumes it on the next turn', async () => {
     const s = newSession()
     s.send('IGNORE_INTERRUPT')
