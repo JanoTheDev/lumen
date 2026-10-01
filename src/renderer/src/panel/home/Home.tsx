@@ -18,16 +18,56 @@ function useHomeInfo(): [HomeInfo | null, () => void] {
   return [info, refresh]
 }
 
-/** The lesson to continue (07 T22); refreshed whenever Home opens. */
-function useLearning(): [LessonProgressView['active'], () => void] {
-  const [active, setActive] = useState<LessonProgressView['active']>(null)
+/** The lesson to continue, up next and due reviews (07 T22, T27-T29); refreshed on open. */
+function useLearning(): [LessonProgressView | null, () => void] {
+  const [view, setView] = useState<LessonProgressView | null>(null)
   const refresh = useCallback((): void => {
     invoke('teach:progress')
-      .then((p) => setActive(p.active))
+      .then(setView)
       .catch(() => {})
   }, [])
   useEffect(refresh, [refresh])
-  return [active, refresh]
+  return [view, refresh]
+}
+
+interface LearnItem {
+  key: string
+  title: string
+  meta: string
+  start: () => Promise<unknown>
+}
+
+/** At most three rows: the lesson left part-way, the next lesson of a started app, one review. */
+function learnItems(v: LessonProgressView | null): LearnItem[] {
+  if (!v) return []
+  const out: LearnItem[] = []
+  const a = v.active
+  if (a)
+    out.push({
+      key: `a-${a.lessonId}`,
+      title: a.title,
+      meta: `${a.appName} · ${a.running ? 'now on' : 'stopped at'} step ${a.step} of ${a.total}`,
+      start: () => invoke('teach:start', a.lessonId)
+    })
+  const app = v.apps.find((x) => x.completed > 0 && x.next && x.next.lessonId !== a?.lessonId)
+  if (app?.next) {
+    const next = app.next
+    out.push({
+      key: `n-${next.lessonId}`,
+      title: next.title,
+      meta: `${app.appName} · up next · ${app.completed} of ${app.total} done`,
+      start: () => invoke('teach:start', next.lessonId)
+    })
+  }
+  const r = v.reviews[0]
+  if (r)
+    out.push({
+      key: `r-${r.lessonId}`,
+      title: `Review: ${r.title}`,
+      meta: `${r.appName} · ${v.reviews.length > 1 ? `${v.reviews.length} reviews due` : 'review due'}`,
+      start: () => invoke('teach:review', r.lessonId)
+    })
+  return out
 }
 
 function run(text: string): void {
@@ -37,7 +77,8 @@ function run(text: string): void {
 
 export function Home(): JSX.Element {
   const [info, refresh] = useHomeInfo()
-  const [lesson, refreshLesson] = useLearning()
+  const [learning, refreshLesson] = useLearning()
+  const learn = learnItems(learning)
   const { cfg, patch } = useConfig()
   const [ask, setAsk] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
@@ -157,28 +198,31 @@ export function Home(): JSX.Element {
         </div>
       </section>
 
-      {lesson && (
+      {learn.length > 0 && (
         <section className="home-section" aria-labelledby="home-learn">
           <h2 id="home-learn" className="home-label">
             Continue learning
           </h2>
-          <button
-            type="button"
-            className="home-recent__item home-learn"
-            onClick={() => {
-              void invoke('teach:start', lesson.lessonId).catch(() => {})
-              send('panel:close')
-            }}
-          >
-            <icons.book />
-            <span className="home-learn__text">
-              <span className="home-learn__title">{lesson.title}</span>
-              <span className="home-learn__meta">
-                {lesson.appName} · {lesson.running ? 'now on' : 'stopped at'} step {lesson.step} of{' '}
-                {lesson.total}
-              </span>
-            </span>
-          </button>
+          <ul className="home-recent">
+            {learn.map((item) => (
+              <li key={item.key}>
+                <button
+                  type="button"
+                  className="home-recent__item home-learn"
+                  onClick={() => {
+                    void item.start().catch(() => {})
+                    send('panel:close')
+                  }}
+                >
+                  <icons.book />
+                  <span className="home-learn__text">
+                    <span className="home-learn__title">{item.title}</span>
+                    <span className="home-learn__meta">{item.meta}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
