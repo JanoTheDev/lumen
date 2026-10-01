@@ -94,6 +94,8 @@ describe('starting a lesson by voice', () => {
     expect(matchStartLesson('Teach me Blender')).toBe('blender')
     expect(matchStartLesson('teach me how to make folders')).toBe('make folders')
     expect(matchStartLesson('what is a lesson')).toBeNull()
+    expect(matchStartLesson('Start lesson 2.')).toBe('2')
+    expect(matchStartLesson('start lesson number two')).toBe('number two')
   })
 
   it('an app name alone picks its first lesson', () => {

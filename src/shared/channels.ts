@@ -1,7 +1,7 @@
 // IPC channel names and payload types (CONTRACTS C5). Zod-free so the sandboxed preload can
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
-import type { AssistantState, ScreenScene } from './events'
+import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { GuideStep, LocateItem, ModelResponse, Point, Rect, SavedGuide } from './types'
 
 type Confidence = 'high' | 'medium' | 'low'
@@ -68,6 +68,21 @@ export interface InvokeChannels {
   'usage:get': { args: []; result: UsageOverview }
   /** Which OS agent is running (Settings shows it read-only). */
   'agent:info': { args: []; result: AgentImplInfo }
+  /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
+  'teach:list': { args: [appId?: string]; result: LessonListItem[] }
+  /** Starts a lesson; the lesson left part-way resumes on its step. */
+  'teach:start': { args: [id: string]; result: { ok: boolean; error?: string } }
+  /** next / back / pause / stop … for the running lesson (buttons, switch). */
+  'teach:command': { args: [command: LessonCommand]; result: { ok: boolean } }
+  /** The lesson to continue and recent completions (Home "Continue learning"). */
+  'teach:progress': { args: []; result: LessonProgressView }
+  /** Deletes one of the user's own lessons. */
+  'teach:delete': { args: [id: string]; result: { ok: boolean } }
+  /** Saves the last "show me how" lesson to the user's lessons. */
+  'teach:save-last': {
+    args: [name?: string]
+    result: { id: string; title: string } | { error: string }
+  }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -101,6 +116,8 @@ export interface SendChannels {
   /** Closes the panel window (or flyout) that sent it. */
   'panel:close': []
   'home:run': [text: string]
+  /** Onboarding practice board: the button the user clicked, for the mini lesson's check. */
+  'teach:practice': [label: string]
   'memory:open-folder': []
   /** Command sheet: close its window. */
   'a11y:sheet-close': []
@@ -332,6 +349,37 @@ export interface AgentImplInfo {
   fallback: string | null
 }
 
+/** One lesson in the picker (07 T22). */
+export interface LessonListItem {
+  id: string
+  title: string
+  summary?: string
+  appId: string
+  appName: string
+  level: 'beginner' | 'intermediate' | 'advanced'
+  minutes: number
+  steps: number
+  /** pack = shipped with Lumen; user = the user's own (saved or migrated guide). */
+  source: 'pack' | 'user'
+  /** Times completed. */
+  completed: number
+}
+
+export interface LessonProgressView {
+  /** A lesson that is running or was left part-way in the last 7 days. */
+  active: {
+    lessonId: string
+    title: string
+    appName: string
+    /** 1-based. */
+    step: number
+    total: number
+    running: boolean
+  } | null
+  /** Completed lessons, newest first (max 5). */
+  recent: { lessonId: string; title: string; appName: string; completedAt: number }[]
+}
+
 export interface HomeInfo {
   hotkey: string
   agentReady: boolean
@@ -458,7 +506,13 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:export',
   'memory:delete-all',
   'usage:get',
-  'agent:info'
+  'agent:info',
+  'teach:list',
+  'teach:start',
+  'teach:command',
+  'teach:progress',
+  'teach:delete',
+  'teach:save-last'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
@@ -484,6 +538,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'panel:open',
   'panel:close',
   'home:run',
+  'teach:practice',
   'memory:open-folder',
   'a11y:sheet-close',
   'a11y:dwell-pick',

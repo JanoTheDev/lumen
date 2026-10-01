@@ -4,6 +4,8 @@
 import { app, shell } from 'electron'
 import { homedir } from 'os'
 import { join } from 'path'
+import type { LessonListItem, LessonProgressView } from '@shared/channels'
+import type { LessonCommand } from '@shared/events'
 import type { ElementNode, InputStep, Point, Rect } from '@shared/types'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
@@ -21,6 +23,8 @@ import { matchPlayGuide } from '../guides/voice-nav'
 import { setTeachHandler } from '../query/pipeline'
 import { flattenElements } from '../query/uia-list'
 import {
+  lessonNumber,
+  matchAppOnly,
   matchSaveLesson,
   matchStartLesson,
   parseLessonCommand,
@@ -37,8 +41,10 @@ import { ProgressStore, resumeOffer, type ResumeOffer } from './progress'
 import { SkillRegistry, hasMatchRules, type Skill } from './registry'
 import { LessonRunner } from './runner'
 import { lessonKeysAllowed, lessonUrlAllowed } from './safety'
+import { lessonList, progressView } from './picker'
+import { PRACTICE_LESSON, PRACTICE_LESSON_ID } from './practice-lesson'
 import { makeShowMeHow } from './show-me'
-import { freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
+import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
 
 /** Same reply shape as 06's local grammar: handled, nothing for the renderer to show. */
 const HANDLED = { mode: 'answer', text: '', local: true, dictated: true } as const
@@ -51,6 +57,9 @@ const FRAME_CACHE = 8
 const BLUR_PAUSE_MS = 60_000
 const BLUR_POLL_MS = 5000
 const RESUME_OFFER_DELAY_MS = 4000
+/** "start lesson 2" refers to the list "teach me <app>" read out this recently. */
+const LIST_TTL_MS = 5 * 60_000
+const LIST_MAX = 9
 
 let registry: SkillRegistry | null = null
 let store: ProgressStore | null = null
@@ -59,6 +68,8 @@ let offer: ResumeOffer | null = null
 /** The last "show me how" lesson, for "save this lesson". */
 let lastGenerated: { lesson: Lesson; skill: Skill | null } | null = null
 let skillsRoot = ''
+/** The numbered lessons "teach me <app>" read out last. */
+let listed: { ids: string[]; at: number } | null = null
 
 const frames = new Map<string, string>()
 
@@ -513,6 +524,79 @@ export function saveGeneratedLesson(name?: string): Lesson | null {
   return lesson
 }
 
+/**
+ * Starts a lesson from the picker: the running one stays, the one left part-way resumes on
+ * its step, the onboarding mini lesson starts at once, anything else from its intro.
+ */
+export function startOrResume(id: string): boolean {
+  if (!runner) return false
+  if (runner.running() && runner.state.lesson?.id === id) return true
+  if (id === PRACTICE_LESSON_ID) {
+    offer = null
+    runner.start(PRACTICE_LESSON, {
+      source: 'pack',
+      autoStart: true,
+      ...pacingFor(loadConfig().a11y)
+    })
+    return true
+  }
+  const o = store
+    ? resumeOffer(store.get(), Date.now(), (lid) => {
+        const f = registry?.lesson(lid)
+        return f ? { lesson: f.lesson, appName: f.skill.name } : null
+      })
+    : null
+  if (o?.lessonId === id) {
+    offer = o
+    return resumeOffered()
+  }
+  return startLesson(id)
+}
+
+/** A command from a button or switch; resume/yes also take a resume offer. */
+export function lessonCommand(cmd: LessonCommand): boolean {
+  if (!runner) return false
+  if (runner.running()) return runner.command(cmd)
+  return cmd === 'resume' || cmd === 'yes' ? resumeOffered() : false
+}
+
+export function listLessons(appId?: string): LessonListItem[] {
+  if (!registry || !store) return []
+  const mine = new Set(registry.userLessons().map((x) => x.lesson.id))
+  return lessonList(registry.all(), store.get(), mine, appId)
+}
+
+export function lessonProgress(): LessonProgressView {
+  if (!registry || !store) return { active: null, recent: [] }
+  return progressView(store.get(), runner?.state ?? null, Date.now(), (id) => registry!.lesson(id))
+}
+
+/** Deletes one of the user's own lessons (never a pack lesson). */
+export function deleteLesson(id: string): boolean {
+  if (!registry || !skillsRoot) return false
+  if (!registry.userLessons().some((x) => x.lesson.id === id)) return false
+  const ok = deleteUserLesson(userLessonsDir(skillsRoot), id)
+  if (ok) registry.load()
+  return ok
+}
+
+/** The onboarding board's click, as the invoke event its mini lesson waits for. */
+export function practiceClick(label: string): void {
+  if (runner?.running() && runner.state.lesson?.id === PRACTICE_LESSON_ID)
+    emitUia({ kind: 'invoked', element: { name: label, role: 'button' } })
+}
+
+/** "teach me blender": the app's beginner lessons, numbered for "start lesson 2". */
+function listAppLessons(skill: Skill): unknown {
+  const beginner = skill.lessons.filter((l) => l.level === 'beginner')
+  const list = (beginner.length ? beginner : skill.lessons).slice(0, LIST_MAX)
+  if (!list.length) return { mode: 'answer', text: `There are no ${skill.name} lessons yet.` }
+  listed = { ids: list.map((l) => l.id), at: Date.now() }
+  const text = `${skill.name} lessons: ${list.map((l, i) => `${i + 1}, ${l.title}`).join('. ')}. Say "start lesson" and a number.`
+  announce(text, { kind: 'answer' })
+  return { mode: 'answer', text }
+}
+
 function candidates(): LessonCandidate[] {
   return (registry?.all() ?? []).flatMap((s) =>
     s.lessons.map((l) => ({ id: l.id, title: l.title, appId: s.id, appName: s.name }))
@@ -584,6 +668,15 @@ export function interceptLesson(utterance: string): unknown | undefined {
   }
   const query = matchStartLesson(utterance)
   if (query) {
+    const n = lessonNumber(query)
+    if (n !== null && listed && Date.now() - listed.at < LIST_TTL_MS) {
+      const id = listed.ids[n - 1]
+      if (id && startOrResume(id)) return HANDLED
+      return { mode: 'answer', text: `There is no lesson ${n} in that list.` }
+    }
+    const appId = matchAppOnly(query, registry.all())
+    const app = appId ? registry.get(appId) : null
+    if (app) return listAppLessons(app)
     const hit = pickLesson(query, candidates())
     if (hit && startLesson(hit.id)) return HANDLED
   }

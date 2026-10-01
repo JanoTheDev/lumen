@@ -49,6 +49,7 @@ import * as settingsWin from './windows/settings'
 import { uiV2 } from './windows/ui-mode'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
+import { registerTeachIpc } from './ipc/teach'
 import { registerHighlightIpc } from './ipc/highlight'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
@@ -107,6 +108,7 @@ function registerIpc(): void {
   registerWakeIpc()
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
+  registerTeachIpc()
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()

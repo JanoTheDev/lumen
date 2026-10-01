@@ -10,6 +10,31 @@ export const queryOptsSchema = z.object({ lowDetail: z.boolean().optional() }).s
 export const textSchema = z.string().max(20_000)
 export const nameSchema = z.string().max(80)
 export const guideIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
+/** Lesson ids (07): kebab-case, app id first. */
+export const lessonIdSchema = z
+  .string()
+  .max(100)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+export const lessonCommandSchema = z.enum([
+  'next',
+  'back',
+  'repeat',
+  'skip',
+  'stop',
+  'pause',
+  'resume',
+  'help',
+  'do-it',
+  'why',
+  'done',
+  'slower',
+  'faster',
+  'yes',
+  'no',
+  'perform'
+])
+/** Onboarding practice board button labels. */
+export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([
   'left',

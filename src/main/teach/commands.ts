@@ -251,3 +251,46 @@ export function matchSaveLesson(utterance: string): { name?: string } | null {
   const name = m.groups?.name?.replace(/[.!?,;:]+$/, '').trim()
   return name ? { name } : {}
 }
+
+/** The app a query names on its own ("blender", "the windows basics"), else null. */
+export function matchAppOnly(query: string, apps: { id: string; name: string }[]): string | null {
+  const q = words(query)
+  if (!q.length) return null
+  const hit = apps.find((a) => {
+    const w = words(`${a.name} ${a.id.replace(/-/g, ' ')}`)
+    return q.every((x) => w.includes(x))
+  })
+  return hit?.id ?? null
+}
+
+const NUMBER_WORDS: Record<string, number> = {
+  one: 1,
+  first: 1,
+  two: 2,
+  second: 2,
+  three: 3,
+  third: 3,
+  four: 4,
+  fourth: 4,
+  five: 5,
+  fifth: 5,
+  six: 6,
+  sixth: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10
+}
+
+/** "2", "two", "number 2", "the second one" → 2; else null. */
+export function lessonNumber(query: string): number | null {
+  const w = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((x) => x && x !== 'number' && x !== 'the' && x !== 'lesson')
+  if (w.length === 2 && w[1] === 'one') w.pop()
+  if (w.length !== 1) return null
+  const n = /^\d+$/.test(w[0]) ? Number(w[0]) : (NUMBER_WORDS[w[0]] ?? 0)
+  return n > 0 && n <= 50 ? n : null
+}
