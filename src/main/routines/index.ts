@@ -72,6 +72,7 @@ import { AutomationScheduler, type RunEnd } from './engine'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
+import { runPrompt } from './run-prompt'
 import { automationIdFromArgv, WakeTasks } from './schtasks'
 import { RoutineStore } from './store'
 import { describeTrigger, isTimeTrigger } from './triggers'
@@ -109,13 +110,6 @@ export function userPresent(): boolean {
 
 // ---- runs ----
 
-function detailLine(a: Automation, detail?: string): string {
-  if (!detail) return ''
-  if (a.trigger.kind === 'file')
-    return `\n\n(This run was started because of the file "${detail}". It is in a folder read_file may read.)`
-  return `\n\n(This run was started because ${detail}.)`
-}
-
 /** A reminder nobody is around to hear waits in the Tasks list (and on the tray badge). */
 function queueReminder(a: Automation, say: string): string {
   const t = startBackgroundTask({
@@ -140,9 +134,7 @@ async function runAutomation(
     }
     return { result: 'done', summary: act.say, taskId: queueReminder(a, act.say) }
   }
-  const prompt =
-    (act.kind === 'task' ? act.prompt : act.prompt || `Run the skill “${act.skill}”.`) +
-    detailLine(a, ctx.detail)
+  const prompt = runPrompt(a, ctx.detail)
   const t = startBackgroundTask({
     prompt,
     title: a.name,
