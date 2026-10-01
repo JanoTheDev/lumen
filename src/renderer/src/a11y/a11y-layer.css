@@ -194,3 +194,107 @@
   background: #ffd800;
   box-shadow: 0 0 0 2px #fff;
 }
+
+/* Switch scanning (06 T09): 4px yellow ring between black edges, number + name tag, and a
+   menu panel for levels without screen targets. Fixed colours: they must read on any app. */
+
+.a11y-scan,
+.a11y-scan-ring,
+.a11y-scan-menu {
+  position: fixed;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+
+.a11y-scan {
+  inset: 0;
+}
+
+.a11y-scan-ring {
+  box-sizing: border-box;
+  border: 4px solid #ffd800;
+  outline: 2px solid #000;
+  box-shadow:
+    inset 0 0 0 2px #000,
+    0 0 0 4px #fff;
+  border-radius: 6px;
+}
+
+.a11y-scan-tag {
+  position: absolute;
+  left: -4px;
+  bottom: calc(100% + 6px);
+  display: inline-flex;
+  gap: 0.4em;
+  align-items: center;
+  max-width: 28em;
+  padding: 0.2em 0.5em;
+  font:
+    700 1rem/1.2 system-ui,
+    'Segoe UI',
+    sans-serif;
+  color: #000;
+  background: #ffd800;
+  border: 2px solid #000;
+  border-radius: 0.35em;
+  box-shadow: 0 0 0 2px #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* No room above the item: the tag goes under it. */
+.a11y-scan-ring.is-top .a11y-scan-tag {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
+.a11y-scan-tag b {
+  font-variant-numeric: tabular-nums;
+}
+
+.a11y-scan-menu {
+  min-width: 12em;
+  max-width: calc(100vw - 16px);
+  padding: 0.6em;
+  box-sizing: border-box;
+  font:
+    600 1.25rem/1.3 system-ui,
+    'Segoe UI',
+    sans-serif;
+  color: #fff;
+  background: #000;
+  border: 3px solid #ffd800;
+  border-radius: 10px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.a11y-scan-title {
+  margin: 0 0 0.3em;
+  font-size: 0.8em;
+  color: #ffd800;
+}
+
+.a11y-scan-menu ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.a11y-scan-menu li {
+  padding: 0.25em 0.5em;
+  border: 3px solid transparent;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* Highlight is shape + colour: a thick border and a marker, not colour alone. */
+.a11y-scan-menu li.is-on {
+  color: #000;
+  background: #ffd800;
+  border-color: #fff;
+}
+
+.a11y-scan-menu li.is-on::before {
+  content: '▶ ';
+}

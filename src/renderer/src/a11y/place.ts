@@ -23,3 +23,23 @@ export function placeBadge(
   if (roomAbove && rect.x + badge.w <= view.w) return 'above'
   return 'inside'
 }
+
+// Switch scanning menu panel (06 T09).
+const MENU_GAP = 24
+export const MENU_EDGE = 8
+
+/** Menu box near `at`, below-right, flipped and clamped so it stays on screen. */
+export function placeMenu(
+  at: { x: number; y: number },
+  size: { w: number; h: number },
+  view: { w: number; h: number }
+): { x: number; y: number } {
+  let x = at.x + MENU_GAP
+  let y = at.y + MENU_GAP
+  if (x + size.w > view.w - MENU_EDGE) x = at.x - MENU_GAP - size.w
+  if (y + size.h > view.h - MENU_EDGE) y = at.y - MENU_GAP - size.h
+  return {
+    x: Math.max(MENU_EDGE, Math.min(x, view.w - size.w - MENU_EDGE)),
+    y: Math.max(MENU_EDGE, Math.min(y, view.h - size.h - MENU_EDGE))
+  }
+}

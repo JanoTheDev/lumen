@@ -4,7 +4,16 @@
 // Every message is also published on the bus (a11y.announce) for the renderer's live region.
 // Per-kind throttle, 3 s de-duplication, and assertive messages skip the throttle.
 
-export type AnnounceKind = 'answer' | 'status' | 'step' | 'error' | 'confirm' | 'focus' | 'command'
+export type AnnounceKind =
+  | 'answer'
+  | 'status'
+  | 'step'
+  | 'error'
+  | 'confirm'
+  | 'focus'
+  | 'command'
+  /** Switch scanning item names: every move is spoken, repeats included. */
+  | 'scan'
 export type AnnouncePriority = 'polite' | 'assertive'
 export type AnnounceVia = 'sr' | 'tts' | 'none'
 
@@ -34,7 +43,8 @@ export const THROTTLE_MS: Record<AnnounceKind, number> = {
   confirm: 0,
   // FocusNarrator already waits for focus to settle.
   focus: 200,
-  command: 300
+  command: 300,
+  scan: 0
 }
 
 export const DEDUPE_MS = 3000
@@ -60,13 +70,14 @@ export class Announcer {
     const now = this.deps.now()
 
     for (const [t, at] of this.recent) if (now - at > DEDUPE_MS) this.recent.delete(t)
-    if (this.recent.has(text)) return { via: 'none', dropped: 'duplicate' }
+    // Scanning comes back to the same item every pass; that is not a duplicate.
+    if (kind !== 'scan' && this.recent.has(text)) return { via: 'none', dropped: 'duplicate' }
     if (priority !== 'assertive') {
       const last = this.lastByKind.get(kind)
       if (last !== undefined && now - last < THROTTLE_MS[kind])
         return { via: 'none', dropped: 'throttled' }
     }
-    this.recent.set(text, now)
+    if (kind !== 'scan') this.recent.set(text, now)
     this.lastByKind.set(kind, now)
 
     const via = this.route()

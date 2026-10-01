@@ -8,6 +8,7 @@ import type { Point } from '@shared/types'
 import { invoke, useIpc } from '../lib/ipc'
 import { GridLayer } from '../a11y/GridLayer'
 import { MarksLayer } from '../a11y/MarksLayer'
+import { ScanLayer } from '../a11y/ScanLayer'
 import { DwellRing, DwellUi } from '../a11y/DwellRing'
 import { HighlightLabels, HighlightsSvg, type Highlight } from './Highlights'
 import { Buddy, type BuddyConfig } from './Buddy'
@@ -128,6 +129,7 @@ export function ScreenApp(): JSX.Element {
       {scene?.grid && <GridLayer grid={scene.grid} />}
       {marks.marks?.length ? <MarksLayer marks={marks.marks} exiting={marks.exiting} /> : null}
       {scene?.dwellUi && <DwellUi ui={scene.dwellUi} />}
+      {scene?.scan && <ScanLayer scan={scene.scan} />}
       <Buddy
         buddy={b}
         targetRect={targetRect}

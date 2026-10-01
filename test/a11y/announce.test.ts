@@ -106,6 +106,14 @@ describe('announce throttle and de-duplication', () => {
     expect(a.announce('Scrolling', { kind: 'answer' }).dropped).toBeUndefined()
   })
 
+  it('scan item names repeat freely and do not block the same text elsewhere', () => {
+    const { a, tick } = setup()
+    expect(a.announce('Back', { kind: 'scan' }).dropped).toBeUndefined()
+    tick(100)
+    expect(a.announce('Back', { kind: 'scan' }).dropped).toBeUndefined()
+    expect(a.announce('Back', { kind: 'command' }).dropped).toBeUndefined()
+  })
+
   it('kinds are throttled independently', () => {
     const { a } = setup()
     a.announce('Thinking')

@@ -12,6 +12,8 @@ export const nameSchema = z.string().max(80)
 export const guideIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum(['left', 'right', 'double', 'drag', 'scroll', 'pause'])
+/** Scan keyboard key id: c:<char>, s:<n> or a named key. */
+export const keyboardKeySchema = z.string().regex(/^(c:.|s:\d|[a-z]{2,10})$/u)
 export const overlayHeightSchema = z
   .number()
   .finite()

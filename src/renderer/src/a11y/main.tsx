@@ -6,13 +6,23 @@ import { createRoot } from 'react-dom/client'
 import { bootstrapTheme } from '../theme/apply'
 import { CommandSheet } from './CommandSheet'
 import { DwellPalette } from './DwellPalette'
+import { ScanKeyboard } from './ScanKeyboard'
 
-// Small a11y windows (06): the "what can I say" sheet and the dwell click-type palette.
+// Small a11y windows (06): the "what can I say" sheet, the dwell click-type palette and the
+// scan keyboard.
 // Main zooms both by uiScale, so the root font size is not scaled again here.
 bootstrapTheme()
 
 const route = location.hash.replace(/^#\/?/, '')
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>{route === 'palette' ? <DwellPalette /> : <CommandSheet />}</StrictMode>
+  <StrictMode>
+    {route === 'palette' ? (
+      <DwellPalette />
+    ) : route === 'keyboard' ? (
+      <ScanKeyboard />
+    ) : (
+      <CommandSheet />
+    )}
+  </StrictMode>
 )

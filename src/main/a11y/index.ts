@@ -32,6 +32,7 @@ import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
 import { dwellController } from './dwell'
 import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
 import { installDwell } from './install-dwell'
+import { installSwitch, type SwitchControl } from './install-switch'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
@@ -43,6 +44,7 @@ const AT_POLL_MS = 60_000
 let announcer: Announcer | null = null
 let a11y: A11yCommands | null = null
 let narrator: FocusNarrator | null = null
+let switchCtl: SwitchControl | null = null
 
 /** One short message to the user through the announce policy (screen reader, TTS or visual). */
 export function announce(text: string, opts?: AnnounceOptions): void {
@@ -182,7 +184,7 @@ export function createIo(): A11yIo {
       return true
     },
     setDwellPaused,
-    setScanning: () => false,
+    setScanning: (on) => switchCtl?.setScanning(on) ?? false,
     setWakeWord: (on) => {
       const cfg = loadConfig()
       saveAndBroadcast({ wakeWord: { ...cfg.wakeWord, enabled: on } })
@@ -278,10 +280,21 @@ export function installA11y(): void {
     wantFocusEvents
   })
   installHelpShortcut()
+  const sw = installSwitch({
+    commands: () => a11y,
+    announce: (text) => announce(text, { kind: 'scan' }),
+    feedback: (text, ok) => {
+      setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
+      announce(text, { kind: ok ? 'command' : 'error' })
+    }
+  })
+  switchCtl = sw
   registerA11yIpc({
     commands: () => commandSheetData(commandsImpl.context(), helpShortcut()),
     closeSheet: () => commandSheet.hide(),
     dwellState: () => dwell.state(),
-    dwellPick: (pick) => dwell.choose(pick)
+    dwellPick: (pick) => dwell.choose(pick),
+    keyboardState: () => sw.keyboardState(),
+    keyboardKey: (id) => sw.keyboardKey(id)
   })
 }

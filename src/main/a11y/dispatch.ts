@@ -370,7 +370,8 @@ export class A11yCommands {
 
   // ---- numbers ----
 
-  private async showMarks(scope: 'foreground' | 'all', role: unknown): Promise<void> {
+  /** "Show numbers" (also switch scanning's Numbers). Throws UserError when nothing is found. */
+  async showMarks(scope: 'foreground' | 'all', role: unknown): Promise<void> {
     const markRole = isMarkRole(role) ? role : undefined
     if (this.grid.shown) {
       this.grid.close()
@@ -405,7 +406,7 @@ export class A11yCommands {
     this.io.feedback(`${count} numbers${more}`, true)
   }
 
-  private hideMarks(): void {
+  hideMarks(): void {
     this.marks.hide()
     this.renderMarks()
   }
@@ -485,7 +486,8 @@ export class A11yCommands {
 
   // ---- grid ----
 
-  private showGrid(monitor?: number): void {
+  /** "Mouse grid [n]": the given monitor, else the one under the cursor. */
+  showGrid(monitor?: number, opts: { quiet?: boolean } = {}): void {
     const mons = [...this.io.monitors()].sort(
       (a, b) => a.bounds.x - b.bounds.x || a.bounds.y - b.bounds.y
     )
@@ -508,10 +510,10 @@ export class A11yCommands {
     this.marks.hide()
     this.grid.show(target.bounds, target.id)
     this.io.setScene({ marks: undefined, grid: this.grid.scene() })
-    this.io.feedback('Say a number from 1 to 9', true)
+    if (!opts.quiet) this.io.feedback('Say a number from 1 to 9', true)
   }
 
-  private renderGrid(): void {
+  renderGrid(): void {
     this.io.setScene({ grid: this.grid.scene() })
   }
 

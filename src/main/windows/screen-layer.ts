@@ -51,7 +51,9 @@ const emptyScene = (s: Scene): boolean =>
   !s.grid &&
   !s.annotations?.length &&
   !s.dwellUi?.scrollAt &&
-  !s.dwellUi?.dragFrom
+  !s.dwellUi?.dragFrom &&
+  !s.scan?.ring &&
+  !s.scan?.menu
 
 /**
  * What is drawn right now. While hidden for a screenshot, the a11y numbers and grid stay up:
@@ -59,7 +61,13 @@ const emptyScene = (s: Scene): boolean =>
  */
 function visibleScene(): Scene {
   return suppressed
-    ? { highlights: [], marks: scene.marks, grid: scene.grid, dwellUi: scene.dwellUi }
+    ? {
+        highlights: [],
+        marks: scene.marks,
+        grid: scene.grid,
+        dwellUi: scene.dwellUi,
+        scan: scene.scan
+      }
     : scene
 }
 
@@ -93,6 +101,14 @@ export function localize(s: Scene, d: { id: number; bounds: Electron.Rectangle }
     if (dw.scrollAt && contains(b, dw.scrollAt)) ui.scrollAt = shiftPt(dw.scrollAt, b)
     if (dw.dragFrom && contains(b, dw.dragFrom)) ui.dragFrom = shiftPt(dw.dragFrom, b)
     if (ui.scrollAt || ui.dragFrom) out.dwellUi = ui
+  }
+  const sc = s.scan
+  if (sc) {
+    const scan: NonNullable<ScreenScene['scan']> = {}
+    if (sc.ring && intersects(sc.ring.rect, b))
+      scan.ring = { ...sc.ring, rect: shift(sc.ring.rect, b) }
+    if (sc.menu && contains(b, sc.menu.at)) scan.menu = { ...sc.menu, at: shiftPt(sc.menu.at, b) }
+    if (scan.ring || scan.menu) out.scan = scan
   }
   const ann = s.annotations?.filter((a) => a.points.some((p) => contains(b, p)))
   if (ann?.length)
@@ -334,11 +350,17 @@ export function flashFailure(rect: Rect): void {
   flash(rect, 'failure', FAILURE_MS)
 }
 
-/** Drops highlights, buddy and annotations. Numbers, the grid and dwell belong to a11y and stay. */
+/** Drops highlights, buddy and annotations. Numbers, grid, dwell and scan belong to a11y and stay. */
 export function clear(): void {
   if (locateTimer) clearTimeout(locateTimer)
   locateTimer = null
-  scene = { highlights: [], marks: scene.marks, grid: scene.grid, dwellUi: scene.dwellUi }
+  scene = {
+    highlights: [],
+    marks: scene.marks,
+    grid: scene.grid,
+    dwellUi: scene.dwellUi,
+    scan: scene.scan
+  }
   render()
 }
 
