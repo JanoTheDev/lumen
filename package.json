@@ -31,6 +31,8 @@
     "dotenv": "^17.4.2",
     "lucide-react": "^0.474.0",
     "openai": "^7.25.0",
+    "perfect-freehand": "^1.2.3",
+    "roughjs": "^4.6.6",
     "sherpa-onnx-node": "^1.13.8",
     "zod": "^4.6.5"
   },
