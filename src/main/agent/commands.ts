@@ -84,6 +84,8 @@ const CAPABILITY: Record<string, string> = {
   tts_synthesize: 'tts',
   audio_output: 'audio-output',
   audio_unmute: 'audio-output',
+  audio_set_volume: 'audio-volume',
+  ptt_mouse: 'ptt-mouse',
   switch_keys: 'switch',
   browser_url: 'browser-url'
 }
@@ -293,6 +295,24 @@ export function audioOutput(bridge: AgentBridge, opts?: RequestOptions): Promise
 
 export async function audioUnmute(bridge: AgentBridge, opts?: RequestOptions): Promise<void> {
   await send(bridge, 'audio_unmute', {}, opts)
+}
+
+/** Sets the master volume (0..1) of the default playback device; returns the level now. */
+export function audioSetVolume(
+  bridge: AgentBridge,
+  level: number,
+  opts?: RequestOptions
+): Promise<{ volume: number }> {
+  return send(bridge, 'audio_set_volume', { level }, opts)
+}
+
+/** Dictation push-to-talk on a mouse button (reported as dictation-down / -up); "" = off. */
+export function pttMouse(
+  bridge: AgentBridge,
+  button: '' | 'middle' | 'x1' | 'x2',
+  opts?: RequestOptions
+): Promise<{ button: string }> {
+  return send(bridge, 'ptt_mouse', { button }, opts)
 }
 
 export type SwitchMouseButton = 'left' | 'right' | 'middle' | 'x1' | 'x2'

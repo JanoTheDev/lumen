@@ -48,6 +48,7 @@ import {
   setDictationRecorder
 } from './speech/dictation/pipeline'
 import { recordDictation } from './speech/dictation/history'
+import { dictationHandler, installDictationExtras } from './speech/dictation-extras'
 import { addNote } from './speech/dictation/notes'
 import { setNoteSaver } from './web'
 import { isOwnRendererUrl } from './windows/factory'
@@ -130,7 +131,7 @@ function registerIpc(): void {
   registerHudIpc({ armEscape: () => holdEscape('hud'), disarmEscape: () => releaseEscape('hud') })
   registerAnswerIpc()
   registerWakeIpc()
-  registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
+  registerVoiceIpc({ speak: speakAnswer, transcribe, dictate: dictationHandler(dictate) })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerTeachIpc()
   registerSkillsIpc()
@@ -213,6 +214,7 @@ app.whenReady().then(() => {
   const agent = new AgentBridge({ initArgs: () => agentInitArgs(loadConfig()) })
   setAgent(agent)
   wireAgentEvents(agent)
+  installDictationExtras(agent)
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
   installAgentMode()

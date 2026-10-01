@@ -13,6 +13,7 @@ import { clipboard, screen, type BrowserWindow, type Rectangle } from 'electron'
 import type { AssistantCommand, AssistantView, EventChannel, EventChannels } from '@shared/channels'
 import type { AppEvent, AssistantPhase } from '@shared/events'
 import { createWindow, loadRenderer } from './factory'
+import { pillBounds } from './pill-place'
 import { FocusReturn, hwndOf, type ForegroundIo } from './focus-return'
 import * as commandSheet from './command-sheet'
 import { currentZoom, live, registerWindow, sendTo } from './registry'
@@ -145,6 +146,35 @@ function placement(): Rectangle {
   }
 }
 
+/** The window was moved next to the text caret for the dictation pill (04 T47). */
+let nearCaret = false
+
+/**
+ * Moves the bar so its card sits next to `anchor` (the text caret, logical px) while
+ * dictating; null puts it back at the bottom centre. Closing the bar also puts it back.
+ */
+export function placeNear(anchor: Rectangle | null): void {
+  const w = get()
+  if (!w) return
+  if (!anchor) {
+    if (nearCaret && w.isVisible()) w.setBounds(placement())
+    nearCaret = false
+    return
+  }
+  const wa = screen.getDisplayNearestPoint({ x: anchor.x, y: anchor.y }).workArea
+  const zoom = currentZoom(win)
+  w.setBounds(
+    pillBounds(anchor, wa, {
+      width: Math.min(wa.width, Math.round(BAR_WIDTH_CSS * zoom)),
+      height: Math.round(wa.height * 0.6),
+      bottomPad: Math.round(16 * zoom),
+      pillHeight: Math.round(52 * zoom),
+      gap: Math.round(10 * zoom)
+    })
+  )
+  nearCaret = true
+}
+
 function reveal(): void {
   if (hideTimer) {
     clearTimeout(hideTimer)
@@ -152,6 +182,7 @@ function reveal(): void {
   }
   const w = get()
   if (!w || w.isVisible()) return
+  nearCaret = false
   w.setBounds(placement())
   w.showInactive()
   w.setAlwaysOnTop(true, 'screen-saver')
