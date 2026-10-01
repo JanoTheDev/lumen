@@ -17,7 +17,12 @@ import { LlmError, type AgentMessage, type ToolDef } from '../../src/main/ai/pro
 let server: Server
 let base = ''
 const bodies: Record<string, unknown>[] = []
-let queue: { status?: number; message?: Record<string, unknown>; finish?: string }[] = []
+let queue: {
+  status?: number
+  error?: string
+  message?: Record<string, unknown>
+  finish?: string
+}[] = []
 
 function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
@@ -38,7 +43,8 @@ beforeAll(async () => {
       const body = await readBody(req)
       bodies.push(body)
       const next = queue.shift() ?? { message: { role: 'assistant', content: '{}' } }
-      if (next.status) return json(res, next.status, { error: { message: 'quota exceeded' } })
+      if (next.status)
+        return json(res, next.status, { error: { message: next.error ?? 'quota exceeded' } })
       return json(res, 200, {
         id: 'x',
         object: 'chat.completion',
@@ -98,6 +104,25 @@ describe('gemini provider', () => {
     expect(err).toBeInstanceOf(LlmError)
     expect((err as LlmError).code).toBe('E_RATE_LIMIT')
     expect((err as LlmError).message).toBe(GEMINI_RATE_LIMIT_MESSAGE)
+  })
+
+  it('a schema rejection steps down only that schema; other 400s change nothing', async () => {
+    const ok = { message: { role: 'assistant', content: '{"mode":"answer","spoken":"Hi."}' } }
+    const p = createGeminiProvider(client)
+    queue = [{ status: 400, error: 'image format unsupported' }]
+    await p.complete(req).catch(() => null)
+    queue = [ok]
+    await p.complete(req)
+    expect(bodies[1].response_format).toMatchObject({ type: 'json_schema' })
+    queue = [{ status: 400, error: 'Invalid value at response_format.json_schema' }, ok]
+    await p.complete(req)
+    expect(bodies[3].response_format).toMatchObject({ type: 'json_object' })
+    queue = [ok]
+    await p.complete({ ...req, schemaName: 'other_reply' })
+    expect(bodies[4].response_format).toMatchObject({ type: 'json_schema' })
+    queue = [ok]
+    await p.complete(req)
+    expect(bodies[5].response_format).toMatchObject({ type: 'json_object' })
   })
 
   it('reports vision and tools for every model', () => {

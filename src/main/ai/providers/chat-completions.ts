@@ -30,7 +30,11 @@ type ChatParams = OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
 type ResponseFormat = ChatParams['response_format']
 type Message = OpenAI.Chat.ChatCompletionMessageParam
 
-/** How to ask for JSON; stepped down once per backend when the server rejects the richer form. */
+/**
+ * How to ask for JSON; stepped down when the server rejects the richer form. A rejected
+ * `json_schema` steps down only that schema (keyed by backend + schema name); a rejected
+ * `json_object` steps the whole backend down to plain text.
+ */
 export type JsonLevel = 'schema' | 'object' | 'none'
 
 const jsonLevels = new Map<string, JsonLevel>()
@@ -39,6 +43,11 @@ const jsonLevels = new Map<string, JsonLevel>()
 export function resetJsonLevels(): void {
   jsonLevels.clear()
 }
+
+const RANK: Record<JsonLevel, number> = { schema: 2, object: 1, none: 0 }
+const lower = (a: JsonLevel, b: JsonLevel): JsonLevel => (RANK[a] <= RANK[b] ? a : b)
+const schemaKey = (id: string, req: StructuredRequest<unknown>): string =>
+  `${id}|${req.schemaName ?? 'response'}`
 
 function responseFormat(req: StructuredRequest<unknown>, level: JsonLevel): ResponseFormat {
   if (level === 'none' || (!req.schema && !req.json)) return undefined
@@ -277,7 +286,7 @@ function isFormatRejection(e: unknown): boolean {
   const status = (e as { status?: number }).status
   return (
     (status === 400 || status === 422) &&
-    /response_format|json_schema|format/i.test(String((e as Error).message))
+    /response_format|json_schema|json_object/i.test(String((e as Error).message))
   )
 }
 
@@ -320,7 +329,8 @@ export function mapRateLimit(e: unknown, message: string): unknown {
 export function createChatBackend(o: ChatBackendOptions): ChatBackend {
   const params = o.params ?? {}
   const rateMessage = o.rateLimitMessage ?? DEFAULT_RATE_LIMIT_MESSAGE
-  const level = (): JsonLevel => jsonLevels.get(o.id) ?? 'schema'
+  const level = (req: StructuredRequest<unknown>): JsonLevel =>
+    lower(jsonLevels.get(o.id) ?? 'schema', jsonLevels.get(schemaKey(o.id, req)) ?? 'schema')
 
   async function call<R>(fn: () => Promise<R>): Promise<R> {
     try {
@@ -337,7 +347,7 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
   ): Promise<OpenAI.Chat.ChatCompletion> {
     const client = o.client()
     for (;;) {
-      const lvl = level()
+      const lvl = level(req)
       try {
         return await call(() =>
           client.chat.completions.create(buildChatParams(req, o.vision(req.model), lvl, params), {
@@ -346,8 +356,10 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
         )
       } catch (e) {
         if (signal?.aborted || lvl === 'none' || !isFormatRejection(e)) throw e
-        const next: JsonLevel = lvl === 'schema' ? 'object' : 'none'
-        jsonLevels.set(o.id, next)
+        // A json_schema request steps down that schema; a json_object one the whole backend.
+        if (req.schema && lvl === 'schema') jsonLevels.set(schemaKey(o.id, req), 'object')
+        else jsonLevels.set(o.id, 'none')
+        const next = level(req)
         console.log(`[models] ${o.id} server rejected the JSON format; using ${next}`)
       }
     }
@@ -405,7 +417,7 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
       const events = await call(() =>
         client.chat.completions.create(
           {
-            ...buildChatParams(req, o.vision(req.model), level(), params),
+            ...buildChatParams(req, o.vision(req.model), level(req), params),
             stream: true,
             stream_options: { include_usage: true }
           },
