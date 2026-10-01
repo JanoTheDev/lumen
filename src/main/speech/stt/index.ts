@@ -21,6 +21,7 @@ import {
 } from './local-model'
 import { mergeVocabulary, splitTerms } from './vocabulary'
 import { isWav, parseWav } from './wav'
+import { noteDetectedLanguage } from '../language'
 
 // Under ~0.3s there is no word to recognise and Whisper tends to hallucinate.
 const MIN_AUDIO_SECONDS = 0.3
@@ -137,11 +138,15 @@ async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<
       }),
       model: 'whisper-1',
       language: whisperLanguage(lang),
-      prompt: dictation ? dictationPrompt(terms, lang) : whisperPrompt(terms, lang)
+      prompt: dictation ? dictationPrompt(terms, lang) : whisperPrompt(terms, lang),
+      // Carries the detected language (voice language auto, 04 T43); same price as json.
+      response_format: 'verbose_json'
     },
     { timeout: 60000 }
   )
-  log('time', 'stt cloud', { timeMs: Date.now() - t0 })
+  const detected = lang === 'auto' ? result.language : undefined
+  if (lang === 'auto') noteDetectedLanguage(detected)
+  log('time', 'stt cloud', { timeMs: Date.now() - t0, ...(detected ? { lang: detected } : {}) })
   return result.text
 }
 
@@ -175,6 +180,8 @@ async function transcribeAudio(audio: ArrayBuffer, opts: { dictation?: boolean }
 
   const localReady = a.localSupported && a.localInstalled && a.localLanguage !== false
   if (decision.engine === 'local' && pcm) {
+    // Offline "auto" hears English (Canary needs the language up front).
+    if (loadConfig().voice.language === 'auto') noteDetectedLanguage('en')
     try {
       return await transcribeLocal(pcm.samples, pcm.sampleRate)
     } catch (e) {
