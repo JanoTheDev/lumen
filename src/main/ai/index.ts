@@ -4,9 +4,8 @@ import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
 import { buildSystemBlocks } from './prompts/system'
-import { getModel, getProvider } from './router'
 import { parseResponse, sanitizeResponse } from './schema'
-import { LlmError, REFUSAL_MESSAGE, onUsage, providerFor, warmupProviders } from './providers'
+import { LlmError, REFUSAL_MESSAGE, getProvider, onUsage, warmupProviders } from './providers'
 import { logUsage } from './pricing'
 
 export type {
@@ -28,10 +27,11 @@ export async function callModel(
   opts: CallOptions = {}
 ): Promise<ModelResponse> {
   const { imgW, imgH } = currentFrame()
+  const { llm, model, effort } = getProvider('main')
   try {
-    const res = await providerFor(getProvider()).complete(
+    const res = await llm.complete(
       {
-        model: getModel('main'),
+        model,
         system: buildSystemBlocks(activeWindow),
         messages: [
           ...historyMessages(),
@@ -44,7 +44,7 @@ export async function callModel(
           ? [{ base64: screenshotBase64, detail: opts.lowDetail ? 'low' : 'high' }]
           : [],
         maxTokens: opts.lowDetail ? 2048 : 4096,
-        effort: 'low',
+        effort,
         json: true
       },
       opts.signal

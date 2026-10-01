@@ -1,7 +1,6 @@
 import crypto from 'crypto'
-import { getModel, getProvider } from '../ai/router'
 import { usageCost } from '../ai/pricing'
-import { providerFor } from '../ai/providers'
+import { getProvider } from '../ai/providers'
 import { log } from '../logger'
 
 // Intentionally excludes navigate_url/open_url: verifier mis-judges slow page loads
@@ -40,8 +39,7 @@ export async function verifyStep(
     return { success: false, detail: 'page unchanged', cost: 0 }
   }
 
-  const provider = getProvider()
-  const model = getModel('verify')
+  const { llm, model, effort } = getProvider('fast')
   const start = Date.now()
   const prompt = `You verify if a screen action succeeded by looking at the resulting screenshot.
 Action attempted: "${stepDescription}"
@@ -57,13 +55,13 @@ Reply ONLY with JSON: {"success":true,"detail":"<one short sentence>"}`
   let cost = 0
 
   try {
-    const res = await providerFor(provider).complete({
+    const res = await llm.complete({
       model,
       system: [],
       messages: [{ role: 'user', content: prompt }],
       images: [{ base64: afterScreenshot, detail: 'low' }],
       maxTokens: 256,
-      effort: 'low',
+      effort,
       json: true
     })
     cost = usageCost(res.model, res.usage).total

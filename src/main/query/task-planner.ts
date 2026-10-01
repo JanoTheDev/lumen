@@ -1,6 +1,5 @@
 // src/main/task-planner.ts
-import { getModel, getProvider } from '../ai/router'
-import { providerFor } from '../ai/providers'
+import { getProvider } from '../ai/providers'
 import { log, startTimer } from '../logger'
 import { hashScreenshot, shouldVerifyStep, verifyStep } from './step-verifier'
 import type { ClaudeResponse, Action } from '../ai'
@@ -40,8 +39,7 @@ export async function buildPlan(
   activeWindow: string,
   signal?: AbortSignal
 ): Promise<ExecutionPlan> {
-  const provider = getProvider()
-  const model = getModel('planning')
+  const { llm, model, effort } = getProvider('planning')
   const start = Date.now()
   const planTimer = startTimer(`buildPlan (${model})`)
 
@@ -80,14 +78,14 @@ Current app: ${activeWindow}
 Return ONLY JSON, no markdown, no prose:
 {"task":"<brief title>","steps":[{"index":1,"description":"<imperative action>"}]}`
 
-  const res = await providerFor(provider).complete(
+  const res = await llm.complete(
     {
       model,
       system: [{ text: systemPrompt, cacheable: true }],
       messages: [{ role: 'user', content: planPrompt }],
       images: screenshot ? [{ base64: screenshot, detail: 'low' }] : [],
       maxTokens: 2048,
-      effort: 'low',
+      effort,
       json: true
     },
     signal

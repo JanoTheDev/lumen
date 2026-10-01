@@ -1,5 +1,5 @@
 import { anthropicClient } from './providers/anthropic'
-import { computerUseModel } from './router'
+import { COMPUTER_USE_MODEL } from './models'
 
 /**
  * Use Anthropic's Computer Use API to find exact pixel coordinates of a UI element.
@@ -17,7 +17,7 @@ export async function findClickCoordinates(
   try {
     const response = await anthropicClient().beta.messages.create(
       {
-        model: computerUseModel(),
+        model: COMPUTER_USE_MODEL,
         max_tokens: 256,
         betas: ['computer-use-2025-11-24'],
         tools: [

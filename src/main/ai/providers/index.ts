@@ -1,5 +1,6 @@
 // Provider registry: one lazily created provider (and SDK client) per backend, reused for the
 // app's lifetime. Every call's usage is reported to the usage listener.
+import { resolveRole, type Role, type RoleModel } from '../models'
 import { createAnthropicProvider } from './anthropic'
 import { createOpenAIProvider } from './openai'
 import { LlmError, type ChatChunk, type LlmProvider, type ProviderId, type Usage } from './types'
@@ -49,6 +50,12 @@ function withUsage(inner: LlmProvider): LlmProvider {
 
 export function providerFor(id: ProviderId): LlmProvider {
   return (instances[id] ??= withUsage(create(id)))
+}
+
+/** Provider, model and effort for a role. */
+export function getProvider(role: Role): RoleModel & { llm: LlmProvider } {
+  const resolved = resolveRole(role)
+  return { ...resolved, llm: providerFor(resolved.provider) }
 }
 
 /** Test hook: replace (or with null, reset) the provider used for an id. */
