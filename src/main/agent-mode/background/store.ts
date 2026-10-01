@@ -33,6 +33,7 @@ export function parseTask(raw: unknown): BackgroundTask | null {
   if (typeof t.phase !== 'string' || !PHASES.has(t.phase)) return null
   if (!t.counters || typeof t.counters.startedAt !== 'number') return null
   if (t.origin !== 'voice' && t.origin !== 'agent' && t.origin !== 'routine') return null
+  if (t.userText !== undefined && typeof t.userText !== 'string') delete t.userText
   return {
     ...(t as BackgroundTask),
     progress: Array.isArray(t.progress) ? t.progress.filter((p) => typeof p === 'string') : []

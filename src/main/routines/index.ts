@@ -73,7 +73,7 @@ import { folderAllowed, resolveFolderWith } from './folders'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
-import { runPrompt } from './run-prompt'
+import { ownWords, runPrompt } from './run-prompt'
 import { automationIdFromArgv, WakeTasks } from './schtasks'
 import { RoutineStore } from './store'
 import { describeTrigger, isTimeTrigger } from './triggers'
@@ -138,6 +138,8 @@ async function runAutomation(
   const prompt = runPrompt(a, ctx.detail)
   const t = startBackgroundTask({
     prompt,
+    // The fenced file name in the prompt is data, never words the user said.
+    userText: ownWords(a),
     title: a.name,
     origin: 'routine',
     routineId: a.id,

@@ -282,6 +282,11 @@ export interface BackgroundTask {
   title: string
   /** The request as given (Run again starts it anew). */
   prompt: string
+  /**
+   * The user's own words when the prompt holds more (an automation's text without the fenced
+   * file name that started the run): the policy gate's userText.
+   */
+  userText?: string
   skill?: string
   origin: 'voice' | 'agent' | 'routine'
   phase: BackgroundTaskPhase

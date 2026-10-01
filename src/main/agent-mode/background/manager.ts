@@ -13,6 +13,8 @@ export const STEER_MAX = 2000
 
 export interface StartInput {
   prompt: string
+  /** The user's own words when `prompt` holds more (policy userText); default the prompt. */
+  userText?: string
   title?: string
   skill?: string
   origin: BackgroundTask['origin']
@@ -170,6 +172,7 @@ export class BackgroundManager {
       id: this.deps.newId(),
       title: input.title?.trim() || taskTitle(input.prompt),
       prompt: input.prompt,
+      ...(input.userText !== undefined ? { userText: input.userText } : {}),
       ...(input.skill ? { skill: input.skill } : {}),
       origin: input.origin,
       phase: 'queued',
@@ -278,6 +281,7 @@ export class BackgroundManager {
     if (!t || isOpen(t) || t.claude || this.entries.get(id)?.run) return null
     return this.start({
       prompt: t.prompt,
+      ...(t.userText !== undefined ? { userText: t.userText } : {}),
       title: t.title,
       skill: t.skill,
       origin: t.origin,

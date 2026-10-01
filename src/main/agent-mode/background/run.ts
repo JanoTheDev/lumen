@@ -53,6 +53,32 @@ export interface BgRunEnv {
   offers?(tool: string): boolean
   /** The installed skill by name, with its trust (default: the skill registry). */
   skillInfo?(name: string): Promise<RunSkillInfo | null>
+  /** Text the task read (pages, files, how-to steps): the policy's injection check. */
+  observe?(text: string): void
+}
+
+/** Tools whose results are text the task observed (not the user's words). */
+export const OBSERVED_TOOLS = new Set(['fetch_url', 'read_file', 'read_document', 'lookup_howto'])
+
+/** The observed tools' successful results go to `observe` (the policy's observedText). */
+export function observing(
+  handlers: Record<string, ToolHandler>,
+  observe: (text: string) => void
+): Record<string, ToolHandler> {
+  const out: Record<string, ToolHandler> = { ...handlers }
+  for (const name of OBSERVED_TOOLS) {
+    const h = handlers[name]
+    if (!h) continue
+    out[name] = async (input, ctx) => {
+      const r = await h(input, ctx)
+      if (!r.isError) {
+        const t = r.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n')
+        if (t.trim()) observe(t)
+      }
+      return r
+    }
+  }
+  return out
 }
 
 /** Tools that change the user's files. */
@@ -176,7 +202,8 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
   const more = env.moreTools
     ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
     : { defs: [] as ToolDef[], handlers: {} }
-  const base = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
+  const own = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
+  const base = env.observe ? observing(own, env.observe) : own
   const skillRun = !!task.skill || !!env.toolGuard
   let need: Promise<{ confirm: boolean; skill: string }> | null = null
   const all = skillRun

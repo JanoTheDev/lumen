@@ -18,6 +18,7 @@ import { announce } from '../../a11y'
 import { bus } from '../../bus'
 import { configPath, loadConfig } from '../../config'
 import { mcpToolSet } from '../../connectors'
+import type { McpTaskEnv } from '../../connectors/tools'
 import { CREATE_FILE_TOOL, createFileHandler } from '../../docs-out/tool'
 import { GRANTED_FILE_TOOLS, grantedFileHandlers, realGrantedPorts } from '../../files/granted'
 import type { GateCtx } from '../../actions/policy'
@@ -44,6 +45,8 @@ import { TaskStore } from './store'
 import { transcripts } from '../transcript-hub'
 
 const TURN_MAX_TOKENS = 2048
+/** Observed text kept for the policy's injection check (newest last). */
+const MAX_OBSERVED = 20_000
 
 /**
  * lookup_howto (05 T36), loaded on first use (it pulls in the providers and the agent). A helper
@@ -145,6 +148,8 @@ export interface ForegroundSource {
   skills: string[]
   /** May use the mouse without asking (a routine's pre-approval). */
   preapproved: boolean
+  /** What the background task read so far (the policy's injection check). */
+  observedText?: string
 }
 
 /**
@@ -211,7 +216,13 @@ async function requestForeground(
   const res = await runAgentTask(prompt, windowOnlyContext(window), signal, {
     noSpawn: true,
     userText: source.userText,
-    observedText: `Background task request: ${reason}\nSteps: ${steps.join('; ')}`,
+    observedText: [
+      source.observedText,
+      `Background task request: ${reason}`,
+      `Steps: ${steps.join('; ')}`
+    ]
+      .filter(Boolean)
+      .join('\n'),
     ...(source.skills.length ? { underSkills: source.skills } : {})
   })
   const summary = res.mode === 'answer' ? (res.spoken ?? res.text) : 'Done.'
@@ -330,6 +341,19 @@ export function readUnder(
   return last
 }
 
+/**
+ * The policy gate's "user's words" for a task: a helper's own prompt was written by its
+ * parent's model, so the root's words count; an automation's prompt also holds the fenced name
+ * of the file that started it, so its own text (`userText`) counts, not the whole prompt.
+ */
+export function policyUserText(
+  task: Pick<BackgroundTask, 'prompt' | 'userText'>,
+  parent?: Pick<BackgroundTask, 'prompt' | 'userText'> | null
+): string {
+  const root = parent ?? task
+  return root.userText ?? root.prompt
+}
+
 /** runTask, plus a run-history entry when the task runs a named skill. */
 async function runAndRecord(ctl: TaskControl): ReturnType<typeof runTask> {
   const skill = ctl.task().skill
@@ -356,9 +380,20 @@ async function runTask(
   const role: Role = skills.skill?.role ?? 'fast'
   // A routine run: high-risk calls only when pre-approved (a run whose routine is gone: none).
   const shapes = task.origin === 'routine' ? (routineShapes(task.routineId ?? '') ?? []) : null
-  // A helper's own prompt was written by its parent's model; the user's words are the root's.
   const parent = task.parentId ? manager.get(task.parentId) : null
-  const userText = parent?.prompt ?? task.prompt
+  const userText = policyUserText(task, parent)
+  const unattended = { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
+  // What the task read (pages, files, connector results) for the policy's injection check. A
+  // prompt that holds more than the user's words (a fenced file name, a parent's wording) starts it.
+  const seen: McpTaskEnv & { observedText: string } = {
+    taskId: id,
+    prompt: userText,
+    observedText: task.prompt === userText ? '' : task.prompt,
+    unattended
+  }
+  const observe = (text: string): void => {
+    seen.observedText = `${seen.observedText}\n${text}`.slice(-MAX_OBSERVED)
+  }
   const host: GuardHost = {
     speak: (text) => notice(`${task.title}: ${text}`),
     // Confirm-every-action skills: the question waits in the Tasks list.
@@ -400,6 +435,7 @@ async function runTask(
     requestForeground: (reason, steps, signal) =>
       requestForeground(ctl, reason, steps, signal, {
         userText,
+        observedText: seen.observedText,
         skills: envelopes.map((e) => e.skill),
         preapproved: !!shapes && allowsForeground(shapes)
       }),
@@ -433,11 +469,8 @@ async function runTask(
     // Connector tools; every call goes through the policy gate with origin "mcp". A skill run
     // gets only the servers every envelope lists.
     moreTools: async () => {
-      const set = await mcpToolSet({
-        taskId: id,
-        prompt: userText,
-        unattended: { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
-      })
+      // The connector handlers add their results to seen.observedText.
+      const set = await mcpToolSet(seen)
       const defs = envelopes.reduce((d, e) => connectorDefsFor(d, e), set.defs)
       // File tools (docs-out, files/granted): the policy gate with this task's origin and
       // unattended confirms; reads, renames and moves only in the granted folders.
@@ -445,7 +478,8 @@ async function runTask(
         origin: task.origin === 'routine' ? 'routine' : 'agent',
         taskId: `background:${id}`,
         userText,
-        unattended: { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
+        observedText: seen.observedText,
+        unattended
       })
       const granted = realGrantedPorts(
         () => cfg.readFolders,
@@ -460,6 +494,7 @@ async function runTask(
         }
       }
     },
+    observe,
     ...(shapes ? { guard: routineGuard(shapes) } : {}),
     ...(envelopes.length
       ? {
