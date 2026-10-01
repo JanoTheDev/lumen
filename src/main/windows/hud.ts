@@ -1,65 +1,25 @@
-// Push-to-talk HUD. Kept loaded and toggled by opacity so the renderer keeps recording.
-import { screen, type BrowserWindow } from 'electron'
-import { is } from '@electron-toolkit/utils'
+// Voice entry points. The assistant window hosts the voice controller (assistant/VoiceHost),
+// so every call goes to it; this module only keeps the voice wiring in one place.
+import type { BrowserWindow } from 'electron'
 import type { EventChannel, EventChannels } from '@shared/channels'
-import { createWindow, loadRenderer } from './factory'
-import { live, registerWindow, sendTo } from './registry'
+import { sendTo } from './registry'
 import { bus } from '../bus'
 import * as assistant from './assistant'
-import { uiV2 } from './ui-mode'
 
-let win: BrowserWindow | null = null
-
-// With ui v2 the assistant window hosts the voice renderer, so every HUD call goes there.
 export function get(): BrowserWindow | null {
-  return uiV2() ? assistant.get() : live(win)
+  return assistant.get()
 }
 
 export function send<C extends EventChannel>(channel: C, ...args: EventChannels[C]): void {
   sendTo(get(), channel, ...args)
 }
 
-export function create(): void {
-  if (uiV2()) return
-  const { width, height } = screen.getPrimaryDisplay().workAreaSize
-  const w = 100
-  const h = 44
-
-  win = createWindow({
-    width: w,
-    height: h,
-    x: Math.round((width - w) / 2),
-    y: height - h - 32,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    focusable: false,
-    resizable: false,
-    show: true
-  })
-  // Start invisible — use opacity instead of hide/show so Chromium never
-  // suspends the renderer (which pauses audio tracks and kills recording)
-  win.setOpacity(0)
-  win.setIgnoreMouseEvents(true)
-
-  win.webContents.on('did-finish-load', () => {
-    if (is.dev) win?.webContents.openDevTools({ mode: 'detach' })
-  })
-
-  loadRenderer(win, 'index')
-}
-
 export function show(): void {
-  if (uiV2()) return assistant.open('listening')
-  get()?.setOpacity(1)
-  get()?.setIgnoreMouseEvents(false)
+  assistant.open('listening')
 }
 
 export function hide(): void {
-  if (uiV2()) return assistant.turnEnded()
-  get()?.setOpacity(0)
-  get()?.setIgnoreMouseEvents(true)
+  assistant.turnEnded()
 }
 
 /** Hands-free uses the same auto-stop-on-silence path as wake-word activation. */
@@ -78,8 +38,6 @@ export function dictationHandsFree(): void {
 export function stopVoice(): void {
   send('voice:stop')
 }
-
-registerWindow(() => live(win), { zoom: true, interactive: true })
 
 bus.on('voice.started', (e) => {
   show()

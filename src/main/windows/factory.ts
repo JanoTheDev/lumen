@@ -9,7 +9,6 @@ import { fileURLToPath } from 'url'
 import { is } from '@electron-toolkit/utils'
 
 export type RendererEntry =
-  | 'index'
   | 'highlight'
   | 'answeroverlay'
   | 'settings'
@@ -54,7 +53,7 @@ export function createWindow(opts: BrowserWindowConstructorOptions): BrowserWind
 export function loadRenderer(win: BrowserWindow, entry: RendererEntry, hash?: string): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (is.dev && devUrl) {
-    const base = entry === 'index' ? devUrl : `${devUrl}/${entry}.html`
+    const base = `${devUrl}/${entry}.html`
     win.loadURL(hash ? `${base}#${hash}` : base)
   } else {
     win.loadFile(join(__dirname, `../renderer/${entry}.html`), hash ? { hash } : undefined)

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 'react'
-import { toSttWav } from '../voice/wav'
-import { dropMic, getMicStream, holdMic } from '../voice/mic'
+import { toSttWav } from './wav'
+import { dropMic, getMicStream, holdMic } from './mic'
 
 export interface VoiceResultInfo {
   // Milliseconds of audio above the speech threshold during the recording.
@@ -233,7 +233,8 @@ export function useVoice(
           let text: string
           try {
             text =
-              (await window.api.transcribe(
+              (await window.lumen.invoke(
+                'voice:transcribe',
                 arrayBuffer,
                 opts.dictation ? { dictation: true } : undefined
               )) ?? ''

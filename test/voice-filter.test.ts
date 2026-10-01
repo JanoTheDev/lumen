@@ -3,7 +3,7 @@ import {
   computeRms,
   isSilenceHallucination,
   shouldDropTranscript
-} from '../src/renderer/src/hooks/useVoice'
+} from '../src/renderer/src/voice/useVoice'
 
 describe('computeRms', () => {
   it('is 0 for silence and empty input', () => {

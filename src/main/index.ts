@@ -36,17 +36,11 @@ import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pip
 import { isOwnRendererUrl } from './windows/factory'
 import { applyUiScaleOnLoad } from './windows/registry'
 import { setStatus } from './windows/status'
-import * as hud from './windows/hud'
-import * as statusWin from './windows/status'
-import * as answer from './windows/answer'
-import * as highlight from './windows/highlight'
-import * as dwellRing from './windows/dwell-ring'
 import * as tray from './windows/tray'
 import * as assistantWin from './windows/assistant'
 import * as screenLayer from './windows/screen-layer'
 import * as homeWin from './windows/home'
 import * as settingsWin from './windows/settings'
-import { uiV2 } from './windows/ui-mode'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
@@ -63,6 +57,7 @@ import { registerAgentIpc } from './ipc/agent'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
+import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
 import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
@@ -96,16 +91,8 @@ function hardenWebContents(): void {
 }
 
 function createWindows(): void {
-  if (uiV2()) {
-    assistantWin.create()
-    screenLayer.create()
-  } else {
-    hud.create()
-    highlight.create()
-    answer.create()
-    statusWin.create()
-    dwellRing.create()
-  }
+  assistantWin.create()
+  screenLayer.create()
   homeWin.create()
   tray.create()
   applyUiScaleOnLoad()
@@ -184,13 +171,14 @@ app.whenReady().then(() => {
   installLessonOutput()
   installTeach()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
+  installLiveFeedback(announce)
   warmTts()
   prepareStt()
   // A conversation left open when the app last closed is summarized now (memory on only).
   startMemory()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) hud.create()
+    if (BrowserWindow.getAllWindows().length === 0) assistantWin.create()
   })
 })
 

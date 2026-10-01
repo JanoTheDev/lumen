@@ -21,7 +21,6 @@ export default defineConfig({
       minify: true,
       rollupOptions: {
         input: {
-          index: resolve('src/renderer/index.html'),
           highlight: resolve('src/renderer/highlight.html'),
           answeroverlay: resolve('src/renderer/answeroverlay.html'),
           settings: resolve('src/renderer/settings.html'),
