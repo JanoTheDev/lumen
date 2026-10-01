@@ -15,6 +15,10 @@ export interface CommandContext {
   autoScrolling: boolean
   /** An answer card is on screen (pin, dismiss). */
   answerShown?: boolean
+  /** "Read the page" is reading or paused. */
+  reading?: boolean
+  /** A screen description was given a moment ago ("more detail"). */
+  described?: boolean
 }
 
 export const IDLE_CONTEXT: CommandContext = {
@@ -143,6 +147,10 @@ function gateHolds(gate: Gate | undefined, ctx: CommandContext): boolean {
       return !!ctx.answerShown
     case 'guide':
       return ctx.guideActive
+    case 'reading':
+      return !!ctx.reading
+    case 'described':
+      return !!ctx.described
     case 'busy-target':
       return false
   }
@@ -306,7 +314,9 @@ export const GATE_WHEN: Record<Gate, string> = {
   autoscroll: 'while scrolling',
   'busy-target': 'while Lumen is busy',
   answer: 'while an answer is shown',
-  guide: 'during a guide'
+  guide: 'during a guide',
+  reading: 'while Lumen reads aloud',
+  described: 'right after a description'
 }
 
 export interface SheetRow {
