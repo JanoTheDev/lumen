@@ -158,11 +158,18 @@ export function resolveRole(role: Role): RoleModel {
     console.log(`[models] ${role}: ${choice.provider} is not available, using the default`)
   }
   const fallback = activeProvider()
-  if (fallback === 'local' && !choice?.model) {
+  // A model picked for an unavailable provider never goes to another one (a local or service
+  // id would 404 there); only an 'auto' choice or an id of the fallback's own family stays.
+  const picked = choice?.model?.trim()
+  const chosen =
+    picked && (choice?.provider === 'auto' || providerOfModel(picked) === fallback)
+      ? picked
+      : undefined
+  if (fallback === 'local' && !chosen) {
     // One local model for every role (loading a second one would evict the first).
     return { role, provider: 'local', model: localServer()!.model, effort }
   }
-  const override = choice?.model?.trim() || (fallback === 'local' ? undefined : overrideFor(role))
+  const override = chosen || (fallback === 'local' ? undefined : overrideFor(role))
   if (override) {
     const owner = providerOfModel(override) ?? fallback
     if (providerReady(owner)) return { role, provider: owner, model: override, effort }

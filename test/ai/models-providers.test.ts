@@ -150,6 +150,17 @@ describe('per-role choice', () => {
     expect(resolveRole('main')).toMatchObject({ provider: 'openai', model: 'gpt-5-mini' })
   })
 
+  it("a role's model never goes to another provider when its own one is down", () => {
+    keys({ anthropic: true })
+    saveConfig({ models: { roles: { main: { provider: 'local', model: 'qwen3.5:9b' } } } })
+    expect(resolveRole('main')).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-5-5' })
+    saveConfig({ models: { roles: { main: { provider: 'compatible', model: 'deepseek-chat' } } } })
+    expect(resolveRole('main')).toMatchObject({ provider: 'anthropic', model: 'claude-sonnet-5-5' })
+    keys({})
+    setLocalServer(server())
+    expect(resolveRole('main')).toMatchObject({ provider: 'local', model: 'qwen3.5:9b' })
+  })
+
   it('a role can pick a local model next to a cloud default', () => {
     keys({ anthropic: true })
     setLocalServer(server())
