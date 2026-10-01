@@ -8,6 +8,18 @@ import {
   type CustomColors
 } from './themes'
 import { BASE_FONT_PX, COLOR_VARS, STATIC_TOKENS, UI_SCALE_MAX, UI_SCALE_MIN } from './tokens'
+import { springCss } from '../ui/motion'
+
+// CSS transitions that should feel like springs use these (computed once).
+const SPRING_VARS: Record<string, string> = (() => {
+  const out: Record<string, string> = {}
+  for (const name of ['snappy', 'glide'] as const) {
+    const { easing, durationMs } = springCss(name)
+    out[`--spring-${name}`] = easing
+    out[`--spring-${name}-dur`] = `${durationMs}ms`
+  }
+  return out
+})()
 
 /** The config fields the theme engine reads. Everything is optional so old configs work. */
 export interface ThemeConfig {
@@ -103,7 +115,11 @@ export function applyResolved(
   opts: ApplyOptions = {},
   root: HTMLElement = document.documentElement
 ): void {
-  const vars: Record<string, string> = { ...STATIC_TOKENS, ...legacyAliases(t.palette) }
+  const vars: Record<string, string> = {
+    ...STATIC_TOKENS,
+    ...SPRING_VARS,
+    ...legacyAliases(t.palette)
+  }
   for (const [key, cssVar] of Object.entries(COLOR_VARS)) {
     vars[cssVar] = t.palette[key as keyof typeof COLOR_VARS]
   }

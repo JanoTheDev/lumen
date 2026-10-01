@@ -241,3 +241,24 @@ export function flip(
     }
   })
 }
+
+/**
+ * A CSS `linear()` easing plus duration that trace a spring from 0 to 1, so plain CSS
+ * transitions can share the spring presets.
+ */
+export function springCss(name: SpringName): { easing: string; durationMs: number } {
+  const p = SPRINGS[name]
+  const dt = 1 / 120
+  let s: SpringState = { x: [0], v: [0] }
+  const samples = [0]
+  let t = 0
+  while (!atRest(s, [1]) && t < 2) {
+    s = stepSpring(s, [1], p, dt)
+    samples.push(Math.round(s.x[0] * 1000) / 1000)
+    t += dt
+  }
+  samples[samples.length - 1] = 1
+  const stride = Math.max(1, Math.ceil(samples.length / 40))
+  const picked = samples.filter((_, i) => i % stride === 0 || i === samples.length - 1)
+  return { easing: `linear(${picked.join(', ')})`, durationMs: Math.round(t * 1000) }
+}
