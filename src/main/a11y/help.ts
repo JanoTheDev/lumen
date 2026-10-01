@@ -26,10 +26,15 @@ function bind(hotkey: string): void {
   }
 }
 
+/** Binds the configured help shortcut; retries one that failed (an a11y key held it). */
+export function syncHelpShortcut(): void {
+  bind(loadConfig().a11y.helpHotkey ?? '')
+}
+
 /** Binds the help shortcut now and whenever settings change it. */
 export function installHelpShortcut(): void {
-  bind(loadConfig().a11y.helpHotkey ?? '')
-  onConfigPatched((next) => bind(next.a11y.helpHotkey ?? ''))
+  syncHelpShortcut()
+  onConfigPatched(() => syncHelpShortcut())
 }
 
 /** The shortcut actually bound ("" when none or it failed). */

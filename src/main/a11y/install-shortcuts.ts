@@ -14,6 +14,7 @@ import * as home from '../windows/home'
 import { uiV2 } from '../windows/ui-mode'
 import type { A11yCommands } from './dispatch'
 import { dwellController } from './dwell'
+import { syncHelpShortcut } from './help'
 import { ShortcutBinder, planShortcuts, type ShortcutGates } from './shortcuts'
 
 export interface ShortcutInstallDeps {
@@ -94,7 +95,14 @@ export function installShortcuts(deps: ShortcutInstallDeps): { status: () => Sho
       register: (acc, fn) => globalShortcut.register(acc, fn),
       unregister: (acc) => globalShortcut.unregister(acc)
     },
-    run
+    (action) => {
+      // Runs inside globalShortcut's callback: a UserError ("No screen found") becomes feedback.
+      try {
+        run(action)
+      } catch (e) {
+        deps.feedback((e as Error).message || 'That did not work', false)
+      }
+    }
   )
 
   const gates = (): ShortcutGates => ({
@@ -105,7 +113,10 @@ export function installShortcuts(deps: ShortcutInstallDeps): { status: () => Sho
   const sync = (): void => {
     const plan = planShortcuts(loadConfig(), gates())
     binder.sync(plan.bind)
+    // A new help key an a11y shortcut held until now was refused on its own config event.
+    syncHelpShortcut()
     status = binder.withFailures(plan.status)
+
     for (const s of status) {
       if (s.state === 'conflict')
         log('skip', `shortcut ${s.accelerator} (${s.action}) clashes with ${s.with}`)
