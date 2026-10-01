@@ -14,7 +14,7 @@ import {
   type FrameGeometry
 } from '../actions/coords'
 import { parseJsonAs } from '../ai/json'
-import { getProvider, hasKey } from '../ai/providers'
+import { getProvider, hasVisionModel } from '../ai/providers'
 import { log } from '../logger'
 import { LOW_CONFIDENCE, type ResolvedTarget } from './resolve-target'
 
@@ -121,7 +121,7 @@ async function locateInCrop(
 const defaultDeps: RefineDeps = { capture: captureRegion, locate: locateInCrop }
 
 export function canRefine(): boolean {
-  return hasKey('anthropic') || hasKey('openai')
+  return hasVisionModel()
 }
 
 /**

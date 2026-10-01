@@ -1,6 +1,8 @@
 // Model registry: which provider + model + effort serves each role. One key is enough for
 // every role; per-role overrides from config.models apply when their provider has a key.
+// Without a key, a running local server (Ollama / LM Studio, detected) serves every role.
 import { loadConfig } from '../config'
+import { localServer } from './providers/local'
 import type { Effort, ProviderId } from './providers/types'
 
 /**
@@ -51,12 +53,17 @@ export function providerOfModel(model: string): CloudProvider | null {
   return null
 }
 
-/** The provider that serves the defaults: the configured one when it has a key, else any key. */
-export function activeProvider(): CloudProvider {
+/**
+ * The provider that serves the defaults: the configured one when usable, else any cloud key,
+ * else a detected local server. provider "local" prefers the local server over a key.
+ */
+export function activeProvider(): ProviderId {
   const preferred = loadConfig().models.provider
+  if (preferred === 'local' && localServer()) return 'local'
   if ((preferred === 'anthropic' || preferred === 'openai') && hasKey(preferred)) return preferred
   if (hasKey('anthropic')) return 'anthropic'
   if (hasKey('openai')) return 'openai'
+  if (localServer()) return 'local'
   throw new Error('No API key found. Add an Anthropic or OpenAI key in Settings.')
 }
 
@@ -80,6 +87,10 @@ function overrideFor(role: Role): string | undefined {
 export function resolveRole(role: Role): RoleModel {
   const fallback = activeProvider()
   const effort = ROLE_EFFORT[role]
+  if (fallback === 'local') {
+    // One local model for every role (loading a second one would evict the first).
+    return { role, provider: 'local', model: localServer()!.model, effort }
+  }
   const override = overrideFor(role)
   if (override) {
     const owner = providerOfModel(override) ?? fallback
@@ -96,5 +107,7 @@ export function modelLabel(model: string): string {
     const family = claude[1][0].toUpperCase() + claude[1].slice(1)
     return `${family} ${claude[2]}${claude[3] ? `.${claude[3]}` : ''}`
   }
-  return model.replace(/^gpt-/i, 'GPT-')
+  if (/^gpt-/i.test(model)) return model.replace(/^gpt-/i, 'GPT-')
+  // Local names like "qwen3.5:9b" or "lmstudio-community/gemma-4-12b": drop the publisher.
+  return model.split('/').pop() ?? model
 }

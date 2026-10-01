@@ -204,7 +204,10 @@ export async function routeWithLlm(
   const timeout = AbortSignal.timeout(ROUTER_TIMEOUT_MS)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
   try {
-    const { llm, model, effort } = getProvider('fast')
+    const { llm, model, effort, provider } = getProvider('fast')
+    // A local model would add a full extra generation before every answer; the main call
+    // decides the mode itself instead.
+    if (provider === 'local') return null
     const res = await llm.complete(
       {
         model,

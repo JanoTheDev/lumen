@@ -10,6 +10,7 @@ import {
   type Role
 } from '../../src/main/ai/models'
 import { isReasoningModel, reasoningEffort } from '../../src/main/ai/providers/openai'
+import { setLocalServer } from '../../src/main/ai/providers/local'
 import { addToHistory, history, historyMessages } from '../../src/main/ai/history'
 import { setConfigDir, saveConfig } from '../../src/main/config'
 
@@ -68,10 +69,33 @@ describe('role defaults per key combo', () => {
     expect(activeProvider()).toBe('anthropic')
   })
 
-  it('local (not available yet) falls back to a cloud key', () => {
+  it('local with no server running falls back to a cloud key', () => {
     keys(false, true)
     saveConfig({ models: { provider: 'local' } })
     expect(resolveRole('main')).toMatchObject({ provider: 'openai', model: 'gpt-5-mini' })
+  })
+
+  it('local server serves every role: chosen explicitly, or as the keyless fallback', () => {
+    setLocalServer({
+      kind: 'ollama',
+      baseUrl: 'http://localhost:11434',
+      models: ['qwen3.5:9b'],
+      model: 'qwen3.5:9b',
+      vision: true
+    })
+    try {
+      keys(true, false)
+      expect(activeProvider()).toBe('anthropic')
+      saveConfig({ models: { provider: 'local' } })
+      for (const role of ['fast', 'main', 'planning', 'vision-refine'] as Role[])
+        expect(resolveRole(role)).toMatchObject({ provider: 'local', model: 'qwen3.5:9b' })
+      saveConfig({ models: { provider: 'auto' } })
+      keys(false, false)
+      expect(resolveRole('main')).toMatchObject({ provider: 'local', model: 'qwen3.5:9b' })
+      expect(modelLabel('qwen3.5:9b')).toBe('qwen3.5:9b')
+    } finally {
+      setLocalServer(null)
+    }
   })
 
   it('throws a clear error with no keys', () => {

@@ -1,7 +1,10 @@
 // Provider registry: one lazily created provider (and SDK client) per backend, reused for the
 // app's lifetime. Every call's usage is reported to the usage listener.
+import { loadConfig } from '../../config'
+import { markFreeModel } from '../pricing'
 import { resolveRole, type Role, type RoleModel } from '../models'
 import { createAnthropicProvider } from './anthropic'
+import { createLocalProvider, localServer, refreshLocal, type LocalServer } from './local'
 import { createOpenAIProvider } from './openai'
 import { LlmError, type ChatChunk, type LlmProvider, type ProviderId, type Usage } from './types'
 
@@ -10,11 +13,11 @@ export * from './types'
 type UsageListener = (model: string, usage: Usage, hasImage: boolean) => void
 
 const instances: Partial<Record<ProviderId, LlmProvider>> = {}
-let usageListener: UsageListener = () => {}
+let listener: UsageListener = () => {}
 
 /** Receives the usage of every completed call (pricing + cost tracking). */
 export function onUsage(fn: UsageListener): void {
-  usageListener = fn
+  listener = fn
 }
 
 export function hasKey(id: ProviderId): boolean {
@@ -23,13 +26,40 @@ export function hasKey(id: ProviderId): boolean {
   return false
 }
 
+/** Any model can be called: a cloud key or a detected local server. */
+export function hasAnyModel(): boolean {
+  return hasKey('anthropic') || hasKey('openai') || !!localServer()
+}
+
+/** A model that takes images is available (vision verify, refine, screen description). */
+export function hasVisionModel(): boolean {
+  return hasKey('anthropic') || hasKey('openai') || !!localServer()?.vision
+}
+
+/**
+ * Detects a local server (config models.localUrl/localModel, else Ollama then LM Studio).
+ * Cached; cheap enough to await before a turn. Skipped when a cloud key serves everything
+ * and the user did not pick "local".
+ */
+export function refreshLocalModels(force = false): Promise<LocalServer | null> {
+  const m = loadConfig().models
+  if (m.provider !== 'local' && (hasKey('anthropic') || hasKey('openai')))
+    return Promise.resolve(localServer())
+  return refreshLocal({ url: m.localUrl || undefined, model: m.localModel || undefined, force })
+}
+
 function create(id: ProviderId): LlmProvider {
   if (id === 'anthropic') return createAnthropicProvider()
   if (id === 'openai') return createOpenAIProvider()
-  throw new LlmError('E_NO_KEY', `Provider "${id}" is not available yet.`)
+  if (id === 'local') return createLocalProvider()
+  throw new LlmError('E_NO_KEY', `Provider "${id}" is not available.`)
 }
 
 function withUsage(inner: LlmProvider): LlmProvider {
+  const usageListener: UsageListener = (model, usage, hasImage) => {
+    if (inner.id === 'local') markFreeModel(model)
+    listener(model, usage, hasImage)
+  }
   return {
     id: inner.id,
     async complete(req, signal) {
@@ -74,4 +104,5 @@ export function warmupProviders(now = Date.now()): void {
   for (const id of ['anthropic', 'openai'] as const) {
     if (hasKey(id)) void providerFor(id).warmup()
   }
+  void refreshLocalModels()
 }

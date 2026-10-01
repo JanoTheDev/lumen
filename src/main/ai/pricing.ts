@@ -22,8 +22,17 @@ const PRICING: Record<string, Rate> = {
 // Unknown models are priced like the default main model so totals are never zero.
 const FALLBACK = PRICING['claude-sonnet-5-5']
 
+const FREE: Rate = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+// Models served by a local server cost nothing.
+const freeModels = new Set<string>()
+
+export function markFreeModel(model: string): void {
+  freeModels.add(model)
+}
+
 /** Rate for a model id; dated snapshots (`-20251001`, `-2025-08-07`) use their alias's rate. */
 export function rateFor(model: string): Rate & { known: boolean } {
+  if (freeModels.has(model)) return { ...FREE, known: true }
   const alias = model.replace(/-\d{8}$|-\d{4}-\d{2}-\d{2}$/, '')
   const rate = PRICING[alias]
   return rate ? { ...rate, known: true } : { ...FALLBACK, known: false }

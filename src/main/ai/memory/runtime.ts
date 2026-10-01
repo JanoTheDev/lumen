@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { loadConfig } from '../../config'
 import { log } from '../../logger'
 import { parseJsonAs } from '../json'
-import { getProvider, hasKey } from '../providers'
+import { getProvider, hasAnyModel } from '../providers'
 import { createMemory, type Memory, type SessionEndResult, type SessionSummary } from '.'
 import type { EpisodeDraft } from './episodes'
 import type { SessionTurn } from './working'
@@ -127,7 +127,6 @@ export async function summarizeWithModel(
   return { episode: out.episode, facts: out.proposals }
 }
 
-const anyKey = (): boolean => hasKey('anthropic') || hasKey('openai')
 
 // ---- session lifecycle ----
 
@@ -145,7 +144,7 @@ export function endSession(reason: string): Promise<SessionEndResult | null> {
     try {
       const turns = mem.session.turns()
       const result = await mem.endSession(async (transcript) => {
-        if (!anyKey()) return localSummary(turns)
+        if (!hasAnyModel()) return localSummary(turns)
         try {
           return await summarizeWithModel(transcript)
         } catch (e) {

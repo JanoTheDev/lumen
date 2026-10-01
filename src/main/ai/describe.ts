@@ -12,7 +12,7 @@ import { flattenElements, isInteractive, serializeElements } from '../query/uia-
 import { log } from '../logger'
 import { cropImage } from './frames'
 import { parseJsonAs } from './json'
-import { getProvider, hasKey } from './providers'
+import { getProvider, hasVisionModel } from './providers'
 
 export interface DescribeOptions {
   detail: 'brief' | 'full'
@@ -51,7 +51,7 @@ export interface DescribeDeps {
 
 const defaultDeps: DescribeDeps = {
   capture: (signal) => captureContext(true, { signal }),
-  hasModel: () => hasKey('anthropic') || hasKey('openai')
+  hasModel: hasVisionModel
 }
 
 const describeSchema = z.object({ spoken: z.string(), actionable: z.array(z.string()) })

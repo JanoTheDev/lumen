@@ -119,7 +119,11 @@ export const configV2Schema = z.object({
     fast: modelId.optional(),
     planning: modelId.optional(),
     verify: modelId.optional(),
-    provider: z.enum(['auto', 'anthropic', 'openai', 'local'])
+    provider: z.enum(['auto', 'anthropic', 'openai', 'local']),
+    /** Local OpenAI-compatible server (experimental); unset = auto-detect Ollama / LM Studio. */
+    localUrl: z.union([z.literal(''), z.string().regex(/^https?:\/\/[^\s]{1,200}$/i)]).optional(),
+    /** Local model name; unset = best installed vision model. */
+    localModel: modelId.optional()
   }),
   hotkey: v1.hotkey,
   hudAutoCloseMs: v1.hudAutoCloseMs,

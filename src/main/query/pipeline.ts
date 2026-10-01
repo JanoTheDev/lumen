@@ -24,6 +24,7 @@ import { addToHistory, historyExchange } from '../ai/history'
 import { recordTurn } from '../ai/memory/runtime'
 import { appNameOf } from '../ai/skills'
 import { withTurnCost, type TurnCost } from '../ai/cost'
+import { refreshLocalModels } from '../ai/providers'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
 import { requireAgent } from '../agent/instance'
@@ -87,6 +88,8 @@ export async function runQuery(
   bus.emit({ type: 'query.started', turnId, prompt })
   let response: ModelResponse
   try {
+    // Keyless installs: make sure a local server found since the last check is used.
+    if (process.versions.electron) await refreshLocalModels().catch(() => null)
     response = await withTurnCost(
       () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
       (c) => (cost = c)
