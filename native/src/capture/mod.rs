@@ -6,6 +6,7 @@ pub mod dxgi;
 pub mod encode;
 #[cfg(windows)]
 pub mod gdi;
+pub mod marks;
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};

@@ -2,6 +2,7 @@
 // Shared helpers land before every module uses them; dropped once the port is complete.
 #![allow(dead_code)]
 
+mod a11y_state;
 mod announce;
 mod app;
 mod bench;

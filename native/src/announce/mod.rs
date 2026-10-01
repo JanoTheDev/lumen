@@ -61,7 +61,7 @@ pub fn input_desktop_is_default() -> bool {
 
 /// SPI_GETSCREENREADER: set by Narrator, NVDA, JAWS and other screen readers.
 #[cfg(windows)]
-fn screen_reader_running() -> bool {
+pub(crate) fn screen_reader_running() -> bool {
     use windows::Win32::UI::WindowsAndMessaging::{
         SPI_GETSCREENREADER, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
     };

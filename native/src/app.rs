@@ -16,8 +16,19 @@ use crate::wake;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] =
-    &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell", "announce", "wake", "execute"];
+pub const CAPABILITIES: &[&str] = &[
+    "hotkey",
+    "dictation-hotkey",
+    "input",
+    "capture",
+    "ocr",
+    "uia",
+    "dwell",
+    "announce",
+    "wake",
+    "execute",
+    "a11y-state",
+];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -169,6 +180,7 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("capture", Lane::Read, None, |_, args, _| crate::capture::cmd_capture(args));
     app.cmd("ocr", Lane::Read, None, |_, args, token| crate::ocr::cmd_ocr(args, token));
     app.cmd("monitors", Lane::Read, None, |_, _, _| crate::capture::cmd_monitors());
+    app.cmd("marks_render", Lane::Read, None, |_, args, _| crate::capture::marks::cmd_marks_render(args));
 
     app.cmd("active_window", Lane::Read, None, |_, _, _| {
         let hwnd = crate::window::foreground();
@@ -228,6 +240,7 @@ pub fn register_core(app: &Arc<App>) {
     });
 
     app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
+    app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
 
     app.cmd("wake_enable", Lane::Inline, None, |app, args, _| {
         let phrase = arg::opt_str(args, "phrase")?.unwrap_or("");
