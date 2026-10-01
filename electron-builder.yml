@@ -28,13 +28,13 @@ asarUnpack:
 extraResources:
   - from: native/target/release/lumen-native.exe
     to: native/lumen-native.exe
-  - from: agent/vendor/nvda/x64/nvdaControllerClient.dll
+  - from: native/vendor/nvda/x64/nvdaControllerClient.dll
     to: native/nvdaControllerClient.dll
   - from: build/third_party/
     to: third_party/
-  - from: agent/vendor/nvda/license.txt
+  - from: native/vendor/nvda/license.txt
     to: third_party/nvda/license.txt
-  - from: agent/vendor/nvda/SOURCE.txt
+  - from: native/vendor/nvda/SOURCE.txt
     to: third_party/nvda/SOURCE.txt
   - from: LICENSE
     to: third_party/LICENSE.txt

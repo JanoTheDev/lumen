@@ -1,6 +1,6 @@
 //! NVDA controller client (LGPL-2.1, shipped unmodified as a separate DLL),
 //! loaded at runtime. Looks next to the exe first, then in the repo's
-//! agent/vendor copy during development.
+//! native/vendor copy during development.
 
 use std::path::PathBuf;
 use std::sync::OnceLock;
@@ -27,7 +27,7 @@ fn candidates() -> Vec<PathBuf> {
         // Dev: native/target/<profile>/ → repo root.
         let mut up = dir.clone();
         for _ in 0..4 {
-            out.push(up.join("agent").join("vendor").join("nvda").join("x64").join(DLL));
+            out.push(up.join("native").join("vendor").join("nvda").join("x64").join(DLL));
             if !up.pop() {
                 break;
             }
