@@ -127,7 +127,6 @@ export async function summarizeWithModel(
   return { episode: out.episode, facts: out.proposals }
 }
 
-
 // ---- session lifecycle ----
 
 /**
