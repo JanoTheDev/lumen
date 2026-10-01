@@ -85,7 +85,8 @@ export class Memory {
     this.profile = new ProfileLayer(this.store)
     this.apps = new AppLayer(this.store)
     this.working = new WorkingLayer(this.store)
-    this.session = new SessionLayer(this.store, () => !this.settings().privateMode)
+    // The session is kept in RAM always; it reaches disk only when memory may write.
+    this.session = new SessionLayer(this.store, () => this.canWrite())
     this.episodes = new EpisodeStore(this.store)
   }
 

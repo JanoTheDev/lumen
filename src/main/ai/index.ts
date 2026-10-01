@@ -9,7 +9,8 @@ import { historyMessages } from './history'
 import { estimateTokens, logPrefixSize, systemBlocks, userTurn } from './prompts/assemble'
 import { parseReplyText, replySchema, toModelResponse, type Reply } from './schema'
 import { streamReply } from './stream-reply'
-import { matchSkill, regionsLine, skillContext } from './skills'
+import { appNameOf, matchSkill, regionsLine, skillContext } from './skills'
+import { memoryContextFor } from './memory/runtime'
 import {
   LlmError,
   REFUSAL_MESSAGE,
@@ -71,13 +72,19 @@ export async function callModel(
   const skill = ctx?.skill ?? matchSkill({ title: activeWindow })
   const skillText = skill ? skillContext(skill, prompt) : ''
   if (skill) log('plan', `skill ${skill.id}: ~${estimateTokens(skillText)} tokens`)
+  // Memory goes with the user's own request only, not with plan/research/follow-up steps.
+  const withConversation = opts.history !== false
+  const memoryText = withConversation
+    ? memoryContextFor(prompt, skill?.name ?? appNameOf(ctx?.foreground.process))
+    : ''
+  if (memoryText) log('plan', `memory: ~${estimateTokens(memoryText)} tokens`)
   const { llm, model, effort } = getProvider('main')
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
     model,
     system: systemBlocks(),
     messages: [
-      ...(opts.history === false ? [] : historyMessages()),
+      ...(withConversation ? historyMessages() : []),
       {
         role: 'user',
         content: userTurn({
@@ -89,6 +96,7 @@ export async function callModel(
           elements: elements?.text,
           marks: screenshotBase64 ? ctx?.marks?.length : undefined,
           skill: skill ? { name: skill.name, text: skillText } : undefined,
+          memory: memoryText || undefined,
           regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
         })
       }

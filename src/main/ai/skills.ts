@@ -133,6 +133,15 @@ function urlMatches(pattern: string, url: string): boolean {
 
 const baseName = (p: string): string => p.split(/[\\/]/).pop()!.toLowerCase()
 
+/** "C:\…\blender.exe" → "blender" (app name for per-app memory). */
+export function appNameOf(process?: string): string | undefined {
+  const base = process
+    ?.split(/[\\/]/)
+    .pop()
+    ?.replace(/\.exe$/i, '')
+  return base || undefined
+}
+
 export interface ForegroundApp {
   process?: string
   title?: string

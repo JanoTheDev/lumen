@@ -31,6 +31,8 @@ export interface TurnContext {
   skill?: { name: string; text: string }
   /** Region names of that pack, for {"kind":"region"} targets. */
   regions?: string
+  /** `<memory>` block about the user (capped by the memory module). */
+  memory?: string
   now?: Date
 }
 
@@ -74,7 +76,8 @@ ${ctx.elements}`)
   const skill = ctx.skill?.text
     ? `\n<app_guide app="${ctx.skill.name}">\n${ctx.skill.text}\n</app_guide>`
     : ''
-  return `<context>\n${lines.join('\n')}\n</context>${skill}\n<request>${ctx.prompt}</request>`
+  const memory = ctx.memory ? `\n${ctx.memory}` : ''
+  return `<context>\n${lines.join('\n')}\n</context>${memory}${skill}\n<request>${ctx.prompt}</request>`
 }
 
 /** Rough token count (about 3.5 characters per token for English prose and JSON). */

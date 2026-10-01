@@ -21,6 +21,8 @@ import {
 } from './router'
 import { callModel, type CallOptions } from '../ai'
 import { addToHistory, historyExchange } from '../ai/history'
+import { recordTurn } from '../ai/memory/runtime'
+import { appNameOf } from '../ai/skills'
 import { withTurnCost, type TurnCost } from '../ai/cost'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
@@ -303,5 +305,10 @@ async function runTurn(
 
   if (split) recordSplitHistory(split, historyExchange)
   else if (!opts.lowDetail) addToHistory(historyExchange(prompt, result))
+  if (!opts.lowDetail) {
+    const { spoken, mode, targets } = historyExchange(prompt, result)
+    const app = ctx.skill?.name ?? appNameOf(ctx.foreground.process)
+    recordTurn({ utterance: prompt, answer: spoken, mode, targets, app })
+  }
   return result
 }
