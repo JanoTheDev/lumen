@@ -103,7 +103,8 @@ export type Action =
       /** Name of the element (policy risk names, logs). */
       description?: string
     }
-  | { type: 'input'; steps: InputStep[] }
+  /** description: what the click lands on (the policy rates clicks by name). */
+  | { type: 'input'; steps: InputStep[]; description?: string }
 
 export type ActionType = Action['type']
 

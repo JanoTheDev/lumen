@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { Action, ElementNode, Point } from '@shared/types'
 import type { ExecuteResult } from '../../src/main/actions/executor'
+import { evaluate, newTaskState } from '../../src/main/actions/safety'
 import {
+  nameAtTarget,
   performAct,
   type StrategyPorts,
   type TypedFields
@@ -245,5 +247,70 @@ describe('ghost cursor strategy', () => {
     const f = fake([])
     await performAct({ op: 'scroll', dy: -3 }, f.ports, fields(), signal)
     expect(f.batches[0]).toEqual([{ type: 'scroll', direction: 'up', amount: 3 }])
+  })
+})
+
+describe('click names for the policy (mark / point targets, double-click)', () => {
+  const send = node({ id: 'e7', name: 'Send', rect: { x: 800, y: 600, w: 60, h: 30 } })
+  const pane = node({ id: 'e8', name: 'Message', rect: { x: 0, y: 0, w: 1000, h: 1000 } })
+  const marks = [{ n: 14, physRect: send.rect, label: '', elementId: 'e7' }]
+
+  it('names a mark by its element, and a point by the smallest named element under it', () => {
+    const src = { marks, elements: [pane, send], toPhys: (_f: string, p: Point) => p }
+    expect(nameAtTarget({ kind: 'mark', n: 14 }, src)).toBe('Send')
+    expect(nameAtTarget({ kind: 'point', x: 812, y: 610, frame: '1' }, src)).toBe('Send')
+    expect(nameAtTarget({ kind: 'point', x: 5, y: 5, frame: '1' }, src)).toBe('Message')
+    expect(nameAtTarget({ kind: 'mark', n: 99 }, src)).toBeUndefined()
+    expect(
+      nameAtTarget({ kind: 'point', x: 1, y: 1, frame: '2' }, { ...src, toPhys: () => null })
+    ).toBeUndefined()
+  })
+
+  it('a mark click carries the resolved name, so "Send" is rated high', async () => {
+    const f = fake([])
+    f.ports.nameAt = () => 'Send'
+    await performAct(
+      { op: 'click', target: { kind: 'mark', ref: '14' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    const a = f.batches[0][0]
+    expect(a).toMatchObject({ type: 'click_target', description: 'Send' })
+    const d = evaluate(a, { origin: 'agent', task: newTaskState() })
+    expect(d.risk).toBe('high')
+  })
+
+  it('a double-click carries the element name', async () => {
+    const f = fake([node({ id: 'e2', name: 'setup.exe' })])
+    await performAct(
+      { op: 'double_click', target: { kind: 'element', ref: 'e2' } },
+      f.ports,
+      fields(),
+      signal
+    )
+    const a = f.batches[0][0]
+    expect(a).toMatchObject({ type: 'input', description: 'setup.exe' })
+    const ctx = {
+      origin: 'agent' as const,
+      task: newTaskState(),
+      activeWindow: { process: 'explorer.exe', title: 'Downloads' }
+    }
+    expect(evaluate(a, ctx).risk).toBe('high')
+  })
+
+  it('unnamed spot clicks in an agent task are medium and not grantable', () => {
+    const ctx = { origin: 'agent' as const, task: newTaskState() }
+    const d = evaluate({ type: 'click_target', target: { kind: 'point' } }, ctx)
+    expect(d).toMatchObject({ risk: 'medium', needsConfirm: true })
+    expect(d.grantScope).toBeUndefined()
+    const dbl = {
+      type: 'input',
+      steps: [{ t: 'click' as const, button: 'left' as const, count: 2 }]
+    }
+    expect(evaluate(dbl, ctx).risk).toBe('medium')
+    expect(
+      evaluate({ type: 'click_target', target: { kind: 'point' } }, { origin: 'user-direct' }).risk
+    ).toBe('low')
   })
 })

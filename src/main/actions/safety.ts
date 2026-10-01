@@ -599,7 +599,25 @@ function nameOf(a: EvalAction): string {
 
 const SEND_NAMES = new Set(['send', 'send now'])
 
-function clickFindings(name: string, ctx: PolicyCtx, out: Finding[]): void {
+const SPOT_KINDS = new Set(['mark', 'point', 'rect'])
+const RUNNABLE_RE = /\.(exe|com|bat|cmd|ps1|vbs|vbe|js|jse|wsf|msi|msix|appx|scr|lnk|hta|reg)$/i
+
+interface ClickHow {
+  double?: boolean
+  /** A coordinate target (mark, point, rect, raw input): the name is all the policy can rate. */
+  spot?: boolean
+}
+
+function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickHow = {}): void {
+  const { double = false, spot = false } = how
+  // An agent task clicked a mark / point with nothing named under it: not rated by name.
+  if (!name.trim()) {
+    if (spot && agentish(ctx.origin) && ctx.task)
+      out.push({ risk: 'medium', reason: 'clicks something without a readable name' })
+    return
+  }
+  if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
+    out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
   const word = riskyName(name)
   if (!word) return
   const send = ctx.allowSendWithoutReview && SEND_NAMES.has(word)
@@ -662,7 +680,7 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
     case 'click_bbox':
     case 'click_element':
     case 'click_nth_element':
-      clickFindings(nameOf(a), ctx, out)
+      clickFindings(nameOf(a), ctx, out, { spot: SPOT_KINDS.has(a.target?.kind ?? '') })
       break
     case 'uia_act':
       if (a.action === 'set_value') typeFindings(a.value ?? '', ctx, out, redactions)
@@ -675,7 +693,8 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
         const stepCtx = { ...ctx, prevType }
         if (s.t === 'keys') keyFindings(s.combo, stepCtx, out)
         else if (s.t === 'type') typeFindings(s.text, stepCtx, out, redactions)
-        else if (s.t === 'click' && a.elementName) clickFindings(a.elementName, ctx, out)
+        else if (s.t === 'click')
+          clickFindings(nameOf(a), ctx, out, { double: (s.count ?? 1) > 1, spot: true })
         if (s.t !== 'wait') prevType = s.t
       }
       break

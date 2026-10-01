@@ -14,6 +14,8 @@ import type { ActInput } from './tools'
 export interface StrategyPorts {
   /** An element of the latest snapshot (physical rects). */
   element(id: string): ElementNode | undefined
+  /** Name of what a mark / point target lands on (the policy rates clicks by name). */
+  nameAt?(t: Target): string | undefined
   /** The field's current value: the element's UIA value, else the focused field's; null = unknown. */
   readValue(el: ElementNode | undefined, signal: AbortSignal): Promise<string | null>
   /** executeActions with the task's policy context (origin agent, task state, no preview). */
@@ -82,6 +84,40 @@ function targetOf(t: NonNullable<ActInput['target']>): Target | string {
         : `point "${t.ref}" is not "x,y"`
     }
   }
+}
+
+const contains = (r: Rect, p: Point): boolean =>
+  p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h
+
+export interface NameSources {
+  marks?: readonly { n: number; physRect: Rect; label: string; elementId?: string }[]
+  elements: Iterable<ElementNode>
+  /** Image px of a point target's frame → physical px; null when the frame is unknown. */
+  toPhys(frame: string, p: Point): Point | null
+}
+
+/**
+ * What a mark or point target lands on: the smallest named element under it, else the mark's
+ * label. Pure; the policy rates the click by this name ("Send", "Delete" …).
+ */
+export function nameAtTarget(t: Target, src: NameSources): string | undefined {
+  const named = [...src.elements].filter((e) => e.name.trim())
+  const under = (p: Point): string | undefined =>
+    named
+      .filter((e) => contains(e.rect, p))
+      .sort((a, b) => a.rect.w * a.rect.h - b.rect.w * b.rect.h)[0]?.name
+  if (t.kind === 'mark') {
+    const m = src.marks?.find((x) => x.n === t.n)
+    if (!m) return undefined
+    const byId = m.elementId ? named.find((e) => e.id === m.elementId)?.name : undefined
+    return byId ?? (m.label.trim() || under(center(m.physRect)))
+  }
+  if (t.kind === 'point') {
+    const p = src.toPhys(t.frame, { x: t.x, y: t.y })
+    if (!p) return undefined
+    return under(p) ?? src.marks?.find((m) => contains(m.physRect, p))?.label
+  }
+  return undefined
 }
 
 const norm = (s: string): string => s.replace(/\s+/g, ' ').trim().toLowerCase()
@@ -161,8 +197,9 @@ export async function performAct(
         actions: 0,
         ghost: false
       })
+    const name = el ? el.name : ports.nameAt?.(t)
     return real([
-      { type: 'click_target', target: t, button, ...(el ? { description: el.name } : {}) }
+      { type: 'click_target', target: t, button, ...(name ? { description: name } : {}) }
     ])
   }
 
@@ -181,7 +218,11 @@ export async function performAct(
         }
       const c = center(rect)
       return real([
-        { type: 'input', steps: [{ t: 'click', button: 'left', x: c.x, y: c.y, count: 2 }] }
+        {
+          type: 'input',
+          steps: [{ t: 'click', button: 'left', x: c.x, y: c.y, count: 2 }],
+          ...(el?.name ? { description: el.name } : {})
+        }
       ])
     }
     case 'invoke':

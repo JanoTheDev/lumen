@@ -10,7 +10,7 @@ import { executeActions, type ExecuteOptions, type ExecuteResult } from '../acti
 import { gate } from '../actions/policy'
 import { redactForModel } from '../actions/redact'
 import type { TaskState } from '../actions/safety'
-import { logicalToPhys, physToLogical } from '../actions/coords'
+import { imageToPhys, logicalToPhys, physToLogical } from '../actions/coords'
 import { getAgent, requireAgent } from '../agent/instance'
 import * as commands from '../agent/commands'
 import type { AgentBridge } from '../agent/bridge'
@@ -26,7 +26,7 @@ import { loadContent } from '../files/content'
 import { getFile } from '../files/store'
 import { appRegistry, findApp, launchEntry } from './apps'
 import { askUser, type AskIo } from './ask'
-import { performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
+import { nameAtTarget, performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
 import { withInputLane } from './input-lane'
 import { observed } from './prompts'
 import type { ToolHandler, ToolOutcome } from './runner'
@@ -137,6 +137,18 @@ async function observe(
 function strategyPorts(env: TaskEnv): StrategyPorts {
   return {
     element: (id) => elementIndex(currentContext()?.uia).get(id),
+    nameAt: (t) => {
+      const ctx = currentContext()
+      if (!ctx) return undefined
+      return nameAtTarget(t, {
+        marks: ctx.marks,
+        elements: elementIndex(ctx.uia).values(),
+        toPhys: (label, p) => {
+          const f = ctx.frames.find((x) => x.label === label)
+          return f ? imageToPhys(f.geometry, p) : null
+        }
+      })
+    },
     readValue: async (el, signal) => {
       if (el) {
         const fresh = await commands
