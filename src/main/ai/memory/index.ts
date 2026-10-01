@@ -90,6 +90,11 @@ export class Memory {
     this.episodes = new EpisodeStore(this.store)
   }
 
+  /** Memory is on (reads allowed; private mode only stops writes). */
+  isEnabled(): boolean {
+    return this.settings().enabled
+  }
+
   /** Long-term writes happen only with memory on and private mode off. */
   canWrite(): boolean {
     const s = this.settings()
@@ -274,3 +279,4 @@ export type { IndexBackend, RankedEpisode } from './retrieve'
 export { PROFILE_SECTIONS, appIdOf } from './profile'
 export { findSensitive, isSensitive, redact } from './sensitive'
 export { assembleContext, estimateTokens } from './retrieve'
+export { MEMORY_SEARCH_TOOL, memorySearch, memorySearchInput } from './search'

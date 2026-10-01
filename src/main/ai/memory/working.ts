@@ -41,6 +41,8 @@ export interface SessionTurn {
   mode?: string
   app?: string
   targets?: string[]
+  /** Title of the lesson (07) that was running, so "continue where we left off" can name it. */
+  lesson?: string
 }
 
 const SESSION_FILE = 'sessions/current.jsonl'
@@ -122,7 +124,7 @@ export class SessionLayer {
     return this.load()
       .map((t) => {
         const when = `${isoDay(new Date(t.ts))} ${new Date(t.ts).toISOString().slice(11, 16)}`
-        const head = `[${when}${t.app ? ` · ${t.app}` : ''}${t.mode ? ` · ${t.mode}` : ''}]`
+        const head = `[${when}${t.app ? ` · ${t.app}` : ''}${t.mode ? ` · ${t.mode}` : ''}${t.lesson ? ` · lesson "${t.lesson}"` : ''}]`
         return `${head}\nUser: ${t.utterance}${t.answer ? `\nLumen: ${t.answer}` : ''}`
       })
       .join('\n\n')

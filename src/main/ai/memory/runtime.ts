@@ -8,7 +8,9 @@ import { log } from '../../logger'
 import { parseJsonAs } from '../json'
 import { getProvider, hasAnyModel } from '../providers'
 import { createMemory, type Memory, type SessionEndResult, type SessionSummary } from '.'
+import { lessonContext } from '../../teach/context'
 import type { EpisodeDraft } from './episodes'
+import { memorySearch, type memorySearchInput } from './search'
 import type { SessionTurn } from './working'
 
 export const SESSION_END_IDLE_MS = 2 * 60_000
@@ -72,7 +74,7 @@ episode:
 - apps: app names used (e.g. "Blender", "Gmail").
 - outcome: done | partial | failed | info (info = questions only).
 - openThreads: unfinished work the user may want to continue ("export still fails at 80%"); [] when none.
-- refs: URLs, file paths, lesson ids or skill names that were mentioned.
+- refs: URLs, file paths, lessons (kind "lesson", the title from a lesson "..." tag in the transcript) or skill names that were mentioned.
 
 proposals: durable facts worth remembering about the user, at most 5:
 - layer "profile" for the person (name, how to address them, access needs, preferences, goals, skill level), "app" for one app's setup (appId = lowercase app name, e.g. "blender"), "working" for the current project or task.
@@ -94,13 +96,17 @@ export function localSummary(turns: SessionTurn[]): SessionSummary {
       turns.flatMap((t) => `${t.utterance} ${t.answer ?? ''}`.match(/https?:\/\/\S+/g) ?? [])
     )
   ]
+  const lessons = [...new Set(turns.map((t) => t.lesson).filter((l): l is string => !!l))]
   const episode: EpisodeDraft = {
     title: first.length > 60 ? `${first.slice(0, 57)}...` : first,
     summary: `You asked: ${asks.map((a) => `"${a}"`).join(', ')}.`,
     apps,
     outcome: 'info',
     openThreads: [],
-    refs: urls.slice(0, 5).map((value) => ({ kind: 'url', value }))
+    refs: [
+      ...lessons.map((value) => ({ kind: 'lesson' as const, value })),
+      ...urls.slice(0, 5).map((value) => ({ kind: 'url' as const, value }))
+    ]
   }
   return { episode, facts: [] }
 }
@@ -181,7 +187,8 @@ export function recordTurn(turn: Omit<SessionTurn, 'ts'> & { sensitive?: boolean
     const mem = memory()
     // A session left over from long ago (e.g. found after a restart) ends before this one starts.
     if (mem.session.isStale()) void endSession('stale')
-    mem.session.add(turn)
+    const lesson = turn.lesson ?? lessonContext()?.lessonTitle
+    mem.session.add(lesson ? { ...turn, lesson } : turn)
     armIdle()
   } catch (e) {
     log('fail', `memory turn not recorded: ${(e as Error).message}`)
@@ -207,6 +214,16 @@ export async function flushOnQuit(timeoutMs = QUIT_SUMMARY_TIMEOUT_MS): Promise<
     new Promise<void>((r) => (timer = setTimeout(r, timeoutMs)))
   ])
   if (timer) clearTimeout(timer)
+}
+
+/** The `memory_search` tool result for tool-using runs. */
+export function memorySearchFor(input: z.infer<typeof memorySearchInput>): string {
+  try {
+    return memorySearch(memory(), input)
+  } catch (e) {
+    log('fail', `memory search failed: ${(e as Error).message}`)
+    return 'Memory could not be read.'
+  }
 }
 
 /** Memory block for the user turn ('' when memory is off, empty, or unreadable). */
