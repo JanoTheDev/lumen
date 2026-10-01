@@ -36,6 +36,9 @@ function isDir(p: string): boolean {
   }
 }
 
+/** A valid request before the copilot has started: not a bad payload. */
+const NOT_READY = { ok: false, error: 'Claude Code is not ready yet.' } as const
+
 export function registerClaudeCodeIpc(): void {
   ipcMain.handle('claude:status', async () => {
     const st = copilotStore()
@@ -87,8 +90,9 @@ export function registerClaudeCodeIpc(): void {
 
   ipcMain.handle('claude:open', async (_e, raw: unknown) => {
     const req = safeParse('claude:open', claudeOpenSchema, raw)
+    if (!req) return INVALID
     const c = getCopilot()
-    if (!req || !c) return INVALID
+    if (!c) return NOT_READY
     const project = allProjects().find((p) => samePath(p.path, req.project))
     if (!project) return { ok: false, error: 'Unknown project.' }
     try {
@@ -101,8 +105,9 @@ export function registerClaudeCodeIpc(): void {
 
   ipcMain.handle('claude:send', (_e, raw: unknown) => {
     const req = safeParse('claude:send', claudeSendSchema, raw)
+    if (!req) return INVALID
     const c = getCopilot()
-    if (!req || !c) return INVALID
+    if (!c) return NOT_READY
     try {
       c.send(req.id, req.text)
       return { ok: true }

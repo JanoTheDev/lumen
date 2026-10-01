@@ -1,7 +1,8 @@
 // Claude Code IPC: bad payloads return E_INVALID and never reach the copilot or the hooks file.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { copilot, hooksApply, saveSettings } = vi.hoisted(() => ({
+const { copilot, hooksApply, saveSettings, ready } = vi.hoisted(() => ({
+  ready: { on: true },
   copilot: {
     list: vi.fn(() => []),
     send: vi.fn(),
@@ -29,7 +30,7 @@ vi.mock('../../src/main/claude-code', () => ({
     saveSettings
   }),
   getBridge: () => ({ list: () => [], answer: vi.fn(() => true) }),
-  getCopilot: () => copilot,
+  getCopilot: () => (ready.on ? copilot : null),
   hookBase: () => 'http://127.0.0.1:4000',
   hooksApply,
   hooksPreview: vi.fn()
@@ -48,6 +49,22 @@ beforeEach(() => {
 })
 
 describe('claude IPC', () => {
+  it('a valid request before the copilot starts is "not ready", not E_INVALID (review low)', async () => {
+    ready.on = false
+    try {
+      expect(await invokeHandler('claude:send', { id: 'cc_abc123', text: 'hi' })).toEqual({
+        ok: false,
+        error: 'Claude Code is not ready yet.'
+      })
+      expect(await invokeHandler('claude:open', { project: 'C:/x' })).toMatchObject({ ok: false })
+      expect(await invokeHandler('claude:send', { id: 'nope', text: 'x' })).toEqual({
+        error: 'E_INVALID'
+      })
+    } finally {
+      ready.on = true
+    }
+  })
+
   it('validates payloads', async () => {
     expect(await invokeHandler('claude:send', { id: 'nope', text: 'x' })).toEqual({
       error: 'E_INVALID'

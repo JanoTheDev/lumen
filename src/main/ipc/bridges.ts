@@ -21,7 +21,7 @@ export function registerBridgesIpc(): void {
   ipcMain.handle('bridges:blender-addon', () => revealBlenderAddon())
   ipcMain.handle('bridges:obs-set', (_e, raw: unknown) => {
     const req = safeParse('bridges:obs-set', obsBridgeSchema, raw)
-    if (!req) return { ok: false, persisted: false }
+    if (!req) return INVALID
     return setObsSettings(req)
   })
   ipcMain.handle('bridges:obs-clear', () => ({ ok: clearObsSettings() }))
