@@ -8,6 +8,7 @@ import type { FrameGeometry } from '../actions/coords'
 import type { OcrResult, UiaSnapshotResult } from '../agent/commands'
 import type { MarksTable } from './marks'
 import type { UiaQuality } from './uia-list'
+import type { SkillPack } from '../ai/skills'
 
 /** One captured screenshot as the model sees it. */
 export interface Frame {
@@ -32,11 +33,8 @@ export interface Foreground {
   monitorId?: number
 }
 
-/** Skill pack facts the grounding uses (C8 skill.json); filled in by T23. */
-export interface SkillInfo {
-  id: string
-  uiaQuality?: UiaQuality
-}
+/** The foreground app's skill pack (C8): grounding hints, regions and prompt text source. */
+export type SkillInfo = SkillPack
 
 export interface QueryContext {
   frames: Frame[]

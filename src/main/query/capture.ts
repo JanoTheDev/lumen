@@ -17,6 +17,7 @@ import {
   type QueryContext
 } from './context'
 import { buildMarks, type MarksTable } from './marks'
+import { matchSkill } from '../ai/skills'
 import { nodesOnFrame, uiaQuality, type UiaQuality } from './uia-list'
 
 export interface CaptureOptions {
@@ -110,7 +111,10 @@ export async function captureContext(
 ): Promise<QueryContext> {
   const agent = requireAgent()
   const { signal } = opts
-  if (!withScreenshot) return windowOnlyContext(await foregroundOf(agent, signal))
+  if (!withScreenshot) {
+    const fg = await foregroundOf(agent, signal)
+    return { ...windowOnlyContext(fg), skill: matchSkill(fg) ?? undefined }
+  }
   if (highlight.isVisible()) {
     highlight.hide()
     await sleep(32)
@@ -129,6 +133,7 @@ export async function captureContext(
   ])
   const first = frames[0]
   if (!foreground.rect && uia) foreground.rect = uia.root.rect
+  const skill = matchSkill(foreground) ?? undefined
   const frameRect = first && {
     x: first.geometry.originX,
     y: first.geometry.originY,
@@ -136,12 +141,15 @@ export async function captureContext(
     h: first.geometry.height
   }
   // No snapshot (UIA timed out or unsupported) counts as "none": marks only.
-  const quality = frameRect ? uiaQuality(uia, frameRect, foreground.rect) : undefined
+  const quality = frameRect
+    ? uiaQuality(uia, frameRect, foreground.rect, skill?.uiaQuality)
+    : undefined
   const ctx: QueryContext = {
     frames,
     foreground,
     uia,
     uiaQuality: quality,
+    skill,
     ocr: ocrFor(agent, first),
     signal,
     activeWindow: foreground.title,
@@ -168,7 +176,8 @@ export async function captureContext(
       'plan',
       `context: frame ${first.label} ${g.imgW}x${g.imgH} ← phys ${g.width}x${g.height} @(${g.originX},${g.originY})` +
         `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ' (v1 screenshot)'}` +
-        ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote} | ${Date.now() - started}ms`
+        ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote}` +
+        `${skill ? ` | skill ${skill.id}` : ''} | ${Date.now() - started}ms`
     )
     setCurrentFrame(g)
   }

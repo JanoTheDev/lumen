@@ -1,6 +1,7 @@
 // resolveTarget (T13, CONTRACTS C4): turns a model Target into a physical + logical rect with a
 // confidence. Sources in priority order: element (UIA id) → mark (this turn's marks table) →
-// text (UIA name, then OCR, with nth in reading order) → point/rect (image px of a frame).
+// text (UIA name, then OCR, with nth in reading order) → point/rect (image px of a frame) →
+// region (a named area of the window from the active skill pack).
 // All conversions go through actions/coords.ts. Confidence follows grounding.md.
 import type { ElementNode, MonitorInfo, Rect, Target } from '@shared/types'
 import type { OcrResult, OcrWord, UiaSnapshotResult } from '../agent/commands'
@@ -16,7 +17,7 @@ import { findMark, type MarksTable } from './marks'
 import { ocrNorm, pickNth, sortReading } from './nth'
 import { elementIndex, isInteractive } from './uia-list'
 
-export type TargetSource = 'element' | 'mark' | 'text' | 'point' | 'rect'
+export type TargetSource = Target['kind']
 
 export interface ResolvedTarget {
   physRect: Rect
@@ -39,6 +40,8 @@ export interface GroundingContext {
   ocr?: () => Promise<OcrResult | null>
   /** The turn's signal: a cancelled turn resolves nothing (throws its abort reason). */
   signal?: AbortSignal
+  /** The foreground app's skill pack: named regions as fractions of the window (T23). */
+  skill?: { regions?: Record<string, { x: number; y: number; w: number; h: number }> }
 }
 
 /** The latest capture's context, or just the current frame geometry before any capture. */
@@ -56,6 +59,7 @@ export const CONFIDENCE = {
   textFuzzy: 0.6,
   point: 0.5,
   rect: 0.55,
+  region: 0.55,
   disabled: 0.3,
   tinyPenalty: 0.2,
   offWindowPenalty: 0.3
@@ -238,6 +242,24 @@ function resolveImage(
   return { rect: imageRectToPhys(g, rect), confidence, monitorId: frame.monitor?.id }
 }
 
+/** A skill region inside the foreground window (else the frame's monitor area). */
+function resolveRegion(name: string, ctx: GroundingContext): Hit | null {
+  const r = ctx.skill?.regions?.[name.trim().toLowerCase()]
+  if (!r) return null
+  const g = ctx.frames[0]?.geometry
+  const win = ctx.foreground?.rect?.w
+    ? ctx.foreground.rect
+    : g && { x: g.originX, y: g.originY, w: g.width, h: g.height }
+  if (!win) return null
+  const rect = {
+    x: Math.round(win.x + r.x * win.w),
+    y: Math.round(win.y + r.y * win.h),
+    w: Math.max(1, Math.round(r.w * win.w)),
+    h: Math.max(1, Math.round(r.h * win.h))
+  }
+  return { rect, confidence: CONFIDENCE.region, notes: ['coarse region'] }
+}
+
 async function resolveHit(target: Target, ctx: GroundingContext): Promise<Hit | null> {
   switch (target.kind) {
     case 'element': {
@@ -281,6 +303,8 @@ async function resolveHit(target: Target, ctx: GroundingContext): Promise<Hit | 
         CONFIDENCE.rect,
         ctx
       )
+    case 'region':
+      return resolveRegion(target.name, ctx)
   }
 }
 

@@ -48,6 +48,8 @@ export type Target =
   | { kind: 'text'; text: string; nth?: number }
   | { kind: 'point'; x: number; y: number; frame: string }
   | { kind: 'rect'; x: number; y: number; w: number; h: number; frame: string }
+  /** A named area of the foreground app from its skill pack's regions.json (C8). */
+  | { kind: 'region'; name: string }
 
 export type Risk = 'low' | 'medium' | 'high'
 

@@ -27,6 +27,10 @@ export interface TurnContext {
   elements?: string
   /** Number of set-of-marks boxes drawn on frame "1". */
   marks?: number
+  /** Skill pack of the foreground app: overview + shortcuts excerpt, already capped. */
+  skill?: { name: string; text: string }
+  /** Region names of that pack, for {"kind":"region"} targets. */
+  regions?: string
   now?: Date
 }
 
@@ -60,10 +64,17 @@ export function userTurn(ctx: TurnContext): string {
     lines.push(
       `marks: ${ctx.marks} numbered boxes drawn on frame "1" (text and unlabelled controls); point at them with {"kind":"mark","n":N}`
     )
+  if (ctx.regions)
+    lines.push(
+      `regions: ${ctx.regions} (named areas of the ${ctx.skill?.name ?? 'app'} window; point at one with {"kind":"region","name":"..."} when nothing more exact is visible)`
+    )
   if (ctx.elements)
     lines.push(`elements (id role "name" @(x,y,w,h) in frame "1" px):
 ${ctx.elements}`)
-  return `<context>\n${lines.join('\n')}\n</context>\n<request>${ctx.prompt}</request>`
+  const skill = ctx.skill?.text
+    ? `\n<app_guide app="${ctx.skill.name}">\n${ctx.skill.text}\n</app_guide>`
+    : ''
+  return `<context>\n${lines.join('\n')}\n</context>${skill}\n<request>${ctx.prompt}</request>`
 }
 
 /** Rough token count (about 3.5 characters per token for English prose and JSON). */

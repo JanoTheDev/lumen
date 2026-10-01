@@ -15,7 +15,8 @@ export const targetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mark'), n: num }),
   z.object({ kind: z.literal('text'), text: z.string(), nth: num.optional() }),
   z.object({ kind: z.literal('point'), x: num, y: num, frame: z.string() }),
-  z.object({ kind: z.literal('rect'), x: num, y: num, w: num, h: num, frame: z.string() })
+  z.object({ kind: z.literal('rect'), x: num, y: num, w: num, h: num, frame: z.string() }),
+  z.object({ kind: z.literal('region'), name: z.string() })
 ])
 
 const button = z.enum(['left', 'right']).optional()

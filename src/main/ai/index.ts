@@ -6,9 +6,10 @@ import { log } from '../logger'
 import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
-import { logPrefixSize, systemBlocks, userTurn } from './prompts/assemble'
+import { estimateTokens, logPrefixSize, systemBlocks, userTurn } from './prompts/assemble'
 import { parseReplyText, replySchema, toModelResponse, type Reply } from './schema'
 import { streamReply } from './stream-reply'
+import { matchSkill, regionsLine, skillContext } from './skills'
 import {
   LlmError,
   REFUSAL_MESSAGE,
@@ -67,6 +68,9 @@ export async function callModel(
       'plan',
       `uia list: ${elements.count} nodes ~${elements.tokens} tokens${elements.truncated ? ' (truncated)' : ''}`
     )
+  const skill = ctx?.skill ?? matchSkill({ title: activeWindow })
+  const skillText = skill ? skillContext(skill, prompt) : ''
+  if (skill) log('plan', `skill ${skill.id}: ~${estimateTokens(skillText)} tokens`)
   const { llm, model, effort } = getProvider('main')
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
@@ -83,7 +87,9 @@ export async function callModel(
           routedMode: opts.routedMode,
           targetApp: opts.targetApp,
           elements: elements?.text,
-          marks: screenshotBase64 ? ctx?.marks?.length : undefined
+          marks: screenshotBase64 ? ctx?.marks?.length : undefined,
+          skill: skill ? { name: skill.name, text: skillText } : undefined,
+          regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
         })
       }
     ],

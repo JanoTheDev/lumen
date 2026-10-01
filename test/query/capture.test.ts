@@ -10,6 +10,8 @@ import { AgentError, type AgentBridge } from '../../src/main/agent/bridge'
 import { setAgent } from '../../src/main/agent/instance'
 import { currentFrame, setCurrentFrame, setScreenAdapter } from '../../src/main/actions/coords'
 import { captureContext } from '../../src/main/query/capture'
+import { setSkillsDir } from '../../src/main/ai/skills'
+import { join } from 'path'
 import {
   clearSpeculative,
   currentContext,
@@ -91,7 +93,11 @@ function fakeAgent(results: Record<string, unknown>, delayMs = 0): FakeAgent {
   return fake
 }
 
+const REPO_SKILLS = join(__dirname, '../../skills')
+
 beforeEach(() => {
+  // No skill packs unless a test opts in: they override the UIA quality.
+  setSkillsDir(join(__dirname, 'no-skills'))
   resetElectronMock()
   setDisplays(LEFT_150)
   setScreenAdapter(screenAdapterFor(LEFT_150))
@@ -108,6 +114,32 @@ afterEach(() => {
 })
 
 describe('captureContext', () => {
+  it('matches the foreground skill pack, whose uiaQuality caps the measured one', async () => {
+    setSkillsDir(REPO_SKILLS)
+    fakeAgent({
+      active_window: 'Blender',
+      capture: {
+        frames: [
+          {
+            id: 'f5',
+            monitor: LEFT_MONITOR,
+            width: 1280,
+            height: 800,
+            mime: 'image/jpeg',
+            data: 'RAW'
+          }
+        ]
+      },
+      uia_snapshot: UIA,
+      ocr: { words: [], lines: [] },
+      marks_render: { data: 'MARKED', width: 1280, height: 800, mime: 'image/jpeg', count: 7 }
+    })
+    const ctx = await captureContext(true)
+    expect(ctx.skill?.id).toBe('blender')
+    expect(ctx.skill?.regions.outliner).toBeDefined()
+    expect(ctx.uiaQuality).toBe('none')
+  })
+
   it('captures the foreground monitor with its geometry, UIA and window title', async () => {
     const fake = fakeAgent({
       active_window: 'main.ts - Visual Studio Code',
