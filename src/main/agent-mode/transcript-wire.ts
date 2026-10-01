@@ -22,6 +22,7 @@ import {
   claudeHeader,
   foregroundHeader
 } from './transcript-header'
+import { findSessionFile, loadClaudeHistory, readTail } from './transcript-history'
 import { transcripts } from './transcript-hub'
 import { TranscriptStore } from './transcript-store'
 import { matchTaskChatIntent, pickChat } from './transcript-voice'
@@ -288,6 +289,12 @@ export function installTranscripts(dir: string): void {
   const store = new TranscriptStore(dir)
   hub.setStore(store)
   hub.setHeaderSource(chatHeader)
+  hub.setHistorySource((id, rec) => {
+    const v = getCopilot()?.get(id)
+    if (!v?.sessionId) return
+    const file = findSessionFile(v.sessionId, v.project)
+    if (file) loadClaudeHistory(rec, readTail(file))
+  })
   try {
     store.prune(
       new Set(
