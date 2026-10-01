@@ -46,6 +46,15 @@ export interface ScreenScene {
   /** Dwell v2 (06): scroll arrows around a point and the start of a dwell drag. */
   dwellUi?: { scrollAt?: Point; dragFrom?: Point }
   annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
+  /** Switch scanning (06): ring around the highlighted item and/or a menu of the level. */
+  scan?: ScanScene
+}
+
+export interface ScanScene {
+  /** Ring around the highlighted item. */
+  ring?: { rect: Rect; label: string; n?: number }
+  /** Menu panel listing the level's items; `at` is where it goes (global, then display DIP). */
+  menu?: { title: string; items: string[]; index: number; at: Point }
 }
 
 /** Lesson navigation (07 T16): voice, keyboard and switch all map onto these. */

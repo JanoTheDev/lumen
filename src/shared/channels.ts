@@ -52,6 +52,7 @@ export interface InvokeChannels {
   'a11y:commands': { args: []; result: CommandSheetData }
   /** Dwell click-type palette: current pick, pause and drag/scroll state. */
   'a11y:dwell-state': { args: []; result: DwellPaletteState }
+  'a11y:keyboard-state': { args: []; result: ScanKeyboardState }
   /** Applies accessibility profiles (shared/profiles ids) on top of the config; returns it. */
   'a11y:apply-profile': { args: [ids: string[]]; result: Record<string, unknown> }
   'onboarding:info': { args: []; result: OnboardingInfo }
@@ -105,6 +106,28 @@ export interface SendChannels {
   'a11y:sheet-close': []
   /** Dwell palette button (dwelled on or clicked). */
   'a11y:dwell-pick': [pick: DwellPaletteButton]
+  /** Scan keyboard key clicked or dwelled on (ScanKeyboardKey id). */
+  'a11y:keyboard-key': [id: string]
+}
+
+/** One scan keyboard key; `on` = a latched modifier (Shift, Caps). */
+export interface ScanKeyboardKey {
+  id: string
+  label: string
+  /** Spoken name when the label is a symbol. */
+  name?: string
+  /** Width in key units (default 1). */
+  wide?: number
+  on?: boolean
+}
+
+export interface ScanKeyboardState {
+  /** Row 0 holds the word suggestions (may be empty). */
+  rows: ScanKeyboardKey[][]
+  /** Switch scanning highlight: a row, then a key in it. */
+  highlight: { row: number | null; key: number | null }
+  shift: boolean
+  caps: boolean
 }
 
 export type DwellPaletteButton = 'left' | 'right' | 'double' | 'drag' | 'scroll' | 'pause'
@@ -388,6 +411,7 @@ export interface EventChannels {
   /** Command sheet window shown again: re-read the commands for the current context. */
   'a11y:sheet-refresh': []
   'a11y:dwell-state': [state: DwellPaletteState]
+  'a11y:keyboard-state': [state: ScanKeyboardState]
   'voice:tts': [msg: TtsMessage]
   /** Start or stop streaming mic audio to the wake-word spotter. */
   'voice:wake-listen': [on: boolean]
@@ -423,6 +447,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'home:info',
   'a11y:commands',
   'a11y:dwell-state',
+  'a11y:keyboard-state',
   'a11y:apply-profile',
   'onboarding:info',
   'memory:get',
@@ -461,7 +486,8 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'home:run',
   'memory:open-folder',
   'a11y:sheet-close',
-  'a11y:dwell-pick'
+  'a11y:dwell-pick',
+  'a11y:keyboard-key'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
@@ -494,7 +520,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'voice:wake-listen',
   'memory:changed',
   'a11y:sheet-refresh',
-  'a11y:dwell-state'
+  'a11y:dwell-state',
+  'a11y:keyboard-state'
 ]
 
 /** Typed surface exposed to renderers as `window.lumen`. */
