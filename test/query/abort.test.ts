@@ -90,7 +90,7 @@ vi.mock('../../src/main/ai/observe', async (orig) => ({
 import { CancelScope, CancelledError } from '../../src/main/query/cancel'
 import type { QueryContext } from '../../src/main/query/context'
 import { runQuery } from '../../src/main/query/pipeline'
-import { clearHistory, historyMessages } from '../../src/main/ai/history'
+import { history, historyMessages } from '../../src/main/ai/history'
 import { setAgent } from '../../src/main/agent/instance'
 import type { AgentBridge } from '../../src/main/agent/bridge'
 import { bus } from '../../src/main/bus'
@@ -124,7 +124,7 @@ async function runCancelled(): Promise<void> {
 describe('cancelling a turn (T17)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    clearHistory()
+    history.clear()
     agentCalls.length = 0
     events.length = 0
     Object.assign(hooks, { route: null, capture: null, model: null, reply: null, scope: null })

@@ -4,7 +4,7 @@
 // always follow the original question order, whatever order the calls finish in.
 import type { ModelResponse } from '@shared/types'
 import type { CancelScope } from './cancel'
-import { addToHistory } from '../ai/history'
+import { addToHistory, type Exchange } from '../ai/history'
 
 export interface SubResult {
   query: string
@@ -53,8 +53,8 @@ export function mergeSplit(results: SubResult[]): ModelResponse {
 /** One history exchange per sub-question, in the original order. */
 export function recordSplitHistory(
   results: SubResult[],
-  summarize: (r: ModelResponse) => string,
-  add: (prompt: string, summary: string) => void = addToHistory
+  toExchange: (prompt: string, r: ModelResponse) => Exchange,
+  add: (exchange: Exchange) => void = addToHistory
 ): void {
-  for (const r of results) add(r.query, summarize(r.response))
+  for (const r of results) add(toExchange(r.query, r.response))
 }

@@ -115,7 +115,9 @@ function stepCall(prompt: string, s: StepState, opts: CallOptions): Promise<Mode
     ...opts,
     context: s.ctx,
     routedMode: undefined,
-    targetApp: undefined
+    targetApp: undefined,
+    // Steps carry their own goal and step history; the conversation is not needed.
+    history: false
   })
 }
 

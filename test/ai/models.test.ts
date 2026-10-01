@@ -10,7 +10,7 @@ import {
   type Role
 } from '../../src/main/ai/models'
 import { isReasoningModel, reasoningEffort } from '../../src/main/ai/providers/openai'
-import { addToHistory, clearHistory, historyMessages } from '../../src/main/ai/history'
+import { addToHistory, history, historyMessages } from '../../src/main/ai/history'
 import { setConfigDir, saveConfig } from '../../src/main/config'
 
 let dir: string
@@ -145,17 +145,17 @@ describe('model helpers', () => {
 })
 
 describe('history', () => {
-  beforeEach(() => clearHistory())
+  beforeEach(() => history.clear())
 
   it('sends at most historyExchanges exchanges', () => {
     saveConfig({ historyExchanges: 2 })
-    for (let i = 1; i <= 4; i++) addToHistory(`q${i}`, `a${i}`)
+    for (let i = 1; i <= 4; i++) addToHistory({ utterance: `q${i}`, spoken: `a${i}` })
     expect(historyMessages().map((m) => m.content)).toEqual(['q3', 'a3', 'q4', 'a4'])
   })
 
   it('stores and sends nothing when history is disabled', () => {
     saveConfig({ historyEnabled: false })
-    addToHistory('q', 'a')
+    addToHistory({ utterance: 'q', spoken: 'a' })
     expect(historyMessages()).toEqual([])
     saveConfig({ historyEnabled: true })
     expect(historyMessages()).toEqual([])

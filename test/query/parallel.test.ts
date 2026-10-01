@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import type { ModelResponse } from '@shared/types'
 import { CancelScope, CancelledError } from '../../src/main/query/cancel'
 import { mergeSplit, recordSplitHistory, runParallelSplit } from '../../src/main/query/parallel'
-import { clearHistory, historyMessages } from '../../src/main/ai/history'
+import { history, historyMessages } from '../../src/main/ai/history'
 import { setConfigDir } from '../../src/main/config'
 import { tempDir } from '../helpers/fixtures'
 
@@ -65,10 +65,10 @@ describe('recordSplitHistory', () => {
     const t = tempDir()
     cleanup = t.cleanup
     setConfigDir(t.dir)
-    clearHistory()
+    history.clear()
   })
   afterEach(() => {
-    clearHistory()
+    history.clear()
     setConfigDir(null)
     cleanup()
   })
@@ -82,7 +82,10 @@ describe('recordSplitHistory', () => {
         // The second finishes first.
         slow(q.toUpperCase(), q.startsWith('what time') ? 20 : 1, child)
     )
-    recordSplitHistory(results, (r) => (r.mode === 'answer' ? r.text : ''))
+    recordSplitHistory(results, (utterance, r) => ({
+      utterance,
+      spoken: r.mode === 'answer' ? r.text : ''
+    }))
     expect(historyMessages()).toEqual([
       { role: 'user', content: 'what time is it' },
       { role: 'assistant', content: 'WHAT TIME IS IT' },

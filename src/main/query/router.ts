@@ -18,6 +18,7 @@ import {
   type GuideNavCommand
 } from '../guides/voice-nav'
 import { log } from '../logger'
+import { matchMemoryCommand, type MemoryCommand } from './memory-commands'
 
 // ---- 1. Local grammar hook (06) ----
 
@@ -49,6 +50,7 @@ export type PrefilterHit =
   | { kind: 'guide-replay' }
   | { kind: 'guide-save'; name?: string }
   | { kind: 'continuation' }
+  | { kind: 'memory'; command: MemoryCommand }
 
 export interface PrefilterState {
   guideActive: boolean
@@ -76,6 +78,8 @@ export function prefilter(utterance: string, state: PrefilterState): PrefilterHi
   const text = normalizeUtterance(utterance)
   if (!text || utterance.length > MAX_COMMAND_CHARS) return null
   if (CANCEL_RE.test(text)) return { kind: 'cancel' }
+  const memory = matchMemoryCommand(utterance)
+  if (memory) return { kind: 'memory', command: memory }
   if (state.guideActive) {
     const command = parseGuideNav(utterance)
     if (command) return { kind: 'guide-nav', command }
@@ -108,7 +112,9 @@ export function routeLocal(
   }
   const hit = prefilter(utterance, state)
   if (!hit || hit.kind === 'continuation') return undefined
-  log('plan', `prefilter: ${hit.kind}${hit.kind === 'guide-nav' ? ` ${hit.command}` : ''}`)
+  const detail =
+    hit.kind === 'guide-nav' || hit.kind === 'memory' ? ` ${JSON.stringify(hit.command)}` : ''
+  log('plan', `prefilter: ${hit.kind}${detail}`)
   return handle(hit)
 }
 

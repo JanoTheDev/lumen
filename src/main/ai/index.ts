@@ -38,6 +38,8 @@ export interface CallOptions {
   targetApp?: { name: string; url?: string }
   /** Screen context of this call; defaults to the latest capture when its image is the one sent. */
   context?: QueryContext
+  /** false: no conversation history (plan, research and follow-up step calls). */
+  history?: boolean
 }
 
 function contextFor(screenshot: string | null, opts: CallOptions): QueryContext | undefined {
@@ -71,7 +73,7 @@ export async function callModel(
     model,
     system: systemBlocks(),
     messages: [
-      ...historyMessages(),
+      ...(opts.history === false ? [] : historyMessages()),
       {
         role: 'user',
         content: userTurn({

@@ -20,7 +20,7 @@ import {
   type Route
 } from './router'
 import { callModel, type CallOptions } from '../ai'
-import { addToHistory } from '../ai/history'
+import { addToHistory, historyExchange } from '../ai/history'
 import { withTurnCost, type TurnCost } from '../ai/cost'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
@@ -301,23 +301,7 @@ async function runTurn(
   await present(result, prompt, deps.onGuide, shown, scope.signal)
   scope.throwIfCancelled()
 
-  if (split) recordSplitHistory(split, historySummary)
-  else if (!opts.lowDetail) addToHistory(prompt, historySummary(result))
+  if (split) recordSplitHistory(split, historyExchange)
+  else if (!opts.lowDetail) addToHistory(historyExchange(prompt, result))
   return result
-}
-
-/** Text-only summary of a reply for the conversation history. */
-export function historySummary(result: ModelResponse): string {
-  switch (result.mode) {
-    case 'answer':
-      return result.spoken ?? result.text
-    case 'action':
-      return result.summary ?? `action: ${result.actions?.map((a) => a.type).join(', ')}`
-    case 'guide':
-      return `guide: ${result.steps?.map((s) => s.label).join(', ')}`
-    case 'text_insert':
-      return 'inserted text'
-    default:
-      return `located: ${result.items?.map((i) => i.label).join(', ')}`
-  }
 }
