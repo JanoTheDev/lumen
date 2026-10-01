@@ -78,6 +78,51 @@ pub fn chord_events(vks: &[u16], scan: impl Fn(u16) -> u16) -> Vec<Key> {
     vks.iter().map(|&vk| key(vk, false)).chain(vks.iter().rev().map(|&vk| key(vk, true))).collect()
 }
 
+fn same_key(a: &Key, b: &Key) -> bool {
+    let unicode = a.flags & KEYEVENTF_UNICODE;
+    unicode == b.flags & KEYEVENTF_UNICODE && if unicode != 0 { a.scan == b.scan } else { a.vk == b.vk }
+}
+
+/// Updates the list of key-down events not yet released by a later key-up.
+fn track(held: &mut Vec<Key>, k: &Key) {
+    let pos = held.iter().rposition(|h| same_key(h, k));
+    if k.flags & KEYEVENTF_KEYUP != 0 {
+        if let Some(i) = pos {
+            held.remove(i);
+        }
+    } else if pos.is_none() {
+        held.push(*k);
+    }
+}
+
+/// Key-ups for everything `sent` left pressed, latest first. Pure.
+pub fn releases(sent: &[Key]) -> Vec<Key> {
+    let mut held = vec![];
+    for k in sent {
+        track(&mut held, k);
+    }
+    held.iter().rev().map(|k| Key { flags: k.flags | KEYEVENTF_KEYUP, ..*k }).collect()
+}
+
+/// SendInput batches of at least `max` events (bar the last), only cut where no key is held,
+/// so a chord never straddles the pause between two batches. Pure.
+pub fn batches(keys: &[Key], max: usize) -> Vec<&[Key]> {
+    let mut out = vec![];
+    let mut held = vec![];
+    let mut start = 0;
+    for (i, k) in keys.iter().enumerate() {
+        track(&mut held, k);
+        if held.is_empty() && i + 1 - start >= max {
+            out.push(&keys[start..=i]);
+            start = i + 1;
+        }
+    }
+    if start < keys.len() {
+        out.push(&keys[start..]);
+    }
+    out
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Button {
     Left,
@@ -150,27 +195,53 @@ mod win {
         send(&[mouse(MOUSEEVENTF_MOVE, 0)])
     }
 
-    fn send(inputs: &[INPUT]) -> Result<(), AgentError> {
+    /// How many of `inputs` SendInput injected.
+    fn send_raw(inputs: &[INPUT]) -> usize {
         if inputs.is_empty() {
-            return Ok(());
+            return 0;
         }
         // SAFETY: inputs are fully initialised INPUT structs.
-        let sent = unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) };
-        if sent as usize != inputs.len() {
-            return Err(AgentError::denied("input was blocked (the focused window may be elevated)"));
+        unsafe { SendInput(inputs, std::mem::size_of::<INPUT>() as i32) as usize }
+    }
+
+    fn blocked() -> AgentError {
+        AgentError::denied("input was blocked (the focused window may be elevated)")
+    }
+
+    fn send(inputs: &[INPUT]) -> Result<(), AgentError> {
+        if send_raw(inputs) != inputs.len() {
+            return Err(blocked());
         }
         Ok(())
     }
 
+    /// Sends `keys` in batches. On cancel or a blocked batch, whatever is still held
+    /// (a modifier mid-chord) is released before returning the error.
     pub fn send_keys(keys: &[Key], token: &CancelToken) -> Result<(), AgentError> {
-        for (i, chunk) in keys.chunks(BATCH).enumerate() {
-            token.check()?;
-            if i > 0 {
-                token.sleep(BATCH_PAUSE)?;
+        let mut sent = 0;
+        let mut run = || {
+            for (i, chunk) in batches(keys, BATCH).into_iter().enumerate() {
+                token.check()?;
+                if i > 0 {
+                    token.sleep(BATCH_PAUSE)?;
+                }
+                let inputs: Vec<INPUT> = chunk.iter().map(kb).collect();
+                let n = send_raw(&inputs);
+                sent += n.min(inputs.len());
+                if n != inputs.len() {
+                    return Err(blocked());
+                }
             }
-            send(&chunk.iter().map(kb).collect::<Vec<_>>())?;
+            Ok(())
+        };
+        let result = run();
+        if result.is_err() {
+            let up: Vec<INPUT> = releases(&keys[..sent]).iter().map(kb).collect();
+            if send_raw(&up) != up.len() {
+                tracing::warn!("could not release {} held key(s)", up.len());
+            }
         }
-        Ok(())
+        result
     }
 
     pub fn scan_code(vk: u16) -> u16 {
@@ -291,5 +362,36 @@ mod tests {
         assert_eq!(seq, vec![(0x11, false), (0x26, false), (0x26, true), (0x11, true)]);
         assert_eq!(ev[1].flags & KEYEVENTF_EXTENDEDKEY, KEYEVENTF_EXTENDEDKEY);
         assert_eq!(ev[0].flags & KEYEVENTF_EXTENDEDKEY, 0);
+    }
+
+    #[test]
+    fn releases_what_is_still_down() {
+        let chord = chord_events(&[0x11, 0x10, 0x26], |_| 0);
+        assert!(releases(&chord).is_empty());
+        let up = releases(&chord[..2]);
+        let seq: Vec<(u16, bool)> = up.iter().map(|k| (k.vk, k.flags & KEYEVENTF_KEYUP != 0)).collect();
+        assert_eq!(seq, vec![(0x10, true), (0x11, true)]);
+        assert_eq!(releases(&chord[..4]).iter().map(|k| k.vk).collect::<Vec<_>>(), vec![0x10, 0x11]);
+        let ext = releases(&chord_events(&[0x26], |_| 9)[..1]);
+        assert_eq!(ext[0].flags, KEYEVENTF_KEYUP | KEYEVENTF_EXTENDEDKEY);
+        assert_eq!(ext[0].scan, 9);
+        let text = text_events("ab");
+        let up = releases(&text[..3]);
+        assert_eq!(up, vec![Key { vk: 0, scan: b'b' as u16, flags: KEYEVENTF_UNICODE | KEYEVENTF_KEYUP }]);
+    }
+
+    #[test]
+    fn batches_never_split_a_chord() {
+        let mut keys = text_events("abcdefghijklmno"); // 30 events
+        keys.extend(chord_events(&[0x11, 0x10, 0x41], |_| 0)); // 6 more, straddling 32
+        keys.extend(text_events(&"x".repeat(40)));
+        let b = batches(&keys, BATCH);
+        assert_eq!(b.iter().map(|c| c.len()).sum::<usize>(), keys.len());
+        assert_eq!(b[0].len(), 36, "the chord stays in the first batch");
+        for c in &b {
+            assert!(releases(c).is_empty());
+        }
+        assert!(b[..b.len() - 1].iter().all(|c| c.len() >= BATCH));
+        assert!(batches(&[], BATCH).is_empty());
     }
 }
