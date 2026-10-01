@@ -400,6 +400,22 @@ export const HELPERS_DEFAULTS: HelpersConfig = {
   labels: true
 }
 
+/** Dictation styles (04 T36): punctuation and capitals only, never words. */
+export const DICTATION_STYLES = ['formal', 'casual', 'very-casual', 'code', 'off'] as const
+export type DictationStyle = (typeof DICTATION_STYLES)[number]
+/** Kinds of app a dictation style is chosen for (from the focused process or page title). */
+export const DICTATION_APP_KINDS = ['email', 'work', 'personal', 'docs', 'code', 'other'] as const
+export type DictationAppKind = (typeof DICTATION_APP_KINDS)[number]
+export const DICTATION_STYLE_DEFAULTS: Record<DictationAppKind, DictationStyle> = {
+  email: 'formal',
+  work: 'casual',
+  personal: 'casual',
+  docs: 'formal',
+  code: 'code',
+  other: 'off'
+}
+const dictationStyle = z.enum(DICTATION_STYLES)
+
 export const configV2Schema = z.object({
   version: z.literal(2),
   theme: v1.theme,
@@ -563,6 +579,29 @@ export const configV2Schema = z.object({
   /** Speak-to-type. hotkey "" = no dedicated hotkey; autoDetect = dictate from the main hotkey. */
   dictation: z.object({
     enabled: z.boolean(),
+    /** Spoken self-corrections ("Tuesday, actually Wednesday") are applied (04 T34). */
+    backtrack: z.boolean().default(true),
+    /** Lists, numbers, emails and spoken line breaks are formatted after cleanup (04 T35). */
+    format: z.boolean().default(true),
+    /** Style per kind of app (04 T36); styleApps puts a process or site word in a kind. */
+    styles: z
+      .object({
+        email: dictationStyle,
+        work: dictationStyle,
+        personal: dictationStyle,
+        docs: dictationStyle,
+        code: dictationStyle,
+        other: dictationStyle
+      })
+      .default(DICTATION_STYLE_DEFAULTS),
+    styleApps: z
+      .record(z.string().min(1).max(80), z.enum(DICTATION_APP_KINDS))
+      .refine((o) => Object.keys(o).length <= 100, 'at most 100 apps')
+      .default({}),
+    /** With text selected, an edit command ("make this shorter") rewrites it (04 T37). */
+    commandMode: z.boolean().default(true),
+    /** Saved snippets expand when their phrase is said (04 T38). */
+    snippets: z.boolean().default(true),
     hotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]),
     cleanup: z.enum(['light', 'off']),
     autoDetect: z.boolean(),
@@ -678,6 +717,12 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   ai: { router: 'llm' },
   dictation: {
     enabled: true,
+    backtrack: true,
+    format: true,
+    styles: DICTATION_STYLE_DEFAULTS,
+    styleApps: {},
+    commandMode: true,
+    snippets: true,
     hotkey: 'Ctrl+Shift+D',
     cleanup: 'light',
     autoDetect: true,

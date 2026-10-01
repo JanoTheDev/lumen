@@ -56,11 +56,22 @@ export type InsertResult =
 
 export const PASSWORD_NOTICE = 'Dictation does not type into password fields.'
 
+/** Text split on line breaks into typed parts and Shift+Enter presses (for chat apps). */
+export function softBreakActions(text: string, allowTerminal: boolean): AgentAction[] {
+  const out: AgentAction[] = []
+  text.split(/\r?\n/).forEach((part, i) => {
+    if (i > 0) out.push({ type: 'hotkey', keys: ['shift', 'enter'] })
+    if (part) out.push({ type: 'type', text: part, allowTerminal } as AgentAction)
+  })
+  return out
+}
+
 export async function insertDictation(
   agent: AgentBridge,
   text: string,
   target: FocusTarget,
-  policy: TerminalPolicy
+  policy: TerminalPolicy,
+  opts: { softBreaks?: boolean } = {}
 ): Promise<InsertResult> {
   if (target.password) return { ok: false, notice: PASSWORD_NOTICE }
   const decision = guardText(text, target, policy)
@@ -71,8 +82,13 @@ export async function insertDictation(
   if (!typed.trim()) return { ok: true, terminal: decision.terminal }
   // allowTerminal only after the guard removed every line break.
   const action = { type: 'type', text: typed, allowTerminal: decision.terminal }
+  // Enter sends in chat apps: line breaks go in as Shift+Enter there.
+  const actions =
+    opts.softBreaks && !decision.terminal && /\n/.test(typed)
+      ? softBreakActions(typed, false)
+      : [action as AgentAction]
   try {
-    await agent.execute(action as AgentAction)
+    for (const a of actions) await agent.execute(a)
   } catch (e) {
     return { ok: false, notice: `Could not type the dictation: ${(e as Error).message}` }
   }
