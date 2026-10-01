@@ -63,12 +63,14 @@ export function rescueTurn(d: {
   buttons: string[]
   levelLine: string
 }): string {
+  // Screen text loses its angle brackets, so it cannot close the fence and add its own lines.
+  const plain = (t: string): string => t.replace(/[<>]/g, ' ')
   return [
-    d.app ? `App: ${d.app}` : '',
-    `<dialog title=${JSON.stringify(d.title.slice(0, 160))}>`,
-    d.text || '(no readable text)',
+    d.app ? `App: ${plain(d.app)}` : '',
+    `<dialog title=${JSON.stringify(plain(d.title.slice(0, 160)))}>`,
+    plain(d.text) || '(no readable text)',
     '</dialog>',
-    d.buttons.length ? `Buttons: ${d.buttons.join(', ')}` : '',
+    d.buttons.length ? `Buttons: ${d.buttons.map(plain).join(', ')}` : '',
     d.levelLine,
     'Explain this message.'
   ]
