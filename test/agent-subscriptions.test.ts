@@ -1,7 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
-  agent: { running: true, request: vi.fn(() => Promise.resolve({})) }
+  agent: {
+    running: true,
+    caps: new Set<string>(),
+    hasCapability(c: string): boolean {
+      return this.caps.has(c)
+    },
+    request: vi.fn(() => Promise.resolve({}))
+  }
 }))
 vi.mock('../src/main/agent/instance', () => ({ getAgent: () => h.agent }))
 vi.mock('../src/main/logger', () => ({ log: vi.fn() }))
@@ -20,6 +27,21 @@ describe('refCountedSubscription', () => {
     expect(h.agent.request.mock.calls).toEqual([
       ['subscribe', { events: ['mouse-moved'], enabled: true }],
       ['subscribe', { events: ['mouse-moved'], enabled: false }]
+    ])
+  })
+})
+
+describe('refCountedSubscription with a capability', () => {
+  it('only asks an agent that reports the capability', () => {
+    h.agent.request.mockClear()
+    const sub = refCountedSubscription('key-combo', 'key-combo')
+    sub.want('lesson', true)
+    expect(h.agent.request).not.toHaveBeenCalled()
+    expect(sub.wanted()).toBe(true)
+    h.agent.caps.add('key-combo')
+    sub.push()
+    expect(h.agent.request.mock.calls).toEqual([
+      ['subscribe', { events: ['key-combo'], enabled: true }]
     ])
   })
 })

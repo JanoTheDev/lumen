@@ -12,12 +12,14 @@ export interface Subscription {
   want(owner: string, on: boolean): void
 }
 
-export function refCountedSubscription(event: string): Subscription {
+/** `capability`: only ask an agent that reports it (others reject unknown events). */
+export function refCountedSubscription(event: string, capability?: string): Subscription {
   const owners = new Set<string>()
   const wanted = (): boolean => owners.size > 0
   const push = (): void => {
     const agent = getAgent()
     if (!agent?.running) return
+    if (capability && !agent.hasCapability(capability)) return
     agent
       .request('subscribe', { events: [event], enabled: wanted() })
       .catch((e: Error) => log('skip', `${event} subscribe failed (${e.message})`))
@@ -36,6 +38,12 @@ export function refCountedSubscription(event: string): Subscription {
 
 /** mouse-moved: guide auto-dismiss and the follow buddy. */
 export const mouseEvents = refCountedSubscription('mouse-moved')
+
+/** uia-event (invoked / value / selected / window-opened): lesson checks. */
+export const uiaEvents = refCountedSubscription('uia-event', 'uia-events')
+
+/** key-combo (observe-only shortcuts, never typing): lesson keypress checks. */
+export const keyComboEvents = refCountedSubscription('key-combo', 'key-combo')
 
 /** True once the cursor has moved more than `px` from where the last `true` (or the start) was. */
 export function moveGate(px: number): (p: { x: number; y: number }) => boolean {

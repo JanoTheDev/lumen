@@ -54,6 +54,7 @@ const request = vi.fn(async (cmd: string, args?: unknown): Promise<unknown> => {
 })
 const agent = {
   protocol: 2,
+  running: true,
   hasCapability: () => true,
   request,
   onEvent: (event: string, cb: (data: unknown) => void) => {

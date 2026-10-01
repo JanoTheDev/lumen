@@ -15,6 +15,7 @@ import { gate, newTaskId } from '../actions/policy'
 import type { EvalAction } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
+import { keyComboEvents, uiaEvents } from '../agent/subscriptions'
 import { announce } from '../a11y'
 import { wantFocusEvents } from '../a11y/focus-events'
 import { LOCAL_HANDLED as HANDLED } from '../a11y/dispatch'
@@ -250,18 +251,11 @@ function wireAgentEvents(): void {
     const combo = (data as { combo?: unknown } | null)?.combo
     if (typeof combo === 'string') for (const cb of keySubs) cb(combo)
   })
-  // A fresh agent has no subscriptions; ask again while a step watches for keys.
+  // A fresh agent has no subscriptions (init turns off what it does not list): ask again.
   agent.onEvent('agent-ready', () => {
-    if (keySubs.size) setKeyObservation(true)
+    if (keyComboEvents.wanted()) keyComboEvents.push()
+    if (uiaEvents.wanted()) uiaEvents.push()
   })
-}
-
-function setKeyObservation(on: boolean): void {
-  const agent = getAgent()
-  if (!agent?.hasCapability('key-combo')) return
-  agent
-    .request('subscribe', { events: ['key-combo'], enabled: on })
-    .catch((e: Error) => log('skip', `key-combo subscribe failed (${e.message})`))
 }
 
 // ---- Do it for me ----
@@ -440,9 +434,12 @@ function realPorts(): Ports {
         const sub = { kinds: new Set<string>(kinds), cb }
         uiaSubs.add(sub)
         wantFocusEvents('lesson', true)
+        uiaEvents.want('lesson', true)
         return () => {
           uiaSubs.delete(sub)
-          if (!uiaSubs.size) wantFocusEvents('lesson', false)
+          if (uiaSubs.size) return
+          wantFocusEvents('lesson', false)
+          uiaEvents.want('lesson', false)
         }
       }
     },
@@ -456,10 +453,10 @@ function realPorts(): Ports {
       available: () => !!getAgent()?.hasCapability('key-combo'),
       onCombo: (cb) => {
         keySubs.add(cb)
-        if (keySubs.size === 1) setKeyObservation(true)
+        keyComboEvents.want('lesson', true)
         return () => {
           keySubs.delete(cb)
-          if (!keySubs.size) setKeyObservation(false)
+          if (!keySubs.size) keyComboEvents.want('lesson', false)
         }
       }
     },
