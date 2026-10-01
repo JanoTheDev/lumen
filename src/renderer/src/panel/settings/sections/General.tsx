@@ -9,13 +9,7 @@ export function General({ cfg, patch }: SectionProps): JSX.Element {
           label="Push-to-talk shortcut"
           value={cfg.hotkey}
           onCommit={(hotkey) => patch({ hotkey })}
-          hint="Hold it while you speak. Must include Ctrl, Alt or Shift, or be F1 to F12."
-        />
-        <Switch
-          checked={cfg.handsFreeMode}
-          onChange={(handsFreeMode) => patch({ handsFreeMode })}
-          label="Tap to talk"
-          hint="Tap the shortcut instead of holding it. Recording stops after a pause."
+          hint="Must include Ctrl, Alt or Shift, or be F1 to F12. Hold or tap it: choose under Voice."
         />
       </Card>
 

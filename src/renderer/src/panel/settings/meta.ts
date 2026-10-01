@@ -38,7 +38,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Voice',
     icon: icons.mic,
     keywords:
-      'wake word phrase hey lumen microphone vocabulary words cancel stop silence speech read aloud tts voice'
+      'wake word phrase hey lumen sensitivity microphone mic device test level hold tap activation vocabulary words cancel stop silence pause speech read aloud tts voice'
   },
   {
     id: 'accessibility',

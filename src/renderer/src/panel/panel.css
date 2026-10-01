@@ -295,3 +295,36 @@ body {
     padding: var(--space-4);
   }
 }
+
+.panel-warn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.panel-warn svg {
+  flex: none;
+  color: var(--warning);
+}
+
+.panel-mic-test {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.panel-meter {
+  height: 0.5rem;
+  max-width: 28rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.panel-meter__fill {
+  height: 100%;
+  background: var(--success);
+  transform: scaleX(0);
+  transform-origin: left;
+}

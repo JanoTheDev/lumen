@@ -1,21 +1,389 @@
-import { useEffect, useState } from 'react'
-import type { SttStatus, WakeModelProgress } from '@shared/channels'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { SttStatus, WakeModelProgress, WakeStatus } from '@shared/channels'
+import { WAKE_SENSITIVITY_DEFAULT } from '@shared/config'
 import {
   Button,
   Card,
   NumberField,
   ProgressBar,
+  SegmentedControl,
   Select,
   Slider,
   Switch,
   TextField,
   announce,
-  icons
+  icons,
+  type SliderProps
 } from '../../../ui'
+import { useDraft } from '../../../ui/draft'
+import { micConstraints } from '../../../voice/mic'
 import { windowsVoices } from '../../../voice/speaker'
 import type { SectionProps } from '../meta'
+import {
+  PAUSE_OPTIONS,
+  PAUSE_PRESETS,
+  meterLevel,
+  micOptions,
+  pausePresetOf,
+  sensitivityText,
+  type MicDevice
+} from './voice-options'
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
+
+/** A slider that saves after a short pause instead of on every step. */
+function DraftSlider({
+  value,
+  onCommit,
+  ...rest
+}: Omit<SliderProps, 'onChange'> & { onCommit: (v: number) => void }): JSX.Element {
+  const draft = useDraft(value, onCommit)
+  return <Slider {...rest} value={draft.value} onChange={draft.onChange} />
+}
+
+// ---- Microphone ----
+
+function useMicDevices(): [MicDevice[], () => void] {
+  const [devices, setDevices] = useState<MicDevice[]>([])
+  const refresh = useCallback((): void => {
+    navigator.mediaDevices
+      ?.enumerateDevices()
+      .then((list) =>
+        setDevices(list.map((d) => ({ deviceId: d.deviceId, label: d.label, kind: d.kind })))
+      )
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    refresh()
+    const md = navigator.mediaDevices
+    md?.addEventListener('devicechange', refresh)
+    return () => md?.removeEventListener('devicechange', refresh)
+  }, [refresh])
+  return [devices, refresh]
+}
+
+const TEST_MS = 15_000
+const HEARD_LEVEL = 0.45
+
+function micError(err: unknown): string {
+  const name = (err as { name?: string } | null)?.name
+  if (name === 'NotAllowedError')
+    return 'The microphone is blocked. Allow microphone access in Windows privacy settings.'
+  if (name === 'NotFoundError' || name === 'OverconstrainedError')
+    return 'That microphone isn’t connected.'
+  return 'Couldn’t open the microphone.'
+}
+
+/** Live level meter for the chosen microphone; stops by itself after 15 s. */
+function MicTest({ deviceId, onOpened }: { deviceId: string; onOpened: () => void }): JSX.Element {
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState('')
+  const fill = useRef<HTMLDivElement>(null)
+  const stopRef = useRef<(() => void) | null>(null)
+
+  const stop = useCallback((): void => {
+    stopRef.current?.()
+    stopRef.current = null
+  }, [])
+
+  // Picking another device or leaving the page ends the test.
+  useEffect(() => stop, [deviceId, stop])
+
+  const start = async (): Promise<void> => {
+    stop()
+    setMessage('Say something…')
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) })
+    } catch (err) {
+      const text = micError(err)
+      setMessage(text)
+      announce(text, 'assertive')
+      return
+    }
+    onOpened()
+    const ctx = new AudioContext()
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 1024
+    ctx.createMediaStreamSource(stream).connect(analyser)
+    const buf = new Float32Array(analyser.fftSize)
+    let level = 0
+    let heard = false
+    let raf = 0
+    const tick = (): void => {
+      analyser.getFloatTimeDomainData(buf)
+      level = Math.max(meterLevel(buf), level * 0.85)
+      if (fill.current) fill.current.style.transform = `scaleX(${level})`
+      if (!heard && level >= HEARD_LEVEL) {
+        heard = true
+        setMessage('Lumen hears you.')
+        announce('Lumen hears you.')
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    const timer = setTimeout(() => {
+      stop()
+      if (!heard) {
+        const text = 'Lumen didn’t hear anything. Check the microphone or pick another one.'
+        setMessage(text)
+        announce(text, 'assertive')
+      }
+    }, TEST_MS)
+    stopRef.current = () => {
+      clearTimeout(timer)
+      cancelAnimationFrame(raf)
+      stream.getTracks().forEach((t) => t.stop())
+      ctx.close().catch(() => {})
+      if (fill.current) fill.current.style.transform = 'scaleX(0)'
+      setRunning(false)
+    }
+    setRunning(true)
+  }
+
+  return (
+    <div className="panel-mic-test">
+      <div className="panel-row">
+        <Button
+          icon={running ? icons.square : icons.mic}
+          onClick={() => (running ? stop() : void start())}
+        >
+          {running ? 'Stop test' : 'Test microphone'}
+        </Button>
+        <span className="ui-hint" aria-live="polite">
+          {message}
+        </span>
+      </div>
+      <div className="panel-meter" aria-hidden="true">
+        <div ref={fill} className="panel-meter__fill" />
+      </div>
+    </div>
+  )
+}
+
+function Microphone({ cfg, patch }: SectionProps): JSX.Element {
+  const [devices, refreshDevices] = useMicDevices()
+  const saved = cfg.voice.micDeviceId ?? ''
+  const named = devices.some((d) => d.kind === 'audioinput' && d.label)
+  return (
+    <Card
+      title="Microphone"
+      description="Which microphone Lumen listens to, and how you start talking."
+    >
+      <Select
+        label="Microphone"
+        value={saved}
+        options={micOptions(devices, saved)}
+        onChange={(micDeviceId) => patch({ voice: { micDeviceId } })}
+        hint={named ? undefined : 'Test the microphone once to see device names.'}
+      />
+      <MicTest deviceId={saved} onOpened={refreshDevices} />
+      <SegmentedControl
+        label="Start talking by"
+        value={cfg.handsFreeMode ? 'tap' : 'hold'}
+        options={[
+          { value: 'hold', label: 'Holding the shortcut' },
+          { value: 'tap', label: 'Tapping the shortcut' }
+        ]}
+        onChange={(mode) => patch({ handsFreeMode: mode === 'tap' })}
+      />
+      <p className="ui-hint">
+        {cfg.handsFreeMode
+          ? 'Tap once and speak; Lumen stops after a pause. Tap again to send early.'
+          : 'Hold while you speak and let go to send. A quick tap also works and stops after a pause.'}
+      </p>
+    </Card>
+  )
+}
+
+// ---- Wake word ----
+
+function useWakeStatus(): [WakeStatus | null, () => void] {
+  const [status, setStatus] = useState<WakeStatus | null>(null)
+  const refresh = useCallback((): void => {
+    window.lumen
+      .invoke('wake:model-status')
+      .then(setStatus)
+      .catch(() => {})
+  }, [])
+  useEffect(() => {
+    refresh()
+    return window.lumen.on('wake:status', setStatus)
+  }, [refresh])
+  return [status, refresh]
+}
+
+const ENGINE_TEXT: Record<WakeStatus['engine'], string> = {
+  kws: 'Listening with the offline keyword spotter.',
+  vosk: 'Using the backup engine; sensitivity has no effect on it.',
+  off: 'Not listening.'
+}
+
+function WakeEngine({
+  status,
+  refresh
+}: {
+  status: WakeStatus | null
+  refresh: () => void
+}): JSX.Element {
+  const [progress, setProgress] = useState<WakeModelProgress | null>(null)
+
+  useEffect(
+    () =>
+      window.lumen.on('wake:model-progress', (p) => {
+        setProgress(p)
+        if (p.phase === 'done') {
+          announce('Wake word model installed')
+          refresh()
+        }
+        if (p.phase === 'error') announce(`Install failed. ${p.message ?? ''}`, 'assertive')
+      }),
+    [refresh]
+  )
+
+  if (!status) return <p className="ui-hint">Checking the offline model…</p>
+  if (progress?.phase === 'downloading' || progress?.phase === 'extracting') {
+    return (
+      <ProgressBar
+        label={
+          progress.phase === 'extracting'
+            ? 'Unpacking the offline model'
+            : 'Downloading the offline model'
+        }
+        value={progress.phase === 'extracting' ? undefined : (progress.percent ?? 0) / 100}
+      />
+    )
+  }
+  return (
+    <>
+      {status.installed ? (
+        <p className="panel-ok">
+          <icons.checkCircle /> Offline model installed. {ENGINE_TEXT[status.engine]}
+        </p>
+      ) : (
+        <div className="panel-row">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setProgress({ phase: 'downloading', percent: 0 })
+              window.lumen
+                .invoke('wake:model-install')
+                .then(refresh)
+                .catch(() => {})
+            }}
+          >
+            Install offline model ({status.sizeMb} MB)
+          </Button>
+          <span className="ui-hint">
+            {progress?.phase === 'error'
+              ? `Last try failed: ${progress.message ?? 'unknown error'}`
+              : 'Free, one-time download.'}
+          </span>
+        </div>
+      )}
+      {status.unusable.length > 0 && (
+        <p className="panel-warn" role="status">
+          <icons.alert /> Lumen can’t listen for {status.unusable.map((p) => `“${p}”`).join(', ')}.
+          Try other words.
+        </p>
+      )}
+    </>
+  )
+}
+
+function WakeWord({ cfg, patch }: SectionProps): JSX.Element {
+  const [status, refresh] = useWakeStatus()
+  return (
+    <Card
+      title="Wake word"
+      description="Say a phrase to start Lumen without a shortcut. Runs offline."
+    >
+      <Switch
+        checked={cfg.wakeWord.enabled}
+        onChange={(enabled) => patch({ wakeWord: { enabled } })}
+        label="Listen for the wake word"
+      />
+      <TextField
+        label="Wake phrase"
+        value={cfg.wakeWord.phrase}
+        onCommit={(phrase) => patch({ wakeWord: { phrase } })}
+        accept={(v) => v.trim().length > 0}
+        commitOnBlurOnly
+        hint="“Hey Lumen” is the most reliable; other phrases miss more often. Saved when you leave the field."
+      />
+      <DraftSlider
+        label="Sensitivity"
+        value={cfg.wakeWord.sensitivity ?? WAKE_SENSITIVITY_DEFAULT}
+        min={0}
+        max={1}
+        step={0.1}
+        format={sensitivityText}
+        disabled={!cfg.wakeWord.enabled}
+        onCommit={(sensitivity) => patch({ wakeWord: { sensitivity } })}
+        hint="Raise it if Lumen misses you; lower it if Lumen wakes up by itself."
+      />
+      <WakeEngine status={status} refresh={refresh} />
+    </Card>
+  )
+}
+
+// ---- Silence detection ----
+
+function SilenceDetection({ cfg, patch }: SectionProps): JSX.Element {
+  const preset = pausePresetOf(cfg.vad.silenceMs)
+  const [advanced, setAdvanced] = useState(preset === null)
+  return (
+    <Card
+      title="Silence detection"
+      description="When tap-to-talk and the wake word decide you’re done."
+    >
+      <SegmentedControl
+        label="Pause before stopping"
+        value={preset ?? 'normal'}
+        options={PAUSE_OPTIONS}
+        onChange={(p) => patch({ vad: { silenceMs: PAUSE_PRESETS[p] } })}
+      />
+      {preset === null && (
+        <p className="ui-hint">Using a custom pause of {cfg.vad.silenceMs} ms.</p>
+      )}
+      <Switch checked={advanced} onChange={setAdvanced} label="Show advanced options" />
+      {advanced && (
+        <>
+          <NumberField
+            label="Silence before stopping"
+            value={cfg.vad.silenceMs}
+            min={400}
+            max={5000}
+            step={100}
+            unit="ms"
+            onCommit={(silenceMs) => patch({ vad: { silenceMs } })}
+          />
+          <NumberField
+            label="Wait for speech"
+            value={cfg.vad.maxWaitMs}
+            min={2000}
+            max={20000}
+            step={500}
+            unit="ms"
+            hint="Cancel if nothing is said in this time."
+            onCommit={(maxWaitMs) => patch({ vad: { maxWaitMs } })}
+          />
+          <NumberField
+            label="Speech threshold"
+            value={Math.round(cfg.vad.speechThreshold * 100)}
+            min={1}
+            max={20}
+            unit="%"
+            hint="Lower picks up quieter speech."
+            onCommit={(v) => patch({ vad: { speechThreshold: v / 100 } })}
+          />
+        </>
+      )}
+    </Card>
+  )
+}
+
+// ---- Speech recognition ----
 
 function SpeechModel(): JSX.Element {
   const [status, setStatus] = useState<SttStatus | null>(null)
@@ -101,69 +469,6 @@ function useWindowsVoices(): SpeechSynthesisVoice[] {
   return voices
 }
 
-function WakeModel(): JSX.Element {
-  const [installed, setInstalled] = useState<boolean | null>(null)
-  const [progress, setProgress] = useState<WakeModelProgress | null>(null)
-
-  useEffect(() => {
-    const refresh = (): void => {
-      window.lumen
-        .invoke('wake:model-status')
-        .then((s) => setInstalled(s.installed))
-        .catch(() => setInstalled(false))
-    }
-    refresh()
-    return window.lumen.on('wake:model-progress', (p) => {
-      setProgress(p)
-      if (p.phase === 'done') {
-        announce('Wake word model installed')
-        refresh()
-      }
-      if (p.phase === 'error') announce(`Install failed. ${p.message ?? ''}`, 'assertive')
-    })
-  }, [])
-
-  const busy = progress?.phase === 'downloading' || progress?.phase === 'extracting'
-  if (installed === null) return <p className="ui-hint">Checking the offline model…</p>
-  if (busy) {
-    return (
-      <ProgressBar
-        label={
-          progress.phase === 'extracting'
-            ? 'Unpacking the offline model'
-            : 'Downloading the offline model'
-        }
-        value={progress.phase === 'extracting' ? undefined : (progress.percent ?? 0) / 100}
-      />
-    )
-  }
-  if (installed) {
-    return (
-      <p className="panel-ok">
-        <icons.checkCircle /> Offline model installed
-      </p>
-    )
-  }
-  return (
-    <div className="panel-row">
-      <Button
-        variant="primary"
-        onClick={() => {
-          setProgress({ phase: 'downloading', percent: 0 })
-          window.lumen.invoke('wake:model-install').catch(() => {})
-        }}
-      >
-        Install offline model (40 MB)
-      </Button>
-      <span className="ui-hint">
-        {progress?.phase === 'error'
-          ? `Last try failed: ${progress.message ?? 'unknown error'}`
-          : 'Free, one-time download.'}
-      </span>
-    </div>
-  )
-}
-
 export function Voice({ cfg, patch }: SectionProps): JSX.Element {
   const speaking = cfg.voice.tts !== 'off'
   const cloud = cfg.voice.tts === 'cloud'
@@ -177,25 +482,8 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
     : (voiceOptions[0]?.value ?? '')
   return (
     <>
-      <Card
-        title="Wake word"
-        description="Say a phrase to start Lumen without a shortcut. Runs offline."
-      >
-        <Switch
-          checked={cfg.wakeWord.enabled}
-          onChange={(enabled) => patch({ wakeWord: { enabled } })}
-          label="Listen for the wake word"
-        />
-        <TextField
-          label="Wake phrase"
-          value={cfg.wakeWord.phrase}
-          onCommit={(phrase) => patch({ wakeWord: { phrase } })}
-          accept={(v) => v.trim().length > 0}
-          commitOnBlurOnly
-          hint="Short and unusual works best. Saved when you leave the field."
-        />
-        <WakeModel />
-      </Card>
+      <Microphone cfg={cfg} patch={patch} />
+      <WakeWord cfg={cfg} patch={patch} />
 
       <Card title="Stop by voice" description="Say a phrase to stop what Lumen is doing.">
         <Switch
@@ -223,39 +511,7 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
         />
       </Card>
 
-      <Card
-        title="Silence detection"
-        description="When tap-to-talk and the wake word decide you’re done."
-      >
-        <NumberField
-          label="Silence before stopping"
-          value={cfg.vad.silenceMs}
-          min={400}
-          max={5000}
-          step={100}
-          unit="ms"
-          onCommit={(silenceMs) => patch({ vad: { silenceMs } })}
-        />
-        <NumberField
-          label="Wait for speech"
-          value={cfg.vad.maxWaitMs}
-          min={2000}
-          max={20000}
-          step={500}
-          unit="ms"
-          hint="Cancel if nothing is said in this time."
-          onCommit={(maxWaitMs) => patch({ vad: { maxWaitMs } })}
-        />
-        <NumberField
-          label="Speech threshold"
-          value={Math.round(cfg.vad.speechThreshold * 100)}
-          min={1}
-          max={20}
-          unit="%"
-          hint="Lower picks up quieter speech."
-          onCommit={(v) => patch({ vad: { speechThreshold: v / 100 } })}
-        />
-      </Card>
+      <SilenceDetection cfg={cfg} patch={patch} />
 
       <Card
         title="Speech recognition"
@@ -302,7 +558,7 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
           options={voiceOptions}
           onChange={(ttsVoice) => patch({ voice: { ttsVoice } })}
         />
-        <Slider
+        <DraftSlider
           label="Speed"
           value={cfg.voice.ttsRate}
           min={0.5}
@@ -310,7 +566,7 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
           step={0.1}
           disabled={!speaking}
           format={(v) => `${v.toFixed(1)}×`}
-          onChange={(ttsRate) => patch({ voice: { ttsRate } })}
+          onCommit={(ttsRate) => patch({ voice: { ttsRate } })}
         />
         <div className="panel-row">
           <Button
