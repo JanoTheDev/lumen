@@ -59,10 +59,15 @@ export interface ChatHeader {
   costUsd: number
   startedAt: number
   endedAt?: number
-  /** A question waiting for the user (answer from the composer or a choice). */
-  question?: { text: string; choices: string[] }
+  /**
+   * A question waiting for the user (answer from the composer or a choice). `token` names this
+   * question: an answer sent with an older token is refused.
+   */
+  question?: { text: string; choices: string[]; token?: string }
   /** A confirm waiting on the assistant bar (foreground): approve / deny from the view. */
   confirm?: string
+  /** The bar confirm's id: approve / deny carry it, so a newer card is never approved unseen. */
+  confirmId?: string
   canStop: boolean
   canPause: boolean
   canResume: boolean
@@ -116,12 +121,17 @@ export interface ChatSteerResult {
 export const chatIdSchema = z.string().regex(/^(bg|t|cc)_[a-z0-9]{4,40}$/)
 export const chatWatchSchema = z.tuple([chatIdSchema, z.boolean()])
 export const chatSteerSchema = z
-  .object({ id: chatIdSchema, text: z.string().trim().min(1).max(2000) })
+  .object({
+    id: chatIdSchema,
+    text: z.string().trim().min(1).max(2000),
+    token: z.string().max(80).optional()
+  })
   .strict()
 export const chatControlSchema = z
   .object({
     id: chatIdSchema,
-    op: z.enum(['stop', 'pause', 'resume', 'run-again', 'approve', 'deny'])
+    op: z.enum(['stop', 'pause', 'resume', 'run-again', 'approve', 'deny']),
+    token: z.string().max(80).optional()
   })
   .strict()
 

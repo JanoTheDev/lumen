@@ -361,13 +361,45 @@ describe('chat headers', () => {
     expect(foregroundHeader('t_a0001', meta, { running: false, steps: 0 }).phase).toBe(
       'interrupted'
     )
-    const live = foregroundHeader('t_a0001', meta, { running: true, steps: 1, confirm: 'Send it?' })
+    const live = foregroundHeader('t_a0001', meta, {
+      running: true,
+      steps: 1,
+      confirm: { id: 'a1', summary: 'Send it?' }
+    })
     expect(live).toMatchObject({
       phase: 'confirm',
       confirm: 'Send it?',
+      confirmId: 'a1',
       canStop: true,
       canSteer: true
     })
+  })
+
+  it('foreground: Pause while the model loop runs, Resume while paused', () => {
+    const meta = {
+      kind: 'foreground' as const,
+      title: 'X',
+      phase: 'running' as const,
+      startedAt: 1,
+      modelCalls: 0,
+      costUsd: 0
+    }
+    const running = foregroundHeader('t_a0002', meta, { running: true, steps: 1, pausable: true })
+    expect(running).toMatchObject({ canPause: true, canResume: false, phase: 'running' })
+    const paused = foregroundHeader('t_a0002', meta, {
+      running: true,
+      steps: 1,
+      pausable: true,
+      paused: true
+    })
+    expect(paused).toMatchObject({
+      canPause: false,
+      canResume: true,
+      canStop: true,
+      phase: 'paused'
+    })
+    const steps = foregroundHeader('t_a0002', meta, { running: true, steps: 1, pausable: false })
+    expect(steps.canPause).toBe(false)
   })
 
   it('claude: no live session means no buttons', () => {
@@ -471,6 +503,22 @@ describe('task chat voice', () => {
     expect(pickChat('', rows)?.id).toBe('bg_b00001')
     expect(pickChat('weather', rows)).toBeNull()
   })
+
+  it('steer words with no task name never go to an idle Claude session', () => {
+    const idle = {
+      id: 'cc_idle01',
+      kind: 'claude' as const,
+      title: 'Claude: app: fix tests',
+      phase: 'done' as const,
+      at: 3
+    }
+    expect(pickChat('', [idle], { steer: true })).toBeNull()
+    expect(pickChat('agent', [idle], { steer: true })).toBeNull()
+    expect(pickChat('claude', [idle], { steer: true })?.id).toBe('cc_idle01')
+    expect(pickChat('', [{ ...idle, phase: 'running' }], { steer: true })?.id).toBe('cc_idle01')
+    // Opening a view is harmless: "show me the task" still finds it.
+    expect(pickChat('', [idle])?.id).toBe('cc_idle01')
+  })
 })
 
 describe('task chat ipc payloads', () => {
@@ -490,21 +538,5 @@ describe('task chat ipc payloads', () => {
     expect(chatSteerSchema.safeParse({ id: 'bg_abc123', text: 'hi', extra: 1 }).success).toBe(false)
     expect(chatControlSchema.safeParse({ id: 'cc_abc123', op: 'pause' }).success).toBe(true)
     expect(chatControlSchema.safeParse({ id: 'cc_abc123', op: 'delete' }).success).toBe(false)
-  })
-
-  it('steer words with no task name never go to an idle Claude session', () => {
-    const idle = {
-      id: 'cc_idle01',
-      kind: 'claude' as const,
-      title: 'Claude: app: fix tests',
-      phase: 'done' as const,
-      at: 3
-    }
-    expect(pickChat('', [idle], { steer: true })).toBeNull()
-    expect(pickChat('agent', [idle], { steer: true })).toBeNull()
-    expect(pickChat('claude', [idle], { steer: true })?.id).toBe('cc_idle01')
-    expect(pickChat('', [{ ...idle, phase: 'running' }], { steer: true })?.id).toBe('cc_idle01')
-    // Opening a view is harmless: "show me the task" still finds it.
-    expect(pickChat('', [idle])?.id).toBe('cc_idle01')
   })
 })

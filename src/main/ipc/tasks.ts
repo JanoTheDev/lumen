@@ -76,12 +76,12 @@ export function registerTasksIpc(): void {
   ipcMain.handle('tasks:steer', (_e, raw: unknown) => {
     const v = safeParse('tasks:steer', chatSteerSchema, raw)
     if (!v) return INVALID
-    return steerChat(v.id, v.text)
+    return steerChat(v.id, v.text, v.token)
   })
   ipcMain.handle('tasks:control', (_e, raw: unknown) => {
     const v = safeParse('tasks:control', chatControlSchema, raw)
     if (!v) return INVALID
-    return controlChat(v.id, v.op)
+    return controlChat(v.id, v.op, v.token)
   })
   ipcMain.handle('tasks:answer', (_e, ...args: unknown[]) => {
     const v = safeParse('tasks:answer', bgTaskAnswerSchema, args)

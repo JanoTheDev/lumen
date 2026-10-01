@@ -193,11 +193,12 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
   }, [count, view?.entries])
 
   const onControl = useCallback(
-    (op: ChatControlOp) => {
-      void invoke('tasks:control', { id, op })
+    (op: ChatControlOp, token?: string) => {
+      void invoke('tasks:control', { id, op, ...(token ? { token } : {}) })
         .then((r) => {
           if (!r || !('ok' in r) || !r.ok) {
-            setNotice({ kind: 'error', text: 'That did not work. The task may have ended.' })
+            const why = r && 'error' in r && r.error
+            setNotice({ kind: 'error', text: why || 'That did not work. The task may have ended.' })
             return
           }
           setNotice(null)
@@ -211,9 +212,9 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
   )
 
   const onSend = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, token?: string): Promise<boolean> => {
       try {
-        const r = await invoke('tasks:steer', { id, text })
+        const r = await invoke('tasks:steer', { id, text, ...(token ? { token } : {}) })
         if (r && 'ok' in r && r.ok) {
           const said =
             r.how === 'answer'
@@ -269,10 +270,10 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
           </p>
           <p>{h.confirm}</p>
           <div className="chat-question__choices">
-            <Button variant="primary" onClick={() => onControl('approve')}>
+            <Button variant="primary" onClick={() => onControl('approve', h.confirmId)}>
               Allow
             </Button>
-            <Button onClick={() => onControl('deny')}>Deny</Button>
+            <Button onClick={() => onControl('deny', h.confirmId)}>Deny</Button>
           </div>
         </div>
       )}
@@ -290,7 +291,7 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
           entries={view.entries}
           header={h}
           dropped={view.dropped}
-          onChoice={(c) => void onSend(c)}
+          onChoice={(c) => void onSend(c, h.question?.token)}
         />
       </div>
       {notice && (
@@ -298,7 +299,7 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
           {notice.text}
         </Toast>
       )}
-      <Composer h={h} onSend={onSend} />
+      <Composer h={h} onSend={(text) => onSend(text, h.question?.token)} />
     </div>
   )
 }

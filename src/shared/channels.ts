@@ -429,8 +429,14 @@ export interface InvokeChannels {
   /** The open view follows this chat (tasks:chat pushes) or stops following it. */
   'tasks:watch': { args: [id: string, on: boolean]; result: { ok: boolean } }
   /** The composer: answers the waiting question, else a message the task reads next. */
-  'tasks:steer': { args: [req: { id: string; text: string }]; result: ChatSteerResult }
-  'tasks:control': { args: [req: { id: string; op: ChatControlOp }]; result: ChatSteerResult }
+  'tasks:steer': {
+    args: [req: { id: string; text: string; token?: string }]
+    result: ChatSteerResult
+  }
+  'tasks:control': {
+    args: [req: { id: string; op: ChatControlOp; token?: string }]
+    result: ChatSteerResult
+  }
   /** Answers a task's queued question. */
   'tasks:answer': { args: [id: string, answer: string]; result: { ok: boolean } }
   /** Starts an interrupted, failed or cancelled task again as a new task. */

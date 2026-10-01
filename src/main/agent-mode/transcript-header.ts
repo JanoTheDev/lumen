@@ -6,6 +6,18 @@ import type { BackgroundTask } from '@shared/types'
 import type { ChatMeta } from './transcript'
 import { claudeMeta } from './transcript-claude'
 
+/** A short id for a question's text (the view sends it back with the answer). */
+export function questionToken(text: string): string {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0
+  return `q${h.toString(36)}`
+}
+
+/** A Claude session's waiting permission (its id) or question (its text). */
+export function claudeToken(p: { kind: string; permId?: string; text: string }): string {
+  return p.kind === 'permission' && p.permId ? `p${p.permId}` : questionToken(p.text)
+}
+
 const OPEN = new Set(['queued', 'running', 'asking', 'needs-foreground'])
 const ACTIVE = new Set(['running', 'asking', 'needs-foreground'])
 const OPEN_CHAT = new Set<ChatPhase>(['queued', 'running', 'paused', 'asking', 'confirm'])
@@ -32,7 +44,13 @@ export function backgroundHeader(
     startedAt: t.counters.startedAt,
     ...(t.endedAt ? { endedAt: t.endedAt } : {}),
     ...(asking && t.question
-      ? { question: { text: t.question.text, choices: t.question.choices ?? [] } }
+      ? {
+          question: {
+            text: t.question.text,
+            choices: t.question.choices ?? [],
+            token: questionToken(t.question.text)
+          }
+        }
       : {}),
     canStop: open,
     canPause: ACTIVE.has(t.phase) && !live.paused && !t.claude,
@@ -49,14 +67,23 @@ export function foregroundHeader(
     running: boolean
     steps: number
     question?: { text: string; choices?: string[] }
-    confirm?: string
+    confirm?: { id: string; summary: string }
+    paused?: boolean
+    /** The model loop can hold (a steps.json run cannot). */
+    pausable?: boolean
   }
 ): ChatHeader {
   // A task that was running when Lumen closed (or crashed) did not end on its own.
   const stale =
     !live.running &&
     (meta.phase === 'running' || meta.phase === 'asking' || meta.phase === 'confirm')
-  const phase: ChatPhase = stale ? 'interrupted' : live.confirm ? 'confirm' : meta.phase
+  const phase: ChatPhase = stale
+    ? 'interrupted'
+    : live.confirm
+      ? 'confirm'
+      : live.running && live.paused
+        ? 'paused'
+        : meta.phase
   return {
     id,
     kind: 'foreground',
@@ -68,12 +95,20 @@ export function foregroundHeader(
     startedAt: meta.startedAt,
     ...(meta.endedAt ? { endedAt: meta.endedAt } : {}),
     ...(live.running && live.question
-      ? { question: { text: live.question.text, choices: live.question.choices ?? [] } }
+      ? {
+          question: {
+            text: live.question.text,
+            choices: live.question.choices ?? [],
+            token: questionToken(live.question.text)
+          }
+        }
       : {}),
-    ...(live.running && live.confirm ? { confirm: live.confirm } : {}),
+    ...(live.running && live.confirm
+      ? { confirm: live.confirm.summary, confirmId: live.confirm.id }
+      : {}),
     canStop: live.running,
-    canPause: false,
-    canResume: false,
+    canPause: live.running && !!live.pausable && !live.paused,
+    canResume: live.running && !!live.paused,
     canRunAgain: !live.running,
     canSteer: live.running
   }
@@ -103,7 +138,9 @@ export function claudeHeader(
       ? {
           question: {
             text: p.kind === 'permission' && p.command ? `${p.text}\n${p.command}` : p.text,
-            choices: p.kind === 'permission' ? ['Allow', 'Always allow', 'Deny'] : (p.choices ?? [])
+            choices:
+              p.kind === 'permission' ? ['Allow', 'Always allow', 'Deny'] : (p.choices ?? []),
+            token: claudeToken(p)
           }
         }
       : {}),
@@ -132,6 +169,7 @@ export function chatSummaries(
     let phase = meta.phase
     if (meta.kind === 'foreground' && id !== live.runningFg && OPEN_CHAT.has(phase))
       phase = 'interrupted'
+    else if (meta.kind === 'foreground' && live.pausedIds?.has(id)) phase = 'paused'
     out.set(id, { id, kind: meta.kind, title: meta.title, phase, at: meta.startedAt })
   }
   for (const t of tasks) {

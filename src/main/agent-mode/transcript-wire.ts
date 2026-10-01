@@ -14,13 +14,24 @@ import * as panel from '../windows/settings'
 import { answerQuestion, askPending } from './ask'
 import { backgroundManager } from './background'
 import { isOpen } from './background/manager'
-import { runningAgentTaskId, stopAgentTask } from './session'
+import {
+  agentConfirmId,
+  agentTaskPaused,
+  canPauseAgentTask,
+  pauseAgentTask,
+  resumePausedAgentTask,
+  runningAgentTaskId,
+  stopAgentTask
+} from './session'
+import { PERMISSION_CHOICES } from './transcript-claude'
 import {
   backgroundHeader,
   chatIdForTask,
   chatSummaries,
   claudeHeader,
-  foregroundHeader
+  claudeToken,
+  foregroundHeader,
+  questionToken
 } from './transcript-header'
 import { findSessionFile, loadClaudeHistory, readTail } from './transcript-history'
 import { transcripts } from './transcript-hub'
@@ -47,12 +58,16 @@ export function chatHeader(id: string): ChatHeader | null {
       const running = runningAgentTaskId() === id
       const r = hub.rec(id)
       const q = r.openQuestion()
-      const confirm = running && assistant.confirmPending() ? assistant.state().confirm : undefined
+      // Only the task's own confirm card: another one on the bar is not this task's to approve.
+      const confirmId = running ? agentConfirmId() : null
+      const card = confirmId ? assistant.state().confirm : undefined
       return foregroundHeader(id, meta, {
         running,
         steps: r.steps,
         ...(q && askPending() ? { question: { text: q.text, choices: q.choices } } : {}),
-        ...(confirm ? { confirm: confirm.summary } : {})
+        ...(confirmId && card ? { confirm: { id: confirmId, summary: card.summary } } : {}),
+        paused: running && agentTaskPaused(id),
+        pausable: running && (agentTaskPaused(id) || canPauseAgentTask(id))
       })
     }
     case 'claude': {
@@ -66,10 +81,10 @@ export function chatHeader(id: string): ChatHeader | null {
 export function chatList(): ChatSummary[] {
   const m = backgroundManager()
   const tasks = m.list()
-  return chatSummaries(tasks, transcripts().metas(), {
-    pausedIds: new Set(tasks.filter((t) => m.isPaused(t.id)).map((t) => t.id)),
-    runningFg: runningAgentTaskId()
-  })
+  const fg = runningAgentTaskId()
+  const pausedIds = new Set(tasks.filter((t) => m.isPaused(t.id)).map((t) => t.id))
+  if (fg && agentTaskPaused(fg)) pausedIds.add(fg)
+  return chatSummaries(tasks, transcripts().metas(), { pausedIds, runningFg: fg })
 }
 
 /** The open background task of a Claude session (it relays questions and permissions). */
@@ -88,16 +103,50 @@ function pickChoice(choices: readonly string[] | undefined, approve: boolean): s
   return choices?.find((c) => re.test(c)) ?? (approve ? 'Allow' : 'Deny')
 }
 
-/** A message from the composer: answers a waiting question, else steers the task. */
-export function steerChat(id: string, text: string): ChatSteerResult {
+const CHANGED: ChatSteerResult = {
+  ok: false,
+  error: 'That question changed. Look at the new one first.'
+}
+
+/** A token the view sent that no longer names what is waiting (undefined: none sent, by voice). */
+const stale = (token: string | undefined, now: string): boolean =>
+  token !== undefined && token !== now
+
+/** "Allow" / "Always allow" / "Deny" from the chat → the waiting permission it was shown for. */
+function answerPermission(
+  sessionId: string,
+  p: { permId?: string },
+  answer: 'once' | 'always' | 'deny'
+): ChatSteerResult {
+  const task = claudeTask(sessionId)
+  const label = answer === 'once' ? 'Allow' : answer === 'always' ? 'Always allow' : 'Deny'
+  if (task && backgroundManager().answer(task, label)) return { ok: true, how: 'answer' }
+  // Without its id the bridge would answer the oldest waiting permission, maybe another one.
+  if (!p.permId) return { ok: false, error: 'Answer this one on the assistant bar.' }
+  return getBridge()?.answer(answer, p.permId) ? { ok: true, how: 'answer' } : CHANGED
+}
+
+function permissionChoice(text: string): 'once' | 'always' | 'deny' | null {
+  const i = PERMISSION_CHOICES.findIndex((c) => c.toLowerCase() === text.trim().toLowerCase())
+  return i < 0 ? null : (['once', 'always', 'deny'] as const)[i]
+}
+
+/**
+ * A message from the composer or a choice button: answers a waiting question, else steers the
+ * task. `token`: the question the view showed; a newer one is not answered with it.
+ */
+export function steerChat(id: string, text: string, token?: string): ChatSteerResult {
   const hub = transcripts()
   const m = backgroundManager()
   switch (chatKind(id)) {
     case 'background': {
       const t = m.get(id)
       if (!t || t.claude) return { ok: false, error: 'No such task.' }
-      if (t.question && (t.phase === 'asking' || t.phase === 'needs-foreground'))
+      if (t.question && (t.phase === 'asking' || t.phase === 'needs-foreground')) {
+        if (stale(token, questionToken(t.question.text))) return CHANGED
         return m.answer(id, text) ? { ok: true, how: 'answer' } : { ok: false }
+      }
+      if (token !== undefined) return CHANGED
       return m.steer(id, text)
         ? { ok: true, how: 'steer' }
         : { ok: false, error: isOpen(t) ? 'Too many messages are waiting.' : 'The task ended.' }
@@ -105,9 +154,12 @@ export function steerChat(id: string, text: string): ChatSteerResult {
     case 'foreground': {
       if (runningAgentTaskId() !== id) return { ok: false, error: 'The task is not running.' }
       if (askPending()) {
+        const q = hub.rec(id).openQuestion()
+        if (stale(token, q ? questionToken(q.text) : '')) return CHANGED
         hub.rec(id).answer(text)
         return answerQuestion(text) ? { ok: true, how: 'answer' } : { ok: false }
       }
+      if (token !== undefined) return CHANGED
       return hub.steer(id, text)
         ? { ok: true, how: 'steer' }
         : { ok: false, error: 'Too many messages are waiting.' }
@@ -116,18 +168,24 @@ export function steerChat(id: string, text: string): ChatSteerResult {
       const c = getCopilot()
       const v = c?.get(id)
       if (!c || !v) return { ok: false, error: 'The Claude session is closed.' }
-      if (v.pending?.kind === 'permission')
-        return { ok: false, error: 'Allow or deny the waiting permission first.' }
-      const task = v.pending ? claudeTask(id) : null
+      const p = v.pending
+      if (p ? stale(token, claudeToken(p)) : token !== undefined) return CHANGED
+      if (p?.kind === 'permission') {
+        const answer = permissionChoice(text)
+        if (!answer) return { ok: false, error: 'Allow or deny the waiting permission first.' }
+        return answerPermission(id, p, answer)
+      }
+      const task = p ? claudeTask(id) : null
       if (task && m.answer(task, text)) return { ok: true, how: 'answer' }
-      if (v.pending?.kind === 'question') c.answerQuestion(id, text)
+      if (p?.kind === 'question') c.answerQuestion(id, text)
       else c.send(id, text)
-      return { ok: true, how: v.pending ? 'answer' : 'sent' }
+      return { ok: true, how: p ? 'answer' : 'sent' }
     }
   }
 }
 
-export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
+/** `token`: approve / deny name the confirm or question the view showed. */
+export function controlChat(id: string, op: ChatControlOp, token?: string): ChatSteerResult {
   const m = backgroundManager()
   const hub = transcripts()
   const kind = chatKind(id)
@@ -148,6 +206,7 @@ export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
       case 'approve':
       case 'deny':
         if (!t.question) return { ok: false }
+        if (token !== questionToken(t.question.text)) return CHANGED
         return { ok: m.answer(id, pickChoice(t.question.choices, op === 'approve')) }
     }
   }
@@ -156,6 +215,10 @@ export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
     switch (op) {
       case 'stop':
         return { ok: stopAgentTask(id) }
+      case 'pause':
+        return { ok: pauseAgentTask(id) }
+      case 'resume':
+        return { ok: resumePausedAgentTask(id) }
       case 'run-again': {
         const first = hub.rec(id).entries.find((e) => e.k === 'user')
         if (running || first?.k !== 'user') return { ok: false }
@@ -163,21 +226,24 @@ export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
         return { ok: true }
       }
       case 'approve':
-      case 'deny':
+      case 'deny': {
         if (!running) return { ok: false }
         if (assistant.confirmPending()) {
+          // Only the task's own card, and only the one the view showed.
+          const own = agentConfirmId()
+          if (!own || token !== own) return CHANGED
           assistant.command({ type: op === 'approve' ? 'confirm' : 'deny' })
           return { ok: true }
         }
         if (askPending()) {
           const q = hub.rec(id).openQuestion()
-          const a = pickChoice(q?.choices, op === 'approve')
+          if (!q || token !== questionToken(q.text)) return CHANGED
+          const a = pickChoice(q.choices, op === 'approve')
           hub.rec(id).answer(a)
           return { ok: answerQuestion(a) }
         }
         return { ok: false }
-      default:
-        return { ok: false }
+      }
     }
   }
   const c = getCopilot()
@@ -191,18 +257,12 @@ export function controlChat(id: string, op: ChatControlOp): ChatSteerResult {
     case 'deny': {
       const p = v.pending
       if (!p) return { ok: false }
+      if (token !== claudeToken(p)) return CHANGED
+      if (p.kind === 'permission')
+        return answerPermission(id, p, op === 'approve' ? 'once' : 'deny')
+      const answer = pickChoice(p.choices, op === 'approve')
       const task = claudeTask(id)
-      const answer =
-        p.kind === 'permission'
-          ? op === 'approve'
-            ? 'Allow'
-            : 'Deny'
-          : pickChoice(p.choices, op === 'approve')
       if (task && m.answer(task, answer)) return { ok: true }
-      if (p.kind === 'permission') {
-        void getBridge()?.answer(op === 'approve' ? 'once' : 'deny', p.permId)
-        return { ok: true }
-      }
       return { ok: c.answerQuestion(id, answer) }
     }
     default:

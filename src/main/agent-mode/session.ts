@@ -60,10 +60,12 @@ import { takeFilesFor } from '../files/attach'
 import { transcripts } from './transcript-hub'
 
 const PAUSE_KEEP_MS = 10 * 60_000
+const CONFIRM_POLL_MS = 250
 const TURN_MAX_TOKENS = 2048
 const PLAN_MAX_TOKENS = 600
 
-let running: { taskId: string; abort: () => void } | null = null
+/** `pausable`: the model loop (a steps.json run has no turns to hold before). */
+let running: { taskId: string; abort: () => void; pausable?: boolean } | null = null
 let countdownAnswer: ((r: 'go' | 'cancel') => void) | null = null
 /** What a paused run needs to go on exactly as before (a skill run keeps its envelope). */
 interface PausedRun {
@@ -87,11 +89,88 @@ export function runningAgentTaskId(): string | null {
   return running?.taskId ?? null
 }
 
-/** Stops the running task if it is `id`. */
+/** Stops the running task if it is `id` (also while it is paused). */
 export function stopAgentTask(id: string): boolean {
   if (running?.taskId !== id) return false
   running.abort()
   return true
+}
+
+// ---- pause / resume of the running task (the task chat's buttons, "pause the task") ----
+
+/** The running task holds before its next model turn while paused (a tool call ends first). */
+let hold: { taskId: string; wake?: () => void } | null = null
+
+export function agentTaskPaused(id: string): boolean {
+  return !!running && running.taskId === id && hold?.taskId === id
+}
+
+/** The running task can be paused now (the task chat's Pause button). */
+export function canPauseAgentTask(id: string): boolean {
+  return running?.taskId === id && !!running.pausable && !hold
+}
+
+export function pauseAgentTask(id: string): boolean {
+  if (!canPauseAgentTask(id)) return false
+  hold = { taskId: id }
+  transcripts().foregroundPaused(id, true)
+  setStatus('step', 'Paused. Say “resume” or press Resume to go on.')
+  lastStatus = ''
+  return true
+}
+
+export function resumePausedAgentTask(id: string): boolean {
+  if (hold?.taskId !== id) return false
+  const wake = hold.wake
+  hold = null
+  wake?.()
+  transcripts().foregroundPaused(id, false)
+  return true
+}
+
+/** Waits while the task is paused; an abort (Stop, Escape) ends the wait. */
+async function whilePaused(taskId: string, signal: AbortSignal): Promise<void> {
+  while (hold?.taskId === taskId && !signal.aborted) {
+    const h = hold
+    await new Promise<void>((resolve) => {
+      h.wake = resolve
+      signal.addEventListener('abort', () => resolve(), { once: true })
+    })
+  }
+}
+
+// ---- the bar confirm that belongs to the running task (the task chat shows only that one) ----
+
+let ownConfirm: string | null = null
+
+/** The id of the bar's confirm card when the running task asked it, else null. */
+export function agentConfirmId(): string | null {
+  const c = assistant.confirmPending() ? assistant.state().confirm : undefined
+  return running && c && c.actionId === ownConfirm ? c.actionId : null
+}
+
+/**
+ * A confirm card that shows up while one of the task's tool calls runs is the task's (the
+ * policy gate asks through the bar). Checked a few times a second; the chat header follows.
+ */
+async function watchingConfirms<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
+  const before = assistant.confirmPending() ? assistant.state().confirm?.actionId : undefined
+  let seen: string | null = null
+  const tick = (): void => {
+    const c = assistant.confirmPending() ? assistant.state().confirm : undefined
+    const id = c && c.actionId !== before ? c.actionId : null
+    if (id === seen) return
+    seen = id
+    if (id) ownConfirm = id
+    transcripts().touch(taskId)
+  }
+  const t = setInterval(tick, CONFIRM_POLL_MS)
+  try {
+    return await fn()
+  } finally {
+    clearInterval(t)
+    if (seen) transcripts().touch(taskId)
+  }
 }
 
 /** A task paused on an unanswered question that "resume the task" can continue. */
@@ -112,6 +191,7 @@ const words = (s: string): string =>
 const GO_RE = /^(go|go ahead|go now|start|start now|do it now|now)$/
 const STOP_RE = /^(stop|wait|no|cancel|abort|stop it|hold on|not now|don t)$/
 const RESUME_RE = /^(resume|resume the task|continue the task|carry on|keep going|continue)$/
+const PAUSE_RE = /^(pause|pause it|pause the task|pause task|pause the agent)$/
 
 export function isResumeRequest(utterance: string): boolean {
   return RESUME_RE.test(words(utterance))
@@ -142,6 +222,8 @@ export function interceptAgentUtterance(utterance: string): boolean {
     running.abort()
     return true
   }
+  if (PAUSE_RE.test(w)) return pauseAgentTask(running.taskId)
+  if (RESUME_RE.test(w) && hold) return resumePausedAgentTask(running.taskId)
   return false
 }
 
@@ -290,7 +372,7 @@ function deps(
       const refused = guard ? await guard(name, input, ctx.signal) : null
       if (refused) return refused
       const note = trace?.before(name, input)
-      const out = await h(input, ctx)
+      const out = await watchingConfirms(env.taskId, () => h(input, ctx))
       if (note && !out.isError) trace?.after(note)
       return out
     }
@@ -317,18 +399,25 @@ function deps(
         countdownAnswer = finish
         signal.addEventListener('abort', onAbort, { once: true })
       }),
-    askContinue: (reason) =>
-      assistant.requestConfirm({
+    askContinue: (reason) => {
+      const yes = assistant.requestConfirm({
         summary: `This task reached its limit of ${reason}. Keep going?`,
         risk: 'medium'
-      }),
+      })
+      ownConfirm = assistant.state().confirm?.actionId ?? null
+      transcripts().touch(env.taskId)
+      return yes
+    },
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
     inputLane: inputLane(),
     newId: () => env.taskId,
     log: (tag, msg) => log(tag as LogTag, msg),
     observe: (e) => transcripts().rec(env.taskId).run(e),
-    between: async () => transcripts().drain(env.taskId)
+    between: async (signal) => {
+      await whilePaused(env.taskId, signal)
+      return transcripts().drain(env.taskId)
+    }
   }
 }
 
@@ -370,7 +459,7 @@ async function run(
   const onOuter = (): void => ac.abort(signal.reason)
   if (signal.aborted) ac.abort(signal.reason)
   signal.addEventListener('abort', onOuter, { once: true })
-  running = { taskId: env.taskId, abort: () => ac.abort() }
+  running = { taskId: env.taskId, abort: () => ac.abort(), pausable: true }
   lastStatus = ''
   // Skills (11 T02): the L1 list after the agent prompt, use_skill / read_skill_file as tools.
   const skills = skillToolSet()
@@ -446,6 +535,8 @@ async function run(
     signal.removeEventListener('abort', onOuter)
     running = null
     countdownAnswer = null
+    hold = null
+    ownConfirm = null
   }
 }
 
