@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { LESSON_COMMANDS } from './events'
+import { FACE_GESTURES } from './config'
 
 // Payload validators for renderer → main channels. Anything that fails parsing is rejected
 // with E_INVALID before it reaches a handler.
@@ -201,6 +202,26 @@ export const actionSchema = z
   .strip()
 
 export const actionsSchema = z.array(actionSchema).max(50)
+
+/** Face renderer frames and Settings calibration (11 T25). */
+const faceScore = z.number().finite().min(-180).max(180)
+export const faceFrameSchema = z
+  .object({
+    face: z.boolean(),
+    mouthOpen: faceScore,
+    browRaise: faceScore,
+    smile: faceScore,
+    roll: faceScore,
+    yaw: faceScore
+  })
+  .strict()
+export const faceStatusSchema = z
+  .object({ state: z.enum(['running', 'error']), error: z.string().max(300).optional() })
+  .strict()
+export const faceCalibrateSchema = z.union([
+  z.object({ step: z.literal('rest') }).strict(),
+  z.object({ step: z.literal('gesture'), gesture: z.enum(FACE_GESTURES) }).strict()
+])
 
 export class InvalidPayloadError extends Error {
   readonly code = 'E_INVALID'

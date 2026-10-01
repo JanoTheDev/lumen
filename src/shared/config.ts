@@ -179,6 +179,108 @@ const a11yCoexistSchema = z.object({
   wakeWithDragon: z.boolean().default(false)
 })
 
+// ---- face gestures (11 T25) ----
+
+/** Facial gestures the camera can see (MediaPipe Face Landmarker blendshapes + head pose). */
+export const FACE_GESTURES = [
+  'mouthOpen',
+  'browRaise',
+  'smile',
+  'tiltLeft',
+  'tiltRight',
+  'turnLeft',
+  'turnRight'
+] as const
+export type FaceGesture = (typeof FACE_GESTURES)[number]
+
+/** What a gesture does: a click or scroll at the pointer, a switch press, dwell pause, voice. */
+export const FACE_ACTIONS = [
+  'none',
+  'click',
+  'right-click',
+  'double-click',
+  'scroll-up',
+  'scroll-down',
+  'switch-select',
+  'switch-next',
+  'dwell-pause',
+  'voice'
+] as const
+export type FaceAction = (typeof FACE_ACTIONS)[number]
+
+const faceActionSchema = z.enum(FACE_ACTIONS).default('none')
+
+/**
+ * A calibrated gesture: active when score * dir >= on, re-armed below rest + 70% of the gap.
+ * Scores are 0..1 blendshapes or head angles in degrees.
+ */
+export const faceThresholdSchema = z.object({
+  on: z.number().min(-90).max(90),
+  rest: z.number().min(-90).max(90),
+  dir: z.union([z.literal(1), z.literal(-1)])
+})
+export type FaceThreshold = z.infer<typeof faceThresholdSchema>
+
+const a11yFaceSchema = z.object({
+  /** Camera on and gestures live. Off: the camera is closed and nothing runs. */
+  enabled: z.boolean().default(false),
+  bindings: z
+    .object({
+      mouthOpen: faceActionSchema,
+      browRaise: faceActionSchema,
+      smile: faceActionSchema,
+      tiltLeft: faceActionSchema,
+      tiltRight: faceActionSchema,
+      turnLeft: faceActionSchema,
+      turnRight: faceActionSchema
+    })
+    .default({
+      mouthOpen: 'click',
+      browRaise: 'scroll-down',
+      smile: 'none',
+      tiltLeft: 'none',
+      tiltRight: 'switch-select',
+      turnLeft: 'none',
+      turnRight: 'none'
+    }),
+  /** Calibrated thresholds; a missing gesture uses the built-in default. */
+  thresholds: z
+    .object({
+      mouthOpen: faceThresholdSchema.optional(),
+      browRaise: faceThresholdSchema.optional(),
+      smile: faceThresholdSchema.optional(),
+      tiltLeft: faceThresholdSchema.optional(),
+      tiltRight: faceThresholdSchema.optional(),
+      turnLeft: faceThresholdSchema.optional(),
+      turnRight: faceThresholdSchema.optional()
+    })
+    .default({}),
+  /** How long a gesture must be held before it acts. */
+  holdMs: z.number().int().min(50).max(3000).default(300),
+  /** Quiet time after a gesture acted. */
+  cooldownMs: z.number().int().min(100).max(10_000).default(800),
+  /** Camera deviceId from enumerateDevices; '' = the system default. */
+  cameraId: z.string().max(200).default('')
+})
+export type FaceConfig = z.infer<typeof a11yFaceSchema>
+
+export const FACE_DEFAULTS: FaceConfig = {
+  enabled: false,
+  bindings: {
+    mouthOpen: 'click',
+    browRaise: 'scroll-down',
+    smile: 'none',
+    tiltLeft: 'none',
+    tiltRight: 'switch-select',
+    turnLeft: 'none',
+    turnRight: 'none'
+  },
+  thresholds: {},
+  holdMs: 300,
+  cooldownMs: 800,
+  cameraId: ''
+}
+
 const shortcut = z.union([z.literal(''), z.string().regex(HOTKEY_RE)])
 
 /**
@@ -374,7 +476,9 @@ export const configV2Schema = z.object({
     /** Opens the "what can I say" sheet; "" = no shortcut. Filled from the defaults on load. */
     helpHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional(),
     shortcuts: a11yShortcutsSchema.default(A11Y_DEFAULTS.shortcuts),
-    coexist: a11yCoexistSchema.default({ yieldToVoiceControl: true, wakeWithDragon: false })
+    coexist: a11yCoexistSchema.default({ yieldToVoiceControl: true, wakeWithDragon: false }),
+    /** Face-gesture input (11 T25), off by default. */
+    face: a11yFaceSchema.default(FACE_DEFAULTS)
   }),
   buddy: z.object({
     enabled: z.boolean(),
@@ -537,7 +641,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     profiles: [],
     helpHotkey: 'Ctrl+Shift+F1',
     shortcuts: { ...A11Y_DEFAULTS.shortcuts },
-    coexist: { yieldToVoiceControl: true, wakeWithDragon: false }
+    coexist: { yieldToVoiceControl: true, wakeWithDragon: false },
+    face: { ...FACE_DEFAULTS, bindings: { ...FACE_DEFAULTS.bindings }, thresholds: {} }
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: {

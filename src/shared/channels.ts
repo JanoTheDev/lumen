@@ -164,8 +164,56 @@ export interface TutorialImportResult {
   error?: string
 }
 
+/** One camera frame's gesture scores from the face renderer (11 T25); no image data. */
+export interface FaceFrame {
+  /** A face was found; the scores are 0 otherwise. */
+  face: boolean
+  /** Blendshapes, 0..1. */
+  mouthOpen: number
+  browRaise: number
+  smile: number
+  /** Head roll and yaw in degrees. */
+  roll: number
+  yaw: number
+}
+
+export type FaceAssets =
+  | { ok: true; wasm: Uint8Array; model: Uint8Array; cameraId: string }
+  | { ok: false; error: string }
+
+export interface FaceState {
+  /** Model + wasm downloaded and verified. */
+  installed: boolean
+  /** Download progress, 0..100, while installing. */
+  installing?: number
+  status: 'off' | 'starting' | 'running' | 'error'
+  error?: string
+  /** Latest scores (null when no frame came in the last second). */
+  frame: FaceFrame | null
+  /** Each gesture's latest strength: 0 at rest, 1 at its threshold. */
+  levels: Record<string, number>
+  /** Last gesture that acted. */
+  last?: { gesture: string; action: string; at: number }
+  /** Calibration is sampling (gestures do not act meanwhile). */
+  calibrating: boolean
+}
+
+export type FaceCalibrateStep = { step: 'rest' } | { step: 'gesture'; gesture: string }
+
+export interface FaceCalibrateResult {
+  ok: boolean
+  message: string
+  /** Frames with a face in the sample. */
+  samples: number
+}
+
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
+  /** Face-gesture input (11 T25): face renderer assets, Settings state / install / calibration. */
+  'face:assets': { args: []; result: FaceAssets }
+  'face:state': { args: []; result: FaceState }
+  'face:install': { args: []; result: { ok: boolean; error?: string } }
+  'face:calibrate': { args: [step: FaceCalibrateStep]; result: FaceCalibrateResult }
   'assistant:query': {
     args: [prompt: string, opts?: { lowDetail?: boolean }]
     result: ModelResponse | { error: string }
@@ -435,6 +483,9 @@ export interface InvokeChannels {
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
 export interface SendChannels {
+  /** Face renderer: one frame's gesture scores (about 15 a second) and its state. */
+  'face:frame': [frame: FaceFrame]
+  'face:status': [status: { state: 'running' | 'error'; error?: string }]
   'assistant:show': []
   'assistant:close': []
   'assistant:cancel': []
@@ -1055,6 +1106,10 @@ export type SendChannel = keyof SendChannels
 export type EventChannel = keyof EventChannels
 
 export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
+  'face:assets',
+  'face:state',
+  'face:install',
+  'face:calibrate',
   'assistant:query',
   'assistant:execute',
   'assistant:announce',
@@ -1233,7 +1288,9 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'a11y:sheet-close',
   'a11y:dwell-pick',
   'a11y:keyboard-key',
-  'a11y:try'
+  'a11y:try',
+  'face:frame',
+  'face:status'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
