@@ -41,7 +41,13 @@ import { installClaudeCode, interceptClaudeCode, shutdownClaudeCode } from './cl
 import { runQuery } from './query/pipeline'
 import { setAnswerAnnouncer, speakAnswer, warmTts } from './speech/tts'
 import { prepareStt, transcribe } from './speech/stt'
-import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pipeline'
+import {
+  dictate,
+  maybeAutoDictate,
+  offerRecovery,
+  setDictationRecorder
+} from './speech/dictation/pipeline'
+import { recordDictation } from './speech/dictation/history'
 import { isOwnRendererUrl } from './windows/factory'
 import { applyUiScaleOnLoad } from './windows/registry'
 import * as tray from './windows/tray'
@@ -173,6 +179,8 @@ app.whenReady().then(() => {
   // Dictation left over from a crash: taken now, before any new dictation, and shown once the
   // answer card can show it.
   offerRecovery(2500)
+  // Every dictation goes to the local history (when on) and stats (04 T44/T46).
+  setDictationRecorder(recordDictation)
   createWindows()
   applyAutostart(loadConfig().system.startAtLogin)
   onConfigPatched((next) => applyAutostart(next.system.startAtLogin))
