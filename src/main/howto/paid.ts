@@ -4,9 +4,10 @@
 //   1,000 searches + tokens; `max_uses` caps searches per call; count in
 //   usage.server_tool_use.web_search_requests; citations web_search_result_location.
 // - OpenAI Responses `web_search` tool: $10 per 1,000 calls + search content tokens at model
-//   rates; calls are `web_search_call` output items, citations `url_citation` annotations. The
-//   SDK here has no per-request tool-call cap, so the prompt asks for at most N searches and the
-//   budget counts the calls that ran.
+//   rates; calls are `web_search_call` output items, citations `url_citation` annotations.
+//   `max_tool_calls` caps built-in tool calls per response (API reference, Responses create; the
+//   SDK typings here lack it on the create params, so it is passed through a cast).
+// The budget is reserved before the call (lookup.ts) and settled with the searches that ran.
 // The reply is asked for as numbered steps with [UI: …] and [keys: …] tags, parsed locally.
 import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
@@ -103,19 +104,19 @@ export async function openaiHowto(
   client: Pick<OpenAI, 'responses'>,
   model: string,
   question: string,
+  maxSearches: number,
   toUsage: (u: OpenAI.Responses.ResponseUsage | undefined) => Usage,
   signal?: AbortSignal
 ): Promise<PaidAnswer> {
-  const res = await client.responses.create(
-    {
-      model,
-      instructions: PAID_SYSTEM,
-      input: question,
-      tools: [{ type: 'web_search' }],
-      max_output_tokens: 1200
-    },
-    { signal }
-  )
+  const body: OpenAI.Responses.ResponseCreateParamsNonStreaming & { max_tool_calls: number } = {
+    model,
+    instructions: PAID_SYSTEM,
+    input: question,
+    tools: [{ type: 'web_search' }],
+    max_tool_calls: maxSearches,
+    max_output_tokens: 1200
+  }
+  const res = await client.responses.create(body, { signal })
   const a = openaiAnswer(res)
   return {
     steps: stepsFromText(a.text),

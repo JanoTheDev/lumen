@@ -9,6 +9,7 @@ import { redact } from '../ai/memory/sensitive'
 import type { HowtoCache } from './cache'
 import type { AppNote, AppNotesStore } from './notes'
 import type { PaidAnswer } from './paid'
+import { outboundGoal } from './goal'
 import { learnHowto, type GetText } from './sources'
 import type { AppIdentity, HowtoMode, HowtoResult, HowtoStep } from './types'
 import { isMicrosoftApp } from './version'
@@ -57,13 +58,26 @@ export function noteSteps(n: AppNote): HowtoStep[] {
   return [{ text, ui: n.path.ui, ...(n.path.shortcut ? { shortcut: n.path.shortcut } : {}) }]
 }
 
+/**
+ * The provider turned the request down before running any tool (bad request, auth, rate limit,
+ * or no connection at all). Anything else (timeout, abort, a 5xx, a parse error) may have
+ * searched already.
+ */
+export function refusedBeforeRun(e: unknown): boolean {
+  const err = e as { status?: unknown; name?: unknown; code?: unknown } | null
+  const status = typeof err?.status === 'number' ? err.status : 0
+  if (status >= 400 && status < 500 && status !== 408) return true
+  return err?.code === 'ENOTFOUND' || err?.code === 'ECONNREFUSED'
+}
+
 export async function lookupHowto(
   input: LookupInput,
   deps: LookupDeps,
   signal?: AbortSignal
 ): Promise<HowtoResult> {
   const { id, taskId } = input
-  const goal = input.goal.replace(/\s+/g, ' ').trim().slice(0, 200)
+  // Secrets, addresses and quoted text never leave the machine (Learn query, paid search).
+  const goal = outboundGoal(input.goal)
   const base = { app: id.app, version: id.version, goal, searches: 0, costUsd: 0 }
   const none = (note: string): HowtoResult => ({
     ...base,
@@ -112,17 +126,20 @@ export async function lookupHowto(
         ? 'No free how-to found. Paid web search is off.'
         : 'No free how-to found, and the AI provider has no web search.'
     )
-  const left = deps.cache.paidLeft(taskId)
+  // Reserved before the call, so lookups running at the same time share one budget.
+  const left = deps.cache.reserve(taskId)
   if (left <= 0) return none('The web search limit for this task or today is reached.')
   let paid: PaidAnswer
   try {
     paid = await deps.paid({ app: id.app, version: id.version, goal, maxSearches: left }, signal)
   } catch (e) {
+    // Searches that may have run stay counted; a request the provider refused gets them back.
+    if (refusedBeforeRun(e)) deps.cache.settle(taskId, left, 0)
     if (signal?.aborted) throw e
     deps.log(`howto: web search failed (${(e as Error).message})`)
     return none('The web search failed.')
   }
-  deps.cache.notePaid(taskId, paid.searches)
+  deps.cache.settle(taskId, left, paid.searches)
   const costUsd = deps.recordPaid(paid)
   deps.log(
     `howto: web search "${goal}" in ${id.appId}: ${paid.steps.length} steps, ${paid.searches} searches`

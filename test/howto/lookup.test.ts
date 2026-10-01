@@ -5,12 +5,13 @@ import { join } from 'path'
 import { afterAll, describe, expect, it, vi, type Mock } from 'vitest'
 import type Anthropic from '@anthropic-ai/sdk'
 import type OpenAI from 'openai'
-import { HowtoCache } from '../../src/main/howto/cache'
-import { lookupHowto, type LookupDeps } from '../../src/main/howto/lookup'
+import { HowtoCache, PAID_PER_DAY, PAID_PER_TASK } from '../../src/main/howto/cache'
+import { lookupHowto, refusedBeforeRun, type LookupDeps } from '../../src/main/howto/lookup'
 import { AppNotesStore } from '../../src/main/howto/notes'
 import {
   anthropicHowto,
   openaiAnswer,
+  openaiHowto,
   paidQuestion,
   type PaidAnswer
 } from '../../src/main/howto/paid'
@@ -248,5 +249,102 @@ describe('paid search adapters', () => {
       sources: [{ title: 'Prefs', url: 'https://docs.blender.org/a' }],
       searches: 1
     })
+  })
+})
+
+describe('paid budget under load (review 3, 9, 10)', () => {
+  const answer = (searches: number): PaidAnswer => ({
+    steps: [{ text: 'Edit > Preferences', ui: ['Edit', 'Preferences'] }],
+    sources: [],
+    searches,
+    model: 'm'
+  })
+
+  it('concurrent lookups share one task budget and one day budget', async () => {
+    const { d } = deps()
+    const seen: number[] = []
+    d.paid = async (q) => {
+      seen.push(q.maxSearches)
+      await new Promise((r) => setTimeout(r, 5))
+      return answer(q.maxSearches)
+    }
+    const goals = ['bake normals', 'add a modifier', 'set the frame rate']
+    await Promise.all(goals.map((goal) => lookupHowto({ id: BLENDER, goal, taskId: 'same' }, d)))
+    expect(seen.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(PAID_PER_TASK)
+    // Twelve tasks at once never pass the day cap.
+    const many = Array.from({ length: 12 }, (_, i) =>
+      lookupHowto({ id: BLENDER, goal: `goal number ${i} alpha`, taskId: `task-${i}` }, d)
+    )
+    await Promise.all(many)
+    expect(seen.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(PAID_PER_DAY)
+  })
+
+  it('a search that fails after it ran stays counted; a refused request is given back', async () => {
+    const { d } = deps()
+    d.paid = async () => {
+      throw new Error('socket hang up')
+    }
+    const r = await lookupHowto({ id: BLENDER, goal: 'bake normals', taskId: 'f1' }, d)
+    expect(r.from).toBe('none')
+    expect(d.cache.paidLeft('f1')).toBe(0)
+    d.paid = async () => {
+      throw Object.assign(new Error('rate limited'), { status: 429 })
+    }
+    await lookupHowto({ id: BLENDER, goal: 'add a modifier', taskId: 'f2' }, d)
+    expect(d.cache.paidLeft('f2')).toBe(PAID_PER_TASK)
+    expect(refusedBeforeRun({ status: 500 })).toBe(false)
+    expect(refusedBeforeRun({ status: 401 })).toBe(true)
+  })
+
+  it('unused reserved searches go back after the call', async () => {
+    const { d } = deps()
+    d.paid = async () => answer(1)
+    await lookupHowto({ id: BLENDER, goal: 'bake normals', taskId: 'u1' }, d)
+    expect(d.cache.paidLeft('u1')).toBe(PAID_PER_TASK - 1)
+  })
+
+  it('a running task keeps its count while many other turns search', () => {
+    const c = new HowtoCache(null)
+    c.notePaid('long-task', PAID_PER_TASK)
+    for (let i = 0; i < 60; i++) c.notePaid(`turn-${i}`, 1)
+    expect(c.paidLeft('long-task')).toBe(0)
+  })
+
+  it('OpenAI: caps built-in tool calls with max_tool_calls', async () => {
+    const create = vi.fn(async () => ({ output: [], usage: undefined }))
+    const client = { responses: { create } } as unknown as Pick<OpenAI, 'responses'>
+    await openaiHowto(client, 'gpt-x', 'q', 1, () => ({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0
+    }))
+    const params = (create.mock.calls[0] as unknown[])[0] as Record<string, unknown>
+    expect(params.max_tool_calls).toBe(1)
+  })
+})
+
+describe('goals leave the machine redacted (review 5)', () => {
+  it('no secret, address or quoted text in the Learn URL or the paid question', async () => {
+    const key = ['sk', 'proj', 'C'.repeat(40)].join('-')
+    const goal = `reply to anna@clinic.example with "my results are positive" and token ${key}`
+    const { d, paid } = deps()
+    await lookupHowto(
+      { id: { app: 'Microsoft Outlook', appId: 'outlook', version: '' }, goal, taskId: 'r1' },
+      d
+    )
+    const urls = (d.get as Mock).mock.calls.map((c) => String(c[0]))
+    expect(urls.length).toBeGreaterThan(0)
+    for (const u of urls.map(decodeURIComponent)) {
+      expect(u).not.toContain(key)
+      expect(u).not.toContain('anna@clinic.example')
+      expect(u).not.toContain('positive')
+    }
+    await lookupHowto({ id: BLENDER, goal, taskId: 'r2' }, d)
+    const q = JSON.stringify(paid.mock.calls)
+    expect(q).not.toContain(key)
+    expect(q).not.toContain('anna@clinic.example')
+    expect(q).not.toContain('positive')
+    expect(q).toContain('reply to')
   })
 })

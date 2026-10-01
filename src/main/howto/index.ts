@@ -66,6 +66,7 @@ function paidSearch(): LookupDeps['paid'] {
         openaiClient(),
         fast.model,
         paidQuestion(q.app, q.version, q.goal, q.maxSearches),
+        q.maxSearches,
         openaiUsage,
         signal
       )

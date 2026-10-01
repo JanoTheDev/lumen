@@ -13,6 +13,8 @@ export const MISS_TTL_MS = 24 * 60 * 60_000
 export const MAX_ENTRIES = 200
 export const PAID_PER_TASK = 2
 export const PAID_PER_DAY = 10
+/** Per-task counters kept (each holds at least one paid search, at most PAID_PER_DAY a day). */
+const MAX_TASKS = 500
 const MATCH_MIN = 0.8
 
 interface Entry {
@@ -126,13 +128,33 @@ export class HowtoCache {
     return Math.max(0, Math.min(PAID_PER_TASK - usedTask, PAID_PER_DAY - usedToday))
   }
 
+  /**
+   * Takes up to `max` searches out of the budget before the call (synchronously, so lookups
+   * running at the same time cannot each spend the same remainder). Returns the number granted.
+   */
+  reserve(taskId: string, max = PAID_PER_TASK): number {
+    const n = Math.min(max, this.paidLeft(taskId))
+    if (n > 0) this.notePaid(taskId, n)
+    return n
+  }
+
+  /** After the call: `used` of the `reserved` searches ran; the rest goes back (or more is noted). */
+  settle(taskId: string, reserved: number, used: number): void {
+    this.notePaid(taskId, Math.max(0, used) - reserved)
+  }
+
+  /** Adds (or with a negative count, returns) searches to the day and task counters. */
   notePaid(taskId: string, searches: number): void {
-    if (searches <= 0) return
+    if (!searches) return
     const f = this.load()
     const today = dayOf(this.now())
-    f.paid = { date: today, count: (f.paid.date === today ? f.paid.count : 0) + searches }
-    this.perTask.set(taskId, (this.perTask.get(taskId) ?? 0) + searches)
-    if (this.perTask.size > 50) this.perTask.delete(this.perTask.keys().next().value!)
+    const day = f.paid.date === today ? f.paid.count : 0
+    f.paid = { date: today, count: Math.max(0, day + searches) }
+    // Most recently used last: a long-running task's count is never the one evicted first.
+    const task = Math.max(0, (this.perTask.get(taskId) ?? 0) + searches)
+    this.perTask.delete(taskId)
+    this.perTask.set(taskId, task)
+    if (this.perTask.size > MAX_TASKS) this.perTask.delete(this.perTask.keys().next().value!)
     this.save()
   }
 }
