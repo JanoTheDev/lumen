@@ -132,7 +132,8 @@ export class CardImages {
         maxBytes: IMAGE_MAX_BYTES,
         overflow: 'throw',
         timeoutMs: IMAGE_TIMEOUT_MS,
-        accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8'
+        // nativeImage decodes JPEG and PNG only.
+        accept: 'image/jpeg,image/png;q=0.9,image/*;q=0.5'
       })
       if (res.status < 200 || res.status >= 300) return null
       if (!res.contentType.startsWith('image/') || !res.bytes?.length) return null
