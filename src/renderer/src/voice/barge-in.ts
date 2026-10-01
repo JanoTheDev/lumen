@@ -10,7 +10,7 @@
 // The wake-word feed is held quiet while Lumen speaks unless barge-in is armed (with AEC the
 // spotter hears the user, not Lumen).
 import tapUrl from './worklets/pcm-tap.ts?worker&url'
-import { dropMic, getMicStream, holdMic } from './mic'
+import { dropMic, getMicStream, holdMic, onMicChanged } from './mic'
 import { BargeDetector, PcmRing, blockRms, joinPcm } from './vad/barge'
 import { onSpeakingChange, speakingState, stopSpeaking, type SpeakingState } from './speaker'
 import { setWakeFeedQuiet } from './wake-feed'
@@ -158,9 +158,16 @@ export function startBargeIn(): () => void {
     speaking = s
     sync()
   })
+  // The shared stream was closed for another device: the tap is dead, open it again.
+  const offMic = onMicChanged(() => {
+    if (!active) return
+    disarm()
+    sync()
+  })
   return () => {
     offCfg()
     offSpeak()
+    offMic()
     enabled = false
     speaking = null
     disarm()
