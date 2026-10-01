@@ -11,9 +11,24 @@ export interface SpottedPhrase {
 // Cancel: 36/36 recall on "stop", "cancel", "never mind" (+ "okay stop", "cancel that"), but
 // the spotter also fires inside "stopwatch" or "cancellation", so cancel hits are confirmed
 // with the speech model before they count (see confirm.ts).
-const TUNING: Record<PhraseKind, { boost: number; threshold: number }> = {
-  wake: { boost: 5, threshold: 0.1 },
-  cancel: { boost: 0.5, threshold: 0.3 }
+export interface KeywordTuning {
+  boost: number
+  threshold: number
+}
+
+const CANCEL_TUNING: KeywordTuning = { boost: 0.5, threshold: 0.3 }
+
+/**
+ * Wake sensitivity 0..1 → spotter tuning. 0.5 is the evaluated boost 5 / threshold 0.1;
+ * higher boosts the phrase and lowers the trigger threshold (more wakes, more false wakes).
+ * Range: boost 2..8, threshold 0.2..0.05 (halved per +0.5).
+ */
+export function wakeTuning(sensitivity = 0.5): KeywordTuning {
+  const s = Number.isFinite(sensitivity) ? Math.min(1, Math.max(0, sensitivity)) : 0.5
+  return {
+    boost: Math.round((2 + 6 * s) * 100) / 100,
+    threshold: Math.round(0.2 * Math.pow(4, -s) * 1000) / 1000
+  }
 }
 
 export interface KeywordList {
@@ -24,10 +39,18 @@ export interface KeywordList {
   unusable: string[]
 }
 
-export function buildKeywords(
-  phrases: { wake: string; cancel: string[] },
-  vocab: PieceVocab
-): KeywordList {
+export interface KeywordPhrases {
+  wake: string
+  cancel: string[]
+  /** Wake sensitivity 0..1 (see wakeTuning); default 0.5. */
+  sensitivity?: number
+}
+
+export function buildKeywords(phrases: KeywordPhrases, vocab: PieceVocab): KeywordList {
+  const tuning: Record<PhraseKind, KeywordTuning> = {
+    wake: wakeTuning(phrases.sensitivity),
+    cancel: CANCEL_TUNING
+  }
   const byTag = new Map<string, SpottedPhrase>()
   const unusable: string[] = []
   const lines: string[] = []
@@ -46,7 +69,7 @@ export function buildKeywords(
     if (seen.has(key)) continue
     seen.add(key)
     const tag = `${p.kind}${byTag.size}`
-    const t = TUNING[p.kind]
+    const t = tuning[p.kind]
     lines.push(`${key} :${t.boost} #${t.threshold} @${tag}`)
     byTag.set(tag, p)
   }

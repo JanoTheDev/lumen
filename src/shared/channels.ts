@@ -41,7 +41,7 @@ export interface InvokeChannels {
   'guides:save-last': { args: [name?: string]; result: SavedGuide | { error: string } }
   'guides:replay': { args: [id: string]; result: SavedGuide | { error: string } }
   'guides:delete': { args: [id: string]; result: { ok: boolean } }
-  'wake:model-status': { args: []; result: { installed: boolean; path: string } }
+  'wake:model-status': { args: []; result: WakeStatus }
   'wake:model-install': { args: []; result: { ok: boolean; error?: string } }
   'keys:status': { args: []; result: KeyStatus[] }
   'keys:set': { args: [req: { provider: KeyProvider; key: string }]; result: KeySetResult }
@@ -240,6 +240,19 @@ export interface HomeInfo {
   recent: string[]
 }
 
+/** Wake word / voice-cancel engine state for Settings. */
+export interface WakeStatus {
+  /** The model for this PC's engine (spotter, or Vosk without the native engine) is installed. */
+  installed: boolean
+  path: string
+  /** Running engine: keyword spotter, Vosk fallback, or nothing listening. */
+  engine: 'kws' | 'vosk' | 'off'
+  /** Download size of that model, MB. */
+  sizeMb: number
+  /** Wake/stop phrases the spotter can't spell (they are ignored). */
+  unusable: string[]
+}
+
 export interface WakeModelProgress {
   phase: 'downloading' | 'extracting' | 'done' | 'error'
   percent?: number
@@ -280,6 +293,8 @@ export interface EventChannels {
   'assistant:run-query': [text: string]
   'settings:changed': [config: Record<string, unknown>]
   'wake:model-progress': [progress: WakeModelProgress]
+  /** The wake engine changed (applied settings, model installed, fallback). */
+  'wake:status': [status: WakeStatus]
   'voice:stt-model-progress': [progress: WakeModelProgress]
   'status:set': [message: StatusMessage]
   'status:hide': []
@@ -375,6 +390,7 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'assistant:run-query',
   'settings:changed',
   'wake:model-progress',
+  'wake:status',
   'voice:stt-model-progress',
   'status:set',
   'status:hide',

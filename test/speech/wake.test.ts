@@ -5,7 +5,12 @@ import {
   phraseWords,
   type PieceVocab
 } from '../../src/main/speech/wake/sentencepiece'
-import { buildKeywords, EnergyGate, int16Rms } from '../../src/main/speech/wake/keywords'
+import {
+  buildKeywords,
+  EnergyGate,
+  int16Rms,
+  wakeTuning
+} from '../../src/main/speech/wake/keywords'
 import { confirmsCancel } from '../../src/main/speech/wake/confirm'
 import {
   armCancel,
@@ -96,10 +101,40 @@ describe('buildKeywords', () => {
     expect(list.unusable).toEqual(['zap'])
   })
 
+  it('tunes only the wake phrase by sensitivity', () => {
+    const list = buildKeywords({ wake: 'hey lumen', cancel: ['stop'], sensitivity: 1 }, vocab())
+    expect(list.text.trim().split('\n')).toEqual([
+      '▁HE Y ▁ LU M EN :8 #0.05 @wake0',
+      '▁STOP :0.5 #0.3 @cancel1'
+    ])
+  })
+
   it('is empty without phrases', () => {
     const list = buildKeywords({ wake: '', cancel: [] }, vocab())
     expect(list.text).toBe('')
     expect(list.byTag.size).toBe(0)
+  })
+})
+
+describe('wakeTuning', () => {
+  it('keeps the evaluated tuning at the default and moves monotonically', () => {
+    expect(wakeTuning()).toEqual({ boost: 5, threshold: 0.1 })
+    expect(wakeTuning(0.5)).toEqual({ boost: 5, threshold: 0.1 })
+    expect(wakeTuning(0)).toEqual({ boost: 2, threshold: 0.2 })
+    expect(wakeTuning(1)).toEqual({ boost: 8, threshold: 0.05 })
+    let prev = wakeTuning(0)
+    for (let s = 0.1; s <= 1; s += 0.1) {
+      const t = wakeTuning(s)
+      expect(t.boost).toBeGreaterThan(prev.boost)
+      expect(t.threshold).toBeLessThan(prev.threshold)
+      prev = t
+    }
+  })
+
+  it('clamps out-of-range and NaN input', () => {
+    expect(wakeTuning(-3)).toEqual(wakeTuning(0))
+    expect(wakeTuning(7)).toEqual(wakeTuning(1))
+    expect(wakeTuning(Number.NaN)).toEqual(wakeTuning(0.5))
   })
 })
 

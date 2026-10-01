@@ -208,7 +208,13 @@ export const configV2Schema = z.object({
   hotkey: v1.hotkey,
   hudAutoCloseMs: v1.hudAutoCloseMs,
   answerAutoCloseMs: v1.answerAutoCloseMs,
-  wakeWord: v1.wakeWord,
+  wakeWord: v1.wakeWord.extend({
+    /**
+     * Keyword spotter only: 0 = fewest false wakes, 1 = wakes most easily. Optional (no zod
+     * default) so a partial patch never resets it; DEFAULT_CONFIG_V2 fills it on load.
+     */
+    sensitivity: z.number().min(0).max(1).optional()
+  }),
   statusBubble: v1.statusBubble,
   voiceVocab: v1.voiceVocab,
   historyEnabled: v1.historyEnabled,
@@ -225,7 +231,9 @@ export const configV2Schema = z.object({
     tts: z.enum(['cloud', 'windows', 'off']),
     ttsVoice: shortText(40),
     ttsRate: z.number().min(0.25).max(4),
-    bargeIn: z.boolean()
+    bargeIn: z.boolean(),
+    /** Microphone deviceId from enumerateDevices; '' = the system default. */
+    micDeviceId: z.string().max(200).optional()
   }),
   a11y: z.object({
     announce: z.enum(['auto', 'off']),
@@ -297,6 +305,9 @@ export const configV2Schema = z.object({
 
 export type ConfigV2 = z.infer<typeof configV2Schema>
 
+/** Matches the evaluated spotter tuning (boost 5, threshold 0.1). */
+export const WAKE_SENSITIVITY_DEFAULT = 0.5
+
 // New sections default to off/neutral so a migrated install behaves exactly like v1.
 export const DEFAULT_CONFIG_V2: ConfigV2 = {
   version: 2,
@@ -306,7 +317,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   hotkey: DEFAULT_CONFIG_V1.hotkey,
   hudAutoCloseMs: DEFAULT_CONFIG_V1.hudAutoCloseMs,
   answerAutoCloseMs: DEFAULT_CONFIG_V1.answerAutoCloseMs,
-  wakeWord: { ...DEFAULT_CONFIG_V1.wakeWord },
+  wakeWord: { ...DEFAULT_CONFIG_V1.wakeWord, sensitivity: WAKE_SENSITIVITY_DEFAULT },
   statusBubble: { ...DEFAULT_CONFIG_V1.statusBubble },
   voiceVocab: DEFAULT_CONFIG_V1.voiceVocab,
   historyEnabled: DEFAULT_CONFIG_V1.historyEnabled,
@@ -318,7 +329,14 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   dwellClick: { ...DEFAULT_CONFIG_V1.dwellClick },
   vad: { ...DEFAULT_CONFIG_V1.vad },
   guideAutoDismissOnMove: DEFAULT_CONFIG_V1.guideAutoDismissOnMove,
-  voice: { stt: 'local', tts: 'off', ttsVoice: 'alloy', ttsRate: 1, bargeIn: false },
+  voice: {
+    stt: 'local',
+    tts: 'off',
+    ttsVoice: 'alloy',
+    ttsRate: 1,
+    bargeIn: false,
+    micDeviceId: ''
+  },
   a11y: {
     announce: 'off',
     uiScale: 1,

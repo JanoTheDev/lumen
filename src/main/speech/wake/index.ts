@@ -6,36 +6,54 @@ import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { getAgent } from '../../agent/instance'
 import { splitPhrases } from '../../agent/state'
-import { installModel as installVoskModel, modelInstalled as voskInstalled } from '../../wake-model'
+import type { WakeStatus } from '@shared/channels'
+import {
+  installModel as installVoskModel,
+  modelInstalled as voskInstalled,
+  modelRoot as voskModelRoot
+} from '../../wake-model'
 import * as hud from '../../windows/hud'
+import { broadcast } from '../../windows/registry'
 import { loadSherpa } from '../sherpa'
 import { localSttReady, transcribeLocal } from '../stt/local'
 import { cancelArmed, onCancelArmed } from './arm'
 import { confirmsCancel } from './confirm'
 import { handleVoiceCancel, handleWake } from './handlers'
-import { installKwsModel, kwsModelDir, kwsModelInstalled } from './kws-model'
+import { installKwsModel, KWS_MODEL, kwsModelDir, kwsModelInstalled } from './kws-model'
+import type { KeywordPhrases } from './keywords'
 import { Spotter } from './spotter'
 
 export type WakeEngine = 'kws' | 'vosk' | 'off'
 
-interface Phrases {
-  wake: string
-  cancel: string[]
-}
+type Phrases = KeywordPhrases
 
 const REFRACTORY_MS = 2000
 // Audio after a cancel hit that goes into the confirming transcript ("stop" vs "stopwatch").
 const CONFIRM_TAIL_MS = 300
 const MAX_PCM_BYTES = 64_000
+const VOSK_SIZE_MB = 40
 
 let engine: WakeEngine = 'off'
 let spotter: Spotter | null = null
 let applySeq = 0
 let lastWakeAt = 0
 let confirming = false
+let unusable: string[] = []
 
 export function wakeEngine(): WakeEngine {
   return engine
+}
+
+/** Engine, model and phrase state for Settings. */
+export function wakeStatus(): WakeStatus {
+  const native = !!loadSherpa()
+  return {
+    installed: native ? kwsModelInstalled() : voskInstalled(),
+    path: native ? kwsModelDir() : voskModelRoot(),
+    engine,
+    sizeMb: native ? KWS_MODEL.sizeMb : VOSK_SIZE_MB,
+    unusable: [...unusable]
+  }
 }
 
 /** The voice renderer should stream mic audio here. */
@@ -47,7 +65,8 @@ function phrasesOf(cfg: AppConfig): Phrases {
   const phrase = cfg.wakeWord.phrase.trim()
   return {
     wake: cfg.wakeWord.enabled ? phrase : '',
-    cancel: cfg.cancelVoice.enabled ? splitPhrases(cfg.cancelVoice.phrases) : []
+    cancel: cfg.cancelVoice.enabled ? splitPhrases(cfg.cancelVoice.phrases) : [],
+    sensitivity: cfg.wakeWord.sensitivity
   }
 }
 
@@ -74,7 +93,10 @@ function startVosk(p: Phrases): void {
 }
 
 function switchTo(next: WakeEngine, p?: Phrases): void {
-  if (next !== 'kws') spotter = null
+  if (next !== 'kws') {
+    spotter = null
+    unusable = []
+  }
   if (next !== engine) log('step', `wake engine: ${next}`)
   engine = next
   hud.send('voice:wake-listen', next === 'kws')
@@ -83,6 +105,7 @@ function switchTo(next: WakeEngine, p?: Phrases): void {
     getAgent()
       ?.disableListener()
       .catch(() => {})
+  broadcast('wake:status', wakeStatus())
 }
 
 /** Applies the wake/cancel settings; re-run after config changes and agent restarts. */
@@ -98,6 +121,7 @@ export function applyWakeState(cfg: AppConfig): void {
       for (const phrase of next.unusable)
         log('fail', `wake: "${phrase}" can't be spelled by the model`)
       spotter = next
+      unusable = next.unusable
       return switchTo('kws')
     } catch (e) {
       log('fail', `wake word spotter failed, using Vosk: ${(e as Error).message}`)

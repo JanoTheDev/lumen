@@ -12,7 +12,12 @@ import {
   lastConfigWarning,
   DEFAULT_CONFIG
 } from '../src/main/config'
-import { DEFAULT_CONFIG_V1, configV2Schema, migrateV1toV2 } from '../src/shared/config'
+import {
+  DEFAULT_CONFIG_V1,
+  configPatchSchema,
+  configV2Schema,
+  migrateV1toV2
+} from '../src/shared/config'
 
 let dir: string
 
@@ -102,7 +107,7 @@ describe('config', () => {
     expect(cfg.hotkey).toBe('Alt+B')
     expect(cfg.hudAutoCloseMs).toBe(3000)
     expect(cfg.answerAutoCloseMs).toBe(0)
-    expect(cfg.wakeWord).toEqual({ enabled: true, phrase: 'hey computer' })
+    expect(cfg.wakeWord).toEqual({ enabled: true, phrase: 'hey computer', sensitivity: 0.5 })
     expect(cfg.statusBubble.enabled).toBe(false)
     expect(cfg.voiceVocab).toBe('Kubernetes, Exness')
     expect(cfg.historyEnabled).toBe(false)
@@ -259,5 +264,37 @@ describe('config', () => {
     expect(loadConfig().theme).toBe('dark')
     invalidateConfig()
     expect(loadConfig().theme).toBe('midnight')
+  })
+
+  it('fills wake sensitivity and mic device for a v2 file written before they existed', () => {
+    const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    delete old.wakeWord.sensitivity
+    delete old.voice.micDeviceId
+    old.wakeWord.phrase = 'hey computer'
+    writeRaw(old)
+    const cfg = loadConfig()
+    expect(lastConfigWarning()).toBeNull()
+    expect(cfg.wakeWord).toEqual({ enabled: false, phrase: 'hey computer', sensitivity: 0.5 })
+    expect(cfg.voice.micDeviceId).toBe('')
+  })
+
+  it('a partial wakeWord / voice patch keeps the saved sensitivity and mic', () => {
+    saveConfig({ wakeWord: { ...DEFAULT_CONFIG.wakeWord, sensitivity: 0.8 } })
+    saveConfig({ voice: { ...DEFAULT_CONFIG.voice, micDeviceId: 'abc' } })
+    const patch = configPatchSchema.parse({ wakeWord: { enabled: true }, voice: { ttsRate: 1.2 } })
+    expect(patch).toEqual({ wakeWord: { enabled: true }, voice: { ttsRate: 1.2 } })
+    saveConfig(patch as never)
+    const cfg = loadConfig()
+    expect(cfg.wakeWord.sensitivity).toBe(0.8)
+    expect(cfg.voice.micDeviceId).toBe('abc')
+  })
+
+  it('patch schema bounds wake sensitivity and mic device', () => {
+    expect(configPatchSchema.safeParse({ wakeWord: { sensitivity: 0.3 } }).success).toBe(true)
+    expect(configPatchSchema.safeParse({ wakeWord: { sensitivity: 1.5 } }).success).toBe(false)
+    expect(configPatchSchema.safeParse({ wakeWord: { sensitivity: -0.1 } }).success).toBe(false)
+    expect(configPatchSchema.safeParse({ voice: { micDeviceId: 'x'.repeat(201) } }).success).toBe(
+      false
+    )
   })
 })

@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import type { KeywordSpotter, OnlineStream } from 'sherpa-onnx-node'
 import { parseSentencepieceModel, type PieceVocab } from './sentencepiece'
-import { buildKeywords, EnergyGate, type SpottedPhrase } from './keywords'
+import { buildKeywords, EnergyGate, type KeywordPhrases, type SpottedPhrase } from './keywords'
 import { KWS_MODEL } from './kws-model'
 import type { Sherpa } from '../sherpa'
 
@@ -37,7 +37,7 @@ export class Spotter {
   private readonly byTag: Map<string, SpottedPhrase>
 
   /** Throws when the model fails to load or no phrase is usable. */
-  constructor(lib: Sherpa, dir: string, phrases: { wake: string; cancel: string[] }) {
+  constructor(lib: Sherpa, dir: string, phrases: KeywordPhrases) {
     const list = buildKeywords(phrases, vocabOf(dir))
     this.unusable = list.unusable
     this.byTag = list.byTag
