@@ -1,19 +1,44 @@
 # Connectors
 
 A connector is an [MCP](https://modelcontextprotocol.io) server. Its tools become available to
-Lumen's agent tasks, next to the screen tools. Lumen ships no connectors and no sign-in flows;
-you add the servers you want in **Settings → Connectors**.
+Lumen's agent tasks, next to the screen tools. Lumen ships no connectors switched on; you add the
+servers you want in **Settings → Connectors**, from **Browse integrations** or by hand.
+
+## Browse integrations
+
+The catalog lists well-known servers, each with a link to its maker's own documentation and the
+date its address and sign-in were last checked. Click **Add**:
+
+- **Sign in** (Notion, Linear, Sentry, Supabase, Stripe, PayPal, Intercom, Webflow): your
+  browser opens the provider's sign-in page. Lumen registers itself with the server, waits for the
+  browser to come back to `http://127.0.0.1:<port>/callback` on this PC, and stores the sign-in.
+- **Access token** (GitHub, monday.com, Zapier, and optionally Linear, Supabase, Stripe,
+  Intercom, Hugging Face, Context7): paste the token the server's docs describe.
+- **No sign-in** (DeepWiki, Microsoft Learn, Cloudflare docs, Figma desktop).
+- **Local commands** (Files, Git, Fetch, Time, Playwright, Chrome DevTools …) show the exact
+  command line and need **I trust this command**, like any local command. Most need
+  [Node.js](https://nodejs.org) or [uv](https://docs.astral.sh/uv/) (free); the entry says which.
+
+Servers that only accept apps their maker approved (for example Asana, HubSpot, Box, Vercel and
+Figma's hosted server) are not in the catalog: they cannot be signed in to from Lumen.
 
 ## How Lumen uses a connector
 
 - **Two kinds.** _Local command_: Lumen starts a program on your PC and talks to it over
   stdin/stdout. _Web server_: Lumen connects to an `https://` URL (plain `http://` only for a
-  server on this PC), optionally with an access token sent as `Authorization: Bearer …`.
+  server on this PC), with an access token sent as `Authorization: Bearer …`, an OAuth sign-in,
+  or neither.
+- **Sign-in (OAuth).** Lumen uses the MCP authorization flow: authorization code with PKCE and
+  dynamic client registration, the redirect to `127.0.0.1` on this PC. The sign-in is refreshed
+  by itself while it is valid; when it ends, the connector says "Not signed in" and **Sign in**
+  under it starts again. **Sign out** deletes the stored sign-in. Any web server can try **Sign in
+  with OAuth**; servers that need an approved app refuse it.
 - **Trust.** A local command runs with your Windows permissions. Settings shows the exact command
   line and only adds it after you tick **I trust this command**. Changing the command or its
   arguments needs the tick again.
-- **Secrets.** Access tokens and environment variable values are encrypted with Windows DPAPI in
-  `~/.ai-overlay/connectors.dat` and are never shown again. `~/.ai-overlay/connectors.json` holds
+- **Secrets.** Access tokens, sign-ins (OAuth tokens and the registration) and environment
+  variable values are encrypted with Windows DPAPI in `~/.ai-overlay/connectors.dat`, never
+  shown again and never written to the log. `~/.ai-overlay/connectors.json` holds
   everything else (names, commands, URLs, tool settings) and no secrets.
 - **When it connects.** Only when an agent task starts and the connector is switched on. A server
   that fails is left out of that task and retried later (1 s, 5 s, 15 s, then every minute).
@@ -64,7 +89,7 @@ who publishes it and what it can do, and add it:
   password the server's readme asks for under **Environment variables** as `NAME=value`, one per
   line. They are stored encrypted and passed only to that command.
 - **Hosted by the provider**: kind **Web server**, with the server URL and an access token if it
-  uses one. Servers that need an interactive OAuth sign-in are not supported.
+  uses one, or **Sign in with OAuth** after adding it.
 
 Tools that send mail or change events count as writing and always ask first. Lumen's agent never
 sends on its own: it drafts, and you send.
@@ -80,6 +105,15 @@ so follow Blackmagic's documentation for the address or command, then:
    Lessons only need read-only tools.
 
 Without Studio, Resolve lessons check your progress from the screen; see Settings → App helpers.
+
+## From Claude Code plugins
+
+**Settings → Skills → Import from Claude Code** reads a plugin's `.mcp.json` (and the
+`mcpServers` in its `plugin.json`). Each server is offered as a connector with its exact command
+line or address, and only the ones you tick ("I trust this command") are added. Servers that
+run a program from inside the plugin (`${CLAUDE_PLUGIN_ROOT}`), use the old SSE or WebSocket
+transports, or build their headers with a command are left out. Values a server reads from your
+environment (`${API_KEY}`) are listed: add them under the connector afterwards.
 
 ## Troubleshooting
 
