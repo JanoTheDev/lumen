@@ -73,6 +73,8 @@ nsis:
   deleteAppDataOnUninstall: false
 portable:
   artifactName: Lumen-${version}-portable.${ext}
+# Writes resources/app-update.yml for electron-updater (src/main/update). Builds always run with
+# --publish never; .github/workflows/release.yml uploads the files to a draft release on a v* tag.
 publish:
   provider: github
   owner: JanoTheDev

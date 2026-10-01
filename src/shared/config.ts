@@ -319,7 +319,16 @@ export const configV2Schema = z.object({
   privacy: z.object({ saveScreenshots: z.boolean(), telemetry: z.boolean() }),
   teach: z.object({
     activeSkill: z.string().max(80).nullable(),
-    hintLevel: z.enum(['auto', 'minimal', 'detailed'])
+    hintLevel: z.enum(['auto', 'minimal', 'detailed']),
+    /** Offer a due lesson review when its app is opened, at most once a day (07 T29). */
+    reviewReminders: z.boolean(),
+    /** Opt-in idle hints (07 T33): off by default; no screenshots outside a lesson. */
+    idleHint: z.boolean(),
+    /** Skill ids idle hints are on for; empty = every app. */
+    idleHintApps: z.array(z.string().max(80)).max(50),
+    idleHintSec: z.number().int().min(5).max(300),
+    /** Speak idle hints (else bar caption only). */
+    idleHintVoice: z.boolean()
   }),
   memory: z.object({
     enabled: z.boolean(),
@@ -354,8 +363,11 @@ export const configV2Schema = z.object({
   }),
   /** First-run setup finished (or skipped). */
   onboarding: z.object({ done: z.boolean() }),
-  /** Windows integration: start Lumen when the user signs in (ignored in the portable build). */
-  system: z.object({ startAtLogin: z.boolean() }),
+  /**
+   * Windows integration: start Lumen when the user signs in (ignored in the portable build);
+   * autoUpdate: daily check, background download, install on quit (installed build only).
+   */
+  system: z.object({ startAtLogin: z.boolean(), autoUpdate: z.boolean() }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -416,7 +428,15 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },
   privacy: { saveScreenshots: false, telemetry: false },
-  teach: { activeSkill: null, hintLevel: 'auto' },
+  teach: {
+    activeSkill: null,
+    hintLevel: 'auto',
+    reviewReminders: true,
+    idleHint: false,
+    idleHintApps: [],
+    idleHintSec: 20,
+    idleHintVoice: false
+  },
   memory: {
     enabled: false,
     autoLearn: 'ask',
@@ -435,7 +455,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   },
   ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
-  system: { startAtLogin: false }
+  system: { startAtLogin: false, autoUpdate: true }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
