@@ -1,8 +1,9 @@
 // Card images (05 T38): a remote picture becomes a small local JPEG data URL, so renderers never
 // load a remote URL (CSP img-src stays 'self' data:). Fetched through web/net safeGet (https, no
 // private hosts, every redirect re-checked), ≤ 3 MB, image/* only, 8 s; decoded and scaled to
-// ≤ 640 px by Electron's nativeImage. Kept in memory (LRU 50) and in ~/.ai-overlay/card-images/
-// for 7 days, except in private mode. Also: the picture a page names (og:image / twitter:image /
+// ≤ 640 px by Electron's nativeImage (WebP / AVIF / GIF drawn by Chromium first, raster.ts).
+// Kept in memory (LRU 50) and in ~/.ai-overlay/card-images/ for 7 days, except in private
+// mode. Also: the picture a page names (og:image / twitter:image /
 // a large <img>) and a Wikimedia Commons lookup with its credit line.
 import { createHash } from 'crypto'
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
@@ -12,6 +13,7 @@ import { configPath, loadConfig } from '../config'
 import { log } from '../logger'
 import { decodeEntities, htmlToText, metaContent } from '../web/extract'
 import { assertFetchable, safeGet, type SafeGetOptions, type SafeGetResult } from '../web/net'
+import { rasterize, rasterKind } from './raster'
 
 export const IMAGE_MAX_BYTES = 3 * 1024 * 1024
 export const IMAGE_TIMEOUT_MS = 8_000
@@ -35,7 +37,12 @@ async function nativeEncode(bytes: Buffer): Promise<Buffer | null> {
   try {
     const { nativeImage } = await import('electron')
     const img = nativeImage.createFromBuffer(bytes)
-    if (img.isEmpty()) return null
+    if (img.isEmpty()) {
+      // WebP / AVIF / GIF: drawn by Chromium in a script-less offscreen window (raster.ts).
+      if (!rasterKind(bytes)) return null
+      const drawn = await rasterize(bytes, IMAGE_MAX_EDGE)
+      return drawn && !drawn.isEmpty() ? drawn.toJPEG(80) : null
+    }
     const { width, height } = img.getSize()
     if (!width || !height) return null
     const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(width, height))
@@ -132,7 +139,7 @@ export class CardImages {
         maxBytes: IMAGE_MAX_BYTES,
         overflow: 'throw',
         timeoutMs: IMAGE_TIMEOUT_MS,
-        // nativeImage decodes JPEG and PNG only.
+        // nativeImage decodes JPEG and PNG; WebP / AVIF / GIF take the slower raster path.
         accept: 'image/jpeg,image/png;q=0.9,image/*;q=0.5'
       })
       if (res.status < 200 || res.status >= 300) return null
