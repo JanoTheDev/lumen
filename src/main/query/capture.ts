@@ -16,7 +16,8 @@ import {
   type Frame,
   type QueryContext
 } from './context'
-import { nodesOnFrame, uiaQuality } from './uia-list'
+import { buildMarks, type MarksTable } from './marks'
+import { nodesOnFrame, uiaQuality, type UiaQuality } from './uia-list'
 
 export interface CaptureOptions {
   /** Every monitor instead of the foreground one (router needsAllScreens). */
@@ -67,6 +68,41 @@ function ocrFor(agent: AgentBridge, frame: Frame | undefined): QueryContext['ocr
   })
 }
 
+/**
+ * Set-of-marks (T15) when UIA is poor: OCR the frame, build the marks table and let the agent
+ * draw the numbers into the frame's JPEG. Null when there is nothing to mark or it failed.
+ */
+async function setOfMarks(
+  agent: AgentBridge,
+  ctx: QueryContext,
+  frame: Frame,
+  quality: UiaQuality,
+  signal?: AbortSignal
+): Promise<{ marks: MarksTable; data: string } | null> {
+  const g = frame.geometry
+  const frameRect = { x: g.originX, y: g.originY, w: g.width, h: g.height }
+  const ocr = await ctx.ocr()
+  const marks = buildMarks({
+    nodes: nodesOnFrame(ctx.uia, frameRect),
+    ocrLines: ocr?.lines ?? [],
+    frame: frameRect,
+    quality
+  })
+  if (!marks.length) return null
+  const drawn = await commands.marksRender(
+    agent,
+    {
+      frameId: frame.id,
+      marks: marks.map((m) => ({ n: m.n, rect: m.physRect })),
+      maxWidth: MAX_IMAGE_WIDTH
+    },
+    { signal }
+  )
+  // The marked image must have the frame's size, or targets in it would map wrongly.
+  if (drawn.width !== g.imgW || drawn.height !== g.imgH) return null
+  return { marks, data: drawn.data }
+}
+
 /** Active window plus, when asked, the screen: frames, UIA snapshot and lazy OCR. */
 export async function captureContext(
   withScreenshot: boolean,
@@ -99,7 +135,8 @@ export async function captureContext(
     w: first.geometry.width,
     h: first.geometry.height
   }
-  const quality = uia && frameRect ? uiaQuality(uia, frameRect, foreground.rect) : undefined
+  // No snapshot (UIA timed out or unsupported) counts as "none": marks only.
+  const quality = frameRect ? uiaQuality(uia, frameRect, foreground.rect) : undefined
   const ctx: QueryContext = {
     frames,
     foreground,
@@ -111,6 +148,19 @@ export async function captureContext(
     screenshot: first?.data ?? null,
     at: Date.now()
   }
+  let marksNote = ''
+  if (first && quality && quality !== 'good' && !first.id.startsWith('v1-')) {
+    const t0 = Date.now()
+    const marked = await setOfMarks(agent, ctx, first, quality, signal).catch((e) => {
+      log('fail', `set-of-marks skipped: ${(e as Error).message}`)
+      return null
+    })
+    if (marked) {
+      ctx.marks = marked.marks
+      ctx.screenshot = marked.data
+      marksNote = ` | ${marked.marks.length} marks ${Date.now() - t0}ms`
+    }
+  }
   if (first) {
     const g = first.geometry
     const onFrame = uia && frameRect ? nodesOnFrame(uia, frameRect).length : 0
@@ -118,7 +168,7 @@ export async function captureContext(
       'plan',
       `context: frame ${first.label} ${g.imgW}x${g.imgH} ← phys ${g.width}x${g.height} @(${g.originX},${g.originY})` +
         `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ' (v1 screenshot)'}` +
-        ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'} | ${Date.now() - started}ms`
+        ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote} | ${Date.now() - started}ms`
     )
     setCurrentFrame(g)
   }

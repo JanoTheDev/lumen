@@ -279,6 +279,7 @@ def register_commands(debug: bool = False) -> None:
     reg("execute", _cmd_execute, INPUT)
     reg("screenshot", lambda args, token: take_screenshot(), READ)
     reg("capture", _cmd_capture, READ)
+    reg("marks_render", lambda args, token: capture.render_marks(**args), READ)
     reg("monitors", lambda args, token: {"monitors": monitors.enumerate_monitors()}, READ)
     reg("ocr", lambda args, token: ocr.run(args, token), READ)
     reg("uia_snapshot", _cmd_uia_snapshot, READ, timeout_ms=uia.SNAPSHOT_TIMEOUT_MS)

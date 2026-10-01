@@ -80,7 +80,8 @@ export async function callModel(
           frame: screenshotBase64 ? { w: imgW, h: imgH } : null,
           routedMode: opts.routedMode,
           targetApp: opts.targetApp,
-          elements: elements?.text
+          elements: elements?.text,
+          marks: screenshotBase64 ? ctx?.marks?.length : undefined
         })
       }
     ],

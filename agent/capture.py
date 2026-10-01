@@ -174,3 +174,84 @@ def get_active_window() -> str:
 
     hwnd = window.foreground()
     return window.title(hwnd) if hwnd else "Unknown"
+
+
+# ---- set-of-marks rendering -------------------------------------------------
+
+MARK_OUTLINE = (255, 212, 0)
+MARK_BADGE = (0, 0, 0)
+MARK_TEXT = (255, 255, 255)
+MARK_FONT_PX = 12  # badge text height in the image the model sees
+MAX_MARKS = 200
+
+_fonts: dict = {}
+
+
+def _font(size: int):
+    from PIL import ImageFont
+
+    if size not in _fonts:
+        try:
+            _fonts[size] = ImageFont.load_default(size=size)
+        except TypeError:  # Pillow < 10.1 has only the fixed bitmap font
+            _fonts[size] = ImageFont.load_default()
+    return _fonts[size]
+
+
+def _check_marks(marks) -> list:
+    if not isinstance(marks, list) or len(marks) > MAX_MARKS:
+        raise AgentError(E_INVALID, f"marks must be a list of at most {MAX_MARKS}")
+    out = []
+    for m in marks:
+        n = m.get("n") if isinstance(m, dict) else None
+        if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+            raise AgentError(E_INVALID, "each mark needs an integer n")
+        out.append({"n": n, "rect": _as_rect(m.get("rect"))})
+    return out
+
+
+def draw_marks(img: Image.Image, marks: list, origin: dict, out_scale: float = 1.0) -> Image.Image:
+    """Copy of `img` with a thin box per mark and a numbered badge at its top-left.
+
+    Mark rects are physical px; `origin` is the image's top-left on the virtual desktop.
+    `out_scale` is full-res px per output px, so badges keep their size after downscaling.
+    White on black with a yellow outline stays legible on dark and light UIs. Pure.
+    """
+    from PIL import ImageDraw
+
+    out = img.copy()
+    draw = ImageDraw.Draw(out)
+    k = max(1.0, float(out_scale))
+    line = max(1, round(k))
+    pad = max(1, round(2 * k))
+    font = _font(max(8, round(MARK_FONT_PX * k)))
+    boxes = []
+    for m in marks:
+        r = m["rect"]
+        x, y = r["x"] - origin["x"], r["y"] - origin["y"]
+        draw.rectangle([x, y, x + r["w"] - 1, y + r["h"] - 1], outline=MARK_OUTLINE, width=line)
+        boxes.append((str(m["n"]), x, y))
+    for label, x, y in boxes:  # badges last so no outline crosses a number
+        left, top, right, bottom = draw.textbbox((0, 0), label, font=font)
+        bw, bh = right - left + 2 * pad, bottom - top + 2 * pad
+        bx = min(max(x, 0), max(0, out.width - bw))
+        by = min(max(y, 0), max(0, out.height - bh))
+        draw.rectangle([bx, by, bx + bw - 1, by + bh - 1], fill=MARK_BADGE, outline=MARK_OUTLINE, width=line)
+        draw.text((bx + pad - left, by + pad - top), label, fill=MARK_TEXT, font=font)
+    return out
+
+
+def render_marks(frameId=None, marks=None, maxWidth=_MAX_WIDTH, quality=75, **_ignored) -> dict:
+    """`marks_render {frameId, marks:[{n, rect}], maxWidth?, quality?}`: the cached full-res frame
+    with marks drawn, encoded like `capture` (same size as that frame's image)."""
+    frame = get_frame(str(frameId)) if frameId else None
+    if frame is None:
+        raise AgentError(E_NOT_FOUND, f"frame {frameId} expired; capture again")
+    checked = _check_marks(marks)
+    max_width = int(maxWidth) if isinstance(maxWidth, (int, float)) and maxWidth > 0 else 0
+    quality = int(quality) if isinstance(quality, (int, float)) and 1 <= quality <= 100 else 75
+    img = frame["img"]
+    out_w = min(img.width, max_width) if max_width else img.width
+    drawn = draw_marks(img, checked, frame["rect"], img.width / out_w)
+    data, w, h = _encode(drawn, max_width, quality)
+    return {"data": data, "width": w, "height": h, "mime": "image/jpeg", "count": len(checked)}

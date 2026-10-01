@@ -6,6 +6,7 @@
 import type { MonitorInfo, Rect } from '@shared/types'
 import type { FrameGeometry } from '../actions/coords'
 import type { OcrResult, UiaSnapshotResult } from '../agent/commands'
+import type { MarksTable } from './marks'
 import type { UiaQuality } from './uia-list'
 
 /** One captured screenshot as the model sees it. */
@@ -44,6 +45,8 @@ export interface QueryContext {
   uiaQuality?: UiaQuality
   /** OCR of frame "1", run on first use and shared afterwards; null when unavailable. */
   ocr: () => Promise<OcrResult | null>
+  /** Set-of-marks numbers drawn on the model image this turn (T15). */
+  marks?: MarksTable
   skill?: SkillInfo
   signal?: AbortSignal
   /** Foreground window title (what older call sites pass around). */

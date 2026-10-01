@@ -57,6 +57,19 @@ const UIA = {
   }
 }
 
+// Five big named buttons covering the window: quality "good", so no set-of-marks.
+const GOOD_UIA = {
+  snapshotId: 's2',
+  root: {
+    ...node('e0', 'window', 'Editor', -2880, 0),
+    rect: { x: -2880, y: 0, w: 2880, h: 1800 },
+    children: [0, 1, 2, 3, 4].map((i) => ({
+      ...node(`e${i + 1}`, 'button', `Big ${i}`, -2880, i * 360),
+      rect: { x: -2880, y: i * 360, w: 2880, h: 350 }
+    }))
+  }
+}
+
 interface FakeAgent {
   calls: { cmd: string; args: Record<string, unknown> }[]
   results: Record<string, unknown>
@@ -153,9 +166,11 @@ describe('captureContext', () => {
       }
     })
     await captureContext(true)
+    // No UIA here, so OCR runs for set-of-marks; nothing that moves focus or types.
     expect(fake.calls.map((c) => c.cmd).sort()).toEqual([
       'active_window',
       'capture',
+      'ocr',
       'uia_snapshot'
     ])
   })
@@ -191,14 +206,85 @@ describe('captureContext', () => {
           }
         ]
       },
+      uia_snapshot: GOOD_UIA,
       ocr
     })
     const ctx = await captureContext(true)
+    expect(ctx.uiaQuality).toBe('good')
     expect(fake.calls.some((c) => c.cmd === 'ocr')).toBe(false)
     await expect(ctx.ocr()).resolves.toEqual(ocr)
     await ctx.ocr()
     const ocrCalls = fake.calls.filter((c) => c.cmd === 'ocr')
     expect(ocrCalls).toEqual([{ cmd: 'ocr', args: { frameId: 'f9' } }])
+  })
+
+  it('draws set-of-marks when UIA is poor and keeps the marks table for the turn', async () => {
+    const fake = fakeAgent({
+      active_window: 'Blender',
+      capture: {
+        frames: [
+          {
+            id: 'f4',
+            monitor: LEFT_MONITOR,
+            width: 1280,
+            height: 800,
+            mime: 'image/jpeg',
+            data: 'RAW'
+          }
+        ]
+      },
+      uia_snapshot: UIA,
+      ocr: {
+        words: [],
+        lines: [
+          { text: 'Render', rect: { x: -2000, y: 300, w: 160, h: 40 }, conf: 1 },
+          { text: 'File', rect: { x: -2860, y: 300, w: 80, h: 40 }, conf: 1 }
+        ]
+      },
+      marks_render: { data: 'MARKED', width: 1280, height: 800, mime: 'image/jpeg', count: 2 }
+    })
+    const ctx = await captureContext(true)
+    expect(ctx.uiaQuality).toBe('partial')
+    expect(ctx.screenshot).toBe('MARKED')
+    expect(ctx.frames[0].data).toBe('RAW')
+    expect(ctx.marks?.map((m) => [m.n, m.label])).toEqual([
+      [1, 'File'],
+      [2, 'Render']
+    ])
+    const render = fake.calls.find((c) => c.cmd === 'marks_render')
+    expect(render?.args).toMatchObject({
+      frameId: 'f4',
+      marks: [
+        { n: 1, rect: { x: -2860, y: 300, w: 80, h: 40 } },
+        { n: 2, rect: { x: -2000, y: 300, w: 160, h: 40 } }
+      ]
+    })
+  })
+
+  it('sends the plain frame when the marked image has the wrong size', async () => {
+    fakeAgent({
+      active_window: 'Blender',
+      capture: {
+        frames: [
+          {
+            id: 'f5',
+            monitor: LEFT_MONITOR,
+            width: 1280,
+            height: 800,
+            mime: 'image/jpeg',
+            data: 'RAW'
+          }
+        ]
+      },
+      ocr: {
+        words: [],
+        lines: [{ text: 'File', rect: { x: -2860, y: 300, w: 80, h: 40 }, conf: 1 }]
+      },
+      marks_render: { data: 'MARKED', width: 640, height: 400, mime: 'image/jpeg', count: 1 }
+    })
+    const ctx = await captureContext(true)
+    expect(ctx.screenshot).toBe('RAW')
+    expect(ctx.marks).toBeUndefined()
   })
 
   it('a query arriving before the speculative capture finishes awaits the same capture', async () => {

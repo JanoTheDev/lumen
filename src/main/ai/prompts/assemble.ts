@@ -25,6 +25,8 @@ export interface TurnContext {
   targetApp?: { name: string; url?: string }
   /** Compact UIA elements list (C3 lines, rects in frame "1" px). */
   elements?: string
+  /** Number of set-of-marks boxes drawn on frame "1". */
+  marks?: number
   now?: Date
 }
 
@@ -54,6 +56,10 @@ export function userTurn(ctx: TurnContext): string {
       `target_app: ${ctx.targetApp.name}${ctx.targetApp.url ? ` ${ctx.targetApp.url}` : ''} (not in front)`
     )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
+  if (ctx.marks)
+    lines.push(
+      `marks: ${ctx.marks} numbered boxes drawn on frame "1" (text and unlabelled controls); point at them with {"kind":"mark","n":N}`
+    )
   if (ctx.elements)
     lines.push(`elements (id role "name" @(x,y,w,h) in frame "1" px):
 ${ctx.elements}`)

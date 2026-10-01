@@ -247,3 +247,28 @@ export async function ping(bridge: AgentBridge, opts?: RequestOptions): Promise<
   await bridge.request('ping', {}, opts)
   return { t: Date.now() }
 }
+
+export interface MarksRenderArgs {
+  frameId: string
+  /** Physical px rects. */
+  marks: { n: number; rect: Rect }[]
+  maxWidth?: number
+  quality?: number
+}
+
+export interface MarksRenderResult {
+  data: string
+  width: number
+  height: number
+  mime: string
+  count: number
+}
+
+/** A cached frame re-encoded with numbered marks drawn in (agent-side, Pillow). */
+export function marksRender(
+  bridge: AgentBridge,
+  args: MarksRenderArgs,
+  opts?: RequestOptions
+): Promise<MarksRenderResult> {
+  return v2Only(bridge, 'marks_render', args, opts)
+}
