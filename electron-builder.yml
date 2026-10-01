@@ -25,6 +25,8 @@ asarUnpack:
   - resources/**
   # Native addon + onnxruntime DLLs cannot load from inside the asar.
   - node_modules/sherpa-onnx-*/**
+  # The speech worker loads that addon; keep it on disk beside it.
+  - out/main/sherpa-worker*.js
 extraResources:
   - from: native/target/release/lumen-native.exe
     to: native/lumen-native.exe
