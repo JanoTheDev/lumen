@@ -26,6 +26,10 @@ interface Layer {
 }
 
 const EXIT_MS = 260
+/** Locate spotlights clear themselves (surfaces.md §3.4). */
+const LOCATE_MS = 6000
+const SUCCESS_MS = 1100
+const FAILURE_MS = 1500
 const CURSOR_MS = 16
 const CURSOR_IDLE_MS = 100
 
@@ -38,6 +42,7 @@ let cursorDisplay: number | null = null
 let captureDisplay: number | null = null
 
 let created = false
+let locateTimer: ReturnType<typeof setTimeout> | null = null
 
 const emptyScene = (s: Scene): boolean =>
   !s.highlights.length &&
@@ -100,19 +105,22 @@ function followCursor(): boolean {
   return b.enabled && b.followCursor
 }
 
-function showLayer(l: Layer): void {
+/** `raise` re-asserts top-most; scene changes do, dwell ticks and cursor moves do not. */
+function showLayer(l: Layer, raise = true): void {
   if (l.hideTimer) {
     clearTimeout(l.hideTimer)
     l.hideTimer = null
   }
   if (!l.ready || (suppressed && !l.hasScene)) return
-  if (!l.win.isVisible()) {
+  const wasVisible = l.win.isVisible()
+  if (!wasVisible) {
     l.win.showInactive()
     if (!l.placed) {
       l.win.setBounds(l.display.bounds)
       l.placed = true
     }
   }
+  if (!raise && wasVisible) return
   l.win.setAlwaysOnTop(true, 'screen-saver')
   l.win.moveTop()
 }
@@ -166,7 +174,7 @@ function pollCursor(): void {
     for (const l of layers.values()) {
       if (l.display.id === d.id || l.display.id === prev) {
         sendCursorTo(l)
-        if (l.display.id === d.id) showLayer(l)
+        if (l.display.id === d.id) showLayer(l, false)
         else if (!l.hasScene) hideLater(l)
       }
     }
@@ -259,6 +267,10 @@ export function create(): void {
 // ---- Scene API (old highlight-window calls map onto these) ----
 
 export function setScene(next: Partial<Scene>): void {
+  if ('highlights' in next && locateTimer) {
+    clearTimeout(locateTimer)
+    locateTimer = null
+  }
   scene = { ...scene, ...next }
   render()
 }
@@ -295,17 +307,37 @@ export function setLocate(items: LocateItem[]): void {
       })
   })
   setScene({ highlights, buddy: undefined })
+  if (!highlights.length) return
+  locateTimer = setTimeout(() => {
+    locateTimer = null
+    if (scene.highlights.every((h) => h.style === 'dim-reveal')) setScene({ highlights: [] })
+  }, LOCATE_MS)
+}
+
+function flash(rect: Rect, style: 'success' | 'failure', ms: number): void {
+  const id = `${style}${Date.now().toString(36)}`
+  scene = { ...scene, highlights: [...scene.highlights, { id, rect, style }] }
+  render()
+  setTimeout(() => {
+    scene = { ...scene, highlights: scene.highlights.filter((h) => h.id !== id) }
+    render()
+  }, ms)
 }
 
 /** Briefly marks a rect as done (green ring + check), then drops it. */
 export function flashSuccess(rect: Rect): void {
-  const id = `ok${Date.now().toString(36)}`
-  setScene({ highlights: [...scene.highlights, { id, rect, style: 'success' }] })
-  setTimeout(() => setScene({ highlights: scene.highlights.filter((h) => h.id !== id) }), 1100)
+  flash(rect, 'success', SUCCESS_MS)
+}
+
+/** Marks a rect as failed (red ring + cross) for 1.5s. Pair it with an announcement. */
+export function flashFailure(rect: Rect): void {
+  flash(rect, 'failure', FAILURE_MS)
 }
 
 /** Drops highlights, buddy and annotations. Numbers, the grid and dwell belong to a11y and stay. */
 export function clear(): void {
+  if (locateTimer) clearTimeout(locateTimer)
+  locateTimer = null
   scene = { highlights: [], marks: scene.marks, grid: scene.grid, dwellUi: scene.dwellUi }
   render()
 }
@@ -346,7 +378,7 @@ export function dwell(data: DwellRingData): void {
   for (const l of layers.values()) {
     if (!l.ready) continue
     if (contains(l.display.bounds, p)) {
-      if (data.active) showLayer(l)
+      if (data.active) showLayer(l, false)
       const target = data.target ? shift(data.target, l.display.bounds) : undefined
       l.win.webContents.send('screen:dwell', {
         ...data,
