@@ -190,6 +190,8 @@ export interface EvalAction {
   server?: string
   tool?: string
   annotations?: { destructiveHint?: boolean; readOnlyHint?: boolean }
+  /** mcp_tool arguments (shown redacted on the confirm card, summarized in the audit line). */
+  args?: Record<string, unknown>
 }
 
 export interface Decision {

@@ -59,6 +59,25 @@ export function hashText(text: string): { len: number; sha256: string } {
   return { len: text.length, sha256: createHash('sha256').update(text, 'utf8').digest('hex') }
 }
 
+const ARG_MAX = 80
+const ARGS_MAX = 300
+
+/**
+ * Tool arguments in one short line for the confirm card and the audit log: secrets redacted,
+ * each value cut at 80 characters, the whole at 300.
+ */
+export function summarizeArgs(args: Record<string, unknown>, max = ARGS_MAX): string {
+  const cut = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+  const value = (v: unknown): string => {
+    const raw = typeof v === 'string' ? `“${v}”` : (JSON.stringify(v) ?? String(v))
+    return cut(redactForLog(raw).replace(/\s+/g, ' ').trim(), ARG_MAX)
+  }
+  const line = Object.entries(args)
+    .map(([k, v]) => `${k}: ${value(v)}`)
+    .join(', ')
+  return cut(line, max)
+}
+
 /** What the log keeps of an action: type, target, keys, URL; text only as hash + length. */
 export function summarizeAction(a: EvalAction, app?: string): Record<string, unknown> {
   const out: Record<string, unknown> = { type: a.type }
@@ -76,6 +95,10 @@ export function summarizeAction(a: EvalAction, app?: string): Record<string, unk
     )
   if (a.appId) out.appId = a.appId
   if (a.server) out.tool = `${a.server}/${a.tool ?? ''}`
+  if (a.args) {
+    const json = JSON.stringify(a.args) ?? ''
+    out.args = { summary: summarizeArgs(a.args), ...hashText(json) }
+  }
   if (app) out.app = app
   return out
 }

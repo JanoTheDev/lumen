@@ -178,7 +178,8 @@ export function createMcpToolHandlers(
           server: server.id,
           tool: tool.name,
           annotations: { destructiveHint: tool.destructive, readOnlyHint: tool.readOnly },
-          description: `${server.name}: ${tool.name}`
+          description: `${server.name}: ${tool.name}`,
+          args
         },
         {
           origin: 'mcp',

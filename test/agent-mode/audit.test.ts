@@ -8,6 +8,7 @@ import {
   listAudit,
   setAuditStoreTypedText,
   summarizeAction,
+  summarizeArgs,
   uninstallAudit,
   writeAudit,
   type AuditEntry
@@ -60,6 +61,19 @@ describe('audit log', () => {
       '2026-09-30.ndjson',
       'notes.txt'
     ])
+  })
+
+  it('MCP calls keep a redacted, cut summary of their arguments plus a hash (review M6)', () => {
+    const key = ['sk', 'proj', 'B'.repeat(40)].join('-')
+    const args = { to: 'a@example.com', body: `${'x'.repeat(200)} ${key}`, n: 3 }
+    const s = summarizeAction({ type: 'mcp_tool', server: 'gmail', tool: 'send_email', args })
+    const a = s.args as { summary: string; len: number; sha256: string }
+    expect(a.summary).toContain('to: “a@example.com”')
+    expect(a.summary).toContain('n: 3')
+    expect(a.summary.length).toBeLessThanOrEqual(300)
+    expect(JSON.stringify(s)).not.toContain(key)
+    expect(a.sha256).toBe(createHash('sha256').update(JSON.stringify(args)).digest('hex'))
+    expect(summarizeArgs({ k: `pre ${key}` })).not.toContain(key)
   })
 
   it('stores typed text as length + sha256, never plaintext', () => {

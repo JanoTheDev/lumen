@@ -194,6 +194,14 @@ describe('MCP tool handlers', () => {
     expect(call).not.toHaveBeenCalled()
   })
 
+  it('the gate sees the call arguments (confirm card and audit line, review M6)', async () => {
+    const entries = mcpToolDefs([{ server: server(), tools: [tool('send_email')] }])
+    const { gate, seen } = fakeGate(false)
+    const h = createMcpToolHandlers(entries, env(), { manager: { call: vi.fn() }, gate })
+    await h.mcp__notes__send_email({ to: 'attacker@example.com', body: 'hi' }, ctx())
+    expect(seen[0].action.args).toEqual({ to: 'attacker@example.com', body: 'hi' })
+  })
+
   it('first use is medium; "allow" runs it without asking, "ask" always asks', async () => {
     const cases = [
       [undefined, true],

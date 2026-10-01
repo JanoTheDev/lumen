@@ -20,7 +20,13 @@ import { getAgent } from '../agent/instance'
 import type { ActiveWindowInfo, FocusInfoResult } from '../agent/commands'
 import { askUser } from '../agent-mode/confirm'
 import { grants } from '../agent-mode/grants'
-import { summarizeAction, writeAudit, type AuditDecision, type AuditResult } from '../audit/log'
+import {
+  summarizeAction,
+  summarizeArgs,
+  writeAudit,
+  type AuditDecision,
+  type AuditResult
+} from '../audit/log'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { setStatus } from '../windows/status'
@@ -113,6 +119,12 @@ function focusWindow(f: FocusInfoResult): WindowInfo {
 /** One line for the confirm card, secrets masked. */
 export function describeForConfirm(a: EvalAction): string {
   if (a.type === 'input' && a.steps) return describeSteps(a.steps)
+  // A connector call: what it is called with, so the user does not approve it blind.
+  if (a.type === 'mcp_tool') {
+    const what = a.description ?? `${a.server ?? '?'}: ${a.tool ?? '?'}`
+    const args = a.args && Object.keys(a.args).length ? summarizeArgs(a.args) : ''
+    return args ? `${what} (${args})` : what
+  }
   return describeActions([maskedForConfirm(a)])
 }
 

