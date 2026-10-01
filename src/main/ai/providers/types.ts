@@ -67,11 +67,6 @@ export interface CompleteResult<T> extends ChatResult {
 
 export type ChatChunk = { type: 'text'; text: string } | { type: 'done'; result: ChatResult }
 
-export interface ModelInfo {
-  id: string
-  provider: ProviderId
-}
-
 export interface LlmProvider {
   id: ProviderId
   /** With a schema the reply is constrained JSON; the caller parses the final text. */

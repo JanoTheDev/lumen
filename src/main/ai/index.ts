@@ -4,6 +4,9 @@ import { currentContext, type QueryContext } from '../query/context'
 import { serializeElements } from '../query/uia-list'
 import { log } from '../logger'
 import { bus } from '../bus'
+import { loadConfig } from '../config'
+import { answerStyle } from '../a11y/phrases'
+import { replyLanguageLine } from '../speech/language'
 import { currentFrame } from '../actions/coords'
 import { screenNames } from '../query/screens'
 import { historyMessages } from './history'
@@ -23,13 +26,7 @@ import {
   type StructuredRequest
 } from './providers'
 import { noteAnswerModel, recordUsage } from './cost'
-
-export type {
-  Action,
-  Confidence,
-  GuideStep as Step,
-  ModelResponse as ClaudeResponse
-} from '@shared/types'
+import { installTurnMetrics } from './turn-metrics'
 
 export interface CallOptions {
   lowDetail?: boolean // use low-res image + fewer tokens (for follow_up row enumeration)
@@ -116,6 +113,8 @@ export async function callModel(
           skill: skill ? { name: skill.name, text: skillText } : undefined,
           memory: memoryText || undefined,
           lesson: lessonLine,
+          style: answerStyle(loadConfig()),
+          language: replyLanguageLine(loadConfig().voice.language) || undefined,
           regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
         })
       }
@@ -152,11 +151,11 @@ export async function callModel(
   }
 }
 
-/** @deprecated Use callModel. */
-export const callClaude = callModel
+// Usage feeds the cost totals; every turn logs one latency/token record.
+onUsage(recordUsage)
+installTurnMetrics()
 
 // Warm the SDK connection pools at startup (after .env is loaded) and whenever the user starts
 // speaking, so the request after the transcript skips the TLS handshake.
-onUsage(recordUsage)
 if (process.versions.electron) setImmediate(() => warmupProviders())
 bus.on('voice.started', () => warmupProviders())

@@ -1,6 +1,7 @@
 // Builds one request: a stable, cacheable system prefix (core + grounding + every mode
 // contract, byte-identical for the whole session) and a volatile user turn (<context> +
 // <request>). Anything that changes per call goes in the user turn, never the prefix.
+import { PLAIN_STYLE_LINE } from '../../a11y/phrases'
 import type { SystemBlock } from '../providers/types'
 import { writingRulesFor } from './apps'
 import { CORE } from './core'
@@ -37,6 +38,10 @@ export interface TurnContext {
   memory?: string
   /** The running lesson (07), one line. */
   lesson?: string
+  /** 'plain' in simple mode (a11y.simpleMode): short sentences, everyday words. */
+  style?: 'plain'
+  /** Reply language line for non-English voice users (speech/language replyLanguageLine). */
+  language?: string
   now?: Date
 }
 
@@ -70,6 +75,8 @@ export function userTurn(ctx: TurnContext): string {
       `target_app: ${ctx.targetApp.name}${ctx.targetApp.url ? ` ${ctx.targetApp.url}` : ''} (not in front)`
     )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
+  if (ctx.style === 'plain') lines.push(PLAIN_STYLE_LINE)
+  if (ctx.language) lines.push(ctx.language)
   if (ctx.lesson) lines.push(ctx.lesson)
   if (ctx.marks)
     lines.push(

@@ -59,6 +59,8 @@ export interface TaskContext {
   app?: string
   /** Skill pack overview for the foreground app (07 registry), already capped. */
   skill?: { name: string; text: string }
+  /** Reply language line for non-English voice users ('' or absent for English). */
+  language?: string
   now?: Date
 }
 
@@ -83,6 +85,7 @@ export function planTurn(prompt: string, ctx: TaskContext): string {
 function contextBlock(ctx: TaskContext): string {
   const lines = [`date: ${formatDate(ctx.now ?? new Date())}`]
   lines.push(`foreground: ${ctx.window || 'unknown'}${ctx.app ? ` (${ctx.app})` : ''}`)
+  if (ctx.language) lines.push(ctx.language)
   const skill = ctx.skill?.text
     ? `\n<app_guide app="${ctx.skill.name}">\n${ctx.skill.text}\n</app_guide>`
     : ''
