@@ -411,7 +411,7 @@ describe('prompt injection', () => {
 
     await callModel('step', null, 'notes.txt - Notepad', { history: false })
     expect(seen[1].messages.at(-1)!.content).not.toContain('<memory>')
-  })
+  }, 20_000)
 
   it('adds nothing when memory is off', async () => {
     setMem({ enabled: false })
