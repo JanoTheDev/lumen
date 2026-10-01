@@ -33,6 +33,8 @@ function readGuideFile(file: string): SavedGuide | null {
 }
 
 export const GUIDE_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/
+/** Windows device names: "con.json" can open the device instead of a file. */
+const RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i
 
 let dirOverride: string | null = null
 
@@ -58,7 +60,7 @@ export function slugify(s: string): string {
 }
 
 export function isValidGuideId(id: unknown): id is string {
-  return typeof id === 'string' && GUIDE_ID_RE.test(id)
+  return typeof id === 'string' && GUIDE_ID_RE.test(id) && !RESERVED_RE.test(id)
 }
 
 // Returns the on-disk path for an id, or null if the id is malformed or escapes the dir.

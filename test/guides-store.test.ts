@@ -99,11 +99,21 @@ describe('guide store', () => {
     expect(guidePath(id)).toBeNull()
   })
 
-  // Windows device names pass the id pattern; on Windows 10 'con.json' opens the console
-  // device instead of a file. See 10-quality/tasks.md Notes.
-  it.fails.each(['con', 'nul', 'aux', 'prn', 'com1', 'lpt1'])('rejects reserved name %s', (id) => {
-    expect(isValidGuideId(id)).toBe(false)
-  })
+  // On Windows 10 'con.json' opens the console device instead of a file.
+  it.each(['con', 'nul', 'aux', 'prn', 'com1', 'com9', 'lpt1', 'lpt9', 'CON', 'Nul', 'aux.json'])(
+    'rejects reserved name %s',
+    (id) => {
+      expect(isValidGuideId(id)).toBe(false)
+      expect(guidePath(id)).toBeNull()
+    }
+  )
+
+  it.each(['console', 'con-1', 'com10', 'com0', 'lpt', 'nuls', 'my-aux'])(
+    'accepts lookalike %s',
+    (id) => {
+      expect(isValidGuideId(id)).toBe(true)
+    }
+  )
 
   it('accepts well-formed ids', () => {
     expect(isValidGuideId('gmail-settings-abc123')).toBe(true)
