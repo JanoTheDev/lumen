@@ -3,7 +3,7 @@
 // tool loop), the assistant bar (state, countdown, cap confirm), speech and the voice
 // commands that only apply while a task runs ("go", "stop", "wait", answers, "resume the task").
 import type { AgentTask } from '@shared/events'
-import type { ModelResponse } from '@shared/types'
+import type { ModelResponse, SkillRunRecord } from '@shared/types'
 import { newTaskState } from '../actions/safety'
 import { usageCost } from '../ai/pricing'
 import { getProvider } from '../ai/providers'
@@ -26,15 +26,31 @@ import {
   type RunnerDeps,
   type RunnerModel,
   type RunResult,
-  type SavedRun
+  type SavedRun,
+  type ToolHandler
 } from './runner'
-import { FOREGROUND_TOOLS } from './tools'
+import { FOREGROUND_TOOLS, type ToolName } from './tools'
 import { foregroundSpawnHandler } from './background'
 import { BG_TOOLS } from './background/tools'
-import { preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
+import { enabledSkill, preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
+import {
+  afterDrift,
+  finishSkillRun,
+  runStepsForeground,
+  skillGuard,
+  type SkillHost,
+  type ToolGuard
+} from './skill-run'
+import { traceRecorder, type RunTrace } from './trace'
+import { rememberAgentRun } from '../skills/creation'
+import type { LoadedSkill } from '../skills/registry'
 import { MEMORY_SEARCH_TOOL, memorySearchInput } from '../ai/memory/search'
+import type { ToolDef } from '../ai/providers/types'
+import { mcpToolSet } from '../connectors'
+import { mcpServerOf } from '../skills/permissions'
 import { memorySearchFor } from '../ai/memory/runtime'
 import { observed } from './prompts'
+import { CancelledError } from '../query/cancel'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -215,20 +231,39 @@ const askIo: AskIo = {
 }
 let lastQuestion = ''
 
-function deps(env: TaskEnv, spawn: boolean, skills: SkillToolSet): RunnerDeps {
+function deps(
+  env: TaskEnv,
+  spawn: boolean,
+  skills: SkillToolSet,
+  guard?: ToolGuard,
+  trace?: RunTrace
+): RunnerDeps {
+  const handlers: RunnerDeps['handlers'] = {
+    ...createHandlers(env),
+    ...skills.handlers,
+    memory_search: async (input) => {
+      const q = memorySearchInput.safeParse(input)
+      if (!q.success) return { content: [{ type: 'text', text: 'Invalid input.' }], isError: true }
+      return { content: [{ type: 'text', text: observed('memory', memorySearchFor(q.data)) }] }
+    },
+    ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {})
+  }
+  // A skill's permissions (11 T04) in front of every call; successful UI calls are traced for
+  // "save that as a skill" (11 T09).
+  for (const [name, h] of Object.entries(handlers)) {
+    if (!h) continue
+    handlers[name] = async (input, ctx) => {
+      const refused = guard ? await guard(name, input, ctx.signal) : null
+      if (refused) return refused
+      const note = trace?.before(name, input)
+      const out = await h(input, ctx)
+      if (note && !out.isError) trace?.after(note)
+      return out
+    }
+  }
   return {
     model,
-    handlers: {
-      ...createHandlers(env),
-      ...skills.handlers,
-      memory_search: async (input) => {
-        const q = memorySearchInput.safeParse(input)
-        if (!q.success)
-          return { content: [{ type: 'text', text: 'Invalid input.' }], isError: true }
-        return { content: [{ type: 'text', text: observed('memory', memorySearchFor(q.data)) }] }
-      },
-      ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {})
-    },
+    handlers,
     publish: (task) => {
       if (task.question?.text) lastQuestion = task.question.text
       showOnBar(task)
@@ -283,9 +318,18 @@ async function run(
   env: TaskEnv,
   context: TaskContext,
   signal: AbortSignal,
-  extra: { skipPlan?: boolean; resume?: SavedRun; noSpawn?: boolean }
+  extra: {
+    skipPlan?: boolean
+    resume?: SavedRun
+    noSpawn?: boolean
+    /** A skill run: its permission check, its tool list and its connectors. */
+    guard?: ToolGuard
+    tools?: readonly ToolName[]
+    connectors?: readonly string[]
+    onResult?: (r: RunResult) => void
+  }
 ): Promise<ModelResponse> {
-  const { noSpawn, ...more } = extra
+  const { noSpawn, guard, tools, connectors, onResult, ...more } = extra
   if (running) throw new Error('An agent task is already running.')
   const ac = new AbortController()
   const onOuter = (): void => ac.abort(signal.reason)
@@ -295,17 +339,27 @@ async function run(
   lastStatus = ''
   // Skills (11 T02): the L1 list after the agent prompt, use_skill / read_skill_file as tools.
   const skills = skillToolSet()
+  // Connectors (08 T18): the enabled MCP servers' tools; a skill only gets its own servers.
+  const mcp = await mcpToolSet(env).catch(() => ({
+    defs: [] as ToolDef[],
+    handlers: {} as Record<string, ToolHandler>
+  }))
+  const mcpDefs = connectors
+    ? mcp.defs.filter((d) => connectors.includes(mcpServerOf(d.name) ?? ''))
+    : mcp.defs
+  const trace = traceRecorder()
   try {
     const r = await withCancelArmed(() =>
       runAgent(
         {
           prompt,
           context,
-          tools: FOREGROUND_TOOLS,
+          tools: tools ?? FOREGROUND_TOOLS,
           // Helper tasks in the background (T28): parallel research fan-out.
           extraTools: [
             MEMORY_SEARCH_TOOL,
             ...skills.defs,
+            ...mcpDefs,
             ...(noSpawn ? [] : [BG_TOOLS.spawn_task])
           ],
           parallelTools: ['spawn_task'],
@@ -315,9 +369,18 @@ async function run(
           speakSummary: false,
           ...more
         },
-        deps(env, !noSpawn, skills)
+        deps(
+          env,
+          !noSpawn,
+          { ...skills, handlers: { ...skills.handlers, ...mcp.handlers } },
+          guard,
+          trace
+        )
       )
     )
+    onResult?.(r)
+    if (r.status === 'done' && trace.steps.length)
+      rememberAgentRun({ prompt, summary: r.summary, at: Date.now(), steps: trace.steps })
     paused =
       r.status === 'paused' && r.saved
         ? { saved: r.saved, env, context, until: Date.now() + PAUSE_KEEP_MS }
@@ -370,7 +433,121 @@ export function runAgentTask(
   // A skill named by its trigger phrase: its instructions are the task's guide.
   const loaded = skill ? preloadSkill(skill, skillArgs) : null
   if (loaded) context.skill = loaded
+  const s = skill ? enabledSkill(skill) : null
+  if (s) return runSkill(s, prompt, newEnv(taskId, prompt), context, signal, skillArgs, extra)
   return run(prompt, newEnv(taskId, prompt), context, signal, extra)
+}
+
+const skillHost: SkillHost = { speak: say, publish: showOnBar, ask: askIo }
+
+/** The skill's tools: its own list (finish always), else everything agent mode has. */
+function skillTools(s: LoadedSkill): readonly ToolName[] {
+  const list = s.manifest.tools
+  return list
+    ? FOREGROUND_TOOLS.filter((t) => t === 'finish' || list.includes(t))
+    : FOREGROUND_TOOLS
+}
+
+const RUN_STATUS: Record<RunResult['status'], SkillRunRecord['status']> = {
+  done: 'done',
+  failed: 'failed',
+  stopped: 'stopped',
+  paused: 'paused'
+}
+
+const sayable = (name: string): string => name.replace(/-/g, ' ')
+
+/**
+ * A foreground skill run (11 T04): its steps.json without the model when it has one (verified
+ * step by step), the model with the skill's instructions after drift or without steps. The
+ * skill's permissions guard both; the run is audited and kept in the skill's history.
+ */
+async function runSkill(
+  s: LoadedSkill,
+  prompt: string,
+  env: TaskEnv,
+  context: TaskContext,
+  signal: AbortSignal,
+  args: { name: string; value: string }[] | undefined,
+  extra: { skipPlan?: boolean; noSpawn?: boolean }
+): Promise<ModelResponse> {
+  const name = s.manifest.name
+  const startedAt = Date.now()
+  let how: SkillRunRecord['how'] = 'agent'
+  let actions = 0
+  const end = (status: SkillRunRecord['status'], summary: string): void =>
+    finishSkillRun(env, name, { how, status, summary, actions }, startedAt)
+  try {
+    let task = prompt
+    if (s.hasSteps) {
+      const steps = await runExclusive(env.taskId, signal, (sig) =>
+        runStepsForeground(s, env, args, skillHost, sig)
+      )
+      if (steps.kind === 'outcome') {
+        how = 'steps'
+        const o = steps.outcome
+        actions = o.actions
+        if (o.status !== 'drift') {
+          const why = o.status === 'denied' ? o.reason.replace(/^E_DENIED: /, '') : ''
+          const text =
+            o.status === 'done'
+              ? `Done: ${sayable(name)}, ${o.ran} ${o.ran === 1 ? 'step' : 'steps'}.`
+              : `I stopped ${sayable(name)} at step ${o.at + 1}: ${why.replace(/ Do not retry.*$/, '')}`
+          end(o.status, o.status === 'done' ? `${o.ran} steps without the model` : why)
+          bus.emit({ type: 'agent.task', task: null })
+          return { mode: 'answer', text, spoken: text }
+        }
+        log('plan', `skill ${name}: drift at step ${o.at + 1} (${o.reason}); the model goes on`)
+        how = 'steps+agent'
+        task = afterDrift(prompt, steps)
+      }
+    }
+    let result: RunResult | null = null
+    const response = await run(task, env, context, signal, {
+      ...extra,
+      noSpawn: true,
+      ...(how === 'steps+agent' ? { skipPlan: true } : {}),
+      guard: skillGuard(s, env, skillHost),
+      tools: skillTools(s),
+      connectors: s.manifest.permissions.connectors,
+      onResult: (r) => (result = r)
+    })
+    const r = result as RunResult | null
+    if (r) {
+      actions += r.task.counters.actions
+      end(RUN_STATUS[r.status], r.summary)
+    }
+    return response
+  } catch (e) {
+    const cancelled =
+      signal.aborted || (e as Error).name === 'AbortError' || e instanceof CancelledError
+    end(cancelled ? 'cancelled' : 'failed', cancelled ? 'Stopped.' : (e as Error).message)
+    throw e
+  }
+}
+
+/** Runs `fn` as the one foreground task ("stop" and Escape abort it). */
+async function runExclusive<T>(
+  taskId: string,
+  signal: AbortSignal,
+  fn: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  if (running) throw new Error('An agent task is already running.')
+  const ac = new AbortController()
+  const onOuter = (): void => ac.abort(signal.reason)
+  if (signal.aborted) ac.abort(signal.reason)
+  signal.addEventListener('abort', onOuter, { once: true })
+  running = { taskId, abort: () => ac.abort() }
+  lastStatus = ''
+  try {
+    return await withCancelArmed(() => fn(ac.signal))
+  } catch (e) {
+    bus.emit({ type: 'agent.task', task: null })
+    throw e
+  } finally {
+    signal.removeEventListener('abort', onOuter)
+    running = null
+  }
 }
 
 /** "resume the task": continues the paused task by asking its question again. */
