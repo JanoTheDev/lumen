@@ -22,7 +22,7 @@ const LEVELS: { value: AutopilotLevel; label: string }[] = [
 const LEVEL_HINT: Record<AutopilotLevel, string> = {
   off: 'Every permission prompt and every question from Claude comes to you.',
   careful:
-    'Lumen approves reads, searches, edits inside the project and test, lint and typecheck commands, and answers questions only when the answer is clear. Installs, network, git push, deletes and anything outside the project ask you.',
+    'Lumen approves reads, searches, edits inside the project and type checks, and answers questions only when the answer is clear. Commands that run the project’s code (tests, scripts, builds), installs, network, git push, deletes and anything outside the project ask you.',
   full: 'Lumen approves everything except the hard list and answers what it can. Product, money and irreversible decisions still come to you.'
 }
 
