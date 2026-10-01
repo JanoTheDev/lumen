@@ -1,15 +1,9 @@
-// The single place model actions run on the machine: coordinate conversion, optional
-// Computer Use refinement, on-screen preview, safety policy and cancellation.
+// The single place model actions run on the machine: click targets resolved against the
+// turn's screen context (resolveTarget), refinement of low-confidence clicks, on-screen
+// preview, safety policy and cancellation.
 import { shell } from 'electron'
-import type { Action } from '@shared/types'
-import {
-  currentFrame,
-  imageRectToPhys,
-  imageToPhys,
-  physRectToLogical,
-  physToLogical,
-  rectCenter
-} from './coords'
+import type { Action, Target } from '@shared/types'
+import { currentFrame, imageToPhys, physToLogical, rectCenter } from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
 import { assertSafeUrl } from './safety'
 import { passesPolicy } from './policy'
@@ -17,7 +11,15 @@ import { requireAgent } from '../agent/instance'
 import type { AgentBridge } from '../agent/bridge'
 import { findClickCoordinates } from '../ai/computer-use'
 import { captureScreenshot } from '../query/capture'
-import { isBrowser } from '../ai/app-context'
+import {
+  describeResolved,
+  groundingNow,
+  LOW_CONFIDENCE,
+  resolveFirst,
+  resolveTarget,
+  type GroundingContext,
+  type ResolvedTarget
+} from '../query/resolve-target'
 import { log } from '../logger'
 import * as highlight from '../windows/highlight'
 import { sleep } from '../util'
@@ -46,69 +48,112 @@ function canPauseDwell(agent: AgentBridge): boolean {
 }
 
 async function refineClick(
-  _agent: AgentBridge,
   description: string,
   signal: AbortSignal | undefined
 ): Promise<{ x: number; y: number } | null> {
   // Same monitor + geometry as the turn's frame (currentFrame follows the capture).
   const freshShot = await captureScreenshot(signal)
-  if (!freshShot) return null
   const frame = currentFrame()
   const refined = await findClickCoordinates(freshShot, description, frame.imgW, frame.imgH, signal)
   return refined ? imageToPhys(frame, refined) : null
 }
 
+/** How a click action is found on screen: its targets in priority order. */
+interface ClickPlan {
+  targets: Target[]
+  /** What the click is for (refine prompt, logs). */
+  label?: string
+  /** Text clicks the agent can still search for itself when main cannot resolve them. */
+  agentFallback?: boolean
+}
+
+function clickPlan(action: Action): ClickPlan | null {
+  switch (action.type) {
+    case 'click_target':
+      return { targets: [action.target], label: action.description ?? labelOf(action.target) }
+    case 'click_bbox':
+      return { targets: [{ kind: 'rect', ...action.bbox, frame: '1' }], label: action.description }
+    case 'click_element':
+      return {
+        targets: [
+          { kind: 'text', text: action.text },
+          ...(action.bbox ? [{ kind: 'rect' as const, ...action.bbox, frame: '1' }] : [])
+        ],
+        label: action.text,
+        agentFallback: true
+      }
+    case 'click_nth_element':
+      return {
+        targets: [{ kind: 'text', text: action.text, nth: action.n }],
+        label: `${action.text} #${action.n}`,
+        agentFallback: true
+      }
+    default:
+      return null
+  }
+}
+
+function labelOf(t: Target): string | undefined {
+  return t.kind === 'text' ? t.text : undefined
+}
+
+/** Resolves a click; null when the target is not on screen. */
+async function resolveClick(
+  plan: ClickPlan,
+  ctx: GroundingContext
+): Promise<ResolvedTarget | null> {
+  // Text first; the bbox hint only counts when OCR ran and found nothing, otherwise the agent
+  // does its own UIA/OCR search (click_element) as before.
+  const [first, ...rest] = plan.targets
+  const r = await resolveTarget(first, ctx)
+  if (r || !rest.length) return r
+  if (plan.agentFallback && !(ctx.ocr && (await ctx.ocr()))) return null
+  return resolveFirst(rest, ctx)
+}
+
 // Resolves one model action into what the agent runs, refining and previewing clicks.
 async function resolve(
-  agent: AgentBridge,
   action: Action,
   opts: Required<Pick<ExecuteOptions, 'refine' | 'preview'>> & { signal?: AbortSignal }
-): Promise<AgentAction> {
-  const frame = currentFrame()
-  const scaled = toAgentAction(action, frame)
-  const canRefine = opts.refine && !!process.env.ANTHROPIC_API_KEY
+): Promise<AgentAction | null> {
+  const plan = clickPlan(action)
+  if (!plan) return toAgentAction(action, currentFrame())
+  const ctx = groundingNow()
+  const r = await resolveClick(plan, ctx)
+  if (!r) {
+    if (plan.agentFallback) {
+      log('step', `${action.type} "${plan.label}": not resolved here, agent searches itself`)
+      return toAgentAction(action, currentFrame())
+    }
+    log('fail', `${action.type} "${plan.label ?? ''}": target not on screen, skipped`)
+    return null
+  }
+  log('step', `${action.type} "${(plan.label ?? '').slice(0, 40)}": ${describeResolved(r)}`)
+  let target = rectCenter(r.physRect)
 
-  if (action.type === 'click_bbox' && action.bbox) {
-    const physRect = imageRectToPhys(frame, action.bbox)
-    let target = rectCenter(physRect)
-    // Computer Use is tuned for UI clicking and beats the model's own bbox centre.
-    if (canRefine && action.description) {
-      console.log(`[execute] click_bbox CU lookup: "${action.description}"`)
-      const refined = await refineClick(agent, action.description, opts.signal)
-      if (refined) {
-        target = refined
-        console.log(`[execute] click_bbox CU refined → (${target.x},${target.y})`)
-      } else {
-        console.log('[execute] click_bbox CU returned null, using bbox center')
-      }
-    }
-    if (opts.preview) {
-      highlight.send('screen:highlights', [
-        { label: 'Clicking here', target_hint: '', bbox: physRectToLogical(physRect) }
-      ])
-      highlight.show()
-      await sleep(600)
-      highlight.hide()
-    }
-    return {
-      type: 'click',
-      x: Math.round(target.x),
-      y: Math.round(target.y),
-      button: action.button ?? 'left'
+  const canRefine = opts.refine && !!process.env.ANTHROPIC_API_KEY && !!plan.label
+  if (canRefine && (r.confidence < LOW_CONFIDENCE || r.source === 'point')) {
+    const refined = await refineClick(plan.label!, opts.signal)
+    if (refined) {
+      target = refined
+      log('step', `refined → (${target.x},${target.y})`)
     }
   }
-
-  if (action.type === 'click_element' && action.bbox && action.text && canRefine) {
-    // In a browser, Computer Use beats the OCR lookup the agent would do.
-    if (isBrowser(await agent.activeWindow())) {
-      const p = await refineClick(agent, action.text, opts.signal)
-      if (p) {
-        console.log(`[execute] click_element CU refined "${action.text}" → (${p.x},${p.y})`)
-        return { type: 'click', x: p.x, y: p.y, button: action.button ?? 'left' }
-      }
-    }
+  if (opts.preview) {
+    highlight.send('screen:highlights', [
+      { label: 'Clicking here', target_hint: '', bbox: r.logicalRect }
+    ])
+    highlight.show()
+    await sleep(600)
+    highlight.hide()
   }
-  return scaled
+  const button = 'button' in action ? action.button : undefined
+  return {
+    type: 'click',
+    x: Math.round(target.x),
+    y: Math.round(target.y),
+    button: button ?? 'left'
+  }
 }
 
 export async function executeActions(
@@ -139,9 +184,10 @@ export async function executeActions(
   try {
     for (const action of actions) {
       if (signal?.aborted) break
-      const scaled = await resolve(agent, action, { refine, preview, signal })
+      const scaled = await resolve(action, { refine, preview, signal })
       if (signal?.aborted) break
 
+      if (!scaled) continue
       if (!scaled.type) {
         console.warn('[execute] skipping action with no type:', JSON.stringify(action))
         continue

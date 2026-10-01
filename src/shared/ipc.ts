@@ -26,11 +26,32 @@ const bbox = z.union([
   z.tuple([coord, coord, coord, coord])
 ])
 
+// CONTRACTS C4 Target (renderer → main for click_target).
+const target = z.union([
+  z.object({ kind: z.literal('element'), id: z.string().max(64) }),
+  z.object({ kind: z.literal('mark'), n: z.number().int().min(0).max(1000) }),
+  z.object({
+    kind: z.literal('text'),
+    text: z.string().max(500),
+    nth: z.number().int().min(-100).max(100).optional()
+  }),
+  z.object({ kind: z.literal('point'), x: coord, y: coord, frame: z.string().max(8) }),
+  z.object({
+    kind: z.literal('rect'),
+    x: coord,
+    y: coord,
+    w: coord,
+    h: coord,
+    frame: z.string().max(8)
+  })
+])
+
 export const actionSchema = z
   .object({
     type: z.enum([
       'move',
       'click',
+      'click_target',
       'click_bbox',
       'click_element',
       'click_nth_element',
@@ -44,6 +65,7 @@ export const actionSchema = z
     x: coord.optional(),
     y: coord.optional(),
     bbox: bbox.optional(),
+    target: target.optional(),
     button: z.enum(['left', 'right']).optional(),
     text: z.string().max(20_000).optional(),
     keys: z.array(z.string().max(20)).max(6).optional(),

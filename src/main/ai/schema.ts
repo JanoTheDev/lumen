@@ -24,6 +24,12 @@ const button = z.enum(['left', 'right']).optional()
 export const actionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('click'), x: num, y: num, button }),
   z.object({
+    type: z.literal('click_target'),
+    target: targetSchema,
+    button,
+    description: z.string().optional()
+  }),
+  z.object({
     type: z.literal('click_bbox'),
     bbox: rectSchema,
     button,
@@ -169,11 +175,12 @@ export function toModelResponse(r: ModeReply, activeWindow = ''): ModelResponse 
         })
       }
     case 'locate': {
+      // Element, mark and text targets are resolved when presented (resolveTarget).
       const items: LocateItem[] = []
       for (const it of r.items) {
         const bbox = targetRect(it.target)
-        if (bbox && bbox.w > 0 && bbox.h > 0)
-          items.push({ label: it.label, bbox, target: it.target })
+        if (bbox && (bbox.w <= 0 || bbox.h <= 0)) continue
+        items.push({ label: it.label, ...(bbox ? { bbox } : {}), target: it.target })
       }
       if (!items.length) return { mode: 'answer', text: r.notFoundReason || NOT_FOUND_TEXT }
       return {

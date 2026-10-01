@@ -22,6 +22,8 @@ vi.mock('../src/main/query/capture', () => ({ captureScreenshot: async () => 'im
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../src/main/actions/executor'
+import { frameGeometryOf } from '../src/main/actions/coords'
+import { setCurrentContext, type QueryContext } from '../src/main/query/context'
 import { setAgent } from '../src/main/agent/instance'
 import type { AgentBridge } from '../src/main/agent/bridge'
 
@@ -64,7 +66,10 @@ describe('executeActions', () => {
     findClickCoordinates.mockClear()
     delete process.env.ANTHROPIC_API_KEY
   })
-  afterEach(() => setAgent(null))
+  afterEach(() => {
+    setAgent(null)
+    setCurrentContext(null)
+  })
 
   it('maps an action sequence onto agent calls', async () => {
     const m = mockAgent()
@@ -177,5 +182,109 @@ describe('executeActions', () => {
     const m = mockAgent({ protocol: 1, caps: ['dwell'] })
     await executeActions([{ type: 'click', x: 1, y: 1 }])
     expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
+  })
+
+  describe('click targets resolved against the turn context', () => {
+    const monitor = { id: 1, rect: { x: -1280, y: 0, w: 1280, h: 720 }, scale: 1, primary: false }
+    function turn(over: Partial<QueryContext> = {}): void {
+      setCurrentContext({
+        frames: [
+          {
+            id: 'f1',
+            label: '1',
+            monitor,
+            geometry: frameGeometryOf({ width: 1280, height: 720, monitor }),
+            mime: 'image/jpeg',
+            data: 'img'
+          }
+        ],
+        foreground: { title: 'App' },
+        ocr: async () => null,
+        activeWindow: 'App',
+        screenshot: 'img',
+        at: Date.now(),
+        ...over
+      })
+    }
+
+    it('clicks the centre of a UIA element on the frame monitor', async () => {
+      turn({
+        uia: {
+          snapshotId: 's1',
+          root: {
+            id: 'e0',
+            role: 'window',
+            name: 'App',
+            rect: monitor.rect,
+            monitorId: 1,
+            enabled: true,
+            patterns: [],
+            children: [
+              {
+                id: 'e4',
+                role: 'button',
+                name: 'Save',
+                rect: { x: -1200, y: 100, w: 100, h: 40 },
+                monitorId: 1,
+                enabled: true,
+                patterns: ['invoke']
+              }
+            ]
+          }
+        }
+      })
+      const m = mockAgent()
+      await executeActions([{ type: 'click_target', target: { kind: 'element', id: 'e4' } }])
+      expect(executed(m)).toEqual([{ type: 'click', x: -1150, y: 120, button: 'left' }])
+    })
+
+    it('clicks a set-of-marks number', async () => {
+      turn({
+        marks: [
+          { n: 3, physRect: { x: -600, y: 300, w: 60, h: 20 }, source: 'ocr', label: 'Render' }
+        ]
+      })
+      const m = mockAgent()
+      await executeActions([{ type: 'click_target', target: { kind: 'mark', n: 3 } }])
+      expect(executed(m)).toEqual([{ type: 'click', x: -570, y: 310, button: 'left' }])
+    })
+
+    it('resolves click_nth_element with OCR in reading order', async () => {
+      const w = (
+        y: number
+      ): {
+        text: string
+        rect: { x: number; y: number; w: number; h: number }
+        conf: number
+        lineIndex: number
+      } => ({
+        text: 'OxGF',
+        rect: { x: -1000, y, w: 80, h: 20 },
+        conf: 1,
+        lineIndex: y
+      })
+      turn({ ocr: async () => ({ words: [w(300), w(100), w(200)], lines: [] }) })
+      const m = mockAgent()
+      await executeActions([{ type: 'click_nth_element', text: '0xGF', n: 2 }])
+      expect(executed(m)).toEqual([{ type: 'click', x: -960, y: 210, button: 'left' }])
+    })
+
+    it('lets the agent search itself when main has no OCR for a text click', async () => {
+      turn()
+      const m = mockAgent()
+      await executeActions([{ type: 'click_nth_element', text: 'Inbox', n: 2 }])
+      expect(executed(m)).toEqual([{ type: 'click_nth_element', text: 'Inbox', n: 2 }])
+    })
+
+    it('skips a click whose target is not on screen', async () => {
+      turn()
+      const m = mockAgent()
+      const r = await executeActions([
+        { type: 'click_target', target: { kind: 'element', id: 'gone' } },
+        { type: 'type', text: 'hi' }
+      ])
+      expect(executed(m)).toEqual([{ type: 'type', text: 'hi' }])
+      expect(r.executed).toBe(1)
+    })
   })
 })

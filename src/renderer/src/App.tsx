@@ -76,14 +76,17 @@ export default function App(): JSX.Element {
         console.error('[action] failed:', err)
       }
     } else if (r.mode === 'guide' && depth > 0) {
-      // AI returned guide during follow_up — auto-click the first bbox instead of showing steps
-      const firstWithBbox = r.steps?.find((s) => s.bbox)
-      if (firstWithBbox?.bbox) {
+      // AI returned guide during follow_up — auto-click the first target instead of showing steps
+      const first = r.steps?.find((s) => s.target || s.bbox)
+      if (first?.target) {
         console.log(
-          '[follow_up] guide mode in follow_up — auto-clicking first bbox:',
-          firstWithBbox.bbox
+          '[follow_up] guide mode in follow_up — auto-clicking first target:',
+          first.target
         )
-        await window.api.executeAction([{ type: 'click_bbox', bbox: firstWithBbox.bbox }])
+        await window.api.executeAction([{ type: 'click_target', target: first.target }])
+      } else if (first?.bbox) {
+        console.log('[follow_up] guide mode in follow_up — auto-clicking first bbox:', first.bbox)
+        await window.api.executeAction([{ type: 'click_bbox', bbox: first.bbox }])
       }
     } else if (r.mode === 'locate') {
       const desc = r.items?.map((i) => i.description || i.label).join(' · ')

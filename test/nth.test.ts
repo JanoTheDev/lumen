@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ocrNorm, correctNthElement } from '../src/main/query/nth'
-import type { ClaudeResponse } from '../src/main/ai'
+import { compareReading, ocrNorm, parseOrdinal, pickNth, sortReading } from '../src/main/query/nth'
 
 describe('ocrNorm', () => {
   it('lowercases', () => expect(ocrNorm('HELLO')).toBe('hello'))
@@ -10,76 +9,39 @@ describe('ocrNorm', () => {
   it('handles mixed', () => expect(ocrNorm('0xGF_1I')).toBe('oxgf_ll'))
 })
 
-describe('correctNthElement', () => {
-  function makeResult(n: number, text: string, summary: string): ClaudeResponse {
-    return { mode: 'action', actions: [{ type: 'click_nth_element', text, n }], summary }
-  }
+describe('parseOrdinal', () => {
+  it('reads words, numerals and last', () => {
+    expect(parseOrdinal('third')).toBe(3)
+    expect(parseOrdinal('Second')).toBe(2)
+    expect(parseOrdinal('12th')).toBe(12)
+    expect(parseOrdinal('1st')).toBe(1)
+    expect(parseOrdinal('last')).toBe(-1)
+    expect(parseOrdinal('button')).toBeNull()
+  })
+})
 
-  it('corrects n=6 to n=3 when OxGF is rows 4,5,6', () => {
-    const r = makeResult(
-      6,
-      'OxGF',
-      'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF, Row 6: OxGF'
-    )
-    const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(3)
+describe('reading order', () => {
+  const r = (x: number, y: number, h = 20): { x: number; y: number; w: number; h: number } => ({
+    x,
+    y,
+    w: 50,
+    h
   })
 
-  it('corrects n=7 to n=4 when OxGF is rows 4-7', () => {
-    const r = makeResult(
-      7,
-      'OxGF',
-      'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF, Row 6: OxGF, Row 7: OxGF'
-    )
-    const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(4)
+  it('sorts rows top to bottom, then left to right within a row', () => {
+    const items = [r(300, 102), r(10, 200), r(10, 100), r(500, 98)]
+    expect(sortReading(items, (i) => i)).toEqual([r(10, 100), r(300, 102), r(500, 98), r(10, 200)])
   })
 
-  it('does not change already-correct n=3 (occurrence) when row 6 is 3rd OxGF', () => {
-    const r = makeResult(
-      3,
-      'OxGF',
-      'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF, Row 6: OxGF'
-    )
-    const fixed = correctNthElement(r)
-    // n=3 → look for row n=3 in OxGF rows [4,5,6] → not found → no correction
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(3)
+  it('treats boxes whose centres differ by half a height as different rows', () => {
+    expect(compareReading(r(500, 100), r(10, 115))).toBeLessThan(0)
+    expect(compareReading(r(500, 100), r(10, 105))).toBeGreaterThan(0)
   })
 
-  it('normalizes 0/O: text=0xGF matches OxGF rows', () => {
-    const r = makeResult(
-      5,
-      '0xGF',
-      'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt, Row 4: OxGF, Row 5: OxGF'
-    )
-    const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(2)
-  })
-
-  it('no-ops when mode is not action', () => {
-    const r: ClaudeResponse = { mode: 'answer', text: 'hello' }
-    expect(correctNthElement(r)).toBe(r)
-  })
-
-  it('no-ops when no summary', () => {
-    const r: ClaudeResponse = {
-      mode: 'action',
-      actions: [{ type: 'click_nth_element', text: 'OxGF', n: 6 }]
-    }
-    const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(6)
-  })
-
-  it('corrects unique sender: n=2 for Jobbier at row 2 → n=1', () => {
-    const r = makeResult(2, 'Jobbier', 'Row 1: Stripe, Row 2: Jobbier, Row 3: Wolt')
-    const fixed = correctNthElement(r)
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(1)
-  })
-
-  it('no-ops when row number not in summary', () => {
-    const r = makeResult(10, 'OxGF', 'Row 1: Stripe, Row 2: OxGF, Row 3: OxGF')
-    const fixed = correctNthElement(r)
-    // row 10 not in summary → findIndex = -1 → no correction
-    expect(fixed.mode === 'action' && (fixed.actions[0] as { n?: number }).n).toBe(10)
+  it('picks the nth (1-based) or counts from the end', () => {
+    expect(pickNth(['a', 'b', 'c'], 2)).toBe('b')
+    expect(pickNth(['a', 'b', 'c'], -1)).toBe('c')
+    expect(pickNth(['a'], 3)).toBeUndefined()
+    expect(pickNth(['a'], 0)).toBeUndefined()
   })
 })

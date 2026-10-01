@@ -181,8 +181,21 @@ describe('toModelResponse adapter', () => {
     expect(r.steps[1].bbox).toEqual({ x: 1, y: 2, w: 3, h: 4 })
   })
 
-  it('locate: drops items without geometry, answers with the not-found reason', () => {
-    expect(toModelResponse(samples[2])).toEqual({ mode: 'answer', text: 'scrolled away' })
+  it('locate: keeps element targets for the resolver, answers with the reason when empty', () => {
+    expect(toModelResponse(samples[2])).toEqual({
+      mode: 'locate',
+      items: [{ label: 'Inbox', target: { kind: 'element', id: 'e4' } }],
+      notFoundReason: 'scrolled away'
+    })
+    expect(toModelResponse({ mode: 'locate', items: [], notFoundReason: 'scrolled away' })).toEqual(
+      { mode: 'answer', text: 'scrolled away' }
+    )
+    expect(
+      toModelResponse({
+        mode: 'locate',
+        items: [{ label: 'x', target: { kind: 'rect', x: 1, y: 1, w: 0, h: 5, frame: '1' } }]
+      })
+    ).toMatchObject({ mode: 'answer' })
     const r = toModelResponse({
       mode: 'locate',
       items: [{ label: 'Bell', target: { kind: 'point', x: 100, y: 50, frame: '1' } }]

@@ -82,6 +82,7 @@ export type UiaAction =
 export type Action =
   | { type: 'move'; x: number; y: number }
   | { type: 'click'; x: number; y: number; button?: MouseButton }
+  | { type: 'click_target'; target: Target; button?: MouseButton; description?: string }
   | { type: 'click_bbox'; bbox: Rect; button?: MouseButton; description?: string }
   | { type: 'click_element'; text: string; button?: MouseButton; bbox?: Rect }
   | { type: 'click_nth_element'; text: string; n: number; button?: MouseButton }
@@ -116,7 +117,8 @@ export interface SavedGuide {
 
 export interface LocateItem {
   label: string
-  bbox: Rect
+  /** Image px from the model (rect/point targets); logical px once presented. */
+  bbox?: Rect
   description?: string
   target?: Target
 }

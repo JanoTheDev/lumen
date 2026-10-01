@@ -8,7 +8,6 @@ import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext 
 import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
 import { isResearchIntent } from './legacy/classifier'
-import { correctNthElement } from './nth'
 import { runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
 import { mergeSplit, recordSplitHistory, runParallelSplit, type SubResult } from './parallel'
@@ -248,7 +247,7 @@ async function runTurn(
     result = await runPlanned(plan.prompt, activeWindow, opts, scope, timer)
   } else {
     const callOpts = { ...opts, ...plan.routing, context: ctx }
-    result = correctNthElement(await callModel(plan.prompt, screenshot, activeWindow, callOpts))
+    result = await callModel(plan.prompt, screenshot, activeWindow, callOpts)
     timer.split('callModel done')
   }
 
@@ -279,7 +278,7 @@ async function runTurn(
   if (split) recordSplitHistory(split, historySummary)
   else if (!opts.lowDetail) addToHistory(prompt, historySummary(result))
 
-  present(result, prompt, deps.onGuide)
+  await present(result, prompt, deps.onGuide, ctx.frames.length ? ctx : undefined)
   return result
 }
 
