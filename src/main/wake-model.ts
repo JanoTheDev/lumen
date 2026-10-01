@@ -1,21 +1,25 @@
-import {
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  rmSync,
-  statSync,
-  readdirSync,
-  renameSync
-} from 'fs'
+// Vosk small English model for the agent's fallback wake-word listener, installed once to
+// ~/.ai-overlay/vosk-model/ (a folder containing am/, conf/, graph/) via the verified downloader.
+import { existsSync, readdirSync } from 'fs'
+import { homedir } from 'os'
 import { join } from 'path'
-import { homedir, tmpdir } from 'os'
-import { spawn } from 'child_process'
-import { request } from 'https'
 import { broadcast as broadcastToWindows } from './windows/registry'
 import { log } from './logger'
+import {
+  installArchive,
+  type ArchiveSpec,
+  type DownloadProgress
+} from './downloads/verified-download'
 
-const MODEL_URL = 'https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip'
 const MODEL_NAME = 'vosk-model-small-en-us-0.15'
+
+export const VOSK_MODEL: ArchiveSpec = {
+  url: `https://alphacephei.com/vosk/models/${MODEL_NAME}.zip`,
+  // Computed from the official download on 2026-10-01 (41,205,931 bytes).
+  sha256: '30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498',
+  rootInArchive: MODEL_NAME,
+  requiredFiles: ['am/final.mdl', 'conf/model.conf', 'graph/HCLr.fst']
+}
 
 export function modelRoot(): string {
   return join(homedir(), '.ai-overlay', 'vosk-model')
@@ -25,128 +29,34 @@ export function modelInstalled(): boolean {
   const root = modelRoot()
   if (!existsSync(root)) return false
   try {
-    const entries = readdirSync(root)
-    // expect subdirs like 'am', 'conf', 'graph'
-    return (
-      entries.includes('am') ||
-      entries.includes('conf') ||
-      entries.some((e) => existsSync(join(root, e, 'am')))
-    )
+    return readdirSync(root).includes('am')
   } catch {
     return false
   }
 }
 
-let inProgress = false
+export type ProgressEvent = DownloadProgress
 
-export interface ProgressEvent {
-  phase: 'downloading' | 'extracting' | 'done' | 'error'
-  percent?: number
-  bytes?: number
-  total?: number
-  message?: string
-}
+let installing: Promise<void> | null = null
 
-function broadcast(evt: ProgressEvent): void {
-  broadcastToWindows('wake:model-progress', evt)
-}
-
-async function download(
-  url: string,
-  dest: string,
-  onProgress: (p: { bytes: number; total: number }) => void
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = request(url, { method: 'GET' }, (res) => {
-      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        download(res.headers.location, dest, onProgress).then(resolve, reject)
-        return
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`))
-        return
-      }
-      const total = Number(res.headers['content-length'] || 0)
-      let bytes = 0
-      const out = createWriteStream(dest)
-      res.on('data', (chunk: Buffer) => {
-        bytes += chunk.length
-        onProgress({ bytes, total })
-      })
-      res.pipe(out)
-      out.on('finish', () => {
-        out.close(() => resolve())
-      })
-      out.on('error', reject)
-      res.on('error', reject)
-    })
-    req.on('error', reject)
-    req.end()
-  })
-}
-
-function extract(zipPath: string, destDir: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Windows 10+ tar.exe handles zip natively. macOS/Linux also ship tar.
-    const proc = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'inherit' })
-    proc.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`tar exit ${code}`))))
-    proc.on('error', reject)
-  })
-}
-
-export async function installModel(): Promise<void> {
-  if (inProgress) return
+/** Downloads and unpacks the model once; concurrent callers share the install. */
+export function installModel(): Promise<void> {
   if (modelInstalled()) {
-    broadcast({ phase: 'done' })
-    return
+    broadcastToWindows('wake:model-progress', { phase: 'done' })
+    return Promise.resolve()
   }
-  inProgress = true
-  const root = modelRoot()
-  const parent = join(homedir(), '.ai-overlay')
-  const tmpZip = join(tmpdir(), 'ai-overlay-vosk.zip')
-  const stagingDir = join(tmpdir(), 'ai-overlay-vosk-extract')
-
-  try {
-    if (!existsSync(parent)) mkdirSync(parent, { recursive: true })
-    if (existsSync(stagingDir)) rmSync(stagingDir, { recursive: true, force: true })
-    mkdirSync(stagingDir, { recursive: true })
-
-    log('step', `downloading Vosk model to ${tmpZip}`)
-    broadcast({ phase: 'downloading', percent: 0 })
-    await download(MODEL_URL, tmpZip, ({ bytes, total }) => {
-      const percent = total ? Math.round((bytes / total) * 100) : 0
-      broadcast({ phase: 'downloading', percent, bytes, total })
+  if (installing) return installing
+  log('step', 'downloading Vosk model')
+  const report = (p: DownloadProgress): void => broadcastToWindows('wake:model-progress', p)
+  installing = installArchive(VOSK_MODEL, modelRoot(), report)
+    .then(() => log('done', `Vosk model installed at ${modelRoot()}`))
+    .catch((e: Error) => {
+      log('fail', `Vosk model install failed: ${e.message}`)
+      report({ phase: 'error', message: e.message })
+      throw e
     })
-
-    const size = statSync(tmpZip).size
-    log('step', `downloaded ${size} bytes, extracting`)
-    broadcast({ phase: 'extracting' })
-    await extract(tmpZip, stagingDir)
-
-    const extracted = join(stagingDir, MODEL_NAME)
-    if (!existsSync(extracted)) throw new Error(`expected ${extracted} after extraction`)
-
-    if (existsSync(root)) rmSync(root, { recursive: true, force: true })
-    renameSync(extracted, root)
-    try {
-      rmSync(tmpZip, { force: true })
-    } catch {
-      /* noop */
-    }
-    try {
-      rmSync(stagingDir, { recursive: true, force: true })
-    } catch {
-      /* noop */
-    }
-
-    log('done', `Vosk model installed at ${root}`)
-    broadcast({ phase: 'done' })
-  } catch (e) {
-    const message = (e as Error).message
-    log('fail', `Vosk model install failed: ${message}`)
-    broadcast({ phase: 'error', message })
-    throw e
-  } finally {
-    inProgress = false
-  }
+    .finally(() => {
+      installing = null
+    })
+  return installing
 }
