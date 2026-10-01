@@ -257,4 +257,18 @@ describe('skill guard on agent tool calls', () => {
     expect((r?.content[0] as { text: string }).text).toMatch(/user said no/)
     expect(askConfirm).toHaveBeenCalledTimes(2)
   })
+
+  it('asks through the host when it has its own confirm (background: the Tasks list)', async () => {
+    const asked: string[] = []
+    const queued = {
+      speak: () => {},
+      confirm: async (text: string) => (asked.push(text), false)
+    }
+    vi.mocked(askConfirm).mockClear()
+    const guard = skillGuard(skill({ risky: true, connectors: ['github'] }), env(), queued)
+    const r = await guard('mcp__github__search', { q: 'x' }, new AbortController().signal)
+    expect(r?.isError).toBe(true)
+    expect(asked).toEqual(['export-png: Use github: search'])
+    expect(askConfirm).not.toHaveBeenCalled()
+  })
 })

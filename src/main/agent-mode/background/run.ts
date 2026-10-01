@@ -9,6 +9,7 @@ import type {
   Usage
 } from '../../ai/providers/types'
 import { runAgent, type Caps, type RunnerDeps, type ToolHandler } from '../runner'
+import type { ToolGuard } from '../skill-run'
 import { createBackgroundHandlers, type BgPorts } from './handlers'
 import type { RunOutcome, TaskControl } from './manager'
 import { BACKGROUND_SYSTEM, backgroundTurn } from './prompts'
@@ -43,6 +44,21 @@ export interface BgRunEnv {
    * skip high-risk calls they did not pre-approve.
    */
   guard?(tool: string, input: Record<string, unknown>): string | null
+  /** The skill envelope(s) of the run: checked after `guard` (denials are audited there). */
+  toolGuard?: ToolGuard
+  /** Whether a tool is offered to the model at all (a skill run offers only what it may use). */
+  offers?(tool: string): boolean
+}
+
+/** Every handler behind a skill guard (async; it may ask the user first). */
+export function skillGuarded(
+  handlers: Record<string, ToolHandler>,
+  guard: ToolGuard
+): Record<string, ToolHandler> {
+  const out: Record<string, ToolHandler> = {}
+  for (const [name, h] of Object.entries(handlers))
+    out[name] = async (input, ctx) => (await guard(name, input, ctx.signal)) ?? h(input, ctx)
+  return out
 }
 
 /** Every handler behind `guard`. */
@@ -86,7 +102,9 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
     : { defs: [] as ToolDef[], handlers: {} }
   const all = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
-  const handlers = env.guard ? guarded(all, env.guard, env.ports.audit) : all
+  const inner = env.toolGuard ? skillGuarded(all, env.toolGuard) : all
+  const handlers = env.guard ? guarded(inner, env.guard, env.ports.audit) : inner
+  const offered = (d: ToolDef): boolean => !env.offers || env.offers(d.name)
   const startedAt = task.counters.startedAt
 
   const deps: RunnerDeps = {
@@ -128,7 +146,7 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
         ...backgroundToolDefs({ child: !!task.parentId }),
         ...(skills?.defs ?? []),
         ...more.defs
-      ],
+      ].filter(offered),
       parallelTools: ['spawn_task'],
       cancelWindowMs: 0,
       skipPlan: true,

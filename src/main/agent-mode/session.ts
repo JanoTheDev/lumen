@@ -29,7 +29,7 @@ import {
   type SavedRun,
   type ToolHandler
 } from './runner'
-import { FOREGROUND_TOOLS, type ToolName } from './tools'
+import { FOREGROUND_TOOLS } from './tools'
 import { foregroundSpawnHandler } from './background'
 import { BG_TOOLS } from './background/tools'
 import { enabledSkill, preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
@@ -37,17 +37,21 @@ import {
   afterDrift,
   finishSkillRun,
   runStepsForeground,
-  skillGuard,
   type SkillHost,
   type ToolGuard
 } from './skill-run'
+import {
+  connectorDefsFor,
+  joinEnvelopes,
+  skillEnvelope,
+  type SkillEnvelope
+} from './skill-envelope'
 import { traceRecorder, type RunTrace } from './trace'
 import { rememberAgentRun } from '../skills/creation'
 import type { LoadedSkill } from '../skills/registry'
 import { MEMORY_SEARCH_TOOL, memorySearchInput } from '../ai/memory/search'
 import type { ToolDef } from '../ai/providers/types'
 import { mcpToolSet } from '../connectors'
-import { mcpServerOf } from '../skills/permissions'
 import { memorySearchFor } from '../ai/memory/runtime'
 import { observed } from './prompts'
 import { CancelledError } from '../query/cancel'
@@ -59,7 +63,17 @@ const PLAN_MAX_TOKENS = 600
 
 let running: { taskId: string; abort: () => void } | null = null
 let countdownAnswer: ((r: 'go' | 'cancel') => void) | null = null
-let paused: { saved: SavedRun; env: TaskEnv; context: TaskContext; until: number } | null = null
+/** What a paused run needs to go on exactly as before (a skill run keeps its envelope). */
+interface PausedRun {
+  saved: SavedRun
+  env: TaskEnv
+  context: TaskContext
+  until: number
+  envelope?: SkillEnvelope
+  noSpawn?: boolean
+}
+
+let paused: PausedRun | null = null
 
 /** A task is running (or counting down / asking). */
 export function agentRunning(): boolean {
@@ -327,13 +341,11 @@ async function run(
     resume?: SavedRun
     noSpawn?: boolean
     /** A skill run: its permission check, its tool list and its connectors. */
-    guard?: ToolGuard
-    tools?: readonly ToolName[]
-    connectors?: readonly string[]
+    envelope?: SkillEnvelope
     onResult?: (r: RunResult) => void
   }
 ): Promise<ModelResponse> {
-  const { noSpawn, guard, tools, connectors, onResult, ...more } = extra
+  const { noSpawn, envelope, onResult, ...more } = extra
   if (running) throw new Error('An agent task is already running.')
   const ac = new AbortController()
   const onOuter = (): void => ac.abort(signal.reason)
@@ -348,9 +360,7 @@ async function run(
     defs: [] as ToolDef[],
     handlers: {} as Record<string, ToolHandler>
   }))
-  const mcpDefs = connectors
-    ? mcp.defs.filter((d) => connectors.includes(mcpServerOf(d.name) ?? ''))
-    : mcp.defs
+  const mcpDefs = connectorDefsFor(mcp.defs, envelope)
   const trace = traceRecorder()
   try {
     const r = await withCancelArmed(() =>
@@ -359,7 +369,7 @@ async function run(
           prompt,
           context,
           tools:
-            tools ??
+            envelope?.tools ??
             (context.files?.length ? [...FOREGROUND_TOOLS, 'read_file'] : FOREGROUND_TOOLS),
           // Helper tasks in the background (T28): parallel research fan-out.
           extraTools: [
@@ -367,7 +377,7 @@ async function run(
             ...skills.defs,
             ...mcpDefs,
             ...(noSpawn ? [] : [BG_TOOLS.spawn_task])
-          ],
+          ].filter((d) => !envelope || envelope.offers(d.name)),
           parallelTools: ['spawn_task'],
           ...(skills.index ? { systemExtra: skills.index } : {}),
           cancelWindowMs: loadConfig().agent.cancelWindowMs,
@@ -379,7 +389,7 @@ async function run(
           env,
           !noSpawn,
           { ...skills, handlers: { ...skills.handlers, ...mcp.handlers } },
-          guard,
+          envelope?.guard,
           trace
         )
       )
@@ -389,7 +399,14 @@ async function run(
       rememberAgentRun({ prompt, summary: r.summary, at: Date.now(), steps: trace.steps })
     paused =
       r.status === 'paused' && r.saved
-        ? { saved: r.saved, env, context, until: Date.now() + PAUSE_KEEP_MS }
+        ? {
+            saved: r.saved,
+            env,
+            context,
+            until: Date.now() + PAUSE_KEEP_MS,
+            ...(envelope ? { envelope } : {}),
+            ...(noSpawn ? { noSpawn } : {})
+          }
         : null
     log(
       'done',
@@ -407,13 +424,14 @@ async function run(
   }
 }
 
-function newEnv(taskId: string, prompt: string): TaskEnv {
+/** `prompt`: the user's own words (the policy's userText); `observed`: text that is not theirs. */
+function newEnv(taskId: string, prompt: string, observed = ''): TaskEnv {
   return {
     taskId,
     prompt,
     state: newTaskState(),
     fields: { typed: new Map() },
-    observedText: '',
+    observedText: observed,
     ask: askIo
   }
 }
@@ -430,29 +448,39 @@ export function runAgentTask(
     noSpawn?: boolean
     skill?: string
     skillArgs?: { name: string; value: string }[]
+    /**
+     * Started by a background task (request_foreground): the user's own words for the policy,
+     * since `prompt` was written by the background model ...
+     */
+    userText?: string
+    /** ... which is therefore observed text (the injection check reads it). */
+    observedText?: string
+    /** ... and the permission envelopes of the skills that task runs under. */
+    underSkills?: readonly string[]
   } = {}
 ): Promise<ModelResponse> {
   paused = null
   const taskId = `t_${Date.now().toString(36)}${(seq++).toString(36)}`
-  const { skill, skillArgs, ...extra } = opts
+  const { skill, skillArgs, userText, observedText, underSkills, ...extra } = opts
+  const env = newEnv(taskId, userText ?? prompt, observedText)
   const context = taskContext(ctx, prompt)
+  if (underSkills?.length) {
+    const list = underSkills.map((n) => enabledSkill(n))
+    if (list.some((x) => !x)) throw new Error('A skill this task runs under is off or gone.')
+    const envelope = joinEnvelopes(
+      list.map((x) => skillEnvelope(x as LoadedSkill, taskId, skillHost))
+    )
+    return run(prompt, env, context, signal, { ...extra, noSpawn: true, envelope })
+  }
   // A skill named by its trigger phrase: its instructions are the task's guide.
   const loaded = skill ? preloadSkill(skill, skillArgs) : null
   if (loaded) context.skill = loaded
   const s = skill ? enabledSkill(skill) : null
-  if (s) return runSkill(s, prompt, newEnv(taskId, prompt), context, signal, skillArgs, extra)
-  return run(prompt, newEnv(taskId, prompt), context, signal, extra)
+  if (s) return runSkill(s, prompt, env, context, signal, skillArgs, extra)
+  return run(prompt, env, context, signal, extra)
 }
 
 const skillHost: SkillHost = { speak: say, publish: showOnBar, ask: askIo }
-
-/** The skill's tools: its own list (finish always), else everything agent mode has. */
-function skillTools(s: LoadedSkill): readonly ToolName[] {
-  const list = s.manifest.tools
-  return list
-    ? FOREGROUND_TOOLS.filter((t) => t === 'finish' || list.includes(t))
-    : FOREGROUND_TOOLS
-}
 
 const RUN_STATUS: Record<RunResult['status'], SkillRunRecord['status']> = {
   done: 'done',
@@ -513,9 +541,7 @@ async function runSkill(
       ...extra,
       noSpawn: true,
       ...(how === 'steps+agent' ? { skipPlan: true } : {}),
-      guard: skillGuard(s, env, skillHost),
-      tools: skillTools(s),
-      connectors: s.manifest.permissions.connectors,
+      envelope: skillEnvelope(s, env.taskId, skillHost),
       onResult: (r) => (result = r)
     })
     const r = result as RunResult | null
@@ -561,5 +587,10 @@ export function resumeAgentTask(signal: AbortSignal): Promise<ModelResponse> | n
   if (!hasPausedTask()) return null
   const p = paused!
   paused = null
-  return run(p.saved.task.prompt, p.env, p.context, signal, { resume: p.saved })
+  // A skill run resumes inside the same envelope (guard, tools, connectors).
+  return run(p.saved.task.prompt, p.env, p.context, signal, {
+    resume: p.saved,
+    ...(p.envelope ? { envelope: p.envelope } : {}),
+    ...(p.noSpawn ? { noSpawn: true } : {})
+  })
 }

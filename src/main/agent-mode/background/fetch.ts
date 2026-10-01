@@ -27,15 +27,30 @@ export interface FetchedPage {
   truncated: boolean
 }
 
-/** GET with every redirect hop checked again; HTML becomes text. */
+/** A URL some rule (a skill's network list) does not allow; checked on every redirect hop. */
+export class NotAllowedError extends Error {
+  readonly code = 'E_DENIED'
+}
+
+/**
+ * GET with every redirect hop checked again; HTML becomes text. `allow` is asked for the first
+ * URL and for each hop (a skill's network list), so an open redirect cannot leave it.
+ */
 export async function fetchPage(
   raw: string,
   signal: AbortSignal,
-  impl: FetchImpl = pinnedFetch()
+  impl: FetchImpl = pinnedFetch(),
+  allow?: (url: string) => boolean
 ): Promise<FetchedPage> {
+  const checked: FetchImpl = allow
+    ? (url, init) => {
+        if (!allow(url)) throw new NotAllowedError(`E_DENIED: the skill may not open ${url}`)
+        return impl(url, init)
+      }
+    : impl
   const res = await safeGet(raw, {
     signal,
-    fetch: impl,
+    fetch: checked,
     maxBytes: FETCH_MAX_BYTES,
     overflow: 'cut'
   })

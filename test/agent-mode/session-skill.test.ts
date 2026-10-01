@@ -15,7 +15,8 @@ const h = vi.hoisted(() => ({
   steps: { kind: 'none' } as unknown,
   guard: null as null | ((tool: string) => Promise<unknown>),
   finished: [] as unknown[],
-  remembered: [] as unknown[]
+  remembered: [] as unknown[],
+  noAnswer: false
 }))
 
 vi.mock('../../src/main/ai/providers', () => ({
@@ -56,6 +57,11 @@ vi.mock('../../src/main/agent-mode/handlers', () => ({
     act: async () => {
       h.acts++
       return { content: [{ type: 'text', text: 'clicked' }], actions: 1 }
+    },
+    ask_user: async () => {
+      if (!h.noAnswer) return { content: [{ type: 'text', text: 'The user answered: "yes"' }] }
+      h.noAnswer = false
+      return { content: [{ type: 'text', text: 'No answer.' }], noAnswer: true }
     }
   })
 }))
@@ -101,7 +107,7 @@ vi.mock('../../src/main/connectors', () => ({
   })
 }))
 
-import { runAgentTask } from '../../src/main/agent-mode/session'
+import { resumeAgentTask, runAgentTask } from '../../src/main/agent-mode/session'
 import type { QueryContext } from '../../src/main/query/context'
 import { permissionsSchema } from '../../src/main/skills/manifest'
 
@@ -207,13 +213,8 @@ describe('skill runs', () => {
     await runAgentTask('export png', ctx, signal(), { skill: 'export-png' })
     const first = h.turns[0] as { messages: { content: { text: string }[] }[] }
     expect(first.messages[0].content[0].text).toMatch(/DRIFT NOTE/)
-    expect(toolNames(0)).toEqual([
-      'observe',
-      'act',
-      'finish',
-      'memory_search',
-      'mcp__github__search'
-    ])
+    // No memory_search: the skill does not ask for the profile.
+    expect(toolNames(0)).toEqual(['observe', 'act', 'finish', 'mcp__github__search'])
     expect(h.finished).toMatchObject([{ run: { how: 'steps+agent', status: 'done', actions: 1 } }])
   })
 
@@ -233,5 +234,29 @@ describe('skill runs', () => {
     expect(second.messages[2].content[0].content?.[0].text).toBe('E_DENIED: not allowed')
     expect(r).toMatchObject({ text: 'I could not click.' })
     expect(h.finished).toMatchObject([{ run: { how: 'agent', status: 'done' } }])
+  })
+
+  it('"resume the task" keeps the skill guard, tools and connectors (review M1)', async () => {
+    const sk = { ...(skill(['github']) as { manifest: { tools: string[] } }), hasSteps: false }
+    sk.manifest = { ...sk.manifest, tools: ['observe', 'act', 'ask_user', 'finish'] }
+    h.skill = sk
+    h.guard = async (tool) =>
+      tool === 'act'
+        ? { content: [{ type: 'text', text: 'E_DENIED: not allowed' }], isError: true }
+        : null
+    h.noAnswer = true
+    h.script = [reply(call('ask_user', { question: 'Which file?' }))]
+    const first = await runAgentTask('export png', ctx, signal(), { skill: 'export-png' })
+    expect(first.text).toMatch(/Paused/)
+    h.turns = []
+    h.script = [
+      reply(call('act', { op: 'click', target: { kind: 'text', ref: 'OK' } })),
+      reply(call('finish', { summary: 'Stopped.' }))
+    ]
+    const resumed = resumeAgentTask(signal())
+    expect(resumed).not.toBeNull()
+    await resumed
+    expect(h.acts).toBe(0)
+    expect(toolNames(0)).toEqual(['observe', 'act', 'ask_user', 'finish', 'mcp__github__search'])
   })
 })

@@ -49,8 +49,14 @@ export type ToolGuard = (
   signal: AbortSignal
 ) => Promise<ToolOutcome | null>
 
-export interface SkillHost {
+/** Where a skill's guard speaks a denial and asks "confirm every action" questions. */
+export interface GuardHost {
   speak(text: string): void
+  /** Default: the bar's confirm card. Background runs queue the question in the Tasks list. */
+  confirm?(text: string, signal: AbortSignal): Promise<boolean>
+}
+
+export interface SkillHost extends GuardHost {
   publish(task: AgentTask): void
   ask: AskIo
 }
@@ -77,6 +83,8 @@ function callText(call: SkillCall, input: Record<string, unknown>): string {
       return `Start ${call.app}`
     case 'navigate':
       return `Open ${call.url}`
+    case 'connector':
+      return `Use ${call.tool.replace(/^mcp__[a-z0-9-]+__/, `${call.server}: `)}`
     default: {
       if (call.tool === 'keys') return `Press ${String(input.combo ?? '')}`
       const t = input.target as { ref?: string } | undefined
@@ -86,7 +94,11 @@ function callText(call: SkillCall, input: Record<string, unknown>): string {
 }
 
 /** The permission check of one skill for one task. Denials are spoken once and audited. */
-export function skillGuard(s: LoadedSkill, env: TaskEnv, host: SkillHost): ToolGuard {
+export function skillGuard(
+  s: LoadedSkill,
+  env: Pick<TaskEnv, 'taskId'>,
+  host: GuardHost
+): ToolGuard {
   const registry = getSkillRegistry()
   const trust = registry ? registry.trustOf(s) : s.baseTrust
   const m = s.manifest
@@ -106,8 +118,11 @@ export function skillGuard(s: LoadedSkill, env: TaskEnv, host: SkillHost): ToolG
       return { content: [{ type: 'text', text: v.reason }], isError: true }
     }
     if (!v.confirm) return null
-    const answer = await askConfirm(`${m.name}: ${callText(call, input)}`, CONFIRM_DECISION)
-    if (answer !== 'deny') return null
+    const text = `${m.name}: ${callText(call, input)}`
+    const ok = host.confirm
+      ? await host.confirm(text, signal)
+      : (await askConfirm(text, CONFIRM_DECISION)) !== 'deny'
+    if (ok) return null
     return {
       content: [
         { type: 'text', text: 'E_DENIED: the user said no to this action. Do not retry it.' }

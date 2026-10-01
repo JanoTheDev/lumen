@@ -12,6 +12,7 @@ import type { Role } from '../../ai/models'
 import { memory, memorySearchFor } from '../../ai/memory/runtime'
 import { isSensitive } from '../../ai/memory'
 import { requireAgent } from '../../agent/instance'
+import { redactForLog } from '../../actions/redact'
 import { writeAudit } from '../../audit/log'
 import { announce } from '../../a11y'
 import { bus } from '../../bus'
@@ -25,8 +26,11 @@ import * as assistant from '../../windows/assistant'
 import { inputLane } from '../input-lane'
 import { raced, type ToolHandler, type ToolOutcome } from '../runner'
 import { agentRunning, runAgentTask } from '../session'
+import { allGuards, connectorDefsFor, skillEnvelope, type SkillEnvelope } from '../skill-envelope'
+import { enabledSkill } from '../skill-tools'
+import type { GuardHost } from '../skill-run'
 import { fetchPage } from './fetch'
-import { readGranted } from './files'
+import { readGranted, type ReadResult } from './files'
 import { MAX_CHILDREN, type SpawnTaskInput } from './tools'
 import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
@@ -114,22 +118,44 @@ function turnEnded(): void {
 
 // ---- request_foreground ----
 
+/** The background run a foreground request comes from: its user's words and its skills. */
+export interface ForegroundSource {
+  /** The user's own words for the task (the routine's or the root task's prompt). */
+  userText: string
+  /** Skills whose envelopes the task runs under (its own and its parent's). */
+  skills: string[]
+  /** May use the mouse without asking (a routine's pre-approval). */
+  preapproved: boolean
+}
+
+/**
+ * The confirm text: the reason and steps were written by the background model (which may have
+ * read attacker pages), so they are shown as the task's request, quoted, not as the user's.
+ */
+export function foregroundAskText(title: string, reason: string, steps: string[]): string {
+  const n = `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`
+  const quote = (t: string): string => t.replace(/\s+/g, ' ').trim().slice(0, 200)
+  return `Background task “${title}” asks to use the mouse for ~${n}. Its request (written by the task, not by you): “${quote(reason)}”. Steps: ${steps.map(quote).join('; ')}`
+}
+
 async function requestForeground(
   ctl: TaskControl,
   reason: string,
   steps: string[],
   signal: AbortSignal,
-  preapproved = false
+  source: ForegroundSource
 ): Promise<ForegroundAnswer> {
   const title = ctl.task().title
-  const what = `Task “${title}” wants to use the mouse for ~${steps.length} ${steps.length === 1 ? 'step' : 'steps'}: ${reason}`
+  const what = foregroundAskText(title, reason, steps)
   // A routine that may use the mouse without asking still gets the countdown below.
-  let now = preapproved
+  let now = source.preapproved
   if (!now && !turnActive && !agentRunning() && !assistant.confirmPending()) {
     ctl.update({ phase: 'needs-foreground' })
     let timer: NodeJS.Timeout | null = null
+    let settled = false
     const timeout = new Promise<boolean>((resolve) => {
       timer = setTimeout(() => {
+        settled = true
         assistant.dropConfirm()
         resolve(false)
       }, FOREGROUND_ASK_MS)
@@ -142,8 +168,11 @@ async function requestForeground(
         ]),
         signal
       )
+      settled = true
     } finally {
       if (timer) clearTimeout(timer)
+      // Cancelled while the card was up: take it down, or it would catch the next yes / no.
+      if (!settled && assistant.confirmPending()) assistant.dropConfirm()
     }
   }
   if (!now) {
@@ -158,7 +187,14 @@ async function requestForeground(
   const window = await requireAgent()
     .activeWindow()
     .catch(() => '')
-  const res = await runAgentTask(prompt, windowOnlyContext(window), signal, { noSpawn: true })
+  // The policy's userText is the user's own task; the request itself counts as observed text,
+  // so a site or command that only the background model named stays "from the page".
+  const res = await runAgentTask(prompt, windowOnlyContext(window), signal, {
+    noSpawn: true,
+    userText: source.userText,
+    observedText: `Background task request: ${reason}\nSteps: ${steps.join('; ')}`,
+    ...(source.skills.length ? { underSkills: source.skills } : {})
+  })
   const summary = res.mode === 'answer' ? (res.spoken ?? res.text) : 'Done.'
   return { status: 'done', summary }
 }
@@ -170,10 +206,14 @@ async function spawnChild(
   input: SpawnTaskInput,
   signal: AbortSignal
 ): Promise<{ id: string; summary?: string; ok: boolean }> {
+  // A helper runs under its parent's rules: a routine's child is a routine run too (same
+  // pre-approvals), and a skill run's child keeps the parent's skill envelope (runTask).
+  const parent = manager.get(parentId)
   const child = manager.start({
     prompt: input.prompt,
     ...(input.skill ? { skill: input.skill } : {}),
-    origin: 'agent',
+    origin: parent?.origin === 'routine' ? 'routine' : 'agent',
+    ...(parent?.routineId ? { routineId: parent.routineId } : {}),
     parentId,
     immediate: !!input.wait
   })
@@ -206,22 +246,69 @@ export function foregroundSpawnHandler(parentId: string): ToolHandler {
 // ---- one run ----
 
 function audit(
-  id: string,
+  task: BackgroundTask,
   action: Record<string, unknown>,
   result: 'ok' | 'error' | 'denied',
   reason?: string
 ): void {
-  writeAudit({
-    t: new Date().toISOString(),
-    task: `background:${id}`,
-    origin: 'agent',
-    action,
+  writeAudit(backgroundAuditEntry(task, action, result, reason, new Date()))
+}
+
+type AuditEntry = Parameters<typeof writeAudit>[0]
+
+/** One background audit line: the task's real origin, URLs, paths and reasons redacted. */
+export function backgroundAuditEntry(
+  task: Pick<BackgroundTask, 'id' | 'origin'>,
+  action: Record<string, unknown>,
+  result: 'ok' | 'error' | 'denied',
+  reason: string | undefined,
+  now: Date
+): AuditEntry {
+  const clean: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(action))
+    clean[k] = typeof v === 'string' && (k === 'url' || k === 'path') ? redactForLog(v) : v
+  return {
+    t: now.toISOString(),
+    task: `background:${task.id}`,
+    origin: task.origin === 'routine' ? 'routine' : 'agent',
+    action: clean as AuditEntry['action'],
     risk: 'low',
     decision: result === 'denied' ? 'blocked' : 'auto',
     result,
     ms: 0,
-    ...(reason ? { reason } : {})
-  })
+    ...(reason ? { reason: redactForLog(reason) } : {})
+  }
+}
+
+/**
+ * The skill envelopes a task runs under: its own skill's and, for a helper, its parent's.
+ * A string: why the task cannot run (a skill is off or gone).
+ */
+function envelopesFor(task: BackgroundTask, host: GuardHost): SkillEnvelope[] | string {
+  const parent = task.parentId ? manager.get(task.parentId) : null
+  const names = [...new Set([task.skill, parent?.skill].filter((n): n is string => !!n))]
+  const out: SkillEnvelope[] = []
+  for (const name of names) {
+    const s = enabledSkill(name)
+    if (!s) return `The skill "${name}" is not installed or is off.`
+    out.push(skillEnvelope(s, `background:${task.id}`, host))
+  }
+  return out
+}
+
+/** read_file inside the user's folders plus each envelope's own folders (every one must allow). */
+export function readUnder(
+  path: string,
+  base: readonly string[],
+  envelopes: readonly Pick<SkillEnvelope, 'readRoots'>[]
+): ReadResult {
+  if (!envelopes.length) return readGranted(path, base)
+  let last: ReadResult = { ok: false, error: 'E_DENIED: no folders are granted.' }
+  for (const e of envelopes) {
+    last = readGranted(path, [...base, ...e.readRoots])
+    if (!last.ok) return last
+  }
+  return last
 }
 
 /** runTask, plus a run-history entry when the task runs a named skill. */
@@ -250,19 +337,34 @@ async function runTask(
   const role: Role = skills.skill?.role ?? 'fast'
   // A routine run: high-risk calls only when pre-approved (a run whose routine is gone: none).
   const shapes = task.origin === 'routine' ? (routineShapes(task.routineId ?? '') ?? []) : null
-  const network = skills.skill?.network
+  // A helper's own prompt was written by its parent's model; the user's words are the root's.
+  const parent = task.parentId ? manager.get(task.parentId) : null
+  const userText = parent?.prompt ?? task.prompt
+  const host: GuardHost = {
+    speak: (text) => notice(`${task.title}: ${text}`),
+    // Confirm-every-action skills: the question waits in the Tasks list.
+    confirm: async (text, signal) => {
+      notice(`Task “${task.title}” needs your OK. It waits in the Tasks list.`)
+      const a = await raced(ctl.ask(`${text}. Allow it?`, ['Allow', 'Deny']), signal)
+      return /^(allow|yes|ok|okay|sure)\b/i.test(a.trim())
+    }
+  }
+  const envelopes = envelopesFor(task, host)
+  if (typeof envelopes === 'string') return { status: 'failed', summary: envelopes }
+  // A skill run may only reach the sites every envelope lists, on every redirect hop too.
+  const reaches = (url: string): boolean => envelopes.every((e) => networkAllows(e.network, url))
   const ports: BgPorts = {
     taskId: id,
     child: !!task.parentId,
     fetch: async (url, signal) => {
-      // A skill run may only reach the sites its permissions list.
-      if (network && !networkAllows(network, url))
+      if (!envelopes.length) return fetchPage(url, signal)
+      if (!reaches(url))
         throw Object.assign(new Error(`E_DENIED: the skill may not open ${url}`), {
           code: 'E_DENIED'
         })
-      return fetchPage(url, signal)
+      return fetchPage(url, signal, undefined, reaches)
     },
-    readFile: (path) => readGranted(path, [...cfg.readFolders, ...(skills.skill?.readRoots ?? [])]),
+    readFile: (path) => readUnder(path, cfg.readFolders, envelopes),
     memorySearch: (input) => memorySearchFor(input),
     memoryWrite: (fact) => {
       if (isSensitive(fact)) return 'rejected'
@@ -275,11 +377,15 @@ async function runTask(
       return raced(ctl.ask(question, choices), signal)
     },
     requestForeground: (reason, steps, signal) =>
-      requestForeground(ctl, reason, steps, signal, !!shapes && allowsForeground(shapes)),
+      requestForeground(ctl, reason, steps, signal, {
+        userText,
+        skills: envelopes.map((e) => e.skill),
+        preapproved: !!shapes && allowsForeground(shapes)
+      }),
     spawn: (input, signal) => spawnChild(id, input, signal),
     childCount: () => manager.childCount(id),
     progress: (line) => ctl.progress(line),
-    audit: (action, result, reason) => audit(id, action, result, reason)
+    audit: (action, result, reason) => audit(task, action, result, reason)
   }
   return runBackground(ctl, {
     caps: {
@@ -303,9 +409,19 @@ async function runTask(
       ...(skills.skill ? { skill: { name: skills.skill.name, text: skills.skill.text } } : {})
     },
     log: (tag, msg) => log(tag as LogTag, `[${id}] ${msg}`),
-    // Connector tools; every call goes through the policy gate with origin "mcp".
-    moreTools: () => mcpToolSet({ taskId: id, prompt: task.prompt }),
-    ...(shapes ? { guard: routineGuard(shapes) } : {})
+    // Connector tools; every call goes through the policy gate with origin "mcp". A skill run
+    // gets only the servers every envelope lists.
+    moreTools: async () => {
+      const set = await mcpToolSet({ taskId: id, prompt: userText })
+      return { ...set, defs: envelopes.reduce((defs, e) => connectorDefsFor(defs, e), set.defs) }
+    },
+    ...(shapes ? { guard: routineGuard(shapes) } : {}),
+    ...(envelopes.length
+      ? {
+          toolGuard: allGuards(envelopes.map((e) => e.guard)),
+          offers: (tool: string) => envelopes.every((e) => e.offers(tool))
+        }
+      : {})
   })
 }
 
