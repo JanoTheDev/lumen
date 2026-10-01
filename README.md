@@ -76,7 +76,7 @@ Also available now:
 
 - [ ] Dictation anywhere: dedicated hotkey, light cleanup, personal dictionary (auto-detects when a text field is focused)
 - [ ] Streaming spoken answers with barge-in
-- [ ] Free local speech recognition and Windows voices by default
+- [x] Free local speech recognition and Windows voices by default
 
 **Accessibility**
 
