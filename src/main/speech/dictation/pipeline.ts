@@ -2,11 +2,12 @@
 // dictation hotkey (always pure dictation, never the assistant) and by auto-detect on the
 // assistant hotkey. Text is saved for recovery until it has been typed.
 import type { AgentBridge } from '../../agent/bridge'
-import { holdEscape } from '../../agent/escape'
+import { armEscape, disarmEscape, holdEscape, keepEscapeWhile } from '../../agent/escape'
 import { getAgent } from '../../agent/instance'
 import { bus } from '../../bus'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
+import { beginScope, CancelledError, endScope, isAbortError } from '../../query/cancel'
 import * as answer from '../../windows/answer'
 import { setStatus } from '../../windows/status'
 import { DictationActivation } from './activation'
@@ -60,6 +61,9 @@ const activation = new DictationActivation({
   }
 })
 
+// Hands-free dictation can run 3 minutes; Escape must still stop it.
+keepEscapeWhile(() => activation.active)
+
 bus.on('voice.cancelled', () => activation.reset())
 
 export function onDictationDown(): void {
@@ -107,16 +111,37 @@ export async function dictate(raw: string): Promise<DictateResult> {
   const agent = getAgent()
   if (!agent) {
     archivePending(pendingId)
-    answer.showText(`The helper process is not running, so nothing was typed.\n\n${text}`)
+    answer.showText(`The helper process is not running, so nothing was typed.
+
+${text}`)
     return { ok: false, notice: 'agent not running' }
   }
   setStatus('thinking', cfg.cleanup === 'light' ? 'Cleaning up' : 'Typing')
-  const [cleaned, target] = await Promise.all([
-    cleanupDictation(text, { mode: cfg.cleanup, dictionary: cfg.dictionary }),
-    readFocus(agent)
-  ])
-  log('plan', `dictation cleanup: ${cleaned.source}`)
-  return finishInsert(agent, pendingId, cleaned.text, target, cfg)
+  // Escape (and the voice cancel) cancels the cleanup call and skips typing.
+  const scope = beginScope()
+  armEscape()
+  try {
+    const [cleaned, target] = await Promise.all([
+      cleanupDictation(text, {
+        mode: cfg.cleanup,
+        dictionary: cfg.dictionary,
+        signal: scope.signal
+      }),
+      readFocus(agent)
+    ])
+    scope.throwIfCancelled()
+    log('plan', `dictation cleanup: ${cleaned.source}`)
+    return await finishInsert(agent, pendingId, cleaned.text, target, cfg)
+  } catch (e) {
+    if (!scope.cancelled && !isAbortError(e)) throw e
+    clearPending(pendingId)
+    log('skip', 'dictation cancelled')
+    setStatus('error', 'Cancelled', undefined, 1200)
+    return { ok: false, notice: 'cancelled' }
+  } finally {
+    endScope(scope)
+    disarmEscape()
+  }
 }
 
 /**
@@ -145,13 +170,24 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   if (!isConfidentDictation(verdict)) return false
 
   const pendingId = savePending(prompt)
-  const cleaned = await cleanup
+  let cleaned
+  try {
+    cleaned = await cleanup
+    if (signal?.aborted) throw new CancelledError()
+  } catch (e) {
+    // Cancelled: the user dropped this text, so it is not offered back at the next start.
+    clearPending(pendingId)
+    throw e
+  }
   await finishInsert(agent, pendingId, cleaned.text, target, cfg)
   return true
 }
 
-/** Offers dictation left over from the last run (crash or failed insert). */
-export function offerRecovery(): void {
+/**
+ * Offers dictation left over from the last run (crash or failed insert). The pending file is
+ * read now, before any new dictation can add to it; only the card waits `showAfterMs`.
+ */
+export function offerRecovery(showAfterMs = 0): void {
   let items
   try {
     items = takeRecoverable()
@@ -161,5 +197,6 @@ export function offerRecovery(): void {
   }
   if (!items.length) return
   log('plan', `recovered ${items.length} dictation(s)`)
-  answer.showText(recoveryMessage(items))
+  const message = recoveryMessage(items)
+  setTimeout(() => answer.showText(message), showAfterMs)
 }

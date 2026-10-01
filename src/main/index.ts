@@ -150,6 +150,9 @@ app.whenReady().then(() => {
   hardenWebContents()
   // Pasted keys (DPAPI vault) fill in for anything .env did not set.
   loadVault()
+  // Dictation left over from a crash: taken now, before any new dictation, and shown once the
+  // answer card can show it.
+  offerRecovery(2500)
   createWindows()
   applyAutostart(loadConfig().system.startAtLogin)
   onConfigPatched((next) => applyAutostart(next.system.startAtLogin))
@@ -183,8 +186,6 @@ app.whenReady().then(() => {
   prepareStt()
   // A conversation left open when the app last closed is summarized now (memory on only).
   startMemory()
-  // Dictation left over from a crash is offered once the answer card can show it.
-  setTimeout(offerRecovery, 2500)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) hud.create()
