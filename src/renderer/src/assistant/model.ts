@@ -1,6 +1,6 @@
 // Pure helpers for the assistant bar: labels, streaming chunks, meter smoothing, error hints.
 import type { AssistantView } from '@shared/channels'
-import type { AssistantPhase } from '@shared/events'
+import type { AgentTask, AssistantPhase } from '@shared/events'
 
 export const PHASE_LABEL: Record<AssistantPhase, string> = {
   idle: 'Ready',
@@ -64,4 +64,10 @@ export function errorHint(message: string): string | undefined {
   if (/rate limit|429|overloaded|529/.test(m)) return 'The service is busy. Try again in a moment.'
   if (/agent/.test(m)) return 'The helper process is restarting. Try again in a few seconds.'
   return undefined
+}
+
+/** Label of the agent step list: "2 of 5 steps done". */
+export function progressLabel(task: Pick<AgentTask, 'steps'>): string {
+  const done = task.steps.filter((s) => s.status === 'done').length
+  return `${done} of ${task.steps.length} steps done`
 }

@@ -17,6 +17,7 @@ import { Confirm } from './Confirm'
 import { MorphSurface } from './MorphSurface'
 import { errorHint, statusLine } from './model'
 import { AnswerText, CrossFadeText, Fade, LevelMeter, RollingNumber } from './parts'
+import { StepList } from './StepList'
 import { VoiceHost } from './VoiceHost'
 
 const EMPTY: AssistantView = { phase: 'idle', visible: false, autoCloseMs: 0 }
@@ -318,8 +319,10 @@ export function AssistantApp(): JSX.Element {
                   )}
                 </Fade>
 
-                <Fade show={!!v.step}>
-                  {v.step && (
+                <Fade show={!!v.agentTask}>{v.agentTask && <StepList task={v.agentTask} />}</Fade>
+
+                <Fade show={!!v.step && !v.agentTask}>
+                  {v.step && !v.agentTask && (
                     <p className="as-row as-step">
                       <span className="as-step__count">
                         Step <RollingNumber value={v.step.index} /> of{' '}

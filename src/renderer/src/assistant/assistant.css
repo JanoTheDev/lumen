@@ -433,3 +433,69 @@ body,
     transform: translateY(100%);
   }
 }
+
+/* Agent-mode step list (08 T13). */
+.as-steps {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.as-steps__summary {
+  font-size: var(--text-lg);
+}
+
+.as-steps__list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.as-steps__item {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.as-steps__item.is-pending,
+.as-steps__item.is-skipped {
+  color: var(--fg-muted);
+}
+
+.as-steps__item.is-failed .as-steps__icon {
+  color: var(--danger, currentColor);
+}
+
+.as-steps__icon {
+  flex: none;
+  display: inline-flex;
+  width: 1em;
+}
+
+.as-steps__details ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4, 1rem);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.as-steps__question {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.as-steps__question p {
+  flex-basis: 100%;
+}
+
+.as-steps__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
