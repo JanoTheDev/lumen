@@ -98,7 +98,12 @@ export function AssistantApp(): JSX.Element {
     let alive = true
     send('assistant:interactive', false)
     const done = (): void => {
-      if (alive) setShown(null)
+      if (!alive) return
+      setShown(null)
+      // The card unmounts under the pointer or with focus inside: no leave/blur follows,
+      // so the next card's countdown would stay paused.
+      setHover(false)
+      setFocusWithin(false)
     }
     if (el) void fadeOut(el, 8).then(done)
     else done()
