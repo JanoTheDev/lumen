@@ -17,6 +17,7 @@ import { announce } from '../../a11y'
 import { bus } from '../../bus'
 import { configPath, loadConfig } from '../../config'
 import { mcpToolSet } from '../../connectors'
+import { recordSkillRun } from '../../skills'
 import { log, type LogTag } from '../../logger'
 import { windowOnlyContext } from '../../query/context'
 import { allowsForeground, routineGuard } from '../../routines/preapproval'
@@ -31,7 +32,7 @@ import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
 import { doneLine, noticeVerdict } from './presence'
 import { runBackground } from './run'
-import { backgroundSkills, networkAllows } from './skills'
+import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
 
 const TURN_MAX_TOKENS = 2048
@@ -49,7 +50,7 @@ const settings = (): ReturnType<typeof loadConfig>['agent']['background'] =>
 
 const manager = new BackgroundManager({
   max: () => settings().max,
-  run: (ctl) => runTask(ctl),
+  run: (ctl) => runAndRecord(ctl),
   emit: (task) => bus.emit({ type: 'task.changed', task }),
   save: (task) => store?.save(task),
   remove: (id) => store?.remove(id),
@@ -221,6 +222,21 @@ function audit(
     ms: 0,
     ...(reason ? { reason } : {})
   })
+}
+
+/** runTask, plus a run-history entry when the task runs a named skill. */
+async function runAndRecord(ctl: TaskControl): ReturnType<typeof runTask> {
+  const skill = ctl.task().skill
+  const startedAt = Date.now()
+  try {
+    const r = await runTask(ctl)
+    if (skill) recordSkillRun(skill, backgroundRunRecord(r, startedAt, Date.now()))
+    return r
+  } catch (e) {
+    const end = { error: e as Error, cancelled: ctl.signal.aborted }
+    if (skill) recordSkillRun(skill, backgroundRunRecord(end, startedAt, Date.now()))
+    throw e
+  }
 }
 
 async function runTask(

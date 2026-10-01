@@ -3,6 +3,7 @@
 // its read folders, its network patterns, its model, and its instructions preloaded in the
 // first turn (its on-screen steps go through request_foreground).
 // Permissions = skill permissions ∩ background tool set ∩ user grants.
+import type { SkillRunRecord } from '@shared/types'
 import type { Role } from '../../ai/models'
 import { enabledSkill, preloadSkill, skillToolSet, type SkillToolSet } from '../skill-tools'
 
@@ -18,6 +19,22 @@ export interface BackgroundSkills extends SkillToolSet {
   }
   /** Why the named skill cannot run (not installed or switched off). */
   missing?: string
+}
+
+/** The skill's run-history entry for a finished background task (outcome, or the error). */
+export function backgroundRunRecord(
+  end: { status: 'done' | 'failed'; summary: string } | { error: Error; cancelled: boolean },
+  startedAt: number,
+  now: number
+): SkillRunRecord {
+  const base = { at: startedAt, ms: Math.max(0, now - startedAt), how: 'background' as const }
+  if ('status' in end) return { ...base, status: end.status, summary: end.summary, actions: 0 }
+  return {
+    ...base,
+    status: end.cancelled ? 'cancelled' : 'failed',
+    summary: end.cancelled ? 'Cancelled.' : end.error.message,
+    actions: 0
+  }
 }
 
 /** "https://*.youtube.com" → matches https://www.youtube.com/... and https://youtube.com/... */
