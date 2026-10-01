@@ -40,4 +40,12 @@ describe('reading level in prompts', () => {
     const why = whyTurn({ app: 'Excel', lessonTitle: 't', step: 's', readingLevel: line })
     expect(why.slice(0, why.indexOf('</context>'))).toContain(line)
   })
+
+  it('puts the reply style in the why turn after <context>, before the step', () => {
+    const block = '<reply_style name="pirate">\nTalk like a pirate.\n</reply_style>\nStyle rule.'
+    const why = whyTurn({ app: 'Excel', lessonTitle: 't', step: 'Click Save.', replyStyle: block })
+    expect(why.indexOf(block)).toBeGreaterThan(why.indexOf('</context>'))
+    expect(why.indexOf(block)).toBeLessThan(why.indexOf('<step>'))
+    expect(whyTurn({ app: 'Excel', lessonTitle: 't', step: 's' })).not.toContain('reply_style')
+  })
 })

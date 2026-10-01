@@ -79,6 +79,8 @@ export interface WhyTurnInput {
   appNotes?: string
   /** Reading level line for the app; '' / unset = standard. */
   readingLevel?: string
+  /** The active reply style block (activeStyleBlock); '' / unset = none. */
+  replyStyle?: string
 }
 
 export function whyTurn(i: WhyTurnInput): string {
@@ -87,5 +89,7 @@ export function whyTurn(i: WhyTurnInput): string {
   if (i.next) lines.push(`next step: ${i.next}`)
   if (i.readingLevel) lines.push(i.readingLevel)
   const notes = i.appNotes ? `\n<app_notes>\n${i.appNotes}\n</app_notes>` : ''
-  return `<context>\n${lines.join('\n')}\n</context>${notes}\n<step>${i.step}</step>`
+  // Outside <context> (data), like the main user turn; its rule keeps it to wording.
+  const style = i.replyStyle ? `\n${i.replyStyle}` : ''
+  return `<context>\n${lines.join('\n')}\n</context>${notes}${style}\n<step>${i.step}</step>`
 }

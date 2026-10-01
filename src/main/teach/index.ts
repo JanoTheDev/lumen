@@ -29,6 +29,7 @@ import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
 import { verifyExpectation } from '../ai/verify'
 import { WHY_PROMPT, whyTurn } from '../ai/prompts/lesson'
 import { getProvider } from '../ai/providers'
+import { activeStyleBlock } from '../ai/style-runtime'
 import { skillContext } from '../ai/skills'
 import { readingLevelLineFor } from '../coach/reading-level'
 import { matchPlayGuide } from '../guides/voice-nav'
@@ -422,6 +423,7 @@ async function explainWhy(
             previous: lesson.steps[i - 1]?.say,
             next: lesson.steps[i + 1]?.say,
             readingLevel: readingLevelLineFor(loadConfig().helpers, skill?.id ?? lesson.app),
+            replyStyle: activeStyleBlock(),
             appNotes:
               skill && hasMatchRules(skill)
                 ? skillContext(skill, step.say, WHY_NOTES_TOKENS)
