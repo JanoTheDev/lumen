@@ -20,12 +20,16 @@ export interface ConnectorServer {
   enabled: boolean
   /** The user ticked "I trust this command" for exactly this command line. */
   trusted?: boolean
+  /** http: signs in with OAuth (connectors:sign-in) instead of, or besides, a token. */
+  auth?: 'oauth'
   toolPolicy: Record<string, ToolPolicy>
 }
 
 /** A server for the Settings list: the stored fields plus secret and connection state. */
 export interface ConnectorView extends ConnectorServer {
   hasBearer: boolean
+  /** OAuth tokens are stored (auth: 'oauth'). */
+  signedIn?: boolean
   /** The exact command line that runs (stdio). */
   commandLine?: string
   state: 'off' | 'idle' | 'connected' | 'error'
@@ -41,6 +45,7 @@ export interface ConnectorInput {
   command?: string
   args?: string[]
   url?: string
+  auth?: 'oauth'
   enabled?: boolean
   /** Required (true) for stdio servers whose command line is new or changed. */
   trustCommand?: boolean

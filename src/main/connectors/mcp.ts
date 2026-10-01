@@ -9,6 +9,7 @@ import {
 } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import type { ConnectorServer } from '@shared/connectors'
+import { LumenOAuthProvider, NeedsSignInError, signedIn, type OAuthStore } from './oauth'
 import { launchProblem, type ServerSecrets } from './store'
 
 export const CALL_TIMEOUT_MS = 30_000
@@ -50,7 +51,9 @@ export interface McpConnection {
 export type Connect = (
   server: ConnectorServer,
   secrets: ServerSecrets,
-  signal: AbortSignal
+  signal: AbortSignal,
+  /** OAuth servers: where refreshed tokens are saved. */
+  oauth?: OAuthStore
 ) => Promise<McpConnection>
 
 export interface ServerState {
@@ -71,6 +74,8 @@ interface Entry {
 export interface ManagerDeps {
   servers(): ConnectorServer[]
   secrets(id: string): ServerSecrets
+  /** The OAuth state of a server (auth: 'oauth'), kept with its secrets. */
+  oauthStore?(id: string): OAuthStore
   connect?: Connect
   now?(): number
   log?(msg: string): void
@@ -111,14 +116,25 @@ export class McpManager {
     if (e.conn) return e.conn
     if (e.pending) return e.pending
     if (!force && this.now() < e.retryAt) throw new Error(e.error ?? 'Waiting to reconnect.')
-    const problem = launchProblem(server)
+    const problem =
+      launchProblem(server) ??
+      (server.auth === 'oauth' &&
+      !this.deps.secrets(server.id).bearer &&
+      !signedIn(this.deps.secrets(server.id).oauth)
+        ? new NeedsSignInError().message
+        : null)
     if (problem) {
       e.error = problem
       throw new Error(problem)
     }
     const ac = new AbortController()
     const timer = setTimeout(() => ac.abort(new Error('Connecting timed out.')), CONNECT_TIMEOUT_MS)
-    const attempt = this.connectFn(server, this.deps.secrets(server.id), ac.signal)
+    const attempt = this.connectFn(
+      server,
+      this.deps.secrets(server.id),
+      ac.signal,
+      this.deps.oauthStore?.(server.id)
+    )
       .then(async (conn) => {
         let tools: McpTool[]
         try {
@@ -298,7 +314,7 @@ function toTool(t: Tool): McpTool {
 }
 
 /** The real connection: @modelcontextprotocol/client over stdio or Streamable HTTP. */
-export const sdkConnect: Connect = async (server, secrets, signal) => {
+export const sdkConnect: Connect = async (server, secrets, signal, oauth) => {
   const client = new Client({ name: 'lumen', version: '1.0.0' })
   let stderr = ''
   let transport: Transport
@@ -313,6 +329,12 @@ export const sdkConnect: Connect = async (server, secrets, signal) => {
       stderr = (stderr + chunk.toString('utf8')).slice(-STDERR_KEEP)
     })
     transport = t
+  } else if (server.auth === 'oauth' && oauth && !secrets.bearer) {
+    // Tokens are refreshed by the SDK and saved back; a sign-in is never started from here.
+    const port = oauth.load().port ?? 0
+    transport = new StreamableHTTPClientTransport(new URL(server.url ?? ''), {
+      authProvider: new LumenOAuthProvider({ store: oauth, port })
+    })
   } else {
     transport = new StreamableHTTPClientTransport(new URL(server.url ?? ''), {
       requestInit: secrets.bearer ? { headers: { Authorization: `Bearer ${secrets.bearer}` } } : {}
@@ -326,7 +348,15 @@ export const sdkConnect: Connect = async (server, secrets, signal) => {
     await client.connect(transport, { signal, timeout: CONNECT_TIMEOUT_MS })
   } catch (e) {
     const tail = stderr.trim().split(/\r?\n/).slice(-2).join(' ')
-    throw new Error(`${errorText(e)}${tail ? ` (${tail.slice(0, 200)})` : ''}`)
+    const msg = errorText(e)
+    const hint =
+      server.transport === 'http' &&
+      server.auth !== 'oauth' &&
+      !secrets.bearer &&
+      /\b401\b|unauthori[sz]ed/i.test(msg)
+        ? ' If this server needs a sign-in, click Sign in under it in Settings → Connectors.'
+        : ''
+    throw new Error(`${msg}${tail ? ` (${tail.slice(0, 200)})` : ''}${hint}`)
   } finally {
     signal.removeEventListener('abort', onAbort)
   }

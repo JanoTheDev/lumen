@@ -16,6 +16,7 @@ import type { ToolHandler } from '../agent-mode/runner'
 import { configPath } from '../config'
 import { log } from '../logger'
 import { McpManager, type ManagerDeps } from './mcp'
+import { signIn, signedIn, type OAuthStore, type SignInDeps } from './oauth'
 import {
   applyInput,
   commandLine,
@@ -57,6 +58,7 @@ export class Connectors {
     this.manager = new McpManager({
       servers: () => this.servers,
       secrets: (id) => this.secrets.get(id),
+      oauthStore: (id) => this.oauthStore(id),
       ...(opts.connect ? { connect: opts.connect } : {}),
       log: (m) => log('step', m)
     })
@@ -70,6 +72,7 @@ export class Connectors {
     return this.servers.map((s) => ({
       ...s,
       hasBearer: !!this.secrets.get(s.id).bearer,
+      ...(s.auth === 'oauth' ? { signedIn: signedIn(this.secrets.get(s.id).oauth) } : {}),
       ...(s.transport === 'stdio' ? { commandLine: commandLine(s.command, s.args) } : {}),
       ...this.manager.state(s)
     }))
@@ -98,6 +101,9 @@ export class Connectors {
       const drop = Object.fromEntries((prev?.envNames ?? []).map((n) => [n, '']))
       this.secrets.set(r.server.id, input.bearer, drop)
     } else this.secrets.set(r.server.id, '', input.env)
+    // A sign-in belongs to one server address.
+    if (r.server.auth !== 'oauth' || (prev && prev.url !== r.server.url))
+      this.secrets.setOAuth(r.server.id, undefined)
     this.servers = prev
       ? this.servers.map((s) => (s.id === prev.id ? r.server : s))
       : [...this.servers, r.server]
@@ -111,6 +117,42 @@ export class Connectors {
     this.servers = this.servers.filter((s) => s.id !== id)
     this.save()
     this.secrets.remove(id)
+    await this.manager.disconnect(id)
+    return { ok: true }
+  }
+
+  /** The stored OAuth state of a server, saved back encrypted. */
+  oauthStore(id: string): OAuthStore {
+    return {
+      load: () => this.secrets.get(id).oauth ?? {},
+      save: (next) => void this.secrets.setOAuth(id, next)
+    }
+  }
+
+  /** Browser sign-in for an OAuth web connector; the next connection uses the new tokens. */
+  async signIn(id: string, deps: SignInDeps): Promise<ConnectorResult> {
+    const s = this.get(id)
+    if (!s || s.transport !== 'http') return { ok: false, error: 'Only web connectors sign in.' }
+    try {
+      await signIn(s.url ?? '', this.oauthStore(id), deps)
+      // From now on this server connects with its OAuth tokens.
+      if (s.auth !== 'oauth') {
+        this.servers = this.servers.map((x) => (x.id === id ? { ...x, auth: 'oauth' as const } : x))
+        this.save()
+      }
+      await this.manager.disconnect(id)
+      log('done', `connector ${id}: signed in`)
+      return { ok: true }
+    } catch (e) {
+      const msg = (e as Error).message.replace(/\s+/g, ' ').slice(0, 300)
+      log('fail', `connector ${id}: sign-in failed: ${msg}`)
+      return { ok: false, error: msg || 'The sign-in failed.' }
+    }
+  }
+
+  async signOut(id: string): Promise<ConnectorResult> {
+    if (!this.get(id)) return { ok: false, error: 'No connector with this id.' }
+    this.secrets.setOAuth(id, undefined)
     await this.manager.disconnect(id)
     return { ok: true }
   }

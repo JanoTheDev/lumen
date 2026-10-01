@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname } from 'path'
 import { z } from 'zod'
 import { commandLine, type ConnectorInput, type ConnectorServer } from '@shared/connectors'
+import type { OAuthState } from './oauth'
 
 export { commandLine }
 
@@ -26,6 +27,7 @@ export const serverSchema = z
     url: z.string().max(2000).optional(),
     enabled: z.boolean(),
     trusted: z.boolean().optional(),
+    auth: z.literal('oauth').optional(),
     toolPolicy: z.record(z.string().regex(TOOL_NAME_RE), policySchema)
   })
   .strict()
@@ -40,6 +42,7 @@ export const inputSchema = z
     command: z.string().trim().min(1).max(500).optional(),
     args: z.array(z.string().max(1000)).max(40).optional(),
     url: z.string().trim().max(2000).optional(),
+    auth: z.literal('oauth').optional(),
     enabled: z.boolean().optional(),
     trustCommand: z.boolean().optional(),
     bearer: z.string().max(4000).optional(),
@@ -84,6 +87,8 @@ export interface Cipher {
 export interface ServerSecrets {
   bearer?: string
   env?: Record<string, string>
+  /** OAuth client registration, tokens and discovery (oauth.ts). */
+  oauth?: OAuthState
 }
 
 /** Secrets per server id, encrypted at rest. */
@@ -120,8 +125,20 @@ export class ConnectorSecrets {
     }
     const next: ServerSecrets = {
       ...(cur.bearer ? { bearer: cur.bearer } : {}),
-      ...(Object.keys(cur.env).length ? { env: cur.env } : {})
+      ...(Object.keys(cur.env).length ? { env: cur.env } : {}),
+      ...(cur.oauth ? { oauth: cur.oauth } : {})
     }
+    return this.put(id, next)
+  }
+
+  /** Replaces the OAuth state; undefined or {} removes it. */
+  setOAuth(id: string, oauth: OAuthState | undefined): boolean {
+    const { oauth: _old, ...rest } = this.get(id)
+    void _old
+    return this.put(id, { ...rest, ...(oauth && Object.keys(oauth).length ? { oauth } : {}) })
+  }
+
+  private put(id: string, next: ServerSecrets): boolean {
     if (Object.keys(next).length) this.data[id] = next
     else delete this.data[id]
     return this.save()
@@ -208,7 +225,15 @@ export function applyInput(input: ConnectorInput, prev: ConnectorServer | undefi
   if (input.transport === 'http') {
     const problem = urlProblem(input.url)
     if (problem) return { ok: false, error: problem }
-    return { ok: true, server: { ...base, transport: 'http', url: input.url } }
+    return {
+      ok: true,
+      server: {
+        ...base,
+        transport: 'http',
+        url: input.url,
+        ...(input.auth === 'oauth' ? { auth: 'oauth' as const } : {})
+      }
+    }
   }
   if (!input.command) return { ok: false, error: 'Enter the command that starts the server.' }
   const args = input.args ?? []

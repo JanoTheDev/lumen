@@ -1,5 +1,5 @@
 // connectors:* (08 T19): MCP servers for Settings → Connectors. Secrets go in, never out.
-import { ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import { connectors } from '../connectors'
 import { inputSchema, SERVER_ID_RE } from '../connectors/store'
@@ -28,5 +28,17 @@ export function registerConnectorsIpc(): void {
   ipcMain.handle('connectors:tools', (_e, raw: unknown) => {
     const id = safeParse('connectors:tools', idSchema, raw)
     return id ? connectors().tools(id) : INVALID
+  })
+  // Opens the provider's sign-in page in the default browser and waits (up to 5 minutes) for
+  // the redirect to 127.0.0.1.
+  ipcMain.handle('connectors:sign-in', (_e, raw: unknown) => {
+    const id = safeParse('connectors:sign-in', idSchema, raw)
+    return id
+      ? connectors().signIn(id, { open: (url) => shell.openExternal(url.toString()) })
+      : INVALID
+  })
+  ipcMain.handle('connectors:sign-out', (_e, raw: unknown) => {
+    const id = safeParse('connectors:sign-out', idSchema, raw)
+    return id ? connectors().signOut(id) : INVALID
   })
 }
