@@ -17,6 +17,7 @@ files:
   - '!node_modules/**/*.{d.ts,d.mts,d.cts,md}'
   - '!node_modules/{openai,@anthropic-ai/sdk,zod}/src/**'
   - '!node_modules/{openai,@anthropic-ai/sdk,@modelcontextprotocol/client}/**/*.mjs'
+  - '!node_modules/mammoth/{mammoth.browser*.js,browser/**,test/**,bin/**}'
 # UI is English; Chromium's other locale packs are ~45 MB.
 electronLanguages:
   - en-US
