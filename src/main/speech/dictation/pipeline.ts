@@ -156,7 +156,7 @@ const learnDeps: LearnDeps = {
     const spellAs = rules.length ? withRules(cur.spellAs ?? [], rules) : cur.spellAs
     void patchConfig({ dictation: { ...cur, dictionary, spellAs } })
     const names = added.map((w) => `“${w}”`).join(', ')
-    log('step', `dictionary learned: ${added.join(', ')}`)
+    log('step', `dictionary learned: ${added.length} word(s)`)
     setStatus('answer', `Added ${names} to your dictionary (Settings, Voice)`, undefined, 5000)
   }
 }

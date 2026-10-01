@@ -76,7 +76,8 @@ export function watchCorrections(agent: AgentBridge, dictated: string, deps: Lea
       if (!after || !sameField(before, after) || after.text === before.text) return
       const found = findCorrections(dictated, before.text, after.text)
       if (!found.length) return
-      log('step', `dictation corrections: ${found.map((c) => `${c.from}→${c.to}`).join(', ')}`)
+      // Only the count: corrected words are dictated text, never written to main.log (L6).
+      log('step', `dictation corrections: ${found.length}`)
       const dictionary = deps.dictionary()
       const added = noteCorrections(found, dictionary, deps.storePath)
       if (added.length) deps.learned(withLearned(dictionary, added), added, found)

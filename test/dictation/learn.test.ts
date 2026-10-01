@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { join } from 'path'
 import { readFileSync } from 'fs'
 import {
@@ -122,6 +122,7 @@ describe('watchCorrections', () => {
       fn?.()
       await new Promise((r) => setTimeout(r, 0))
     }
+    const logs = vi.spyOn(console, 'log').mockImplementation(() => {})
     try {
       for (let round = 0; round < 2; round++) {
         watchCorrections(fakeAgent(['made in figma', 'made in Figma']), 'made in figma', deps)
@@ -129,7 +130,12 @@ describe('watchCorrections', () => {
         await flush()
       }
       expect(learned).toEqual([['Figma']])
+      // L6: the corrected words never reach main.log, only how many there were.
+      const lines = logs.mock.calls.map((c) => String(c[0]))
+      expect(lines.some((l) => l.includes('dictation corrections: 1'))).toBe(true)
+      expect(lines.some((l) => /figma/i.test(l))).toBe(false)
     } finally {
+      logs.mockRestore()
       tmp.cleanup()
     }
   })
