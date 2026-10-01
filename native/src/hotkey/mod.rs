@@ -2,18 +2,19 @@
 //!
 //! The hook callback only steps the thread-local FSM and queues events with a
 //! non-blocking send; it takes no locks shared with other threads. Bindings
-//! are swapped by posting a boxed config to the hook thread. The hook is only
-//! installed while something is bound, so an idle agent adds no latency to
-//! system-wide typing.
+//! are swapped through a channel owned by the hook thread; a posted thread
+//! message only wakes it (any process can post one, so its params are never
+//! trusted). The hook is only installed while something is bound, so an idle
+//! agent adds no latency to system-wide typing.
 
 pub mod accel;
 pub mod fsm;
 
 use std::cell::RefCell;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 use std::time::Duration;
 
-use crossbeam_channel::{Sender, bounded};
+use crossbeam_channel::{Receiver, RecvTimeoutError, Sender, bounded, unbounded};
 use serde_json::json;
 
 use crate::proto::AgentError;
@@ -27,10 +28,17 @@ struct Bound {
     taps: bool,
 }
 
+/// The hook thread: its id once it has announced itself, and its config queue.
+struct HookThread {
+    ready: Receiver<u32>,
+    id: Option<u32>,
+    configs: Sender<ConfigMsg>,
+}
+
 pub struct Service {
     out: Out,
     accept_injected: bool,
-    thread: OnceLock<Option<u32>>,
+    hook: Mutex<Option<HookThread>>,
     bound: Mutex<Bound>,
 }
 
@@ -48,7 +56,7 @@ fn parse_opt(accel: &str) -> Result<Option<accel::Hotkey>, AgentError> {
 
 impl Service {
     pub fn new(out: Out, accept_injected: bool) -> Self {
-        Service { out, accept_injected, thread: OnceLock::new(), bound: Mutex::new(Bound::default()) }
+        Service { out, accept_injected, hook: Mutex::new(None), bound: Mutex::new(Bound::default()) }
     }
 
     pub fn assistant(&self) -> String {
@@ -87,7 +95,7 @@ impl Service {
             bindings.push(Binding { hotkey: hk, down: "dictation-down", up: "dictation-up" });
         }
         let config = Config { bindings, taps: next.taps, accept_injected: self.accept_injected };
-        if config.is_idle() && self.thread.get().is_none() {
+        if config.is_idle() && self.hook.lock().unwrap().is_none() {
             *bound = next;
             return Ok(());
         }
@@ -102,11 +110,39 @@ impl Service {
         Ok(())
     }
 
+    /// Hands `config` to the hook thread, starting it on first use. A thread that
+    /// is slow to start is waited for again on the next call; a dead one is replaced.
     fn send(&self, config: Config) -> Result<(), AgentError> {
-        let thread = *self.thread.get_or_init(|| hook::spawn(self.out.clone()));
-        let thread = thread.ok_or_else(|| AgentError::unsupported("keyboard hook thread unavailable"))?;
+        let mut slot = self.hook.lock().unwrap();
+        let h = match slot.as_mut() {
+            Some(h) => h,
+            None => {
+                let (configs, rx) = unbounded();
+                let ready = hook::spawn(self.out.clone(), rx)
+                    .map_err(|e| AgentError::unsupported(format!("keyboard hook thread unavailable: {e}")))?;
+                slot.insert(HookThread { ready, id: None, configs })
+            }
+        };
+        let id = match h.id {
+            Some(id) => id,
+            None => match h.ready.recv_timeout(Duration::from_secs(2)) {
+                Ok(id) => *h.id.insert(id),
+                Err(RecvTimeoutError::Timeout) => {
+                    return Err(AgentError::internal("keyboard hook thread is not ready yet"));
+                }
+                Err(RecvTimeoutError::Disconnected) => {
+                    *slot = None;
+                    return Err(AgentError::internal("keyboard hook thread exited"));
+                }
+            },
+        };
         let (tx, rx) = bounded(1);
-        hook::post(thread, Box::new((config, tx)))?;
+        if h.configs.send((config, tx)).is_err() {
+            *slot = None;
+            return Err(AgentError::internal("keyboard hook thread exited"));
+        }
+        hook::wake(id)?;
+        drop(slot);
         rx.recv_timeout(Duration::from_secs(2))
             .map_err(|_| AgentError::internal("keyboard hook thread did not answer"))?
             .map_err(AgentError::internal)
@@ -160,9 +196,10 @@ mod hook {
     /// Unassigned VK used to mask the Win key release (standard trick).
     const VK_MASK: u16 = 0xE8;
 
-    pub fn spawn(out: Out) -> Option<u32> {
+    /// Starts the hook thread; its id arrives on the returned channel once its queue exists.
+    pub fn spawn(out: Out, configs: Receiver<ConfigMsg>) -> std::io::Result<Receiver<u32>> {
         let (tx, rx) = bounded(1);
-        let spawned = std::thread::Builder::new().name("hotkey-hook".into()).spawn(move || {
+        std::thread::Builder::new().name("hotkey-hook".into()).spawn(move || {
             let mut msg = MSG::default();
             // SAFETY: creates this thread's message queue before announcing its id.
             unsafe {
@@ -170,63 +207,68 @@ mod hook {
                 let _ = tx.send(GetCurrentThreadId());
             }
             HOOK_CTX.with(|c| *c.borrow_mut() = Some(HookCtx { fsm: Fsm::default(), out }));
-            pump();
-        });
-        if let Err(e) = spawned {
-            tracing::error!("hotkey thread: {e}");
-            return None;
-        }
-        rx.recv_timeout(Duration::from_secs(2)).ok()
+            pump(configs);
+        })?;
+        Ok(rx)
     }
 
-    pub fn post(thread: u32, msg: Box<ConfigMsg>) -> Result<(), AgentError> {
-        let ptr = Box::into_raw(msg);
-        // SAFETY: the hook thread takes ownership of `ptr` when it receives WM_CONFIG.
-        unsafe {
-            if let Err(e) = PostThreadMessageW(thread, WM_CONFIG, WPARAM(0), LPARAM(ptr as isize)) {
-                drop(Box::from_raw(ptr));
-                return Err(e.into());
-            }
-        }
-        Ok(())
+    /// Wakes the hook thread to drain its config queue.
+    pub fn wake(thread: u32) -> Result<(), AgentError> {
+        // SAFETY: a parameterless thread message; the hook thread ignores wParam/lParam.
+        unsafe { PostThreadMessageW(thread, WM_CONFIG, WPARAM(0), LPARAM(0)) }.map_err(Into::into)
     }
 
-    fn pump() {
+    fn pump(configs: Receiver<ConfigMsg>) {
         let mut hook: Option<HHOOK> = None;
         let mut msg = MSG::default();
-        // SAFETY: standard message loop on the thread that owns the hook.
-        unsafe {
-            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                if msg.message != WM_CONFIG {
-                    continue;
-                }
-                let (config, reply) = *Box::from_raw(msg.lParam.0 as *mut ConfigMsg);
-                let idle = config.is_idle();
-                HOOK_CTX.with(|c| {
-                    if let Some(ctx) = c.borrow_mut().as_mut() {
-                        let outputs = ctx.fsm.configure(config);
-                        deliver(&ctx.out, outputs);
-                    }
-                });
-                let result = if idle {
-                    if let Some(h) = hook.take() {
-                        let _ = UnhookWindowsHookEx(h);
-                    }
-                    Ok(())
-                } else if hook.is_none() {
-                    let module = GetModuleHandleW(None).ok().map(|m| HINSTANCE(m.0));
-                    match SetWindowsHookExW(WH_KEYBOARD_LL, Some(proc), module, 0) {
-                        Ok(h) => {
-                            hook = Some(h);
-                            Ok(())
-                        }
-                        Err(e) => Err(format!("SetWindowsHookExW failed: {}", e.message())),
-                    }
-                } else {
-                    Ok(())
-                };
-                let _ = reply.send(result);
+        loop {
+            // SAFETY: standard message loop on the thread that owns the hook.
+            let r = unsafe { GetMessageW(&mut msg, None, 0, 0) }.0;
+            // 0 is WM_QUIT, -1 an error (looping on it would spin).
+            if r == 0 || r == -1 {
+                break;
             }
+            if msg.message != WM_CONFIG {
+                continue;
+            }
+            while let Ok((config, reply)) = configs.try_recv() {
+                let _ = reply.send(apply_config(&mut hook, config));
+            }
+        }
+        if let Some(h) = hook.take() {
+            // SAFETY: the hook was installed by this thread.
+            let _ = unsafe { UnhookWindowsHookEx(h) };
+        }
+    }
+
+    /// Runs on the hook thread, which owns `hook`.
+    fn apply_config(hook: &mut Option<HHOOK>, config: Config) -> Result<(), String> {
+        let idle = config.is_idle();
+        HOOK_CTX.with(|c| {
+            if let Some(ctx) = c.borrow_mut().as_mut() {
+                let outputs = ctx.fsm.configure(config);
+                deliver(&ctx.out, outputs);
+            }
+        });
+        if idle {
+            if let Some(h) = hook.take() {
+                // SAFETY: the hook was installed by this thread.
+                let _ = unsafe { UnhookWindowsHookEx(h) };
+            }
+            return Ok(());
+        }
+        if hook.is_some() {
+            return Ok(());
+        }
+        // SAFETY: pure query for this module.
+        let module = unsafe { GetModuleHandleW(None) }.ok().map(|m| HINSTANCE(m.0));
+        // SAFETY: `proc` is a valid LL hook procedure; this thread pumps messages for it.
+        match unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(proc), module, 0) } {
+            Ok(h) => {
+                *hook = Some(h);
+                Ok(())
+            }
+            Err(e) => Err(format!("SetWindowsHookExW failed: {}", e.message())),
         }
     }
 
@@ -280,10 +322,10 @@ mod hook {
 #[cfg(not(windows))]
 mod hook {
     use super::*;
-    pub fn spawn(_: Out) -> Option<u32> {
-        None
+    pub fn spawn(_: Out, _: Receiver<ConfigMsg>) -> std::io::Result<Receiver<u32>> {
+        Err(std::io::Error::new(std::io::ErrorKind::Unsupported, "hotkeys need Windows"))
     }
-    pub fn post(_: u32, _: Box<ConfigMsg>) -> Result<(), AgentError> {
+    pub fn wake(_: u32) -> Result<(), AgentError> {
         Err(AgentError::unsupported("hotkeys need Windows"))
     }
     pub fn mask_win() {}
