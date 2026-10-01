@@ -4,6 +4,8 @@ import type { EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { live, registerWindow, sendTo } from './registry'
 import { loadConfig } from '../config'
+import * as assistant from './assistant'
+import { uiV2 } from './ui-mode'
 
 export type StatusKind =
   | 'idle'
@@ -27,6 +29,7 @@ export function send<C extends EventChannel>(channel: C, ...args: EventChannels[
 }
 
 export function create(): void {
+  if (uiV2()) return
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   const w = 420
   const h = 44
@@ -56,6 +59,7 @@ export function setStatus(
   step?: { index: number; total: number },
   autoHideMs?: number
 ): void {
+  if (uiV2()) return assistant.status(kind, text, step, autoHideMs)
   if (!loadConfig().statusBubble.enabled) return
   const w = get()
   if (!w) return
@@ -71,6 +75,7 @@ export function setStatus(
 }
 
 export function hideStatus(): void {
+  if (uiV2()) return assistant.settle()
   if (!get()) return
   send('status:hide')
   // Tracked so a setStatus during the fade-out cancels the hide.

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LiveRegion } from '../ui'
 import { Gallery } from '../ui/Gallery'
+import { useIpc } from '../lib/ipc'
 import { SettingsPage } from './settings/SettingsPage'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
@@ -12,10 +13,14 @@ function useRoute(): [Route, (hash: string) => void] {
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
+  // Main switches an open panel to another route without reloading it.
+  useIpc('panel:route', (next) => {
+    location.hash = `#/${next}`
+  })
   return [route, (hash) => (location.hash = hash)]
 }
 
-/** The panel window: settings now; onboarding and home join it later. */
+/** The panel window: settings, onboarding and the home flyout share this entry. */
 export function App(): JSX.Element {
   const [route, go] = useRoute()
   const section: SectionId =

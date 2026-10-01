@@ -5,6 +5,8 @@ import { createWindow, loadRenderer } from './factory'
 import { isOverOwnWindow, live, registerWindow, sendTo } from './registry'
 import { loadConfig } from '../config'
 import { physToLogical } from '../actions/coords'
+import * as layer from './screen-layer'
+import { uiV2 } from './ui-mode'
 
 let win: BrowserWindow | null = null
 let lastRaise = 0
@@ -33,6 +35,7 @@ function forceTop(): void {
 }
 
 export function create(): void {
+  if (uiV2()) return
   const { width, height } = screen.getPrimaryDisplay().bounds
   win = createWindow({
     width,
@@ -73,12 +76,23 @@ export function setEnabled(enabled: boolean): void {
 /** Forwards agent dwell progress (physical px) to the ring, which draws in logical px. */
 export function progress(data: Record<string, unknown> | undefined): void {
   const w = get()
-  if (!w) return
+  if (!w && !uiV2()) return
   const xPhys = data?.x
   const yPhys = data?.y
   if (typeof xPhys !== 'number' || typeof yPhys !== 'number') return
   const pt = physToLogical({ x: xPhys, y: yPhys })
   if (isOverOwnWindow(pt)) return
+  if (uiV2()) {
+    const d = data as { progress?: number; active?: boolean }
+    layer.dwell({
+      x: Math.round(pt.x),
+      y: Math.round(pt.y),
+      progress: Number(d.progress) || 0,
+      active: !!d.active
+    })
+    return
+  }
+  if (!w) return
   // Re-raise at most every 2s so the ring stays above the taskbar without churning z-order.
   const now = Date.now()
   if (now - lastRaise > 2000) {

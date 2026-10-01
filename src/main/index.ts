@@ -42,6 +42,10 @@ import * as answer from './windows/answer'
 import * as highlight from './windows/highlight'
 import * as dwellRing from './windows/dwell-ring'
 import * as tray from './windows/tray'
+import * as assistantWin from './windows/assistant'
+import * as screenLayer from './windows/screen-layer'
+import * as homeWin from './windows/home'
+import { uiV2 } from './windows/ui-mode'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerHighlightIpc } from './ipc/highlight'
@@ -50,6 +54,7 @@ import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerVoiceIpc } from './ipc/voice'
 import { registerWakeIpc } from './ipc/wake'
+import { registerUiIpc } from './ipc/ui'
 
 // No Lumen window may open popups or navigate away from its own renderer.
 function hardenWebContents(): void {
@@ -68,11 +73,17 @@ function hardenWebContents(): void {
 }
 
 function createWindows(): void {
-  hud.create()
-  highlight.create()
-  answer.create()
-  statusWin.create()
-  dwellRing.create()
+  if (uiV2()) {
+    assistantWin.create()
+    screenLayer.create()
+    homeWin.create()
+  } else {
+    hud.create()
+    highlight.create()
+    answer.create()
+    statusWin.create()
+    dwellRing.create()
+  }
   tray.create()
   applyUiScaleOnLoad(loadConfig().a11y.uiScale)
 }
@@ -85,6 +96,12 @@ function registerIpc(): void {
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
+  registerUiIpc({
+    cancel: () => {
+      cancelAll()
+      bus.emit({ type: 'voice.cancelled' })
+    }
+  })
   registerQueryIpc({
     intercept: interceptLocal,
     preempt: (prompt, opts, scope) =>

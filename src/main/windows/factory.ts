@@ -15,6 +15,9 @@ export type RendererEntry =
   | 'settings'
   | 'status'
   | 'dwellring'
+  | 'assistant'
+  | 'screen'
+  | 'panel'
 
 /** Locked-down webPreferences shared by every Lumen window. */
 export function securePrefs(): WebPreferences {
@@ -46,12 +49,14 @@ export function createWindow(opts: BrowserWindowConstructorOptions): BrowserWind
   return new BrowserWindow({ ...opts, webPreferences: securePrefs() })
 }
 
-export function loadRenderer(win: BrowserWindow, entry: RendererEntry): void {
+/** Loads a renderer entry; `hash` (without #) selects a route inside it, e.g. "/settings". */
+export function loadRenderer(win: BrowserWindow, entry: RendererEntry, hash?: string): void {
   const devUrl = process.env['ELECTRON_RENDERER_URL']
   if (is.dev && devUrl) {
-    win.loadURL(entry === 'index' ? devUrl : `${devUrl}/${entry}.html`)
+    const base = entry === 'index' ? devUrl : `${devUrl}/${entry}.html`
+    win.loadURL(hash ? `${base}#${hash}` : base)
   } else {
-    win.loadFile(join(__dirname, `../renderer/${entry}.html`))
+    win.loadFile(join(__dirname, `../renderer/${entry}.html`), hash ? { hash } : undefined)
   }
 }
 

@@ -17,6 +17,8 @@ import { normalizeBbox } from '../actions/coords'
 import { executeActions } from '../actions/executor'
 import { armEscape, disarmEscape } from '../agent/escape'
 import { setStatus } from '../windows/status'
+import * as assistant from '../windows/assistant'
+import { uiV2 } from '../windows/ui-mode'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
 
@@ -84,6 +86,15 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
       if (!summary || !summary.trim()) return { delayMs: 0 }
       const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
+      if (uiV2() && cfg.explainBeforeDo) {
+        // The bar asks with a countdown; Stop skips the execute that follows.
+        await assistant.requestConfirm({
+          summary: summary.trim(),
+          risk: conf === 'low' ? 'medium' : 'low',
+          countdownMs: conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
+        })
+        return { delayMs: 0 }
+      }
       const baseText = `About to: ${summary.trim()}`
       const displayText =
         cfg.showConfidence && conf !== 'high'
@@ -103,6 +114,10 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       ...a,
       bbox: a.bbox ? (normalizeBbox(a.bbox) ?? undefined) : undefined
     })) as Action[]
+    if (uiV2() && assistant.consumeDenied()) {
+      log('skip', 'execute skipped: the user stopped it')
+      return { done: false, cancelled: true }
+    }
     const scope = beginScope()
     armEscape()
     const execTimer = startTimer(`execute-action [${actions.map((a) => a.type).join(', ')}]`)

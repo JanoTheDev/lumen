@@ -26,7 +26,10 @@ export default defineConfig({
           answeroverlay: resolve('src/renderer/answeroverlay.html'),
           settings: resolve('src/renderer/settings.html'),
           status: resolve('src/renderer/status.html'),
-          dwellring: resolve('src/renderer/dwellring.html')
+          dwellring: resolve('src/renderer/dwellring.html'),
+          assistant: resolve('src/renderer/assistant.html'),
+          screen: resolve('src/renderer/screen.html'),
+          panel: resolve('src/renderer/panel.html')
         }
       }
     }
