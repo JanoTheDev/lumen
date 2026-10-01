@@ -59,6 +59,12 @@ export function userLine(text: string): string {
   return `${JSON.stringify({ type: 'user', message: { role: 'user', content: text } })}\n`
 }
 
+/**
+ * Read-only taps on every session (the task chat transcript, 08 T41): 'user' (id, text) for
+ * each user turn written, 'event' (id, event) for each stream-json event read.
+ */
+export const sessionTaps = new EventEmitter()
+
 export class ClaudeSession extends EventEmitter {
   view: ClaudeSessionView
   private child: ChildLike | null = null
@@ -115,6 +121,7 @@ export class ClaudeSession extends EventEmitter {
   send(text: string): void {
     if (!this.child) this.spawn()
     this.write(userLine(text))
+    sessionTaps.emit('user', this.view.id, text)
     this.inFlight++
     this.update({
       phase: 'thinking',
@@ -319,6 +326,7 @@ export class ClaudeSession extends EventEmitter {
   }
 
   private onEvent(ev: Record<string, unknown>): void {
+    sessionTaps.emit('event', this.view.id, ev)
     const fx = readEvent(ev)
     if (fx.controlResponse) {
       const r = this.controls.get(fx.controlResponse.requestId)

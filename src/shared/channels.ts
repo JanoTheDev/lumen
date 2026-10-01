@@ -21,6 +21,7 @@ import type {
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
+import type { ChatControlOp, ChatDelta, ChatSteerResult, ChatSummary, ChatView } from './task-chat'
 import type {
   AutomationAction,
   AutomationDraft,
@@ -411,8 +412,17 @@ export interface InvokeChannels {
   /** Background tasks (CONTRACTS C11), newest first; listing marks finished ones seen. */
   'tasks:list': { args: []; result: BackgroundTask[] }
   'tasks:cancel': { args: [id: string]; result: { ok: boolean } }
-  /** Shows the result on the assistant bar (or the waiting question). */
+  /** Opens the task's chat view in the panel window (a task or chat id, or "all"). */
   'tasks:open': { args: [id: string]; result: { ok: boolean } }
+  /** Task chat view (08 T41): one chat's header and transcript; null when it is gone. */
+  'tasks:chat': { args: [id: string]; result: ChatView | null }
+  /** The chat view's list: background, foreground and Claude Code chats. */
+  'tasks:chats': { args: []; result: ChatSummary[] }
+  /** The open view follows this chat (tasks:chat pushes) or stops following it. */
+  'tasks:watch': { args: [id: string, on: boolean]; result: { ok: boolean } }
+  /** The composer: answers the waiting question, else a message the task reads next. */
+  'tasks:steer': { args: [req: { id: string; text: string }]; result: ChatSteerResult }
+  'tasks:control': { args: [req: { id: string; op: ChatControlOp }]; result: ChatSteerResult }
   /** Answers a task's queued question. */
   'tasks:answer': { args: [id: string, answer: string]; result: { ok: boolean } }
   /** Starts an interrupted, failed or cancelled task again as a new task. */
@@ -1260,6 +1270,8 @@ export interface EventChannels {
   'voice:wake-listen': [on: boolean]
   /** Background task list changed (Home flyout Tasks). */
   'tasks:changed': [tasks: BackgroundTask[]]
+  /** New transcript entries / header of a chat the panel watches (tasks:watch). */
+  'tasks:chat-delta': [delta: ChatDelta]
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -1371,6 +1383,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'tasks:open',
   'tasks:answer',
   'tasks:run-again',
+  'tasks:chat',
+  'tasks:chats',
+  'tasks:watch',
+  'tasks:steer',
+  'tasks:control',
   'automations:list',
   'automations:info',
   'automations:update',
@@ -1508,7 +1525,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'a11y:dwell-state',
   'a11y:keyboard-state',
   'assistant:focus',
-  'tasks:changed'
+  'tasks:changed',
+  'tasks:chat-delta'
 ]
 
 /** A file dropped on the assistant bar (08 T21), as the bar shows it. */

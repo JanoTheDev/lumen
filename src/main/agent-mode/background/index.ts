@@ -38,6 +38,7 @@ import { doneLine, noticeVerdict, PRESENT_MS } from './presence'
 import { runBackground } from './run'
 import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
+import { transcripts } from '../transcript-hub'
 
 const TURN_MAX_TOKENS = 2048
 const FOREGROUND_ASK_MS = 60_000
@@ -59,7 +60,11 @@ const manager = new BackgroundManager({
   run: (ctl) => runAndRecord(ctl),
   emit: (task) => bus.emit({ type: 'task.changed', task }),
   save: (task) => store?.save(task),
-  remove: (id) => store?.remove(id),
+  remove: (id) => {
+    store?.remove(id)
+    transcripts().remove(id)
+  },
+  record: (id, e) => transcripts().background(id, e),
   finished: (task) => {
     if (task.phase !== 'done' && task.phase !== 'failed') return
     notice(doneLine(task.title, task.phase, task.result?.summary ?? ''))

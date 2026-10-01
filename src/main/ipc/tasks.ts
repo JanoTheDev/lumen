@@ -1,38 +1,34 @@
 // Background tasks IPC (08 T29, CONTRACTS C11): the Home flyout's Tasks list. tasks:changed
-// carries the whole list (it is short) to the Home window.
+// carries the whole list (it is short) to the Home window. The task chat view (08 T41) in the
+// panel window: tasks:chat / tasks:chats read, tasks:watch subscribes the open view to
+// tasks:chat pushes, tasks:steer and tasks:control act on the task.
 import { ipcMain } from 'electron'
+import { z } from 'zod'
 import { bgTaskAnswerSchema, bgTaskIdSchema } from '@shared/ipc'
-import type { BackgroundTask } from '@shared/types'
+import {
+  chatControlSchema,
+  chatIdSchema,
+  chatSteerSchema,
+  chatWatchSchema
+} from '@shared/task-chat'
 import { backgroundManager } from '../agent-mode/background'
-import { showSessionOnBar } from '../claude-code'
+import {
+  chatForTask,
+  chatList,
+  controlChat,
+  openChat,
+  steerChat,
+  watchChat
+} from '../agent-mode/transcript-wire'
+import { transcripts } from '../agent-mode/transcript-hub'
 import { bus } from '../bus'
-import * as assistant from '../windows/assistant'
 import * as home from '../windows/home'
 import { INVALID, safeParse } from './validate'
 
-const PUSH_MS = 150
+/** tasks:open takes a Tasks-list id, a chat id, or "all" (the chat view's list). */
+export const taskOpenSchema = z.union([chatIdSchema, z.literal('all')])
 
-/** What tasks:open shows on the assistant bar. */
-export function taskCard(t: BackgroundTask): string {
-  if (t.question && (t.phase === 'asking' || t.phase === 'needs-foreground'))
-    return `**${t.title}** asks: ${t.question.text}`
-  if (t.result) {
-    const report = t.result.report ? `\n\n${t.result.report}` : ''
-    return `**${t.title}**\n\n${t.result.summary}${report}`
-  }
-  const last = t.progress[t.progress.length - 1]
-  const state: Record<BackgroundTask['phase'], string> = {
-    queued: 'Waiting for a free slot.',
-    running: last ? `Working: ${last}` : 'Working.',
-    'needs-foreground': 'Waiting to use the mouse.',
-    asking: 'Waiting for your answer.',
-    done: 'Done.',
-    failed: 'It failed.',
-    cancelled: 'Cancelled.',
-    interrupted: 'Stopped when Lumen closed. Run it again from the Tasks list.'
-  }
-  return `**${t.title}**\n\n${state[t.phase]}`
-}
+const PUSH_MS = 150
 
 export function registerTasksIpc(): void {
   const m = backgroundManager()
@@ -49,15 +45,40 @@ export function registerTasksIpc(): void {
     return { ok: m.cancel(id) }
   })
   ipcMain.handle('tasks:open', (_e, raw: unknown) => {
-    const id = safeParse('tasks:open', bgTaskIdSchema, raw)
+    const id = safeParse('tasks:open', taskOpenSchema, raw)
     if (id === undefined) return INVALID
-    const t = m.get(id)
-    if (!t) return { ok: false }
-    m.markSeen(id)
-    // A Claude session opens its live view on the bar (status, activity, waiting prompt).
-    if (t.claude && showSessionOnBar(t.claude.id)) return { ok: true }
-    assistant.showAnswer(taskCard(t))
+    if (id === 'all') {
+      openChat('')
+      return { ok: true }
+    }
+    // A Tasks-list row opens its chat (a Claude session's row: the session's chat).
+    const chat = id.startsWith('bg_') ? chatForTask(id) : id
+    if (!chat) return { ok: false }
+    if (id.startsWith('bg_')) m.markSeen(id)
+    openChat(chat)
     return { ok: true }
+  })
+  ipcMain.handle('tasks:chats', (_e, ...args: unknown[]) => (args.length ? INVALID : chatList()))
+  ipcMain.handle('tasks:chat', (_e, raw: unknown) => {
+    const id = safeParse('tasks:chat', chatIdSchema, raw)
+    if (id === undefined) return INVALID
+    if (id.startsWith('bg_')) m.markSeen(id)
+    return transcripts().view(id)
+  })
+  ipcMain.handle('tasks:watch', (_e, ...args: unknown[]) => {
+    const v = safeParse('tasks:watch', chatWatchSchema, args)
+    if (!v) return INVALID
+    return { ok: watchChat(v[0], v[1]) }
+  })
+  ipcMain.handle('tasks:steer', (_e, raw: unknown) => {
+    const v = safeParse('tasks:steer', chatSteerSchema, raw)
+    if (!v) return INVALID
+    return steerChat(v.id, v.text)
+  })
+  ipcMain.handle('tasks:control', (_e, raw: unknown) => {
+    const v = safeParse('tasks:control', chatControlSchema, raw)
+    if (!v) return INVALID
+    return controlChat(v.id, v.op)
   })
   ipcMain.handle('tasks:answer', (_e, ...args: unknown[]) => {
     const v = safeParse('tasks:answer', bgTaskAnswerSchema, args)

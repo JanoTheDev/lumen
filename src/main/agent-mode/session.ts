@@ -56,6 +56,7 @@ import { memorySearchFor } from '../ai/memory/runtime'
 import { observed } from './prompts'
 import { CancelledError } from '../query/cancel'
 import { takeFilesFor } from '../files/attach'
+import { transcripts } from './transcript-hub'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -78,6 +79,18 @@ let paused: PausedRun | null = null
 /** A task is running (or counting down / asking). */
 export function agentRunning(): boolean {
   return !!running
+}
+
+/** The running foreground task's id (the task chat view steers and stops it). */
+export function runningAgentTaskId(): string | null {
+  return running?.taskId ?? null
+}
+
+/** Stops the running task if it is `id`. */
+export function stopAgentTask(id: string): boolean {
+  if (running?.taskId !== id) return false
+  running.abort()
+  return true
 }
 
 /** A task paused on an unanswered question that "resume the task" can continue. */
@@ -285,6 +298,7 @@ function deps(
     publish: (task) => {
       if (task.question?.text) lastQuestion = task.question.text
       showOnBar(task)
+      transcripts().foregroundTask(task)
     },
     speak: say,
     countdown: (ms, signal) =>
@@ -309,7 +323,9 @@ function deps(
     now: () => Date.now(),
     inputLane: inputLane(),
     newId: () => env.taskId,
-    log: (tag, msg) => log(tag as LogTag, msg)
+    log: (tag, msg) => log(tag as LogTag, msg),
+    observe: (e) => transcripts().rec(env.taskId).run(e),
+    between: async () => transcripts().drain(env.taskId)
   }
 }
 
@@ -362,6 +378,7 @@ async function run(
   }))
   const mcpDefs = connectorDefsFor(mcp.defs, envelope)
   const trace = traceRecorder()
+  if (!more.resume) transcripts().foregroundStart(env.taskId, prompt)
   try {
     const r = await withCancelArmed(() =>
       runAgent(
@@ -395,6 +412,7 @@ async function run(
       )
     )
     onResult?.(r)
+    transcripts().foregroundEnd(env.taskId, r)
     if (r.status === 'done' && trace.steps.length)
       rememberAgentRun({ prompt, summary: r.summary, at: Date.now(), steps: trace.steps })
     paused =
@@ -415,6 +433,10 @@ async function run(
     bus.emit({ type: 'agent.task', task: r.status === 'paused' ? r.task : null })
     return toResponse(r)
   } catch (e) {
+    transcripts().foregroundEnd(env.taskId, {
+      error: (e as Error).message,
+      cancelled: ac.signal.aborted
+    })
     bus.emit({ type: 'agent.task', task: null })
     throw e
   } finally {
