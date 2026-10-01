@@ -23,6 +23,8 @@ export interface TurnContext {
   routedMode?: string
   /** App to switch to first (router appSwitch); url when it is a known web app. */
   targetApp?: { name: string; url?: string }
+  /** Compact UIA elements list (C3 lines, rects in frame "1" px). */
+  elements?: string
   now?: Date
 }
 
@@ -52,6 +54,9 @@ export function userTurn(ctx: TurnContext): string {
       `target_app: ${ctx.targetApp.name}${ctx.targetApp.url ? ` ${ctx.targetApp.url}` : ''} (not in front)`
     )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
+  if (ctx.elements)
+    lines.push(`elements (id role "name" @(x,y,w,h) in frame "1" px):
+${ctx.elements}`)
   return `<context>\n${lines.join('\n')}\n</context>\n<request>${ctx.prompt}</request>`
 }
 

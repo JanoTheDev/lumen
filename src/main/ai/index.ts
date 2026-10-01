@@ -1,6 +1,8 @@
 // Model calls for the query pipeline. Provider and model come from the role router.
 import type { ModelResponse } from '@shared/types'
 import { currentContext, type QueryContext } from '../query/context'
+import { serializeElements } from '../query/uia-list'
+import { log } from '../logger'
 import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
@@ -55,7 +57,14 @@ export async function callModel(
   opts: CallOptions = {}
 ): Promise<ModelResponse> {
   const ctx = contextFor(screenshotBase64, opts)
-  const { imgW, imgH } = ctx?.frames[0]?.geometry ?? currentFrame()
+  const geometry = ctx?.frames[0]?.geometry ?? currentFrame()
+  const { imgW, imgH } = geometry
+  const elements = screenshotBase64 ? serializeElements(ctx?.uia, geometry) : null
+  if (elements)
+    log(
+      'plan',
+      `uia list: ${elements.count} nodes ~${elements.tokens} tokens${elements.truncated ? ' (truncated)' : ''}`
+    )
   const { llm, model, effort } = getProvider('main')
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
@@ -70,7 +79,8 @@ export async function callModel(
           activeWindow,
           frame: screenshotBase64 ? { w: imgW, h: imgH } : null,
           routedMode: opts.routedMode,
-          targetApp: opts.targetApp
+          targetApp: opts.targetApp,
+          elements: elements?.text
         })
       }
     ],
