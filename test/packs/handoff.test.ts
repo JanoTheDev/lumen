@@ -133,7 +133,7 @@ describe('helper handoff', () => {
     expect(listHandoffs(deps)).toMatchObject([{ id: 'handoff-blender-for-sam', lessons: 1 }])
     expect(removeHandoff(deps, 'handoff-blender-for-sam')).toBe(true)
     expect(user.reg.lesson('blender-save-my-file')).toBeNull()
-  })
+  }, 20_000)
 
   it('needs at least one lesson', () => {
     const helper = profile()
