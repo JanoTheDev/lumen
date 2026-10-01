@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SkillDetail } from '@shared/channels'
 import type { SkillRunRecord, SkillSummary } from '@shared/types'
 import { Button, Card, IconButton, Switch, announce, icons } from '../../../ui'
+import { SkillsCompose } from './SkillsCompose'
 import { SkillsInstall } from './SkillsInstall'
 import { TRUST_LABEL, filterSkills, permissionLines, runLine, skillMeta } from './SkillsText'
 
@@ -73,6 +74,12 @@ function SkillEditor({
         <>
           <p className="ui-hint">{skillMeta(s)}</p>
           {s.when_to_use && <p className="ui-hint">Used when: {s.when_to_use}</p>}
+          {s.needsUpdate && (
+            <p className="ui-hint" role="status">
+              Its last runs did not go as recorded. Say “update the {name.replace(/-/g, ' ')} skill”
+              and Lumen rewrites it from the last run that worked.
+            </p>
+          )}
           <h3>What it may do</h3>
           <ul>
             {permissionLines(s.permissions, s.apps).map((line) => (
@@ -364,6 +371,12 @@ export function Skills(): JSX.Element {
           before every action.
         </p>
       </Card>
+      <SkillsCompose
+        onSaved={(name) => {
+          refresh()
+          setOpen(name)
+        }}
+      />
       <NewSkill
         onCreated={(name) => {
           refresh()

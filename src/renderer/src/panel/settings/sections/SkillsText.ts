@@ -68,6 +68,7 @@ export function skillMeta(s: SkillSummary): string {
     parts.push(`replaces the ${s.overrides === 'builtin' ? 'built-in' : 'app pack'} one`)
   if (s.context === 'background') parts.push('runs in the background')
   if (s.hasSteps) parts.push('has recorded steps')
+  if (s.needsUpdate) parts.push('needs an update')
   if (s.triggers.length) parts.push(`say “${s.triggers[0]}”`)
   if (!s.enabled) parts.push('off')
   return parts.join(' · ')

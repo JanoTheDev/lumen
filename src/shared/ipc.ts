@@ -60,6 +60,8 @@ export const skillTextSchema = z
   .max(256 * 1024)
 export const skillDescriptionSchema = z.string().max(200)
 export const skillTokenSchema = z.string().regex(/^[a-f0-9]{24}$/)
+/** "Write it for me": what the skill should do, in the user's words. */
+export const skillComposeSchema = z.string().trim().min(4).max(2000)
 
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])

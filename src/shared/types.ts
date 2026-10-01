@@ -244,6 +244,8 @@ export interface SkillSummary {
   hasSteps: boolean
   /** Loader warnings (long body, unknown keys). */
   warnings: string[]
+  /** Its last runs drifted or failed: "update the X skill" rewrites it (11 F9). */
+  needsUpdate?: boolean
 }
 
 /** One run of a skill (11 T04), newest first in Settings → Skills. */

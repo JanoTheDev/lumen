@@ -479,6 +479,13 @@ export interface InvokeChannels {
   'skills:export': { args: [name: string]; result: { ok: boolean; path?: string; error?: string } }
   /** A skill's last runs, newest first (11 T04). */
   'skills:runs': { args: [name: string]; result: SkillRunRecord[] }
+  /** "Write it for me" (11 F9): the model writes a skill from a description; nothing saved. */
+  'skills:compose': { args: [description: string]; result: SkillComposePreview }
+  /** Saves a written skill (the SKILL.md as the user left it in the preview). */
+  'skills:compose-save': {
+    args: [token: string, text: string]
+    result: { ok: true; name: string } | { ok: false; error: string; problems?: string[] }
+  }
   /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
   'bridges:status': { args: []; result: BridgeStatus[] }
   'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
@@ -969,6 +976,24 @@ export type PackInstallResult =
 
 export type SkillActionResult = { ok: true } | { ok: false; error: string; problems?: string[] }
 
+/** A skill the model wrote, for review before it is saved (11 F9). */
+export type SkillComposePreview =
+  | {
+      ok: true
+      token: string
+      name: string
+      /** SKILL.md as written. */
+      text: string
+      permissions: SkillPermissions
+      apps: string[]
+      triggers: string[]
+      hasSteps: boolean
+      /** Bundled files besides SKILL.md (steps.json, reference/*.md). */
+      files: string[]
+      warnings: string[]
+    }
+  | { ok: false; error: string }
+
 export interface SkillDetail {
   ok: true
   summary: SkillSummary
@@ -1275,6 +1300,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'skills:install-cancel',
   'skills:export',
   'skills:runs',
+  'skills:compose',
+  'skills:compose-save',
   'bridges:status',
   'bridges:test',
   'bridges:blender-addon',

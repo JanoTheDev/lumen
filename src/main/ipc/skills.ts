@@ -4,6 +4,7 @@ import { ipcMain } from 'electron'
 import { z } from 'zod'
 import {
   packUrlSchema,
+  skillComposeSchema,
   skillDescriptionSchema,
   skillNameSchema,
   skillTextSchema,
@@ -12,6 +13,7 @@ import {
 import { INVALID, safeParse } from './validate'
 import {
   cancelPending,
+  composeSkillDraft,
   exportSkillFile,
   installPending,
   listSkillSummaries,
@@ -19,6 +21,7 @@ import {
   previewSkillFile,
   previewSkillUrl,
   removeSkill,
+  saveComposedSkill,
   saveSkill,
   setSkillEnabled,
   setSkillTrusted,
@@ -29,6 +32,7 @@ import {
 const nameFlag = z.tuple([skillNameSchema, z.boolean()])
 const nameText = z.tuple([skillNameSchema, skillTextSchema])
 const nameDescription = z.tuple([skillNameSchema, skillDescriptionSchema])
+const tokenText = z.tuple([skillTokenSchema, skillTextSchema])
 
 export function registerSkillsIpc(): void {
   ipcMain.handle('skills:list', () => listSkillSummaries())
@@ -72,6 +76,14 @@ export function registerSkillsIpc(): void {
   ipcMain.handle('skills:runs', (_e, raw: unknown) => {
     const name = safeParse('skills:runs', skillNameSchema, raw)
     return name ? skillRuns(name) : INVALID
+  })
+  ipcMain.handle('skills:compose', (_e, raw: unknown) => {
+    const description = safeParse('skills:compose', skillComposeSchema, raw)
+    return description ? composeSkillDraft(description) : INVALID
+  })
+  ipcMain.handle('skills:compose-save', (_e, ...raw: unknown[]) => {
+    const args = safeParse('skills:compose-save', tokenText, raw)
+    return args ? saveComposedSkill(args[0], args[1]) : INVALID
   })
   ipcMain.handle('skills:export', (e, raw: unknown) => {
     const name = safeParse('skills:export', skillNameSchema, raw)

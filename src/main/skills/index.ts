@@ -11,6 +11,7 @@ import { basename, join } from 'path'
 import type {
   PackInstallResult,
   SkillActionResult,
+  SkillComposePreview,
   SkillDetail,
   SkillInstallPreview
 } from '@shared/channels'
@@ -18,6 +19,7 @@ import type { SkillRunRecord, SkillSummary } from '@shared/types'
 import { log } from '../logger'
 import { fetchPack, githubPackSource } from '../packs/fetch'
 import { ZIP_LIMITS } from '../packs/zip-read'
+import { authorSkill, validateDraftFiles, type AuthoredSkill } from './compose'
 import { skillFiles, skillIndexText, type SkillIndexContext } from './disclosure'
 import {
   createSkill,
@@ -25,10 +27,12 @@ import {
   exportSkill,
   installArchive,
   previewArchive,
-  saveSkillText
+  saveSkillText,
+  writeNewSkill
 } from './manage'
-import { SKILL_FILE } from './manifest'
+import { SKILL_FILE, parseSkillFile } from './manifest'
 import { SkillRegistry, readSkillText } from './registry'
+import { needsUpdate } from './health'
 import { SkillRunLog } from './runs'
 import { SkillStateStore } from './state'
 import {
@@ -85,9 +89,24 @@ export function loadSkillSteps(name: string): StepsFile | null {
   return parseStepsFile(readFileSync(file, 'utf8'))
 }
 
+type SkillRunListener = (name: string, run: SkillRunRecord) => void
+const runListeners: SkillRunListener[] = []
+
+/** Called after each recorded run (skill health, the run behind an update). */
+export function onSkillRun(fn: SkillRunListener): void {
+  runListeners.push(fn)
+}
+
 /** One finished run (foreground or background) for the skill's history. */
 export function recordSkillRun(name: string, run: SkillRunRecord): void {
   runs?.add(name, run)
+  for (const fn of runListeners) {
+    try {
+      fn(name, run)
+    } catch (e) {
+      log('fail', `skill run listener: ${(e as Error).message}`)
+    }
+  }
 }
 
 export function skillRuns(name: string): SkillRunRecord[] {
@@ -97,7 +116,11 @@ export function skillRuns(name: string): SkillRunRecord[] {
 // ---- Settings ----
 
 export function listSkillSummaries(): SkillSummary[] {
-  return registry ? registry.all().map((s) => registry!.summary(s)) : []
+  if (!registry) return []
+  return registry.all().map((s) => {
+    const summary = registry!.summary(s)
+    return needsUpdate(skillRuns(summary.name)) ? { ...summary, needsUpdate: true } : summary
+  })
 }
 
 export function skillDetail(name: string): SkillDetail | { ok: false; error: string } {
@@ -154,6 +177,66 @@ export function removeSkill(name: string): SkillActionResult {
     log('done', `skill ${name} deleted`)
   }
   return r
+}
+
+// ---- "Write it for me" (11 F9) ----
+
+const composed = new Map<string, { skill: AuthoredSkill; at: number }>()
+
+/** The model writes a skill from a description; kept for review under a token. */
+export async function composeSkillDraft(description: string): Promise<SkillComposePreview> {
+  if (!registry) return notReady
+  const reg = registry
+  const r = await authorSkill(
+    { description, apps: [...new Set(reg.all().flatMap((s) => s.manifest.apps))].slice(0, 60) },
+    { taken: (n) => !!reg.get(n) }
+  )
+  if (!r.ok) return r
+  const now = Date.now()
+  for (const [k, v] of composed) if (now - v.at > PENDING_MS) composed.delete(k)
+  const token = randomBytes(12).toString('hex')
+  composed.set(token, { skill: r, at: now })
+  const { manifest } = parseSkillFile(r.files.skillMd)
+  log('plan', `skill ${r.draft.name} written for review`)
+  return {
+    ok: true,
+    token,
+    name: r.draft.name,
+    text: r.files.skillMd,
+    permissions: manifest.permissions,
+    apps: manifest.apps,
+    triggers: manifest.triggers,
+    hasSteps: !!r.files.stepsJson,
+    files: [
+      ...(r.files.stepsJson ? [STEPS_FILE] : []),
+      ...(r.files.extra ?? []).map((f) => f.path)
+    ],
+    warnings: r.warnings
+  }
+}
+
+/** Saves a reviewed skill: the SKILL.md as the user left it, plus its other files. */
+export function saveComposedSkill(
+  token: string,
+  text: string
+): { ok: true; name: string } | { ok: false; error: string; problems?: string[] } {
+  const c = composed.get(token)
+  if (!c || Date.now() - c.at > PENDING_MS)
+    return { ok: false, error: 'that draft expired; write it again' }
+  if (!registry) return notReady
+  const files = { ...c.skill.files, skillMd: text.replace(/\r\n?/g, '\n') }
+  let name: string
+  try {
+    validateDraftFiles(files)
+    name = parseSkillFile(files.skillMd).manifest.name
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+  const r = writeNewSkill(registry, name, files)
+  if (!r.ok) return r
+  composed.delete(token)
+  log('done', `skill ${name} saved from a written draft`)
+  return { ok: true, name }
 }
 
 // ---- install / share ----
