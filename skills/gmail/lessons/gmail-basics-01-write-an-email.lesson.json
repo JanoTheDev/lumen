@@ -1,0 +1,89 @@
+{
+  "id": "gmail-basics-01-write-an-email",
+  "app": "gmail",
+  "title": "Write and send an email",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": [],
+  "appVersion": ">=2025",
+  "summary": "Open a new message, pick a recipient from the suggestions, add a subject and text, then send it yourself.",
+  "tags": ["email", "compose"],
+  "steps": [
+    {
+      "id": "compose",
+      "say": "Click the Compose button at the top left of Gmail.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a New Message window open in Gmail?"
+        }
+      },
+      "hints": [
+        "Compose has a pencil icon and sits above Inbox.",
+        "With keyboard shortcuts on, the letter c opens it too."
+      ],
+      "why": "Every new email starts in the compose window."
+    },
+    {
+      "id": "recipient",
+      "say": "Type the first letters of a name in the To box, then click the right person in the list.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "Check the email address under the name before you pick it.",
+        "Send it to yourself if you only want to practise."
+      ],
+      "why": "Picking from the list avoids typos in the address."
+    },
+    {
+      "id": "subject",
+      "say": "Click Subject and type a few words about what the email is for.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": ["A short subject like Lunch on Friday works well."],
+      "why": "The subject is what people see first in their inbox."
+    },
+    {
+      "id": "body",
+      "say": "Click the big empty area below and write your message.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": ["Start with a greeting, then say what you need, then sign with your name."],
+      "why": "A clear message gets a faster answer."
+    },
+    {
+      "id": "send",
+      "say": "Read it once more, then click Send at the bottom of the window.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the compose window closed, with a Message sent notice at the bottom left?"
+        }
+      },
+      "hints": [
+        "Control and Enter sends too.",
+        "Click Undo in the notice right away if you change your mind."
+      ],
+      "why": "You stay in charge of sending; Lumen only writes drafts."
+    }
+  ]
+}

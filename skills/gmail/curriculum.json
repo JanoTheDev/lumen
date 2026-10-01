@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "gmail",
+  "units": [
+    {
+      "id": "basics",
+      "title": "Write email",
+      "summary": "Write and send an email yourself.",
+      "lessons": ["gmail-basics-01-write-an-email"]
+    }
+  ]
+}

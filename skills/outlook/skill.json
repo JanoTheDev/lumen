@@ -1,0 +1,17 @@
+{
+  "id": "outlook",
+  "name": "Outlook (new)",
+  "version": "1.0.0",
+  "description": "New Outlook for Windows and Outlook on the web: read the inbox, search, open, reply, forward, write and tidy email. Drafts only.",
+  "match": {
+    "process": ["olk.exe"],
+    "title": ["- Outlook\\b"],
+    "url": ["outlook.live.com/*", "outlook.office.com/*", "outlook.office365.com/*"]
+  },
+  "uiaQuality": "partial",
+  "appVersion": ">=1.2025",
+  "appVersionTested": "New Outlook for Windows (olk.exe, WebView2) and Outlook on the web, September 2026",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "New Outlook is the web app in a WebView2 window, so it shares names and shortcuts with Outlook on the web. Classic Outlook (OUTLOOK.EXE) has its own pack, outlook-classic, matched first by process. Accessible names are assumptions from earlier captures, not measured on this build."
+}

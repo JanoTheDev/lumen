@@ -1,0 +1,78 @@
+{
+  "id": "outlook-classic-basics-01-find-an-email",
+  "app": "outlook-classic",
+  "title": "Find an email with search",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": [],
+  "appVersion": ">=16.0",
+  "summary": "Search your mailbox by sender or subject and open what you find.",
+  "tags": ["email", "search"],
+  "steps": [
+    {
+      "id": "search-box",
+      "say": "Press Control and E to jump to the search box.",
+      "target": {
+        "shortcut": "Ctrl+E"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+E"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the search box at the top of Outlook active, with a blinking cursor?"
+            }
+          ]
+        }
+      },
+      "hints": ["You can also click the Search box at the top of the window."],
+      "why": "Search looks through every email faster than scrolling."
+    },
+    {
+      "id": "type-words",
+      "say": "Type a name or a few words from the subject, then press Enter.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": ["Write from: and a name to see only email from that person."],
+      "why": "Fewer, clearer words give better results."
+    },
+    {
+      "id": "open",
+      "say": "Double-click the email you want to open it.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is an email open in its own window or in the reading pane?"
+        }
+      },
+      "hints": ["One click shows it in the reading pane on the right."],
+      "why": "Opening it shows the whole message and its attachments."
+    },
+    {
+      "id": "clear",
+      "say": "Press Escape in the search box to see your whole Inbox again.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": ["The cross at the right end of the search box does the same."],
+      "why": "Search results stay until you clear them."
+    }
+  ]
+}

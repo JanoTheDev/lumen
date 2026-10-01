@@ -1,0 +1,36 @@
+{
+  "window": "main",
+  "layout": "Gmail default view in a maximized browser on a 1920x1080 display at 100% scale, left menu expanded, no reading pane",
+  "notes": "Estimated, not measured. The browser's tab strip and address bar take the top of the window; zoom and density settings shift everything, so names and OCR come first.",
+  "regions": {
+    "search": { "x": 0.13, "y": 0.09, "w": 0.45, "h": 0.06, "desc": "Search mail box at the top" },
+    "nav": {
+      "x": 0.0,
+      "y": 0.15,
+      "w": 0.14,
+      "h": 0.83,
+      "desc": "Compose button and the Inbox, Sent, Drafts menu on the left"
+    },
+    "toolbar": {
+      "x": 0.14,
+      "y": 0.15,
+      "w": 0.84,
+      "h": 0.05,
+      "desc": "Archive, Delete, Mark as read buttons above the list"
+    },
+    "message-list": {
+      "x": 0.14,
+      "y": 0.2,
+      "w": 0.84,
+      "h": 0.78,
+      "desc": "Conversation rows, newest first"
+    },
+    "compose": {
+      "x": 0.6,
+      "y": 0.4,
+      "w": 0.38,
+      "h": 0.58,
+      "desc": "New message window at the bottom right"
+    }
+  }
+}

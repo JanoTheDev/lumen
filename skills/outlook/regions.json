@@ -1,0 +1,36 @@
+{
+  "window": "main",
+  "layout": "New Outlook maximized on a 1920x1080 display at 100% scale, folder pane open, reading pane on the right",
+  "notes": "Estimated, not measured. Outlook on the web in a browser sits lower by the browser's tab strip and address bar; names and OCR come first.",
+  "regions": {
+    "search": { "x": 0.3, "y": 0.0, "w": 0.4, "h": 0.05, "desc": "Search box at the top" },
+    "ribbon": {
+      "x": 0.05,
+      "y": 0.05,
+      "w": 0.93,
+      "h": 0.08,
+      "desc": "New mail, Delete, Archive, Reply buttons"
+    },
+    "folders": {
+      "x": 0.05,
+      "y": 0.13,
+      "w": 0.14,
+      "h": 0.85,
+      "desc": "Folder list: Inbox, Drafts, Sent Items"
+    },
+    "message-list": {
+      "x": 0.19,
+      "y": 0.13,
+      "w": 0.27,
+      "h": 0.85,
+      "desc": "Email rows, newest first"
+    },
+    "reading": {
+      "x": 0.46,
+      "y": 0.13,
+      "w": 0.52,
+      "h": 0.85,
+      "desc": "The selected email, or the reply being written"
+    }
+  }
+}

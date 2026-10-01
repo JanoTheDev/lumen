@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "outlook-classic",
+  "units": [
+    {
+      "id": "basics",
+      "title": "Find email",
+      "summary": "Search your mailbox and open what you find.",
+      "lessons": ["outlook-classic-basics-01-find-an-email"]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "outlook",
+  "units": [
+    {
+      "id": "basics",
+      "title": "Reply",
+      "summary": "Answer the email in front of you.",
+      "lessons": ["outlook-basics-01-reply-to-an-email"]
+    }
+  ]
+}

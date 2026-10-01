@@ -1,0 +1,36 @@
+{
+  "window": "main",
+  "layout": "Classic Outlook maximized on a 1920x1080 display at 100% scale, simplified ribbon off, folder pane and reading pane on the right",
+  "notes": "Estimated, not measured. The ribbon height changes with the simplified ribbon; names come first.",
+  "regions": {
+    "ribbon": {
+      "x": 0.0,
+      "y": 0.03,
+      "w": 1.0,
+      "h": 0.13,
+      "desc": "Ribbon with New Email, Delete, Reply buttons"
+    },
+    "search": { "x": 0.3, "y": 0.0, "w": 0.4, "h": 0.03, "desc": "Search box in the title bar" },
+    "folders": {
+      "x": 0.0,
+      "y": 0.16,
+      "w": 0.15,
+      "h": 0.8,
+      "desc": "Folder pane: Inbox, Drafts, Sent Items"
+    },
+    "message-list": {
+      "x": 0.15,
+      "y": 0.16,
+      "w": 0.3,
+      "h": 0.8,
+      "desc": "Email rows, newest first"
+    },
+    "reading": {
+      "x": 0.45,
+      "y": 0.16,
+      "w": 0.55,
+      "h": 0.8,
+      "desc": "Reading pane with the selected email"
+    }
+  }
+}

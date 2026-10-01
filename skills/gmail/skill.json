@@ -1,0 +1,16 @@
+{
+  "id": "gmail",
+  "name": "Gmail",
+  "version": "1.0.0",
+  "description": "Gmail in the browser: read the inbox, open, search, reply, forward, write and tidy email. Drafts only; the user presses Send.",
+  "match": {
+    "title": ["- Gmail\\b"],
+    "url": ["mail.google.com/*"]
+  },
+  "uiaQuality": "partial",
+  "appVersion": ">=2025",
+  "appVersionTested": "Gmail web (September 2026) in Chrome, Edge and Firefox",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Web app inside the browser. Shortcuts from Google's Gmail help; single-key shortcuts are off by default (Settings > See all settings > Keyboard shortcuts on), so clicks by name are the fallback. Accessible names (Compose, To recipients, Subject, Message Body, Send) come from Gmail's tooltips and earlier captures, not measured on this build."
+}

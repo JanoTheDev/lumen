@@ -1,0 +1,79 @@
+{
+  "id": "outlook-basics-01-reply-to-an-email",
+  "app": "outlook",
+  "title": "Reply to an email",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": [],
+  "appVersion": ">=1.2025",
+  "summary": "Open an email, start a reply, write it in the reading pane and send it yourself.",
+  "tags": ["email", "reply"],
+  "steps": [
+    {
+      "id": "pick",
+      "say": "Click an email in the list in the middle of the window.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is an email shown in the reading pane on the right?"
+        }
+      },
+      "hints": ["The newest email is at the top of the list."],
+      "why": "A reply always belongs to the email you have open."
+    },
+    {
+      "id": "reply",
+      "say": "Press Control and R to start a reply.",
+      "target": {
+        "shortcut": "Ctrl+R"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+R"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a reply box with a Send button open?"
+            }
+          ]
+        }
+      },
+      "hints": ["The Reply button with the left arrow at the top of the email does the same."],
+      "why": "The reply already has the sender's address filled in."
+    },
+    {
+      "id": "write",
+      "say": "Type your answer above the old message.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": ["Keep it short: a greeting, your answer, your name."],
+      "why": "The old message stays below for context."
+    },
+    {
+      "id": "send",
+      "say": "Check the To line, then click Send.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the reply box closed, so the reply was sent?"
+        }
+      },
+      "hints": ["Control and Enter sends too.", "Discard throws the reply away instead."],
+      "why": "You stay in charge of sending; Lumen only writes drafts."
+    }
+  ]
+}

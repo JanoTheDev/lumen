@@ -1,0 +1,15 @@
+{
+  "id": "outlook-classic",
+  "name": "Outlook (classic)",
+  "version": "1.0.0",
+  "description": "Classic Outlook for Windows: read the inbox, search, open, reply, forward, write and tidy email. Drafts only; the user presses Send.",
+  "match": {
+    "process": ["OUTLOOK.EXE"]
+  },
+  "uiaQuality": "good",
+  "appVersion": ">=16.0",
+  "appVersionTested": "Classic Outlook for Microsoft 365 (Outlook 16.0, Current Channel), September 2026",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Win32 Office app with a full UI Automation tree: ribbon buttons, the message list as a table and edit boxes in the message window are named. Matched by process only, so new Outlook (olk.exe) and Outlook on the web use the outlook pack. Names are assumptions from earlier versions, not measured on this build."
+}
