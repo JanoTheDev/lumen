@@ -16,7 +16,7 @@ import {
   type PaidAnswer
 } from '../../src/main/howto/paid'
 import { learnHowto, learnSearchUrl, parseLearn, type GetText } from '../../src/main/howto/sources'
-import { howtoOutcome } from '../../src/main/howto/tool'
+import { howtoOutcome, lookupHowtoHandler } from '../../src/main/howto/tool'
 import type { AppIdentity, HowtoMode } from '../../src/main/howto/types'
 
 const fixture = (name: string): string => readFileSync(join(__dirname, 'fixtures', name), 'utf8')
@@ -346,5 +346,31 @@ describe('goals leave the machine redacted (review 5)', () => {
     expect(q).not.toContain('anna@clinic.example')
     expect(q).not.toContain('positive')
     expect(q).toContain('reply to')
+  })
+})
+
+describe('spawned helpers spend the parent budget', () => {
+  it('lookupHowtoHandler passes the budget id, not the helper task id', async () => {
+    const lookup = vi.fn(async () => ({
+      app: 'Blender',
+      version: '',
+      goal: 'g',
+      steps: [],
+      sources: [],
+      from: 'none' as const,
+      searches: 0,
+      costUsd: 0
+    }))
+    const handler = lookupHowtoHandler({
+      identify: async () => BLENDER,
+      lookup,
+      budgetId: 'parent-1'
+    })
+    const ctx = {
+      task: () => ({ id: 'child-1' }),
+      signal: new AbortController().signal
+    } as unknown as Parameters<typeof handler>[1]
+    await handler({ goal: 'bake normals' }, ctx)
+    expect((lookup.mock.calls[0] as unknown[])[2]).toBe('parent-1')
   })
 })

@@ -159,11 +159,15 @@ export function taskLearner(): TaskLearner {
   })
 }
 
-/** lookup_howto for an agent run; `learner` watches notes it returns. */
-export function howtoToolHandler(learner?: TaskLearner): ToolHandler {
+/**
+ * lookup_howto for an agent run; `learner` watches notes it returns. `budgetId`: the task whose
+ * paid-search cap applies (a spawn_task helper spends its parent's, not a fresh one).
+ */
+export function howtoToolHandler(learner?: TaskLearner, budgetId?: string): ToolHandler {
   return lookupHowtoHandler({
     identify: (app, signal) => identify(app, signal),
     lookup: (id, goal, taskId, signal) => lookup(id, goal, taskId, signal),
-    onResult: (id, r) => learner?.looked(id, r)
+    onResult: (id, r) => learner?.looked(id, r),
+    ...(budgetId ? { budgetId } : {})
   })
 }

@@ -45,9 +45,14 @@ import { transcripts } from '../transcript-hub'
 
 const TURN_MAX_TOKENS = 2048
 
-/** lookup_howto (05 T36), loaded on first use (it pulls in the providers and the agent). */
-const lookupHowto: ToolHandler = async (input, ctx) =>
-  (await import('../../howto')).howtoToolHandler()(input, ctx)
+/**
+ * lookup_howto (05 T36), loaded on first use (it pulls in the providers and the agent). A helper
+ * spends its parent's paid-search budget.
+ */
+const lookupHowto =
+  (budgetId?: string): ToolHandler =>
+  async (input, ctx) =>
+    (await import('../../howto')).howtoToolHandler(undefined, budgetId)(input, ctx)
 const FOREGROUND_ASK_MS = 60_000
 /** A connector confirm of a background task counts as a no after this (the cap keeps running). */
 const UNATTENDED_CONFIRM_MS = 120_000
@@ -381,7 +386,7 @@ async function runTask(
     readFile: (path) => readUnder(path, cfg.readFolders, envelopes),
     memorySearch: (input) => memorySearchFor(input),
     // A skill run reaches only its own sites, so it gets no web lookups.
-    ...(envelopes.length ? {} : { howto: lookupHowto }),
+    ...(envelopes.length ? {} : { howto: lookupHowto(task.parentId) }),
     memoryWrite: (fact) => {
       if (isSensitive(fact)) return 'rejected'
       const r = memory().remember(fact, { layer: 'working' })

@@ -68,6 +68,8 @@ export interface HowtoToolPorts {
   lookup(id: AppIdentity, goal: string, taskId: string, signal: AbortSignal): Promise<HowtoResult>
   /** Every result (the app-notes learner keeps the steps it may confirm later). */
   onResult?(id: AppIdentity, r: HowtoResult): void
+  /** Task whose paid-search budget this lookup spends (a spawned helper: its parent's). */
+  budgetId?: string
 }
 
 export function lookupHowtoHandler(ports: HowtoToolPorts): ToolHandler {
@@ -79,7 +81,8 @@ export function lookupHowtoHandler(ports: HowtoToolPorts): ToolHandler {
         isError: true
       }
     const id = await ports.identify(parsed.data.app.trim() || undefined, ctx.signal)
-    const r = await ports.lookup(id, parsed.data.goal, ctx.task().id, ctx.signal)
+    const budget = ports.budgetId ?? ctx.task().id
+    const r = await ports.lookup(id, parsed.data.goal, budget, ctx.signal)
     ports.onResult?.(id, r)
     return howtoOutcome(r)
   }
