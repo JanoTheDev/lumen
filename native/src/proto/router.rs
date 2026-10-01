@@ -272,8 +272,10 @@ impl Router {
     pub fn cancel(&self, target: &Value) -> bool {
         let call = self.inflight.lock().unwrap().get(&key_of(target)).cloned();
         let Some(call) = call else { return false };
+        // Claim the response before waking the worker, or its own E_CANCELLED could win the race.
+        let answered = self.finish(&call, Err(AgentError::new(E_CANCELLED, format!("{} cancelled", call.cmd))));
         call.token.cancel(E_CANCELLED);
-        self.finish(&call, Err(AgentError::new(E_CANCELLED, format!("{} cancelled", call.cmd))))
+        answered
     }
 
     /// True while `lane` has queued/running calls, or went idle less than `grace` ago.
@@ -326,8 +328,8 @@ fn timer_loop(router: Weak<Router>, rx: Receiver<(Instant, Arc<Call>)>) {
             let Reverse(Deadline(_, call)) = heap.pop().unwrap();
             let Some(router) = router.upgrade() else { return };
             if !call.token.is_cancelled() {
-                call.token.cancel(E_TIMEOUT);
                 router.finish(&call, Err(AgentError::new(E_TIMEOUT, format!("{} timed out", call.cmd))));
+                call.token.cancel(E_TIMEOUT);
             }
         }
     }
@@ -405,7 +407,7 @@ mod tests {
         r.dispatch(req(5, "sleep", json!({"ms": 60_000})));
         std::thread::sleep(Duration::from_millis(50));
         let t0 = Instant::now();
-        assert!(r.cancel(&json!(5)));
+        assert!(r.cancel(&json!(5)), "{:?}", lines(&r, &s));
         let l = wait_for(&r, &s, 1);
         assert!(t0.elapsed() < Duration::from_secs(2));
         assert_eq!(l[0]["error"]["code"], "E_CANCELLED");
