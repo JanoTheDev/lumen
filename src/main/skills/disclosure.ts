@@ -163,6 +163,18 @@ export function fillParams(
   m: SkillManifest,
   args: SkillArgs
 ): { text: string; missing: string[]; problems: string[] } {
+  const { values, missing, problems } = resolveParams(m, args)
+  const text = body.replace(/\{([A-Za-z_]\w*)\}/g, (all, key: string) =>
+    key in values ? values[key] : all
+  )
+  return { text, missing, problems }
+}
+
+/** Values for the declared params (given, else default), the ones missing, and bad values. */
+export function resolveParams(
+  m: SkillManifest,
+  args: SkillArgs
+): { values: Record<string, string>; missing: string[]; problems: string[] } {
   const given = argMap(args)
   const values: Record<string, string> = {}
   const missing: string[] = []
@@ -182,10 +194,7 @@ export function fillParams(
   }
   for (const key of Object.keys(given))
     if (!(key in m.params)) problems.push(`unknown parameter "${key}"`)
-  const text = body.replace(/\{([A-Za-z_]\w*)\}/g, (all, key: string) =>
-    key in values ? values[key] : all
-  )
-  return { text, missing, problems }
+  return { values, missing, problems }
 }
 
 /** Files of a skill (names + sizes), SKILL.md and hidden files left out. */

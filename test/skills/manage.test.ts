@@ -46,7 +46,10 @@ describe('install / export', () => {
 
   it('round-trips export → import on a clean profile', () => {
     const src = writeSkill(r.user, 'my-skill', {
-      files: { 'reference/notes.md': 'Notes', 'steps.json': '{"steps":[]}' }
+      files: {
+        'reference/notes.md': 'Notes',
+        'steps.json': '{"steps":[{"do":"keys","combo":"ctrl+s"}]}'
+      }
     })
     reg.load()
     const out = exportSkill(reg, 'my-skill')

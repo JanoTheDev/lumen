@@ -1,12 +1,13 @@
 // Skills as a `.lumen` PackKind (11 T06, CONTRACTS C10): a pack folder is a skill folder with
 // SKILL.md at its root. Data files only (no scripts, ever); SKILL.md must parse, its name must
-// match the folder, steps.json must be JSON. Builtin skill names, app-pack ids and reserved
+// match the folder, steps.json must follow the steps schema. Builtin skill names, app-pack ids and reserved
 // folder names cannot be taken by a community skill. No Electron.
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join } from 'path'
 import type { PackKind } from '../packs/install'
 import { MAX_SKILL_FILE_BYTES, SKILL_FILE, parseSkillFile } from './manifest'
 import { RESERVED_DIRS, SKILL_PACK_KIND } from './registry'
+import { STEPS_FILE, parseStepsFile } from './steps'
 
 export const SKILL_FILE_EXT = [
   '.md',
@@ -63,8 +64,17 @@ export function validateSkillDir(dir: string): string[] {
     problems.push(`${SKILL_FILE}: ${(e as Error).message}`)
   }
   for (const f of jsonFiles(dir)) {
+    const text = readFileSync(join(dir, f), 'utf8')
+    if (f === STEPS_FILE) {
+      try {
+        parseStepsFile(text)
+      } catch (e) {
+        problems.push(`${f}: ${(e as Error).message}`)
+      }
+      continue
+    }
     try {
-      JSON.parse(readFileSync(join(dir, f), 'utf8'))
+      JSON.parse(text)
     } catch {
       problems.push(`${f}: not valid JSON`)
     }
