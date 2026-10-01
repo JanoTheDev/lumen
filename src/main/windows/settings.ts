@@ -1,9 +1,8 @@
-// Panel window: settings and onboarding (ui v2 loads the panel entry; v1 the settings entry).
+// Panel window: settings and onboarding.
 import { nativeTheme, type BrowserWindow } from 'electron'
 import type { EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { live, registerWindow, sendTo } from './registry'
-import { uiV2 } from './ui-mode'
 import { loadConfig } from '../config'
 
 let win: BrowserWindow | null = null
@@ -51,8 +50,7 @@ export function create(route = 'settings'): void {
   })
   win = w
   w.once('ready-to-show', () => w.show())
-  if (uiV2()) loadRenderer(w, 'panel', `/${route}`)
-  else loadRenderer(w, 'settings', `/${route}`)
+  loadRenderer(w, 'panel', `/${route}`)
   w.on('closed', () => {
     win = null
   })

@@ -1,4 +1,4 @@
-// Assistant bar (ui v2): one bottom-centre surface for listening, status, answers and
+// Assistant bar: one bottom-centre surface for listening, status, answers and
 // confirmations. Main owns the AssistantState; the renderer only draws it.
 //
 // The window is sized once per display (wide enough for the bar, 60% of the work area tall)

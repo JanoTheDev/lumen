@@ -8,7 +8,7 @@ import { join, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { is } from '@electron-toolkit/utils'
 
-export type RendererEntry = 'settings' | 'assistant' | 'screen' | 'panel' | 'a11y'
+export type RendererEntry = 'assistant' | 'screen' | 'panel' | 'a11y'
 
 /** Locked-down webPreferences shared by every Lumen window. */
 export function securePrefs(): WebPreferences {
