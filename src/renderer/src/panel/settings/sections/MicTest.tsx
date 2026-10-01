@@ -28,8 +28,11 @@ export function MicTest({
   const [message, setMessage] = useState('')
   const fill = useRef<HTMLDivElement>(null)
   const stopRef = useRef<(() => void) | null>(null)
+  // Bumped by every stop (and unmount): a start still waiting for the mic is then stale.
+  const genRef = useRef(0)
 
   const stop = useCallback((): void => {
+    genRef.current++
     stopRef.current?.()
     stopRef.current = null
   }, [])
@@ -39,14 +42,21 @@ export function MicTest({
 
   const start = async (): Promise<void> => {
     stop()
+    const gen = genRef.current
     setMessage('Say something…')
     let stream: MediaStream
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: micConstraints(deviceId) })
     } catch (err) {
+      if (gen !== genRef.current) return
       const text = micError(err)
       setMessage(text)
       announce(text, 'assertive')
+      return
+    }
+    if (gen !== genRef.current) {
+      // Stopped, restarted or unmounted while the mic opened: let this stream go.
+      stream.getTracks().forEach((t) => t.stop())
       return
     }
     onOpened()
