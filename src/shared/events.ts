@@ -101,6 +101,17 @@ export interface ScreenScene {
   dwellSnap?: Rect
   /** Switch scanning (06): ring around the highlighted item and/or a menu of the level. */
   scan?: ScanScene
+  /** Focus mode (11 T14): everything but `keep` is dimmed. Click-through like the rest. */
+  focus?: FocusScene
+}
+
+export interface FocusScene {
+  /** soft = 40% dim; strong = 85% dim plus labels on the hidden areas. */
+  level: 'soft' | 'strong'
+  /** Rects left clear (global logical px, then display DIP). */
+  keep: Rect[]
+  /** Strong only: what a dimmed area holds ("Outliner"). */
+  labels?: { rect: Rect; text: string }[]
 }
 
 export interface ScanScene {

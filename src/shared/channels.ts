@@ -24,6 +24,16 @@ import type {
 type Confidence = 'high' | 'medium' | 'low'
 
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
+/** Settings, Smart helpers: what the shortcut coach and fatigue proposals remember. */
+export interface CoachStatus {
+  /** Shortcuts the user now uses (tips stopped). */
+  learned: { app: string; action: string; combo: string }[]
+  /** Menu commands being counted. */
+  tracking: number
+  /** Fatigue proposals answered (yes / no), remembered. */
+  answered: { id: string; answer: 'yes' | 'no' }[]
+}
+
 export interface InvokeChannels {
   'assistant:query': {
     args: [prompt: string, opts?: { lowDetail?: boolean }]
@@ -116,6 +126,14 @@ export interface InvokeChannels {
   'tasks:run-again': { args: [id: string]; result: { ok: boolean; id?: string } }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
+  /** Learning journal (11 T23): days with a note, newest first; one day's markdown. */
+  'helpers:journal-days': { args: []; result: string[] }
+  'helpers:journal-read': { args: [date: string]; result: { ok: boolean; markdown?: string } }
+  /** Deletes every journal note. */
+  'helpers:journal-clear': { args: []; result: { ok: boolean } }
+  /** Shortcut coach (11 T17) and fatigue answers (11 T18) kept on this PC. */
+  'helpers:coach-status': { args: []; result: CoachStatus }
+  'helpers:coach-reset': { args: []; result: { ok: boolean } }
   /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
   'teach:list': { args: [appId?: string]; result: LessonListItem[] }
   /** Starts a lesson; the lesson left part-way resumes on its step. */
@@ -875,6 +893,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'tasks:answer',
   'tasks:run-again',
   'audit:list',
+  'helpers:journal-days',
+  'helpers:journal-read',
+  'helpers:journal-clear',
+  'helpers:coach-status',
+  'helpers:coach-reset',
   'teach:list',
   'teach:start',
   'teach:command',

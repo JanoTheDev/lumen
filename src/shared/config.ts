@@ -243,6 +243,54 @@ export const A11Y_DEFAULTS = {
   shortcuts: A11yShortcuts
 }
 
+export const READING_LEVELS = ['plain', 'standard', 'expert'] as const
+export type ReadingLevel = (typeof READING_LEVELS)[number]
+
+/**
+ * Opt-in helpers (11 Phase C): focus mode, undo, shortcut coach, fatigue proposals, error
+ * rescue, "what changed?", reading level and the learning journal. Everything stays local.
+ */
+const helpersSchema = z.object({
+  /** How strongly focus mode dims the rest of the screen. */
+  focusLevel: z.enum(['soft', 'strong']),
+  /** Turn focus mode on by itself while a lesson step shows its target. */
+  focusWithLessons: z.boolean(),
+  /** Keep how to reverse Lumen's actions ("undo that"). Memory only, plus file copies. */
+  undo: z.boolean(),
+  shortcutCoach: z.boolean(),
+  /** keys: suggest the key combo; voice: suggest a voice command instead of a chord. */
+  coachMode: z.enum(['keys', 'voice']),
+  /** Menu uses before the first tip. */
+  coachAfter: z.number().int().min(2).max(10),
+  fatigue: z.boolean(),
+  errorRescue: z.boolean(),
+  /** UIA snapshot + low-res screenshot at each command, for "what changed?". */
+  whatChanged: z.boolean(),
+  readingLevel: z.enum(READING_LEVELS),
+  /** Per-app reading level by app-pack id; overrides readingLevel. */
+  readingLevelApps: z
+    .record(z.string().max(80), z.enum(READING_LEVELS))
+    .refine((o) => Object.keys(o).length <= 100, 'too many apps'),
+  journal: z.boolean()
+})
+
+export type HelpersConfig = z.infer<typeof helpersSchema>
+
+export const HELPERS_DEFAULTS: HelpersConfig = {
+  focusLevel: 'soft',
+  focusWithLessons: false,
+  undo: false,
+  shortcutCoach: false,
+  coachMode: 'keys',
+  coachAfter: 3,
+  fatigue: false,
+  errorRescue: false,
+  whatChanged: false,
+  readingLevel: 'standard',
+  readingLevelApps: {},
+  journal: false
+}
+
 export const configV2Schema = z.object({
   version: z.literal(2),
   theme: v1.theme,
@@ -401,6 +449,7 @@ export const configV2Schema = z.object({
    * autoUpdate: daily check, background download, install on quit (installed build only).
    */
   system: z.object({ startAtLogin: z.boolean(), autoUpdate: z.boolean() }),
+  helpers: helpersSchema.default(HELPERS_DEFAULTS),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -500,7 +549,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   },
   ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
-  system: { startAtLogin: false, autoUpdate: true }
+  system: { startAtLogin: false, autoUpdate: true },
+  helpers: HELPERS_DEFAULTS
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -587,7 +637,8 @@ const patchObject = z
     dictation: s2.dictation.partial().strict(),
     ui: s2.ui.partial().strict(),
     onboarding: s2.onboarding.partial().strict(),
-    system: s2.system.partial().strict()
+    system: s2.system.partial().strict(),
+    helpers: helpersSchema.partial().strict()
   })
   .partial()
   .strict()

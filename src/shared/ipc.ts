@@ -66,6 +66,8 @@ export const auditQuerySchema = z
     taskId: z.string().max(64).optional()
   })
   .strict()
+/** helpers:journal-read day (11 T23). */
+export const journalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 /** Background task ids (08 T29) and a typed answer to a task's question. */
 export const bgTaskIdSchema = z.string().regex(/^bg_[a-z0-9]{4,40}$/)
 export const bgTaskAnswerSchema = z.tuple([bgTaskIdSchema, z.string().trim().min(1).max(500)])
