@@ -15,7 +15,8 @@ export function agentInitArgs(cfg: AppConfig): AgentInitArgs {
   return buildAgentInitState(cfg, {
     scale: screen.getPrimaryDisplay().scaleFactor,
     focusEvents: focusEventsWanted(),
-    mouseEvents: mouseEvents.wanted()
+    mouseEvents: mouseEvents.wanted(),
+    systemEvents: !!getAgent()?.hasCapability('system-settings')
   })
 }
 

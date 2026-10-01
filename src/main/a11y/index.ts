@@ -25,7 +25,7 @@ import * as settingsWin from '../windows/settings'
 import { setStatus } from '../windows/status'
 import { uiV2 } from '../windows/ui-mode'
 import { Announcer, type AnnounceOptions } from './announce'
-import { screenReaderActive, setAtState } from './at-state'
+import { screenReaderActive } from './at-state'
 import { focusEventsWanted, pushFocusSubscription, wantFocusEvents } from './focus-events'
 import { FocusNarrator } from './focus-narration'
 import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
@@ -34,14 +34,13 @@ import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
 import { installDwell } from './install-dwell'
 import { installShortcuts } from './install-shortcuts'
 import { installSwitch, type SwitchControl } from './install-switch'
-import { onTextScaleChange, watchTextScale } from './text-scale'
+import { installSystemEvents, refreshAtState } from './system-events'
+import { onTextScaleChange } from './text-scale'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
 const ACT_TIMEOUT_MS = 3000
 const INPUT_TIMEOUT_MS = 15_000
-
-const AT_POLL_MS = 60_000
 
 let announcer: Announcer | null = null
 let a11y: A11yCommands | null = null
@@ -208,17 +207,6 @@ function createIo(): A11yIo {
   }
 }
 
-/** Asks the agent which assistive tech runs; agents without a11y_state keep the last state. */
-async function refreshAtState(): Promise<void> {
-  const agent = getAgent()
-  if (!agent?.running) return
-  try {
-    if (setAtState(await agent.request('a11y_state', {}, { timeoutMs: 2000 }))) narrator?.sync()
-  } catch {
-    /* keep the last state */
-  }
-}
-
 function installFocusNarration(): void {
   narrator = new FocusNarrator({
     enabled: () => loadConfig().a11y.focusNarration,
@@ -231,12 +219,13 @@ function installFocusNarration(): void {
   onBroadcast('settings:changed', () => narrator?.sync())
   const agent = getAgent()
   agent?.onEvent('focus-changed', (data) => narrator?.onFocusChanged(data))
+  if (agent) installSystemEvents(agent, () => narrator?.sync())
   agent?.onEvent('agent-ready', () => {
-    // init carries focus-changed already; re-assert it (in case init failed) and re-read the screen reader.
+    // init carries focus-changed and a11y-state already; re-assert focus (in case init failed)
+    // and read the screen reader once in case the first a11y-state event was missed.
     if (focusEventsWanted()) pushFocusSubscription()
-    void refreshAtState()
+    void refreshAtState(agent).then((changed) => changed && narrator?.sync())
   })
-  setInterval(() => void refreshAtState(), AT_POLL_MS).unref?.()
   narrator.sync()
 }
 
@@ -262,7 +251,6 @@ export function installA11y(): void {
   installHelpShortcut()
   // Windows text size changed: re-send the config (renderer font size) and re-zoom windows.
   onTextScaleChange(() => broadcastConfig(loadConfig()))
-  watchTextScale()
   const sw = installSwitch({
     commands: () => a11y,
     announce: (text) => announce(text, { kind: 'scan' }),

@@ -1,5 +1,5 @@
-// Assistive tech running on this PC (agent `a11y_state`), refreshed every 60 s: the announce
-// policy needs the screen reader, coexistence (T20) needs Voice Access / Dragon.
+// Assistive tech running on this PC (agent `a11y_state` once, then `a11y-state` events): the
+// announce policy needs the screen reader, coexistence (T20) needs Voice Access / Dragon.
 
 export type ScreenReader = 'nvda' | 'jaws' | 'narrator' | 'other' | null
 

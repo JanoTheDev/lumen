@@ -242,7 +242,11 @@ describe('buildAgentInitState', () => {
       'focus-changed'
     ])
     expect(agentSubscriptions(cfg)).toEqual(['mouse-moved'])
-    expect(agentSubscriptions(makeConfig(), false, true)).toEqual(['mouse-moved'])
+    expect(agentSubscriptions(makeConfig(), { mouseEvents: true })).toEqual(['mouse-moved'])
+    expect(agentSubscriptions(makeConfig(), { systemEvents: true })).toEqual([
+      'system-settings',
+      'a11y-state'
+    ])
     expect(buildAgentInitState(makeConfig(), { mouseEvents: true }).subscriptions).toEqual([
       'mouse-moved'
     ])

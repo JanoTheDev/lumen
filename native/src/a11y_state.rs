@@ -49,9 +49,20 @@ fn process_names() -> BTreeSet<String> {
     names
 }
 
+/// The current assistive-tech state (process snapshot + SPI flag).
+#[cfg(windows)]
+pub fn current() -> Value {
+    classify(&process_names(), crate::announce::screen_reader_running())
+}
+
+#[cfg(not(windows))]
+pub fn current() -> Value {
+    classify(&BTreeSet::new(), false)
+}
+
 #[cfg(windows)]
 pub fn cmd_a11y_state() -> crate::proto::CmdResult {
-    Ok(classify(&process_names(), crate::announce::screen_reader_running()))
+    Ok(current())
 }
 
 #[cfg(test)]

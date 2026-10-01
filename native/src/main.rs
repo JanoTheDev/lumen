@@ -19,6 +19,7 @@ mod monitors;
 mod ocr;
 mod proto;
 mod stdio;
+mod system;
 #[cfg(windows)]
 mod uia;
 mod window;

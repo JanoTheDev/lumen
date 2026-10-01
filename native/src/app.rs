@@ -26,6 +26,8 @@ pub const CAPABILITIES: &[&str] = &[
     "announce",
     "execute",
     "a11y-state",
+    "system-settings",
+    "a11y-events",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -220,6 +222,10 @@ pub fn register_core(app: &Arc<App>) {
 
     app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
     app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
+    for event in [crate::system::SETTINGS_EVENT, crate::system::A11Y_EVENT] {
+        let out = app.router.out().clone();
+        app.add_subscribable(event, move |on| crate::system::set_enabled(&out, event, on));
+    }
 
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")
