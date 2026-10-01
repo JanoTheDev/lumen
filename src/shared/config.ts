@@ -162,6 +162,13 @@ export const configV2Schema = z.object({
     activeSkill: z.string().max(80).nullable(),
     hintLevel: z.enum(['auto', 'minimal', 'detailed'])
   }),
+  memory: z.object({
+    enabled: z.boolean(),
+    autoLearn: z.enum(['auto', 'ask', 'off']),
+    retentionDays: z.number().int().min(1).max(3650),
+    maxInjectTokens: z.number().int().min(0).max(8000),
+    privateMode: z.boolean()
+  }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -201,7 +208,14 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },
   privacy: { saveScreenshots: false, telemetry: false },
-  teach: { activeSkill: null, hintLevel: 'auto' }
+  teach: { activeSkill: null, hintLevel: 'auto' },
+  memory: {
+    enabled: false,
+    autoLearn: 'ask',
+    retentionDays: 365,
+    maxInjectTokens: 1200,
+    privateMode: false
+  }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -281,7 +295,8 @@ export const configPatchSchema = z
     buddy: s2.buddy.partial().strict(),
     agent: s2.agent.partial().strict(),
     privacy: s2.privacy.partial().strict(),
-    teach: s2.teach.partial().strict()
+    teach: s2.teach.partial().strict(),
+    memory: s2.memory.partial().strict()
   })
   .partial()
   .strict()
