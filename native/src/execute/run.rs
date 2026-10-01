@@ -237,17 +237,50 @@ fn navigate(url: &str, token: &CancelToken) -> Result<(), AgentError> {
         _ => failed(format!("navigate_url: could not focus the browser: {}", e.message)),
     })?;
     token.sleep(ms(500))?;
-    if window::foreground() != hwnd {
-        return Err(failed("navigate_url: the browser lost focus"));
-    }
+    // Re-checked before every step: a popup or the user can take focus while the URL is
+    // typed, and the rest of it, Delete and Enter must not go to that window.
+    let still_front = || {
+        if window::foreground() == hwnd {
+            Ok(())
+        } else {
+            Err(failed("navigate_url: the browser lost focus"))
+        }
+    };
+    still_front()?;
     chord(&[VK_CONTROL, 0x4C], token)?; // Ctrl+L
     token.sleep(ms(150))?;
+    still_front()?;
     chord(&[VK_CONTROL, 0x41], token)?; // Ctrl+A
-    type_text(url, token)?;
+    for part in text_chunks(url, URL_CHUNK) {
+        still_front()?;
+        type_text(part, token)?;
+    }
     token.sleep(ms(100))?;
+    still_front()?;
     chord(&[VK_DELETE], token)?; // drop inline autocompletion so Enter opens exactly `url`
+    still_front()?;
     chord(&[VK_RETURN], token)?;
     token.sleep(ms(200))
+}
+
+/// URL characters typed between two focus checks.
+const URL_CHUNK: usize = 24;
+
+/// `text` split into pieces of at most `n` characters (on char boundaries).
+fn text_chunks(text: &str, n: usize) -> Vec<&str> {
+    let n = n.max(1);
+    let mut out = Vec::new();
+    let mut start = 0;
+    for (count, (i, _)) in text.char_indices().enumerate() {
+        if count > 0 && count % n == 0 {
+            out.push(&text[start..i]);
+            start = i;
+        }
+    }
+    if start < text.len() {
+        out.push(&text[start..]);
+    }
+    out
 }
 
 pub fn run(action: &Action, token: &CancelToken) -> CmdResult {
@@ -296,4 +329,19 @@ pub fn cmd_execute(args: &Args, token: &CancelToken) -> CmdResult {
     let r = run(&action, token);
     tracing::info!("execute {} done in {:?}", action.kind(), t0.elapsed());
     r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::text_chunks;
+
+    #[test]
+    fn chunks_on_char_boundaries() {
+        assert_eq!(text_chunks("abcdefg", 3), ["abc", "def", "g"]);
+        assert_eq!(text_chunks("abcdef", 3), ["abc", "def"]);
+        assert_eq!(text_chunks("", 3), Vec::<&str>::new());
+        assert_eq!(text_chunks("äöüß", 2), ["äö", "üß"]);
+        assert_eq!(text_chunks("ab", 0), ["a", "b"]);
+        assert_eq!(text_chunks("https://example.com/x", 24).concat(), "https://example.com/x");
+    }
 }
