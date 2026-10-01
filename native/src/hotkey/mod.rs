@@ -2,7 +2,8 @@
 //! else needs the low-level hooks: switch keys/buttons (`switch.rs`, with a
 //! `WH_MOUSE_LL` hook only while mouse switches are set), observe-only `key-combo`
 //! events (`combo.rs`), physical key activity for dwell (`activity.rs`) and throttled
-//! `user-activity` pings (any physical key or mouse event, never which key) while subscribed.
+//! `user-activity` pings (any physical key or mouse event, never which key) while subscribed,
+//! and a mouse push-to-talk button (`ptt_mouse`) reported as `dictation-down` / `dictation-up`.
 //!
 //! The hook callbacks only step thread-local state, write atomics and queue events
 //! with a non-blocking send; they take no locks shared with other threads. Config
@@ -39,6 +40,7 @@ struct Bound {
     combos: bool,
     activity: bool,
     user_activity: bool,
+    ptt_mouse: Option<u8>,
 }
 
 /// Everything the hook thread needs.
@@ -52,6 +54,8 @@ pub struct HookConfig {
     pub activity: bool,
     /// Report `user-activity` (subscribed): needs both hooks.
     pub user_activity: bool,
+    /// Mouse push-to-talk button (index into switch::MOUSE_BUTTONS) for dictation.
+    pub ptt_mouse: Option<u8>,
 }
 
 impl HookConfig {
@@ -61,11 +65,12 @@ impl HookConfig {
             && !self.combos
             && !self.activity
             && !self.user_activity
+            && self.ptt_mouse.is_none()
     }
 
-    /// The mouse hook is only needed for mouse switches and user-activity.
+    /// The mouse hook is only needed for mouse switches, push-to-talk and user-activity.
     pub fn wants_mouse(&self) -> bool {
-        !self.switches.mouse.is_empty() || self.user_activity
+        !self.switches.mouse.is_empty() || self.user_activity || self.ptt_mouse.is_some()
     }
 }
 
@@ -93,6 +98,25 @@ pub struct Update<'a> {
     pub combos: Option<bool>,
     pub activity: Option<bool>,
     pub user_activity: Option<bool>,
+    /// `Some(None)` turns mouse push-to-talk off.
+    pub ptt_mouse: Option<Option<u8>>,
+}
+
+/// Mouse buttons that may be a push-to-talk button: never left or right (normal clicking).
+pub const PTT_BUTTONS: &[&str] = &["middle", "x1", "x2"];
+
+/// "" → off; middle / x1 / x2 → its index into switch::MOUSE_BUTTONS.
+pub fn parse_ptt_button(name: &str) -> Result<Option<u8>, AgentError> {
+    let low = name.trim().to_ascii_lowercase();
+    if low.is_empty() {
+        return Ok(None);
+    }
+    if !PTT_BUTTONS.contains(&low.as_str()) {
+        return Err(AgentError::invalid(format!(
+            "push-to-talk button must be one of middle, x1, x2 (got '{name}')"
+        )));
+    }
+    Ok(switch::MOUSE_BUTTONS.iter().position(|b| *b == low).map(|i| i as u8))
 }
 
 fn parse_opt(accel: &str) -> Result<Option<accel::Hotkey>, AgentError> {
@@ -144,6 +168,9 @@ impl Service {
         if let Some(u) = update.user_activity {
             next.user_activity = u;
         }
+        if let Some(p) = update.ptt_mouse {
+            next.ptt_mouse = p;
+        }
         let mut bindings = vec![];
         if let Some(hk) = parse_opt(&next.assistant)? {
             bindings.push(Binding { hotkey: hk, down: "hotkey-down", up: "hotkey-up" });
@@ -157,6 +184,7 @@ impl Service {
             combos: next.combos,
             activity: next.activity,
             user_activity: next.user_activity,
+            ptt_mouse: next.ptt_mouse,
         };
         if config.is_idle() && self.hook.lock().unwrap().is_none() {
             *bound = next;
@@ -222,6 +250,8 @@ thread_local! {
 struct HookCtx {
     fsm: Fsm,
     switch: SwitchFsm,
+    /// The push-to-talk button as a one-button switch (suppressed, repeat-free, up always seen).
+    ptt: SwitchFsm,
     combos: bool,
     /// Last reported key-down, to skip its auto-repeat.
     combo_vk: Option<u16>,
@@ -237,6 +267,10 @@ impl HookCtx {
             deliver(out, self.fsm.configure(config.hotkeys));
             for (index, down) in self.switch.configure(config.switches) {
                 emit_switch(out, index, down);
+            }
+            let ptt = Switches { keys: vec![], mouse: config.ptt_mouse.into_iter().collect() };
+            for (_, down) in self.ptt.configure(ptt) {
+                emit_ptt(out, down);
             }
         }
         self.combos = config.combos;
@@ -291,6 +325,13 @@ impl HookCtx {
         if let Some((index, down)) = report {
             emit_switch(&out, index, down);
         }
+        if suppress {
+            return true;
+        }
+        let (suppress, report) = self.ptt.mouse(button, down);
+        if let Some((_, down)) = report {
+            emit_ptt(&out, down);
+        }
         suppress
     }
 }
@@ -298,6 +339,14 @@ impl HookCtx {
 fn emit_switch(out: &Out, index: usize, down: bool) {
     if !out.try_emit("switch", json!({"index": index, "down": down})) {
         tracing::warn!("dropped switch event: writer queue full");
+    }
+}
+
+/// Mouse push-to-talk acts like the dictation hotkey (hold, double-tap hands-free).
+fn emit_ptt(out: &Out, down: bool) {
+    let event = if down { "dictation-down" } else { "dictation-up" };
+    if !out.try_emit(event, json!({"source": "mouse"})) {
+        tracing::warn!("dropped {event}: writer queue full");
     }
 }
 
@@ -535,4 +584,40 @@ mod hook {
         Err(AgentError::unsupported("hotkeys need Windows"))
     }
     pub fn mask_win() {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ptt_button_names() {
+        assert_eq!(parse_ptt_button("").unwrap(), None);
+        assert_eq!(parse_ptt_button(" Middle ").unwrap(), Some(2));
+        assert_eq!(parse_ptt_button("x1").unwrap(), Some(3));
+        assert_eq!(parse_ptt_button("x2").unwrap(), Some(4));
+        assert!(parse_ptt_button("left").is_err(), "left click is never push-to-talk");
+        assert!(parse_ptt_button("right").is_err());
+        assert!(parse_ptt_button("wheel").is_err());
+    }
+
+    #[test]
+    fn ptt_needs_only_the_mouse_hook() {
+        let idle = HookConfig::default();
+        assert!(idle.is_idle() && !idle.wants_mouse());
+        let ptt = HookConfig { ptt_mouse: Some(3), ..Default::default() };
+        assert!(!ptt.is_idle());
+        assert!(ptt.wants_mouse());
+    }
+
+    #[test]
+    fn ptt_button_is_a_one_button_switch() {
+        let mut f = SwitchFsm::default();
+        f.configure(Switches { keys: vec![], mouse: vec![3] });
+        assert_eq!(f.mouse(3, true), (true, Some((0, true))));
+        assert_eq!(f.mouse(3, true), (true, None), "repeat swallowed");
+        assert_eq!(f.mouse(0, true), (false, None), "left click untouched");
+        // Turning it off while held reports the release.
+        assert_eq!(f.configure(Switches::default()), vec![(0, false)]);
+    }
 }

@@ -584,7 +584,45 @@ pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
     out["editable"] = json!(is_editable(role, has_value, readonly, has_text_edit, password));
     out["password"] = json!(password);
     out["valueTail"] = json!(tail);
+    // Where to show the dictation pill: the text caret, else the focused element.
+    // SAFETY: current-property read on a live element.
+    let rect = unsafe { el.CurrentBoundingRectangle() }.ok().map(Rect::from).filter(|r| !r.is_empty());
+    out["rect"] = rect.map_or(Value::Null, Rect::to_json);
+    out["caret"] = system_caret().map_or(Value::Null, Rect::to_json);
     Ok(out)
+}
+
+/// A caret rect worth showing something next to: some height, not absurdly large.
+pub fn caret_from(x: i32, y: i32, w: i32, h: i32) -> Option<Rect> {
+    (h > 0 && h <= 400 && (0..=400).contains(&w)).then(|| Rect::new(x, y, w.max(1), h))
+}
+
+/// The foreground thread's system caret (Win32 edits, many editors and browsers), in screen px.
+fn system_caret() -> Option<Rect> {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::Graphics::Gdi::ClientToScreen;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GUITHREADINFO, GetGUIThreadInfo, GetWindowThreadProcessId,
+    };
+    let fg = HWND(window::foreground() as *mut _);
+    // SAFETY: pure query; a stale handle yields 0.
+    let thread = unsafe { GetWindowThreadProcessId(fg, None) };
+    if thread == 0 {
+        return None;
+    }
+    let mut gti = GUITHREADINFO { cbSize: std::mem::size_of::<GUITHREADINFO>() as u32, ..Default::default() };
+    // SAFETY: cbSize is set; the out-param is valid.
+    unsafe { GetGUIThreadInfo(thread, &mut gti) }.ok()?;
+    if gti.hwndCaret.is_invalid() {
+        return None;
+    }
+    let r = gti.rcCaret;
+    let mut tl = POINT { x: r.left, y: r.top };
+    // SAFETY: valid out-param; the caret window may be gone, which returns false.
+    if !unsafe { ClientToScreen(gti.hwndCaret, &mut tl) }.as_bool() {
+        return None;
+    }
+    caret_from(tl.x, tl.y, r.right - r.left, r.bottom - r.top)
 }
 
 // ---- focus-changed events --------------------------------------------------
@@ -595,6 +633,13 @@ pub mod watch;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn caret_rect_sanity() {
+        assert_eq!(caret_from(10, 20, 0, 18), Some(Rect::new(10, 20, 1, 18)));
+        assert_eq!(caret_from(10, 20, 2, 0), None);
+        assert_eq!(caret_from(10, 20, 2, 2000), None);
+    }
 
     #[test]
     fn editable() {

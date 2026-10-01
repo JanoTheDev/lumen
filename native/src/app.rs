@@ -37,6 +37,9 @@ pub const CAPABILITIES: &[&str] = &[
     "uia-text",
     "user-activity",
     "browser-url",
+    "audio-volume",
+    "ptt-mouse",
+    "focus-caret",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -256,6 +259,7 @@ pub fn register_core(app: &Arc<App>) {
     });
     app.cmd("audio_output", Lane::Read, Some(2000), |_, _, _| crate::tts::cmd_output_state());
     app.cmd("audio_unmute", Lane::Read, Some(2000), |_, _, _| crate::tts::cmd_unmute());
+    app.cmd("audio_set_volume", Lane::Read, Some(2000), |_, args, _| crate::tts::cmd_set_volume(args));
     for event in [crate::system::SETTINGS_EVENT, crate::system::A11Y_EVENT] {
         let out = app.router.out().clone();
         app.add_subscribable(event, move |on| crate::system::set_enabled(&out, event, on));
@@ -307,6 +311,14 @@ pub fn register_core(app: &Arc<App>) {
         let switches = hotkey::switch::Switches::parse(&keys, &mouse)?;
         app.hotkeys.apply(hotkey::Update { switches: Some(switches), ..Default::default() })?;
         Ok(json!({"keys": keys, "mouse": mouse}))
+    });
+
+    // Dictation push-to-talk on a mouse button (middle / x1 / x2; "" = off).
+    app.cmd("ptt_mouse", Lane::Inline, None, |app, args, _| {
+        let name = arg::opt_str(args, "button")?.unwrap_or("");
+        let button = hotkey::parse_ptt_button(name)?;
+        app.hotkeys.apply(hotkey::Update { ptt_mouse: Some(button), ..Default::default() })?;
+        Ok(json!({"button": name.trim().to_ascii_lowercase()}))
     });
 
     app.cmd("set_dictation_hotkey", Lane::Inline, None, |app, args, _| {

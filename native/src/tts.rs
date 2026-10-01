@@ -122,6 +122,21 @@ pub fn cmd_unmute() -> CmdResult {
     Ok(json!({"done": true}))
 }
 
+/// Master volume (0..1) of the default playback device, for ducking media while dictating.
+pub fn parse_volume(args: &Args) -> Result<f32, AgentError> {
+    match arg::opt_f64(args, "level")? {
+        Some(v) if v.is_finite() => Ok(v.clamp(0.0, 1.0) as f32),
+        _ => Err(AgentError::invalid("audio_set_volume needs a number level (0..1)")),
+    }
+}
+
+pub fn cmd_set_volume(args: &Args) -> CmdResult {
+    let level = parse_volume(args)?;
+    engine::set_volume(level)?;
+    let (_, volume) = engine::output_state()?;
+    Ok(json!({"volume": volume}))
+}
+
 #[cfg(windows)]
 pub mod engine {
     use super::*;
@@ -232,6 +247,12 @@ pub mod engine {
         // SAFETY: valid interface; a null event context is allowed.
         unsafe { Ok(vol.SetMute(false, std::ptr::null())?) }
     }
+
+    pub fn set_volume(level: f32) -> Result<(), AgentError> {
+        let vol = endpoint()?;
+        // SAFETY: valid interface; a null event context is allowed.
+        unsafe { Ok(vol.SetMasterVolumeLevelScalar(level, std::ptr::null())?) }
+    }
 }
 
 #[cfg(not(windows))]
@@ -255,6 +276,10 @@ pub mod engine {
     }
 
     pub fn unmute() -> Result<(), AgentError> {
+        none()
+    }
+
+    pub fn set_volume(_: f32) -> Result<(), AgentError> {
         none()
     }
 }
@@ -315,6 +340,15 @@ mod tests {
         assert!(parse_args(&args(json!({"text": "  "}))).is_err());
         assert!(parse_args(&args(json!({}))).is_err());
         assert!(parse_args(&args(json!({"text": "x".repeat(MAX_TEXT_CHARS + 1)}))).is_err());
+    }
+
+    #[test]
+    fn volume_level_clamped_and_required() {
+        assert_eq!(parse_volume(&args(json!({"level": 0.25}))).unwrap(), 0.25);
+        assert_eq!(parse_volume(&args(json!({"level": 3}))).unwrap(), 1.0);
+        assert_eq!(parse_volume(&args(json!({"level": -1}))).unwrap(), 0.0);
+        assert!(parse_volume(&args(json!({}))).is_err());
+        assert!(parse_volume(&args(json!({"level": "loud"}))).is_err());
     }
 
     /// Renders one sentence to bytes (never played). Needs an installed OneCore voice.
