@@ -11,6 +11,7 @@ import {
   loadSkill,
   type SkillIndexContext
 } from '../skills/disclosure'
+import { skillAuthoringHandlers } from '../skills/agent-tools'
 import type { LoadedSkill } from '../skills/registry'
 import type { ToolHandler } from './runner'
 
@@ -28,16 +29,18 @@ export interface SkillToolOpts extends SkillIndexContext {
 }
 
 export function skillToolSet(opts: SkillToolOpts = {}): SkillToolSet {
+  // create_skill / update_skill: only runs that list them (the foreground set) can call them.
+  const authoring: Record<string, ToolHandler> = skillAuthoringHandlers()
   const registry = getSkillRegistry()
-  if (!registry) return { defs: [], handlers: {}, index: '' }
+  if (!registry) return { defs: [], handlers: authoring, index: '' }
   const ctx: SkillIndexContext = { app: opts.app }
   const index = skillIndexText(registry, ctx)
-  if (!index) return { defs: [], handlers: {}, index: '' }
+  if (!index) return { defs: [], handlers: authoring, index: '' }
   const raw = createSkillToolHandlers(registry, {
     ...(opts.allow ? { allow: opts.allow } : {}),
     ...(opts.onUse ? { onUse: (s) => opts.onUse!(s) } : {})
   })
-  const handlers: Record<string, ToolHandler> = {}
+  const handlers: Record<string, ToolHandler> = { ...authoring }
   for (const [name, fn] of Object.entries(raw)) handlers[name] = (input) => fn(input)
   return { defs: skillToolDefs({ truncated: indexTruncated(registry, ctx) }), handlers, index }
 }

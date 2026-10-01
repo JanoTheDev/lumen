@@ -4,6 +4,7 @@
 // A run gets a tool *set* (names), so background agents can reuse the runner with non-UI tools.
 import { z } from 'zod'
 import type { ToolDef } from '../ai/providers/types'
+import { CREATE_SKILL_TOOL, UPDATE_SKILL_TOOL } from '../skills/agent-tool-defs'
 
 const step = z
   .number()
@@ -188,6 +189,8 @@ export const TOOLS = {
     description: 'Reads the text of a file the user dropped onto Lumen in this conversation.',
     schema: readFileInput
   },
+  create_skill: CREATE_SKILL_TOOL,
+  update_skill: UPDATE_SKILL_TOOL,
   finish: {
     name: 'finish',
     description:
@@ -211,6 +214,8 @@ export const FOREGROUND_TOOLS: readonly ToolName[] = [
   'wait_for',
   'ask_user',
   'focus_mode',
+  'create_skill',
+  'update_skill',
   'finish'
 ]
 
