@@ -6,10 +6,15 @@ import {
   LlmError,
   REFUSAL_MESSAGE,
   retryBudget,
+  type AgentMessage,
   type ChatChunk,
   type CompleteResult,
   type LlmProvider,
   type StructuredRequest,
+  type ToolCall,
+  type ToolContent,
+  type ToolTurnRequest,
+  type ToolTurnResult,
   type Usage
 } from './types'
 
@@ -108,6 +113,77 @@ function addUsage(a: Usage, b: Usage): Usage {
   }
 }
 
+// Tool use -----------------------------------------------------------------------------------
+
+function contentBlock(c: ToolContent): Anthropic.TextBlockParam | Anthropic.ImageBlockParam {
+  if (c.type === 'text') return { type: 'text', text: c.text }
+  return {
+    type: 'image',
+    source: { type: 'base64', media_type: c.mediaType ?? 'image/jpeg', data: c.base64 }
+  }
+}
+
+function messageParam(m: AgentMessage): Anthropic.MessageParam {
+  if (m.role === 'assistant') {
+    if (Array.isArray(m.raw))
+      return { role: 'assistant', content: m.raw as Anthropic.ContentBlockParam[] }
+    const content: Anthropic.ContentBlockParam[] = []
+    if (m.text) content.push({ type: 'text', text: m.text })
+    for (const c of m.calls)
+      content.push({ type: 'tool_use', id: c.id, name: c.name, input: c.input })
+    return { role: 'assistant', content }
+  }
+  // tool_result blocks must come first in a user message.
+  const results: Anthropic.ToolResultBlockParam[] = []
+  const rest: (Anthropic.TextBlockParam | Anthropic.ImageBlockParam)[] = []
+  for (const c of m.content) {
+    if (c.type === 'tool_result')
+      results.push({
+        type: 'tool_result',
+        tool_use_id: c.id,
+        content: c.content.map(contentBlock),
+        ...(c.isError ? { is_error: true } : {})
+      })
+    else rest.push(contentBlock(c))
+  }
+  return { role: 'user', content: [...results, ...rest] }
+}
+
+/**
+ * Strict tools (schema-valid inputs), auto tool choice (Sonnet/Opus 5.5 reject forced choice),
+ * and three cache breakpoints: system, the last tool, and the newest user message, so each
+ * turn reads the previous turn's prefix from the cache.
+ */
+export function buildToolParams(req: ToolTurnRequest): CreateParams {
+  const base = buildParams({
+    model: req.model,
+    system: req.system,
+    messages: [],
+    maxTokens: req.maxTokens,
+    effort: req.effort
+  })
+  const tools: Anthropic.Tool[] = req.tools.map((t, i) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: anthropicJsonSchema(t.schema) as Anthropic.Tool.InputSchema,
+    strict: true,
+    ...(i === req.tools.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {})
+  }))
+  const messages = req.messages.map(messageParam)
+  const last = messages[messages.length - 1]
+  if (last && Array.isArray(last.content) && last.content.length) {
+    const block = last.content[last.content.length - 1] as { cache_control?: unknown }
+    block.cache_control = { type: 'ephemeral' }
+  }
+  return { ...base, messages, tools, tool_choice: { type: 'auto' } }
+}
+
+function toolCallsOf(msg: Anthropic.Message): ToolCall[] {
+  return msg.content
+    .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
+    .map((b) => ({ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> }))
+}
+
 export function createAnthropicProvider(getClient: () => Anthropic = anthropicClient): LlmProvider {
   const send = (params: CreateParams, signal?: AbortSignal): Promise<Anthropic.Message> =>
     getClient().messages.create(params, { signal })
@@ -162,6 +238,32 @@ export function createAnthropicProvider(getClient: () => Anthropic = anthropicCl
       if (signal?.aborted) return
       if (stopReason === 'refusal') throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
       yield { type: 'done', result: { text, usage, model, stopReason } }
+    },
+
+    async toolTurn(req: ToolTurnRequest, signal?: AbortSignal): Promise<ToolTurnResult> {
+      const params = buildToolParams(req)
+      let msg = await send(params, signal)
+      let usage = toUsage(msg.usage)
+      if (msg.stop_reason === 'max_tokens') {
+        const budget = retryBudget(params.max_tokens)
+        if (budget === null) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+        msg = await send({ ...params, max_tokens: budget }, signal)
+        usage = addUsage(usage, toUsage(msg.usage))
+        if (msg.stop_reason === 'max_tokens')
+          throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+      }
+      if (msg.stop_reason === 'refusal') throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
+      return {
+        message: {
+          role: 'assistant',
+          text: textOf(msg),
+          calls: toolCallsOf(msg),
+          raw: msg.content
+        },
+        usage,
+        model: msg.model,
+        stopReason: msg.stop_reason ?? ''
+      }
     },
 
     async warmup(): Promise<void> {

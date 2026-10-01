@@ -6,11 +6,15 @@ import {
   LlmError,
   REFUSAL_MESSAGE,
   retryBudget,
+  type AgentMessage,
   type ChatChunk,
   type CompleteResult,
   type Effort,
   type LlmProvider,
   type StructuredRequest,
+  type ToolContent,
+  type ToolTurnRequest,
+  type ToolTurnResult,
   type Usage
 } from './types'
 
@@ -131,6 +135,106 @@ function addUsage(a: Usage, b: Usage): Usage {
   }
 }
 
+// Tool use -----------------------------------------------------------------------------------
+
+type InputItem = OpenAI.Responses.ResponseInputItem
+
+function inputContent(c: ToolContent): OpenAI.Responses.ResponseInputContent {
+  if (c.type === 'text') return { type: 'input_text', text: c.text }
+  return {
+    type: 'input_image',
+    image_url: `data:${c.mediaType ?? 'image/jpeg'};base64,${c.base64}`,
+    detail: 'high'
+  }
+}
+
+function inputItems(m: AgentMessage): InputItem[] {
+  if (m.role === 'assistant') {
+    // Rebuilt without item ids: requests use store: false, so ids cannot be looked up.
+    const items: InputItem[] = []
+    if (m.text) items.push({ role: 'assistant', content: m.text })
+    for (const c of m.calls)
+      items.push({
+        type: 'function_call',
+        call_id: c.id,
+        name: c.name,
+        arguments: JSON.stringify(c.input)
+      })
+    return items
+  }
+  const items: InputItem[] = []
+  const rest: OpenAI.Responses.ResponseInputContent[] = []
+  for (const c of m.content) {
+    if (c.type !== 'tool_result') {
+      rest.push(inputContent(c))
+      continue
+    }
+    const text = c.content.filter((x) => x.type === 'text').map((x) => x.text)
+    const body = (c.isError ? ['Error: ', ...text] : text).join('\n')
+    const images = c.content.filter((x) => x.type === 'image')
+    items.push({
+      type: 'function_call_output',
+      call_id: c.id,
+      output: images.length
+        ? [
+            { type: 'input_text', text: body },
+            ...images.map(
+              (img): OpenAI.Responses.ResponseInputImageContent => ({
+                type: 'input_image',
+                image_url: `data:${img.mediaType ?? 'image/jpeg'};base64,${img.base64}`,
+                detail: 'high'
+              })
+            )
+          ]
+        : body
+    })
+  }
+  if (rest.length) items.push({ role: 'user', content: rest })
+  return items
+}
+
+/** Strict function tools (every field required, optional ones nullable), auto tool choice. */
+export function buildToolParams(req: ToolTurnRequest): CreateParams {
+  const params: CreateParams = {
+    model: req.model,
+    input: req.messages.flatMap(inputItems),
+    max_output_tokens: req.maxTokens,
+    store: false,
+    tools: req.tools.map((t) => ({
+      type: 'function',
+      name: t.name,
+      description: t.description,
+      parameters: openaiStrictSchema(t.schema),
+      strict: true
+    })),
+    tool_choice: 'auto'
+  }
+  if (req.system.length) params.instructions = req.system.map((b) => b.text).join('\n\n')
+  const effort = reasoningEffort(req.model, req.effort)
+  if (effort) params.reasoning = { effort }
+  return params
+}
+
+/** Strict mode sends absent optional fields as null; drop them like parseJsonAs does. */
+function withoutNulls(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(withoutNulls)
+  if (!v || typeof v !== 'object') return v
+  return Object.fromEntries(
+    Object.entries(v as Record<string, unknown>)
+      .filter(([, x]) => x !== null)
+      .map(([k, x]) => [k, withoutNulls(x)])
+  )
+}
+
+function parseArgs(text: string): Record<string, unknown> {
+  try {
+    const v = withoutNulls(JSON.parse(text))
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+
 export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): LlmProvider {
   const send = (params: CreateParams, signal?: AbortSignal): Promise<OpenAI.Responses.Response> =>
     getClient().responses.create(params, { signal })
@@ -191,6 +295,29 @@ export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): Ll
           model: final?.model ?? req.model,
           stopReason: final && truncated(final) ? 'max_tokens' : 'end_turn'
         }
+      }
+    },
+
+    async toolTurn(req: ToolTurnRequest, signal?: AbortSignal): Promise<ToolTurnResult> {
+      const params = buildToolParams(req)
+      let res = await send(params, signal)
+      let usage = toUsage(res.usage)
+      if (truncated(res)) {
+        const budget = retryBudget(req.maxTokens)
+        if (budget === null) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+        res = await send({ ...params, max_output_tokens: budget }, signal)
+        usage = addUsage(usage, toUsage(res.usage))
+        if (truncated(res)) throw new LlmError('E_TRUNCATED', 'The reply was cut off.')
+      }
+      if (refused(res)) throw new LlmError('E_REFUSED', REFUSAL_MESSAGE)
+      const calls = (res.output ?? [])
+        .filter((i): i is OpenAI.Responses.ResponseFunctionToolCall => i.type === 'function_call')
+        .map((i) => ({ id: i.call_id, name: i.name, input: parseArgs(i.arguments) }))
+      return {
+        message: { role: 'assistant', text: textOf(res), calls },
+        usage,
+        model: res.model,
+        stopReason: calls.length ? 'tool_use' : 'end_turn'
       }
     },
 

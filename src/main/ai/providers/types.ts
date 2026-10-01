@@ -79,6 +79,8 @@ export interface LlmProvider {
   complete<T = unknown>(req: StructuredRequest<T>, signal?: AbortSignal): Promise<CompleteResult<T>>
   /** Opens the connection pool early; never throws. */
   warmup(): Promise<void>
+  /** One tool-use turn; absent for providers without tool calling (local servers). */
+  toolTurn?: ToolCapable['toolTurn']
 }
 
 export type LlmErrorCode = 'E_TRUNCATED' | 'E_REFUSED' | 'E_NO_KEY'
@@ -108,4 +110,63 @@ export const EMPTY_USAGE: Usage = {
   outputTokens: 0,
   cacheReadTokens: 0,
   cacheWriteTokens: 0
+}
+
+// ---- Tool use (agent mode) ----
+
+/** One tool the model may call. The zod schema becomes each provider's strict JSON schema. */
+export interface ToolDef {
+  name: string
+  description: string
+  schema: ZodType
+}
+
+export type ToolContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; base64: string; mediaType?: 'image/jpeg' | 'image/png' }
+
+export interface ToolCall {
+  id: string
+  name: string
+  input: Record<string, unknown>
+}
+
+export interface ToolResultBlock {
+  type: 'tool_result'
+  id: string
+  content: ToolContent[]
+  isError?: boolean
+}
+
+export type AgentMessage =
+  | { role: 'user'; content: (ToolContent | ToolResultBlock)[] }
+  | {
+      role: 'assistant'
+      text: string
+      calls: ToolCall[]
+      /** Provider-native content (thinking blocks) to send back unchanged. */
+      raw?: unknown
+    }
+
+export interface ToolTurnRequest {
+  model: string
+  system: SystemBlock[]
+  tools: ToolDef[]
+  /** Oldest first; starts and ends with a user message. */
+  messages: AgentMessage[]
+  maxTokens: number
+  effort?: Effort
+}
+
+export interface ToolTurnResult {
+  /** The assistant message to append to the conversation. */
+  message: Extract<AgentMessage, { role: 'assistant' }>
+  usage: Usage
+  model: string
+  stopReason: string
+}
+
+/** Providers that can run a tool-use loop (agent mode). */
+export interface ToolCapable {
+  toolTurn(req: ToolTurnRequest, signal?: AbortSignal): Promise<ToolTurnResult>
 }

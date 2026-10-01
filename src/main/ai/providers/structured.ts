@@ -8,11 +8,32 @@ import { toJSONSchema, type ZodType } from 'zod'
 
 type Json = Record<string, unknown>
 
+// Bounds strict mode rejects or ignores (zod's .int() adds safe-integer bounds); the zod
+// schema still enforces them when the reply is parsed.
+const DROPPED = [
+  'minimum',
+  'maximum',
+  'exclusiveMinimum',
+  'exclusiveMaximum',
+  'multipleOf',
+  'minLength',
+  'maxLength',
+  'minItems',
+  'maxItems'
+]
+
 function strict(node: unknown, nullableOptionals: boolean): unknown {
   if (Array.isArray(node)) return node.map((n) => strict(n, nullableOptionals))
   if (!node || typeof node !== 'object') return node
   const out: Json = {}
-  for (const [k, v] of Object.entries(node as Json)) out[k] = strict(v, nullableOptionals)
+  for (const [k, v] of Object.entries(node as Json)) {
+    if (k === 'properties' && v && typeof v === 'object')
+      // Field names, not keywords: keep every key.
+      out[k] = Object.fromEntries(
+        Object.entries(v as Json).map(([name, p]) => [name, strict(p, nullableOptionals)])
+      )
+    else if (!DROPPED.includes(k)) out[k] = strict(v, nullableOptionals)
+  }
   if (Array.isArray(out.oneOf)) {
     out.anyOf = out.oneOf
     delete out.oneOf

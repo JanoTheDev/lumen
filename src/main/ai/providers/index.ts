@@ -74,7 +74,25 @@ function withUsage(inner: LlmProvider): LlmProvider {
         yield chunk
       }
     },
-    warmup: () => inner.warmup()
+    warmup: () => inner.warmup(),
+    ...(inner.toolTurn
+      ? {
+          async toolTurn(req, signal) {
+            const res = await inner.toolTurn!(req, signal)
+            const hasImage = req.messages.some(
+              (m) =>
+                m.role === 'user' &&
+                m.content.some(
+                  (c) =>
+                    c.type === 'image' ||
+                    (c.type === 'tool_result' && c.content.some((x) => x.type === 'image'))
+                )
+            )
+            usageListener(res.model, res.usage, hasImage)
+            return res
+          }
+        }
+      : {})
   }
 }
 
