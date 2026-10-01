@@ -7,6 +7,7 @@ import { Bridges } from './sections/Bridges'
 import { Connectors } from './sections/Connectors'
 import { Accessibility } from './sections/Accessibility'
 import { General } from './sections/General'
+import { Helpers } from './sections/Helpers'
 import { Lessons } from './sections/Lessons'
 import { Look } from './sections/Look'
 import { Memory } from './sections/Memory'
@@ -24,6 +25,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   memory: Memory,
   lessons: Lessons,
   skills: Skills,
+  helpers: Helpers,
   bridges: Bridges,
   connectors: Connectors,
   privacy: Privacy,

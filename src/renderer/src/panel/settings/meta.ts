@@ -17,6 +17,7 @@ export type SectionId =
   | 'memory'
   | 'lessons'
   | 'skills'
+  | 'helpers'
   | 'bridges'
   | 'connectors'
   | 'privacy'
@@ -86,6 +87,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.sparkles,
     keywords:
       'skills abilities automations install share export import lumen file community trust permissions triggers'
+  },
+  {
+    id: 'helpers',
+    label: 'Smart helpers',
+    icon: icons.sparkles,
+    keywords:
+      'focus mode dim declutter undo shortcut coach tips comfort fatigue tired break error rescue what changed did it work reading level plain expert journal learned'
   },
   {
     id: 'bridges',
