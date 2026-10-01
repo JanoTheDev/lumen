@@ -2,10 +2,14 @@
 // where the user is, what has focus and what can be done; explainTarget answers "what is this
 // button". Both run on the fast role with the UIA tree as the main source and the screenshot as
 // backup. Without a key (or when the call fails) a plain sentence is built from UIA alone.
+// In simple mode (a11y.simpleMode) both prompts ask for the plain style.
 import { z } from 'zod'
 import type { ElementNode, Target } from '@shared/types'
-import { physRectToImage } from '../actions/coords'
+import { physRectToImage, physToImage } from '../actions/coords'
+import { PLAIN_STYLE_LINE, answerStyle } from '../a11y/phrases'
+import { loadConfig } from '../config'
 import { captureContext } from '../query/capture'
+import { replyLanguageLine } from '../speech/language'
 import type { QueryContext } from '../query/context'
 import { resolveTarget } from '../query/resolve-target'
 import { flattenElements, isInteractive, serializeElements } from '../query/uia-list'
@@ -44,15 +48,33 @@ export interface TargetExplanation {
   ms: number
 }
 
+/** A point in physical px on the virtual desktop (the mouse pointer), with its monitor when known. */
+export interface PointerTarget {
+  kind: 'pointer'
+  x: number
+  y: number
+  monitor?: number
+}
+
 export interface DescribeDeps {
-  capture: (signal?: AbortSignal) => Promise<QueryContext>
+  /** `allScreens`: every monitor, for a pointer on a monitor other than the foreground one. */
+  capture: (signal?: AbortSignal, allScreens?: boolean) => Promise<QueryContext>
   hasModel: () => boolean
+  /** 'plain' while simple mode is on. */
+  style?: () => 'plain' | undefined
+  /** Reply language line ('' for English). */
+  language?: () => string
 }
 
 const defaultDeps: DescribeDeps = {
-  capture: (signal) => captureContext(true, { signal }),
-  hasModel: hasVisionModel
+  capture: (signal, allScreens) => captureContext(true, { signal, allScreens }),
+  hasModel: hasVisionModel,
+  style: () => answerStyle(loadConfig()),
+  language: () => replyLanguageLine(loadConfig().voice.language)
 }
+
+const styleLines = (deps: DescribeDeps): string[] =>
+  [deps.style?.() === 'plain' ? PLAIN_STYLE_LINE : '', deps.language?.() ?? ''].filter(Boolean)
 
 const describeSchema = z.object({ spoken: z.string(), actionable: z.array(z.string()) })
 const explainSchema = z.object({ spoken: z.string() })
@@ -144,7 +166,8 @@ export async function describeScreen(
     `window: ${ctx.activeWindow || 'unknown'}`,
     `detail: ${opts.detail}`,
     `focus: ${opts.focus ?? 'window'}`,
-    focused ? `focused: ${say(summary(focused))}` : 'focused: unknown'
+    focused ? `focused: ${say(summary(focused))}` : 'focused: unknown',
+    ...styleLines(deps)
   ]
   if (elements) lines.push(`elements (id role "name" @(x,y,w,h)):\n${elements.text}`)
   try {
@@ -180,20 +203,64 @@ export async function describeScreen(
   }
 }
 
-/** "What is this button": the target's UIA facts plus a crop of it for the fast model. */
+/** The smallest UIA node (not the window root) whose rect holds a physical point. */
+export function nodeAt(ctx: QueryContext, p: { x: number; y: number }): ElementNode | undefined {
+  if (!ctx.uia) return undefined
+  let best: ElementNode | undefined
+  for (const { node: n } of flattenElements(ctx.uia.root)) {
+    const r = n.rect
+    if (n === ctx.uia.root || p.x < r.x || p.y < r.y || p.x >= r.x + r.w || p.y >= r.y + r.h)
+      continue
+    if (!best || r.w * r.h < best.rect.w * best.rect.h) best = n
+  }
+  return best
+}
+
+/** The frame holding a physical point, as a point target in that frame's image px. */
+function pointerOnFrame(ctx: QueryContext, p: PointerTarget): Target | null {
+  for (const f of ctx.frames) {
+    const g = f.geometry
+    if (p.x < g.originX || p.y < g.originY || p.x >= g.originX + g.width) continue
+    if (p.y >= g.originY + g.height) continue
+    const pt = physToImage(g, p)
+    return { kind: 'point', x: Math.round(pt.x), y: Math.round(pt.y), frame: f.label }
+  }
+  return null
+}
+
+/**
+ * "What is this button": the target's UIA facts plus a crop of it for the fast model. A
+ * `pointer` target is a physical point; when it is not on the foreground monitor every monitor
+ * is captured and the frame under the point is used.
+ */
 export async function explainTarget(
-  target: Target,
+  subject: Target | PointerTarget,
   opts: { signal?: AbortSignal } = {},
   deps: DescribeDeps = defaultDeps
 ): Promise<TargetExplanation> {
   const t0 = Date.now()
-  const ctx = await deps.capture(opts.signal)
-  const hit = await resolveTarget(target, { ...ctx, signal: opts.signal })
+  let ctx = await deps.capture(opts.signal)
+  let target: Target | null = subject.kind === 'pointer' ? null : subject
+  if (subject.kind === 'pointer') {
+    const elsewhere =
+      subject.monitor !== undefined &&
+      ctx.foreground.monitorId !== undefined &&
+      subject.monitor !== ctx.foreground.monitorId
+    target = elsewhere ? null : pointerOnFrame(ctx, subject)
+    if (!target) {
+      ctx = await deps.capture(opts.signal, true)
+      target = pointerOnFrame(ctx, subject)
+    }
+  }
+  const hit = target ? await resolveTarget(target, { ...ctx, signal: opts.signal }) : null
   if (!hit)
     return { spoken: "I can't find that on the screen.", source: 'uia', ms: Date.now() - t0 }
   const node = hit.elementId
     ? flattenElements(ctx.uia!.root).find((e) => e.node.id === hit.elementId)?.node
-    : undefined
+    : nodeAt(ctx, {
+        x: hit.physRect.x + hit.physRect.w / 2,
+        y: hit.physRect.y + hit.physRect.h / 2
+      })
   const element = node ? summary(node) : undefined
   const local = (): TargetExplanation => ({
     spoken: element
@@ -205,13 +272,17 @@ export async function explainTarget(
   })
   if (!deps.hasModel()) return local()
 
-  const g = ctx.frames[0]?.geometry
+  // Crop from the frame the target is on (another monitor for an off-foreground pointer).
+  const frame =
+    (target && 'frame' in target && ctx.frames.find((f) => f.label === target.frame)) ||
+    ctx.frames[0]
+  const g = frame?.geometry
   let crop: string | null = null
-  if (g && ctx.frames[0]?.data) {
+  if (g && frame?.data) {
     const r = physRectToImage(g, hit.physRect)
     const w = Math.max(r.w * 3, 160)
     const h = Math.max(r.h * 3, 120)
-    crop = cropImage(ctx.frames[0].data, {
+    crop = cropImage(frame.data, {
       x: r.x + r.w / 2 - w / 2,
       y: r.y + r.h / 2 - h / 2,
       w,
@@ -223,7 +294,8 @@ export async function explainTarget(
     element
       ? `element: role ${element.role}, name "${element.name}"${node?.automationId ? `, automationId ${node.automationId}` : ''}${node && !node.enabled ? ', disabled' : ''}${element.value ? `, value "${element.value}"` : ''}`
       : 'element: not in the accessibility tree',
-    crop ? 'image: the control in the middle of the crop' : 'image: none'
+    crop ? 'image: the control in the middle of the crop' : 'image: none',
+    ...styleLines(deps)
   ]
   try {
     const { llm, model, effort } = getProvider('fast')

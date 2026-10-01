@@ -7,7 +7,7 @@ import { loadConfig } from '../config'
 import { log } from '../logger'
 import { appUrl } from '../ai/app-context'
 import { describeScreen, explainTarget } from '../ai/describe'
-import { currentFrame, logicalToPhys, physRectToLogical, physToImage } from '../actions/coords'
+import { logicalToPhys, physRectToLogical } from '../actions/coords'
 import { assertSafeUrl, isSafeUrl } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent, requireAgent } from '../agent/instance'
@@ -38,6 +38,7 @@ import { installShortcuts } from './install-shortcuts'
 import { installSwitch, type SwitchControl } from './install-switch'
 import { installSystemEvents, refreshAtState } from './system-events'
 import { onTextScaleChange } from './text-scale'
+import { withInputLane } from '../agent-mode/input-lane'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
@@ -166,35 +167,25 @@ async function ocrText(where: 'cursor' | 'window'): Promise<string> {
   return r ? r.lines.map((l) => l.text).join('\n') : ''
 }
 
-/** "What's under my cursor": 05 explainTarget at the pointer, UIA name/role when off-frame. */
+/** "What's under my cursor": 05 explainTarget at the pointer on any monitor, UIA name as fallback. */
 async function explainCursor(): Promise<string> {
   const phys = logicalToPhys(screen.getCursorScreenPoint())
-  const g = currentFrame()
-  const onFrame =
-    phys.x >= g.originX &&
-    phys.y >= g.originY &&
-    phys.x < g.originX + g.width &&
-    phys.y < g.originY + g.height
-  if (onFrame) {
-    const p = physToImage(g, phys)
-    const r = await explainTarget({
-      kind: 'point',
-      x: Math.round(p.x),
-      y: Math.round(p.y),
-      frame: '1'
-    })
-    return r.spoken
-  }
+  const r = await explainTarget({ kind: 'pointer', x: Math.round(phys.x), y: Math.round(phys.y) })
+  if (r.source === 'model' || r.element) return r.spoken
   const at = await readText('point')
   if (at?.name) return `${at.name}, ${at.role ?? 'control'}.`
-  return "I can't tell what is there."
+  return r.spoken
 }
 
 function createIo(): A11yIo {
   return {
     now: () => Date.now(),
     input: async (steps) => {
-      await commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS })
+      await withInputLane(
+        'a11y',
+        () => commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+        { user: true }
+      )
     },
     uiaAct: async (elementId, action) => {
       const r = await commands.uiaAct(

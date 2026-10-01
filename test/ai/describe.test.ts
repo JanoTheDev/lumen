@@ -7,6 +7,7 @@ vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 import type { ElementNode } from '@shared/types'
 import { describeScreen, explainTarget, type DescribeDeps } from '../../src/main/ai/describe'
 import { setProvider } from '../../src/main/ai/providers'
+import { PLAIN_STYLE_LINE } from '../../src/main/a11y/phrases'
 import type {
   ChatChunk,
   CompleteResult,
@@ -151,5 +152,47 @@ describe('describeScreen', () => {
     expect((await explainTarget({ kind: 'element', id: 'nope' }, {}, keyless)).spoken).toBe(
       "I can't find that on the screen."
     )
+  })
+
+  it('explainTarget takes a physical pointer and captures every monitor when it is elsewhere', async () => {
+    const calls: boolean[] = []
+    const second = { originX: -2880, originY: 0, width: 2880, height: 1620, imgW: 1280, imgH: 720 }
+    const deps: DescribeDeps = {
+      hasModel: () => false,
+      capture: async (_signal, allScreens) => {
+        calls.push(!!allScreens)
+        const ctx = context()
+        if (!allScreens) return ctx
+        return {
+          ...ctx,
+          frames: [
+            ...ctx.frames,
+            { id: 'f2', label: '2', geometry: second, mime: 'image/jpeg', data: 'IMG2' }
+          ]
+        }
+      }
+    }
+    const on = await explainTarget({ kind: 'pointer', x: 50, y: 110 }, {}, deps)
+    expect(calls).toEqual([false])
+    expect(on.element).toMatchObject({ role: 'button', name: 'Compose' })
+
+    calls.length = 0
+    const off = await explainTarget({ kind: 'pointer', x: -1000, y: 500 }, {}, deps)
+    expect(calls).toEqual([false, true])
+    expect(off.spoken).not.toBe("I can't find that on the screen.")
+
+    calls.length = 0
+    await explainTarget({ kind: 'pointer', x: -1000, y: 5000 }, {}, deps)
+    expect(calls).toEqual([false, true])
+  })
+
+  it('asks for the plain style in simple mode', async () => {
+    setProvider('anthropic', answer({ spoken: 'Gmail. You can write a mail.', actionable: [] }))
+    await describeScreen({ detail: 'brief' }, { ...withModel, style: () => 'plain' })
+    await explainTarget({ kind: 'element', id: 'e1' }, {}, { ...withModel, style: () => 'plain' })
+    await describeScreen({ detail: 'brief' }, withModel)
+    expect(seen[0].messages[0].content).toContain(PLAIN_STYLE_LINE)
+    expect(seen[1].messages[0].content).toContain(PLAIN_STYLE_LINE)
+    expect(seen[2].messages[0].content).not.toContain(PLAIN_STYLE_LINE)
   })
 })
