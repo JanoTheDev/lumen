@@ -4,7 +4,7 @@
 // "what's that" and "click <label>" (06 grammar), while helpers.labels is on. App packs may
 // ship a labels.json (read-only); `.lumen` files from helpers add theirs to this PC's store.
 import { app as electronApp, BrowserWindow, dialog, screen } from 'electron'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { ElementNode, Point } from '@shared/types'
@@ -19,6 +19,7 @@ import { getProvider, hasVisionModel } from '../ai/providers'
 import { setDeicticLabeler } from '../deictic'
 import { skillRegistry } from '../teach'
 import { appIdFor } from '../teach/generate'
+import { saveChosenFile } from '../teach/save-file'
 import { createLabeler, type LabelApp, type Labeler, type LabelResult } from './core'
 import { isGenericName } from './detect'
 import { parseLabelCommand } from './grammar'
@@ -195,6 +196,8 @@ const cursor = (): Point => logicalToPhys(screen.getCursorScreenPoint())
 
 /** Voice: "label the buttons", "name this Render". */
 export function interceptLabels(prompt: string): unknown | undefined {
+  // Smart helpers → labels off: these words are ordinary requests for the model.
+  if (!enabled()) return undefined
   const cmd = labeler && parseLabelCommand(prompt)
   if (!cmd || !labeler) return undefined
   if (cmd.kind === 'label-window')
@@ -233,9 +236,9 @@ export async function saveLabelsJson(
     ? await dialog.showSaveDialog(parent, opts)
     : await dialog.showSaveDialog(opts)
   if (pick.canceled || !pick.filePath) return { ok: false, error: 'cancelled' }
-  writeFileSync(pick.filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
-  log('done', `labels for ${appId} saved (${data.labels.length})`)
-  return { ok: true, path: pick.filePath }
+  const saved = saveChosenFile(pick.filePath, `${JSON.stringify(data, null, 2)}\n`, 'utf8')
+  if (saved.ok) log('done', `labels for ${appId} saved (${data.labels.length})`)
+  return saved
 }
 
 /** Call once at startup, after teach (the pack registry) and a11y. */

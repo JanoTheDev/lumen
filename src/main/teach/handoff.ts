@@ -3,7 +3,7 @@
 // and open such a file from a helper. No server, no account: the file travels by mail, USB or
 // chat. Received lessons sit in ~/.ai-overlay/skills/handoff-*/ (marked, untrusted).
 import { app, BrowserWindow, dialog } from 'electron'
-import { readFileSync, statSync, writeFileSync } from 'fs'
+import { readFileSync, statSync } from 'fs'
 import { basename, join } from 'path'
 import type { HandoffExport, HandoffInfo, HandoffInstallResult } from '@shared/channels'
 import { log } from '../logger'
@@ -21,6 +21,7 @@ import { installedPacks, installPacks, PackError, removePack } from '../packs/in
 import { ZIP_LIMITS } from '../packs/zip-read'
 import { zip, type ZipEntry } from '../packs/zip-write'
 import { toStoredLesson } from './lesson'
+import { saveChosenFile } from './save-file'
 import type { SkillRegistry } from './registry'
 
 export interface HandoffDeps {
@@ -107,9 +108,9 @@ export async function exportLabelsHandoff(
     ? await dialog.showSaveDialog(parent, opts)
     : await dialog.showSaveDialog(opts)
   if (pick.canceled || !pick.filePath) return { ok: false, error: 'cancelled' }
-  writeFileSync(pick.filePath, built.data)
-  log('done', `labels for ${appId} exported as ${built.id}`)
-  return { ok: true, path: pick.filePath }
+  const saved = saveChosenFile(pick.filePath, built.data)
+  if (saved.ok) log('done', `labels for ${appId} exported as ${built.id}`)
+  return saved
 }
 
 const parentOf = (sender?: Electron.WebContents): BrowserWindow | undefined =>
@@ -138,12 +139,13 @@ export async function exportHandoff(
     ? await dialog.showSaveDialog(parent, opts)
     : await dialog.showSaveDialog(opts)
   if (pick.canceled || !pick.filePath) return { ok: false, error: 'cancelled' }
-  writeFileSync(pick.filePath, built.data)
-  log(
-    'done',
-    `handoff ${built.id} exported: ${built.lessons} lessons, labels for ${built.labels} apps`
-  )
-  return { ok: true, path: pick.filePath }
+  const saved = saveChosenFile(pick.filePath, built.data)
+  if (saved.ok)
+    log(
+      'done',
+      `handoff ${built.id} exported: ${built.lessons} lessons, labels for ${built.labels} apps`
+    )
+  return saved
 }
 
 /** Adds the labels of installed handoff folders to this PC's store (never over the user's). */

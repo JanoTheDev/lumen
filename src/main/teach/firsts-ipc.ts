@@ -39,8 +39,12 @@ async function pickSubtitles(
     : await dialog.showOpenDialog(opts)
   const file = pick.filePaths[0]
   if (pick.canceled || !file) return { error: 'cancelled' }
-  if (statSync(file).size > MAX_SUBTITLE_BYTES) return { error: 'the file is larger than 2 MB' }
-  return { text: readFileSync(file, 'utf8'), name: basename(file) }
+  try {
+    if (statSync(file).size > MAX_SUBTITLE_BYTES) return { error: 'the file is larger than 2 MB' }
+    return { text: readFileSync(file, 'utf8'), name: basename(file) }
+  } catch (e) {
+    return { error: `could not read the file: ${(e as Error).message}` }
+  }
 }
 
 export function registerFirstsIpc(): void {
