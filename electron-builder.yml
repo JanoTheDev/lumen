@@ -16,7 +16,7 @@ files:
   # Main loads the CommonJS builds only: drop TS sources, typings, ESM copies and docs.
   - '!node_modules/**/*.{d.ts,d.mts,d.cts,md}'
   - '!node_modules/{openai,@anthropic-ai/sdk,zod}/src/**'
-  - '!node_modules/{openai,@anthropic-ai/sdk}/**/*.mjs'
+  - '!node_modules/{openai,@anthropic-ai/sdk,@modelcontextprotocol/client}/**/*.mjs'
 # UI is English; Chromium's other locale packs are ~45 MB.
 electronLanguages:
   - en-US
