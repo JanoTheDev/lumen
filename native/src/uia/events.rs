@@ -59,30 +59,35 @@ pub fn set_enabled(out: &Out, enabled: bool) {
         return;
     }
     let (stop_tx, stop_rx) = bounded::<()>(1);
+    let mine = stop_tx.clone();
     let out = out.clone();
-    std::thread::Builder::new()
-        .name("uia-focus-events".into())
-        .spawn(move || {
-            crate::com_init();
-            let client = match Client::get() {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("focus-changed: {}", e.message);
-                    return;
-                }
-            };
+    let spawned = std::thread::Builder::new().name("uia-focus-events".into()).spawn(move || {
+        crate::com_init();
+        let registered = Client::get().map_err(|e| e.message).and_then(|client| {
             let handler: IUIAutomationFocusChangedEventHandler =
                 Handler { out, last: Mutex::new(None) }.into();
             // SAFETY: registration/removal happen on this MTA thread with live interfaces.
             unsafe {
-                if let Err(e) = client.u.AddFocusChangedEventHandler(&client.elem_cr, &handler) {
-                    tracing::error!("AddFocusChangedEventHandler failed: {}", e.message());
-                    return;
-                }
+                client
+                    .u
+                    .AddFocusChangedEventHandler(&client.elem_cr, &handler)
+                    .map_err(|e| format!("AddFocusChangedEventHandler failed: {}", e.message()))?;
                 let _ = stop_rx.recv();
                 let _ = client.u.RemoveFocusChangedEventHandler(&handler);
             }
-        })
-        .expect("spawn focus events thread");
-    *running = Some(stop_tx);
+            Ok(())
+        });
+        if let Err(e) = registered {
+            tracing::error!("focus-changed: {e}");
+            // Not running after all: let the next subscribe try again.
+            let mut running = RUNNING.lock().unwrap();
+            if running.as_ref().is_some_and(|tx| tx.same_channel(&mine)) {
+                *running = None;
+            }
+        }
+    });
+    match spawned {
+        Ok(_) => *running = Some(stop_tx),
+        Err(e) => tracing::error!("focus-changed thread: {e}"),
+    }
 }
