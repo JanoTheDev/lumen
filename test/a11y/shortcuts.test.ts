@@ -35,6 +35,19 @@ describe('a11y shortcuts config', () => {
 })
 
 describe('planShortcuts', () => {
+  it('keeps keys away from the switch keys while switch scanning is on', () => {
+    const base = makeConfig()
+    const shortcuts = { ...base.a11y.shortcuts, grid: 'F8' }
+    const on = makeConfig({
+      a11y: { shortcuts, switch: { enabled: true, keys: ['Space', 'f8'] } }
+    })
+    const grid = (c: typeof base): unknown =>
+      planShortcuts(c, OPEN).status.find((s) => s.action === 'grid')
+    expect(grid(on)).toMatchObject({ state: 'conflict', with: 'a switch key' })
+    const off = makeConfig({ a11y: { shortcuts, switch: { enabled: false, keys: ['F8'] } } })
+    expect(grid(off)).toMatchObject({ state: 'bound' })
+  })
+
   it('binds every default when all gates are open, with no clash with the other Lumen keys', () => {
     const plan = planShortcuts(makeConfig(), OPEN)
     expect(plan.status.every((s) => s.state === 'bound')).toBe(true)

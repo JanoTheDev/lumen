@@ -69,7 +69,7 @@ export function toElectron(hotkey: string): string {
 }
 
 type ShortcutConfig = Pick<ConfigV2, 'hotkey' | 'dictation' | 'ui'> & {
-  a11y: Pick<ConfigV2['a11y'], 'helpHotkey' | 'shortcuts'>
+  a11y: Pick<ConfigV2['a11y'], 'helpHotkey' | 'shortcuts' | 'switch'>
 }
 
 /** Lumen's other global keys, which an a11y shortcut must not reuse. */
@@ -82,6 +82,7 @@ function reserved(cfg: ShortcutConfig): Map<string, string> {
   if (cfg.dictation.enabled) add(cfg.dictation.hotkey, 'the dictation hotkey')
   add(cfg.a11y.helpHotkey, 'the "what can I say" shortcut')
   add(cfg.ui.homeHotkey, 'the Home shortcut')
+  if (cfg.a11y.switch.enabled) for (const k of cfg.a11y.switch.keys) add(k, 'a switch key')
   return out
 }
 
