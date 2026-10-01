@@ -111,7 +111,7 @@ export function routeLocal(
 ): unknown | undefined {
   const grammar = runLocalGrammar(utterance)
   if (grammar) {
-    log('plan', `local grammar handled "${utterance.slice(0, 40)}"`)
+    log('plan', `local grammar handled an utterance (${utterance.length} chars)`)
     return grammar.response
   }
   const hit = prefilter(utterance, state)

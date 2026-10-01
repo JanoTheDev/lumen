@@ -142,3 +142,20 @@ describe('log call sites in src/main and src/preload', () => {
     expect(hits).toEqual([])
   })
 })
+
+describe('prompt and transcript text is logged as a length only', () => {
+  const files = [
+    'src/main/query/pipeline.ts',
+    'src/main/query/router.ts',
+    ...sources(join(ROOT, 'src/main/speech/wake')).map((f) => relative(ROOT, f))
+  ]
+  const content =
+    /\$\{[^}]*\b(prompt|utterance|transcript|text|legacyTaskContext)\b(?!\.length)[^}]*\}/
+
+  it.each(files)('%s', (file) => {
+    const hits = logCalls(join(ROOT, file))
+      .filter((c) => content.test(c.args))
+      .map((c) => c.at)
+    expect(hits).toEqual([])
+  })
+})

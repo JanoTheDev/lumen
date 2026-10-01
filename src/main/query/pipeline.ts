@@ -128,7 +128,7 @@ export async function runQuery(
     )
   } catch (e) {
     if (scope.cancelled || isAbortError(e)) {
-      log('skip', `turn cancelled: "${prompt.slice(0, 40)}"`)
+      log('skip', `turn cancelled (${prompt.length} chars)`)
       bus.emit({ type: 'query.cancelled', turnId })
     } else {
       bus.emit({ type: 'query.failed', turnId, error: (e as Error).message })
@@ -165,7 +165,10 @@ async function planLegacy(
   if (flags.length) log('plan', `overrides: ${flags.join(', ')}`)
   if (requestedApp) log('plan', `app-switch detected: ${requestedApp.app} → ${requestedApp.url}`)
   if (intent.isContinuation && legacyTaskContext)
-    log('plan', `continuation detected, re-running: "${legacyTaskContext}"`)
+    log(
+      'plan',
+      `continuation detected, re-running the last task (${legacyTaskContext.length} chars)`
+    )
   legacyTaskContext = nextTaskContext
 
   const research = !opts.lowDetail && isResearchIntent(prompt)
@@ -198,7 +201,10 @@ async function planRouted(
     utterance = lastTask.prompt
     const mode = lastTask.route.mode === 'plan' ? 'plan' : 'action'
     forced = { ...lastTask.route, mode, needsScreen: true, confidence: 1 }
-    log('plan', `continuation: re-running "${utterance.slice(0, 60)}" as ${mode}`)
+    log(
+      'plan',
+      `continuation: re-running the last utterance (${utterance.length} chars) as ${mode}`
+    )
   }
 
   // Follow-up steps (lowDetail) always need the screen and are not routed: the reply mode
@@ -293,11 +299,11 @@ async function runTurn(
       deps
     )
   }
-  const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
+  const timer = startTimer(`query (${prompt.length} chars)${opts.lowDetail ? ' [low-detail]' : ''}`)
   const legacy = loadConfig().ai.router === 'legacy'
   log(
     'plan',
-    `prompt: "${prompt}"${opts.lowDetail ? ' [low-detail]' : ''}${legacy ? ' [legacy router]' : ''}`
+    `prompt: ${prompt.length} chars${opts.lowDetail ? ' [low-detail]' : ''}${legacy ? ' [legacy router]' : ''}`
   )
 
   const { plan, ctx } = legacy
@@ -307,7 +313,7 @@ async function runTurn(
   scope.throwIfCancelled()
   timer.split('routed + context gathered')
   log('plan', `active window: ${activeWindow}`)
-  log('plan', `query: "${plan.prompt.slice(0, 80)}"`)
+  log('plan', `query: ${plan.prompt.length} chars`)
 
   // The router picked an installed skill (05): same path as a trigger phrase.
   if (plan.skill && enabledSkill(plan.skill.name)) {
@@ -338,7 +344,10 @@ async function runTurn(
   let result: ModelResponse
   let split: SubResult[] | null = null
   if (plan.path === 'split' && plan.subqueries) {
-    log('plan', `parallel split: ${plan.subqueries.map((q) => `"${q.slice(0, 30)}"`).join(', ')}`)
+    log(
+      'plan',
+      `parallel split: ${plan.subqueries.length} parts (${plan.subqueries.map((q) => q.length).join(', ')} chars)`
+    )
     // No turnId: sub-answers do not stream speech; the merged answer is spoken once.
     split = await runParallelSplit(plan.subqueries, scope, (q, child) =>
       callModel(q, screenshot, activeWindow, {
@@ -483,7 +492,7 @@ async function continueAfter(
     })
     return { response: r.mode === 'locate' ? r : done, ctx: now }
   }
-  log('plan', `follow-up continues as an agent task: "${next.slice(0, 60)}"`)
+  log('plan', `follow-up continues as an agent task (${next.length} chars)`)
   const task = `${prompt} (Already done: ${first.summary ?? 'the first step'}. Next: ${next})`
   return { response: await runAgentTask(task, now, scope.signal, { skipPlan: true }), ctx: now }
 }

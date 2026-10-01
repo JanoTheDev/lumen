@@ -139,7 +139,7 @@ async function confirmCancel(phrase: string): Promise<void> {
     const text = await transcribeLocal(audio, 16000)
     if (!cancelArmed()) return
     if (confirmsCancel(text, phrase)) handleVoiceCancel(phrase)
-    else log('step', `cancel "${phrase}" not confirmed by transcript "${text}"`)
+    else log('step', `cancel "${phrase}" not confirmed by the transcript (${text.length} chars)`)
   } catch (e) {
     // Cancelling is the safe side when the check itself fails.
     log('fail', `cancel confirmation failed: ${(e as Error).message}`)
