@@ -46,6 +46,11 @@ export function historyMeta(e: DictationHistoryEntry, now = Date.now()): string 
   return parts.join(' · ')
 }
 
+/** Stored text with a secret taken out cannot be typed again as it was said (L5). */
+export function canTypeAgain(e: DictationHistoryEntry): boolean {
+  return !e.text.includes('[redacted:')
+}
+
 /** The transcript, when cleanup changed it. */
 export function heardText(e: DictationHistoryEntry): string | null {
   const norm = (s: string): string => s.replace(/\s+/g, ' ').trim()

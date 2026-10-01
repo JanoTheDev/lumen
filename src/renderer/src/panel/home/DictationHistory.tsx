@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { DictationHistoryView } from '@shared/dictation-history'
 import { Button, IconButton, Switch, icons } from '../../ui'
 import { invoke, send, useIpc } from '../../lib/ipc'
-import { heardText, historyMeta } from './dictation-view'
+import { canTypeAgain, heardText, historyMeta } from './dictation-view'
 
 const SHOWN = 20
 
@@ -68,14 +68,16 @@ export function DictationHistory({
                         label="Copy"
                         onClick={() => void invoke('dictation:history-copy', e.id).catch(() => {})}
                       />
-                      <IconButton
-                        icon={icons.repeat}
-                        label="Type it again"
-                        onClick={() => {
-                          send('panel:close')
-                          void invoke('dictation:history-insert', e.id).catch(() => {})
-                        }}
-                      />
+                      {canTypeAgain(e) && (
+                        <IconButton
+                          icon={icons.repeat}
+                          label="Type it again"
+                          onClick={() => {
+                            send('panel:close')
+                            void invoke('dictation:history-insert', e.id).catch(() => {})
+                          }}
+                        />
+                      )}
                       <IconButton
                         icon={icons.trash}
                         label="Delete"

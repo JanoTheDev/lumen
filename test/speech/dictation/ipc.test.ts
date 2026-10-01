@@ -13,6 +13,22 @@ import { invokeHandler, resetElectronMock } from '../../helpers/electron-mock'
 import { saveConfig, setConfigDir } from '../../../src/main/config'
 import { registerDictationLogIpc } from '../../../src/main/ipc/dictation-log'
 import { recordDictation } from '../../../src/main/speech/dictation/history'
+import { REDACTED_NOTICE } from '../../../src/main/ipc/dictation-log'
+
+const agent = vi.hoisted(() => ({
+  focus: {} as Record<string, unknown>,
+  executed: [] as unknown[]
+}))
+vi.mock('../../../src/main/agent/instance', () => ({
+  getAgent: () => ({
+    request: async () => agent.focus,
+    execute: async (a: unknown) => {
+      agent.executed.push(a)
+    },
+    activeWindow: async () => ''
+  })
+}))
+vi.mock('../../../src/main/windows/assistant', () => ({ setStatus: vi.fn() }))
 
 const INVALID = { error: 'E_INVALID' }
 let dir: string
@@ -69,6 +85,34 @@ describe('dictation history / notes / stats ipc', () => {
     recordDictation({ raw: 'again', text: 'Again.' })
     expect(await invokeHandler('dictation:history-clear')).toEqual({ ok: true })
     expect(await invokeHandler('dictation:history')).toMatchObject({ entries: [] })
+  })
+
+  it('type again: never types a redaction marker, says so on the bar (L5)', async () => {
+    const { setStatus } = await import('../../../src/main/windows/assistant')
+    agent.executed.length = 0
+    recordDictation({ raw: 'x', text: 'the code is [redacted:api-key] ok' })
+    const view = (await invokeHandler('dictation:history')) as { entries: Array<{ id: string }> }
+    expect(await invokeHandler('dictation:history-insert', view.entries[0].id)).toEqual({
+      ok: false,
+      notice: REDACTED_NOTICE
+    })
+    expect(agent.executed).toEqual([])
+    expect(setStatus).toHaveBeenCalledWith('error', REDACTED_NOTICE, undefined, 4000)
+  })
+
+  it('type again: line breaks as Shift+Enter in a chat app (L5)', async () => {
+    agent.executed.length = 0
+    agent.focus = { process: 'slack.exe', title: 'Slack', uia: true, role: 'Edit', editable: true }
+    recordDictation({ raw: 'x', text: 'Hi.\nBye.' })
+    const view = (await invokeHandler('dictation:history')) as { entries: Array<{ id: string }> }
+    expect(await invokeHandler('dictation:history-insert', view.entries[0].id)).toEqual({
+      ok: true
+    })
+    expect(agent.executed).toEqual([
+      { type: 'type', text: 'Hi.', allowTerminal: false },
+      { type: 'hotkey', keys: ['shift', 'enter'] },
+      { type: 'type', text: 'Bye.', allowTerminal: false }
+    ])
   })
 
   it('stats: show flag from config, reset', async () => {

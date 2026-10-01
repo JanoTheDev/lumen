@@ -3,6 +3,7 @@ import type { DictationHistoryEntry, Note } from '../../../src/shared/dictation-
 import {
   ago,
   appLabel,
+  canTypeAgain,
   duration,
   heardText,
   historyMeta,
@@ -20,6 +21,13 @@ const entry = (p: Partial<DictationHistoryEntry> = {}): DictationHistoryEntry =>
   source: 'hotkey',
   ok: true,
   ...p
+})
+
+describe('canTypeAgain (L5)', () => {
+  it('hides "type it again" for text with a secret taken out', () => {
+    expect(canTypeAgain(entry())).toBe(true)
+    expect(canTypeAgain(entry({ text: 'my key is [redacted:api-key]' }))).toBe(false)
+  })
 })
 
 describe('home dictation view', () => {
