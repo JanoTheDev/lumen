@@ -241,6 +241,21 @@ describe('validator rules (fixture packs)', () => {
     expect(m).toContain('$.steps[2].hints[0]: hint only repeats the step')
   })
 
+  it('flags links, file paths and abbreviations in spoken lines', () => {
+    writePack(root, (f) => {
+      const l = lesson()
+      const steps = l.steps as Record<string, unknown>[]
+      steps[0].say = 'Open https://example.org in your browser.'
+      steps[1].hints = ['Save it in C:\\Users\\you\\Pictures for now.']
+      steps[2].why = 'Shapes, e.g. circles, start here.'
+      f[LESSON] = l
+    })
+    const m = messages()
+    expect(m).toContain('$.steps[0].say: say reads out a link or file path')
+    expect(m).toContain('$.steps[1].hints[0]: hint reads out a link or file path')
+    expect(m).toContain('$.steps[2].why: why uses an abbreviation; write it out')
+  })
+
   it('needs a prompt for vision checks and valid regexes', () => {
     writePack(root, (f) => {
       const l = lesson()

@@ -173,6 +173,9 @@ const SYMBOL_SHORTCUT_RE = /\b(ctrl|alt|shift|win|cmd|control)\s*\+|\+\s*[a-z0-9
 const COORD_RE =
   /\b\d{2,5}\s*(px|pixels?)\b|\(\s*\d{2,5}\s*,\s*\d{2,5}\s*\)|\bx\s*=\s*\d|\by\s*=\s*\d/i
 const MARKDOWN_RE = /\*\*|`|\|.*\||^\s*#|^\s*[-*]\s|\[[^\]]+\]\([^)]+\)/m
+// Spoken lines are read aloud: links and file paths come out as noise, abbreviations as letters.
+const LINK_RE = /\bhttps?:\/\/|\bwww\.\w|\b[a-z]:\\|%[a-z]+%/i
+const ABBREV_RE = /\b(e\.g|i\.e|etc)\./i
 
 function lintSpoken(text, kind, maxWords) {
   const problems = []
@@ -186,6 +189,8 @@ function lintSpoken(text, kind, maxWords) {
     problems.push(`${kind} writes a shortcut with "+"; spell it out ("Control Shift A")`)
   if (COORD_RE.test(text)) problems.push(`${kind} mentions raw coordinates`)
   if (MARKDOWN_RE.test(text)) problems.push(`${kind} contains markdown`)
+  if (LINK_RE.test(text)) problems.push(`${kind} reads out a link or file path`)
+  if (ABBREV_RE.test(text)) problems.push(`${kind} uses an abbreviation; write it out`)
   return problems
 }
 
