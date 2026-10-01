@@ -164,7 +164,11 @@ export function bootstrapTheme(opts: ApplyOptions = {}): () => void {
     .then((c) => apply(c as ThemeConfig))
     .catch(() => {})
   const unsub = lumen.on('settings:changed', (c) => apply(c as ThemeConfig))
-  const queries = ['(prefers-color-scheme: dark)', '(prefers-contrast: more)']
+  const queries = [
+    '(prefers-color-scheme: dark)',
+    '(prefers-contrast: more)',
+    '(forced-colors: active)'
+  ]
     .map((q) => window.matchMedia?.(q))
     .filter((m): m is MediaQueryList => !!m)
   const onOs = (): void => apply(current)

@@ -6,6 +6,7 @@ import { INVALID, safeParse } from './validate'
 import { loadConfig, saveConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import { applyUiScale, broadcast } from '../windows/registry'
+import { effectiveScale, textScaleFactor } from '../a11y/text-scale'
 import { hideStatus } from '../windows/status'
 import * as settingsWin from '../windows/settings'
 
@@ -18,9 +19,15 @@ export interface SettingsIpcDeps {
 
 const profileIdsSchema = z.array(z.enum(PROFILE_IDS)).max(PROFILE_IDS.length)
 
+/** The config plus the Windows text size, which renderers multiply into their font size. */
+function forRenderer(cfg: AppConfig): Record<string, unknown> {
+  return { ...cfg, textScaleFactor: textScaleFactor() }
+}
+
 export function broadcastConfig(cfg: AppConfig): void {
-  broadcast('settings:changed', cfg as unknown as Record<string, unknown>)
-  applyUiScale(cfg.a11y.uiScale)
+  broadcast('settings:changed', forRenderer(cfg))
+  // Zoomed windows do not scale their own text: uiScale × Windows text size.
+  applyUiScale(effectiveScale(cfg.a11y.uiScale))
 }
 
 let deps: SettingsIpcDeps | null = null
@@ -77,7 +84,7 @@ export function onConfigPatched(fn: ConfigListener): () => void {
 
 export function registerSettingsIpc(d: SettingsIpcDeps): void {
   deps = d
-  ipcMain.handle('settings:get', () => loadConfig())
+  ipcMain.handle('settings:get', () => forRenderer(loadConfig()))
   ipcMain.handle('settings:patch', (_e, raw: unknown) => patchConfig(raw))
   ipcMain.handle('a11y:apply-profile', (_e, raw: unknown) => {
     const ids = safeParse('a11y:apply-profile', profileIdsSchema, raw)

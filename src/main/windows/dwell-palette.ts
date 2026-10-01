@@ -7,6 +7,7 @@ import { createWindow, loadRenderer } from './factory'
 import { clampScale, live, registerWindow, sendTo } from './registry'
 import { themeBackground } from './settings'
 import { loadConfig } from '../config'
+import { effectiveScale } from '../a11y/text-scale'
 
 const WIDTH = 76
 const HEIGHT = 440
@@ -22,7 +23,7 @@ export function get(): BrowserWindow | null {
 /** Right edge, vertically centred; sized for the UI scale the window is zoomed by. */
 function placement(): Electron.Rectangle {
   const wa = screen.getPrimaryDisplay().workArea
-  const scale = clampScale(loadConfig().a11y.uiScale)
+  const scale = clampScale(effectiveScale(loadConfig().a11y.uiScale))
   const width = Math.round(WIDTH * scale)
   const height = Math.min(Math.round(HEIGHT * scale), wa.height)
   return {
@@ -50,6 +51,8 @@ function create(): BrowserWindow {
   w.setAlwaysOnTop(true, 'screen-saver')
   w.once('ready-to-show', () => w.showInactive())
   w.webContents.on('did-finish-load', () => {
+    // Created after start-up, so the broadcast zoom never reached it: apply it on load.
+    w.webContents.setZoomFactor(clampScale(effectiveScale(loadConfig().a11y.uiScale)))
     if (last) sendTo(w, 'a11y:dwell-state', last)
   })
   w.on('closed', () => {

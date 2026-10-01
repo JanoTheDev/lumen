@@ -3,8 +3,10 @@
 // or the a11y help shortcut. Escape or the close button hides it.
 import { screen, type BrowserWindow } from 'electron'
 import { createWindow, loadRenderer } from './factory'
-import { live, registerWindow, sendTo } from './registry'
+import { clampScale, live, registerWindow, sendTo } from './registry'
 import { themeBackground } from './settings'
+import { loadConfig } from '../config'
+import { effectiveScale } from '../a11y/text-scale'
 
 const WIDTH = 560
 const HEIGHT = 680
@@ -50,6 +52,10 @@ export function show(): void {
   })
   win = w
   w.setAlwaysOnTop(true, 'floating')
+  // Created after start-up, so the broadcast zoom never reached it: apply it on load.
+  w.webContents.on('did-finish-load', () =>
+    w.webContents.setZoomFactor(clampScale(effectiveScale(loadConfig().a11y.uiScale)))
+  )
   w.once('ready-to-show', () => {
     w.show()
     w.focus()

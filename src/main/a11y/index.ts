@@ -34,6 +34,7 @@ import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
 import { installDwell } from './install-dwell'
 import { installShortcuts } from './install-shortcuts'
 import { installSwitch, type SwitchControl } from './install-switch'
+import { onTextScaleChange, watchTextScale } from './text-scale'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
@@ -281,6 +282,9 @@ export function installA11y(): void {
     wantFocusEvents
   })
   installHelpShortcut()
+  // Windows text size changed: re-send the config (renderer font size) and re-zoom windows.
+  onTextScaleChange(() => broadcastConfig(loadConfig()))
+  watchTextScale()
   const sw = installSwitch({
     commands: () => a11y,
     announce: (text) => announce(text, { kind: 'scan' }),
