@@ -1,6 +1,6 @@
 // Plain-language text for Settings → Skills (11 T05/T06): what a skill may do, its trust level,
-// and the search filter. Pure, shared by the list and the install permissions screen.
-import type { SkillPermissions, SkillSummary, SkillTrust } from '@shared/types'
+// the search filter and run history lines. Pure, shared by the list and the install screen.
+import type { SkillPermissions, SkillRunRecord, SkillSummary, SkillTrust } from '@shared/types'
 
 export const TRUST_LABEL: Record<SkillTrust, string> = {
   builtin: 'comes with Lumen',
@@ -71,4 +71,41 @@ export function skillMeta(s: SkillSummary): string {
   if (s.triggers.length) parts.push(`say “${s.triggers[0]}”`)
   if (!s.enabled) parts.push('off')
   return parts.join(' · ')
+}
+
+const HOW_LABEL: Record<SkillRunRecord['how'], string> = {
+  steps: 'recorded steps, no AI',
+  agent: 'with the AI',
+  'steps+agent': 'recorded steps, then the AI',
+  background: 'in the background'
+}
+
+const STATUS_LABEL: Record<SkillRunRecord['status'], string> = {
+  done: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped at a limit',
+  denied: 'Blocked',
+  cancelled: 'Cancelled',
+  paused: 'Paused'
+}
+
+/** One run in the history: "Done · 2 min ago · recorded steps, no AI · 4 actions · 3 s". */
+export function runLine(r: SkillRunRecord, now = Date.now()): string {
+  const ago = Math.max(0, Math.round((now - r.at) / 60_000))
+  const when =
+    ago < 1
+      ? 'just now'
+      : ago < 60
+        ? `${ago} min ago`
+        : ago < 48 * 60
+          ? `${Math.round(ago / 60)} h ago`
+          : new Date(r.at).toLocaleDateString()
+  const secs = Math.max(1, Math.round(r.ms / 1000))
+  return [
+    STATUS_LABEL[r.status],
+    when,
+    HOW_LABEL[r.how],
+    `${r.actions} ${r.actions === 1 ? 'action' : 'actions'}`,
+    secs < 120 ? `${secs} s` : `${Math.round(secs / 60)} min`
+  ].join(' · ')
 }

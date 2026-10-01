@@ -1,5 +1,5 @@
 // Settings → Skills IPC (11 T05/T06): list, view, edit, switch on/off, trust, create, delete,
-// install with a permissions preview, and export.
+// install with a permissions preview, export, and each skill's run history (T04).
 import { ipcMain } from 'electron'
 import { z } from 'zod'
 import {
@@ -22,7 +22,8 @@ import {
   saveSkill,
   setSkillEnabled,
   setSkillTrusted,
-  skillDetail
+  skillDetail,
+  skillRuns
 } from '../skills'
 
 const nameFlag = z.tuple([skillNameSchema, z.boolean()])
@@ -67,6 +68,10 @@ export function registerSkillsIpc(): void {
   ipcMain.handle('skills:install-cancel', (_e, raw: unknown) => {
     const token = safeParse('skills:install-cancel', skillTokenSchema, raw)
     return { ok: !!token && cancelPending(token) }
+  })
+  ipcMain.handle('skills:runs', (_e, raw: unknown) => {
+    const name = safeParse('skills:runs', skillNameSchema, raw)
+    return name ? skillRuns(name) : INVALID
   })
   ipcMain.handle('skills:export', (e, raw: unknown) => {
     const name = safeParse('skills:export', skillNameSchema, raw)

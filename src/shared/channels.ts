@@ -19,6 +19,7 @@ import type {
   Rect,
   SavedGuide,
   SkillPermissions,
+  SkillRunRecord,
   SkillSummary
 } from './types'
 
@@ -201,6 +202,8 @@ export interface InvokeChannels {
   'skills:install-cancel': { args: [token: string]; result: { ok: boolean } }
   /** Saves a skill as a `.lumen` file (save dialog). */
   'skills:export': { args: [name: string]; result: { ok: boolean; path?: string; error?: string } }
+  /** A skill's last runs, newest first (11 T04). */
+  'skills:runs': { args: [name: string]; result: SkillRunRecord[] }
   /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
   'bridges:status': { args: []; result: BridgeStatus[] }
   'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
@@ -937,6 +940,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'skills:install',
   'skills:install-cancel',
   'skills:export',
+  'skills:runs',
   'bridges:status',
   'bridges:test',
   'bridges:blender-addon',

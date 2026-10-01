@@ -1,13 +1,12 @@
 // Settings → Skills (11 T05): every skill Lumen knows (built in, from app packs, yours,
 // community), with search, on/off, what it may do, trust, view and edit SKILL.md, export and
-// delete; plus making a new skill and installing shared ones. Run history arrives with the
-// skill runner.
+// delete, and its recent runs; plus making a new skill and installing shared ones.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SkillDetail } from '@shared/channels'
-import type { SkillSummary } from '@shared/types'
+import type { SkillRunRecord, SkillSummary } from '@shared/types'
 import { Button, Card, IconButton, Switch, announce, icons } from '../../../ui'
 import { SkillsInstall } from './SkillsInstall'
-import { TRUST_LABEL, filterSkills, permissionLines, skillMeta } from './SkillsText'
+import { TRUST_LABEL, filterSkills, permissionLines, runLine, skillMeta } from './SkillsText'
 
 const NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
 
@@ -25,6 +24,7 @@ function SkillEditor({
   const [text, setText] = useState('')
   const [editing, setEditing] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
+  const [runs, setRuns] = useState<SkillRunRecord[]>([])
   const headingRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
@@ -37,6 +37,10 @@ function SkillEditor({
         } else setError(r.error)
       })
       .catch(() => setError('could not load the skill'))
+    window.lumen
+      .invoke('skills:runs', name)
+      .then((r) => setRuns(Array.isArray(r) ? r : []))
+      .catch(() => {})
   }, [name])
   useEffect(() => headingRef.current?.focus(), [])
 
@@ -84,6 +88,19 @@ function SkillEditor({
                 <li key={w}>{w}</li>
               ))}
             </ul>
+          )}
+          <h3>Recent runs</h3>
+          {runs.length ? (
+            <ul aria-label="Recent runs" className="ui-hint">
+              {runs.map((r) => (
+                <li key={r.at}>
+                  {runLine(r)}
+                  {r.summary ? `: ${r.summary}` : ''}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="ui-hint">It has not run yet.</p>
           )}
           {detail.files.length > 0 && (
             <details className="panel-details">
