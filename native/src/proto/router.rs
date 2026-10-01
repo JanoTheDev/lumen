@@ -4,6 +4,7 @@
 //! - input: one FIFO worker, so synthetic input never interleaves.
 //! - read: a pool of three for capture, window queries, OCR.
 //! - uia: one dedicated COM worker (UI Automation calls cannot be interrupted).
+//! - speech: one worker for voice synthesis, so a long reply never fills the read pool.
 //!
 //! Every queued call gets a [`CancelToken`]. `cancel` answers the target with
 //! E_CANCELLED immediately and flags the token; the worker stops at its next
@@ -29,9 +30,10 @@ pub enum Lane {
     Input,
     Read,
     Uia,
+    Speech,
 }
 
-const QUEUED_LANES: [Lane; 3] = [Lane::Input, Lane::Read, Lane::Uia];
+const QUEUED_LANES: [Lane; 4] = [Lane::Input, Lane::Read, Lane::Uia, Lane::Speech];
 
 fn lane_index(lane: Lane) -> usize {
     match lane {
@@ -39,6 +41,7 @@ fn lane_index(lane: Lane) -> usize {
         Lane::Input => 1,
         Lane::Read => 2,
         Lane::Uia => 3,
+        Lane::Speech => 4,
     }
 }
 
@@ -127,7 +130,7 @@ pub struct Router {
     commands: RwLock<HashMap<String, Entry>>,
     inflight: Mutex<HashMap<String, Arc<Call>>>,
     lanes: HashMap<Lane, Sender<Job>>,
-    stats: [LaneStats; 4],
+    stats: [LaneStats; 5],
     timer: Sender<(Instant, Arc<Call>)>,
 }
 
@@ -380,6 +383,10 @@ mod tests {
             Ok(json!({"slept": true}))
         });
         router.register("boom", Lane::Input, None, |_, _| panic!("kaboom"));
+        router.register("speak", Lane::Speech, None, |args, t| {
+            t.sleep(Duration::from_millis(args["ms"].as_u64().unwrap()))?;
+            Ok(json!({"spoke": true}))
+        });
         (router, sink)
     }
 
@@ -495,5 +502,21 @@ mod tests {
         }
         assert!(!r.lane_busy(Lane::Read, Duration::ZERO));
         assert!(r.lane_busy(Lane::Read, Duration::from_secs(5)));
+    }
+
+    #[test]
+    fn speech_lane_leaves_read_pool_free() {
+        let (r, s) = setup();
+        for id in 20..25 {
+            r.dispatch(req(id, "speak", json!({"ms": 60_000})));
+        }
+        r.dispatch(req(30, "sleep", json!({"ms": 1})));
+        let l = wait_for(&r, &s, 1);
+        assert_eq!(l[0]["id"], 30, "{l:?}");
+        assert_eq!(l[0]["result"]["slept"], true);
+        for id in 20..25 {
+            assert!(r.cancel(&json!(id)));
+        }
+        assert_eq!(wait_for(&r, &s, 6).len(), 6);
     }
 }

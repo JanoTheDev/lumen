@@ -152,7 +152,8 @@ pub mod engine {
 
     const POLL: Duration = Duration::from_millis(2);
 
-    /// One synthesizer for the process; calls take turns (voice and options are per call).
+    /// One synthesizer for the process. Calls run on the single speech lane worker, so this
+    /// lock is never contended (voice and options are set per call).
     static SYNTH: Mutex<Option<SpeechSynthesizer>> = Mutex::new(None);
 
     /// Waits for a WinRT operation, cancelling it when the token fires.

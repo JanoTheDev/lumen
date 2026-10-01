@@ -254,7 +254,7 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
     app.cmd("system_info", Lane::Read, Some(2000), |_, _, _| crate::system::cmd_system_info());
     app.cmd("tts_voices", Lane::Read, Some(5000), |_, _, _| crate::tts::cmd_voices());
-    app.cmd("tts_synthesize", Lane::Read, Some(15_000), |_, args, token| {
+    app.cmd("tts_synthesize", Lane::Speech, Some(15_000), |_, args, token| {
         crate::tts::cmd_synthesize(args, token)
     });
     app.cmd("audio_output", Lane::Read, Some(2000), |_, _, _| crate::tts::cmd_output_state());
