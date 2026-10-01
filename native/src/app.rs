@@ -6,6 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
+use crate::dwell::{self, Dwell, MouseWatch};
 use crate::hotkey::{self, accel};
 use crate::logging;
 use crate::proto::router::{CancelToken, Lane, Router};
@@ -14,7 +15,7 @@ use crate::proto::{AgentError, Args, CmdResult, arg};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia"];
+pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -51,6 +52,8 @@ pub struct App {
     pub router: Arc<Router>,
     pub opts: Opts,
     pub hotkeys: hotkey::Service,
+    pub dwell: Dwell,
+    pub mouse: MouseWatch,
     log: logging::Handle,
     subscribable: Mutex<BTreeMap<&'static str, SubscribeFn>>,
     subscriptions: Mutex<BTreeSet<String>>,
@@ -59,9 +62,15 @@ pub struct App {
 impl App {
     pub fn new(router: Arc<Router>, opts: Opts, log: logging::Handle) -> Arc<Self> {
         let hotkeys = hotkey::Service::new(router.out().clone(), opts.accept_injected);
+        let r = router.clone();
+        let dwell =
+            Dwell::new(router.out().clone(), move || r.lane_busy(Lane::Input, dwell::AUTO_PAUSE_GRACE));
+        let mouse = MouseWatch::new(router.out().clone());
         Arc::new(App {
             router,
             hotkeys,
+            dwell,
+            mouse,
             opts,
             log,
             subscribable: Mutex::new(BTreeMap::new()),
@@ -180,6 +189,38 @@ pub fn register_core(app: &Arc<App>) {
         Ok(json!({"done": true, "hwnd": hwnd}))
     });
 
+    app.cmd("dwell_config", Lane::Inline, None, |app, args, _| Ok(app.dwell.configure(args).to_json()));
+    app.cmd("dwell_pause", Lane::Inline, None, |app, _, _| {
+        app.dwell.set_paused(true);
+        Ok(json!({"paused": true}))
+    });
+    app.cmd("dwell_resume", Lane::Inline, None, |app, _, _| {
+        app.dwell.set_paused(false);
+        Ok(json!({"paused": false}))
+    });
+    // v1 aliases kept for the current bridge wrappers.
+    app.cmd("dwell_enable", Lane::Inline, None, |app, args, _| {
+        let mut cfg = args.clone();
+        cfg.insert("enabled".into(), json!(true));
+        let c = app.dwell.configure(&cfg);
+        Ok(json!({"ok": true, "dwell_ms": c.ms, "cooldown_ms": c.cooldown_ms}))
+    });
+    app.cmd("dwell_disable", Lane::Inline, None, |app, _, _| {
+        app.dwell.configure(json!({"enabled": false}).as_object().unwrap());
+        Ok(json!({"ok": true}))
+    });
+    app.cmd("dwell_set_ms", Lane::Inline, None, |app, args, _| {
+        let ms = args.get("dwell_ms").or_else(|| args.get("ms")).cloned().unwrap_or(json!(1400));
+        app.dwell.configure(json!({"ms": ms}).as_object().unwrap());
+        Ok(json!({"ok": true}))
+    });
+    let weak = Arc::downgrade(app);
+    app.add_subscribable("mouse-moved", move |on| {
+        if let Some(app) = weak.upgrade() {
+            app.mouse.set_enabled(on);
+        }
+    });
+
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")
             .ok()
@@ -252,6 +293,10 @@ fn cmd_init(app: &Arc<App>, args: &Args, _: &CancelToken) -> CmdResult {
         dictation = "";
     }
     app.hotkeys.apply(hotkey::Update { dictation: Some(dictation), ..hotkeys })?;
+    let mut dwell_cfg = arg::obj(args, "dwell").cloned().unwrap_or_default();
+    let enabled = dwell_cfg.get("enabled") == Some(&Value::Bool(true));
+    dwell_cfg.insert("enabled".into(), json!(enabled));
+    app.dwell.configure(&dwell_cfg);
     let known: Vec<&'static str> = app.subscribable.lock().unwrap().keys().copied().collect();
     for event in known {
         app.set_subscription(event, subscriptions.iter().any(|s| s == event));

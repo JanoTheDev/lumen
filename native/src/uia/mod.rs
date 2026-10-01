@@ -491,6 +491,19 @@ pub fn find_in_window(hwnd: isize, text: &str, token: &CancelToken) -> Result<Op
     Ok(tree::find(&flat, Some(text), None, None, None).into_iter().find(|n| !n.rect.is_empty()).cloned())
 }
 
+/// {rect, role, name} of the control under a physical point (dwell snap-to-element).
+pub fn element_at(x: i32, y: i32) -> Option<Value> {
+    let client = Client::get().ok()?;
+    // SAFETY: COM call on this thread's client.
+    let el = unsafe {
+        client.u.ElementFromPointBuildCache(windows::Win32::Foundation::POINT { x, y }, &client.elem_cr)
+    }
+    .ok()?;
+    let node = node_of(&el, &monitors::enumerate());
+    (!node.rect.is_empty())
+        .then(|| json!({"rect": node.rect.to_json(), "role": node.role, "name": node.name}))
+}
+
 // ---- warm-up ---------------------------------------------------------------
 
 static WARM: Mutex<(isize, bool)> = Mutex::new((0, false));

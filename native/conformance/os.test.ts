@@ -201,6 +201,31 @@ describe('dwell', () => {
   })
 })
 
+describe('dwell (live)', () => {
+  it('a resting cursor triggers exactly once, after the input grace period', async (ctx) => {
+    if (!(agent.has('dwell') && agent.has('input'))) ctx.skip()
+    const from = agent.frames.length
+    await agent.ok('input', { steps: [{ t: 'move', x: 400, y: 300 }] })
+    const t0 = Date.now()
+    await agent.ok('dwell_config', { enabled: true, ms: 300, cooldownMs: 300, clickType: 'left' })
+    try {
+      const trig = await agent.waitFor((f) => f.event === 'dwell-trigger', 5000, from)
+      expect(Date.now() - t0).toBeGreaterThanOrEqual(900)
+      expect(trig.data).toMatchObject({ x: 400, y: 300, clickType: 'left' })
+      expect(typeof trig.data?.lx).toBe('number')
+      expect(Number.isInteger(trig.data?.monitorId)).toBe(true)
+      await new Promise((r) => setTimeout(r, 1200))
+      expect(agent.frames.slice(from).filter((f) => f.event === 'dwell-trigger')).toHaveLength(1)
+      const prog = agent.frames
+        .slice(from)
+        .find((f) => f.event === 'dwell-progress' && f.data?.active)
+      expect(prog?.data?.progress).toBeGreaterThan(0)
+    } finally {
+      await agent.ok('dwell_config', { enabled: false })
+    }
+  })
+})
+
 describe('announce', () => {
   it('validates and reports whether it spoke', async (ctx) => {
     if (!agent.has('announce')) ctx.skip()

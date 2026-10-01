@@ -5,6 +5,7 @@
 mod app;
 mod capture;
 mod dpi;
+mod dwell;
 mod geom;
 mod hotkey;
 mod input;
