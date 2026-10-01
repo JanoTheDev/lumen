@@ -15,6 +15,7 @@ import {
   type StructuredRequest,
   type ToolCall,
   type ToolContent,
+  type ToolDef,
   type ToolTurnRequest,
   type ToolTurnResult,
   type Usage
@@ -168,9 +169,68 @@ function messageParam(m: AgentMessage): Anthropic.MessageParam {
 }
 
 /**
- * Strict tools (schema-valid inputs), auto tool choice (Sonnet/Opus 5.5 reject forced choice),
- * and three cache breakpoints: system, the last tool, and the newest user message, so each
- * turn reads the previous turn's prefix from the cache.
+ * Anthropic's limits across all strict schemas of one request (structured-outputs docs):
+ * 20 strict tools, 24 optional parameters, 16 parameters with union types. Going over any of
+ * them is a 400 for the whole request.
+ */
+export const STRICT_LIMITS = { tools: 20, optional: 24, unions: 16 } as const
+
+type Json = Record<string, unknown>
+
+/** Optional and union-typed parameters at every level of a JSON schema. */
+export function strictCounts(schema: unknown): { optional: number; unions: number } {
+  let optional = 0
+  let unions = 0
+  const walk = (node: unknown): void => {
+    if (!node || typeof node !== 'object') return
+    if (Array.isArray(node)) return node.forEach(walk)
+    const n = node as Json
+    if (n.properties && typeof n.properties === 'object') {
+      const required = new Set(Array.isArray(n.required) ? (n.required as string[]) : [])
+      for (const key of Object.keys(n.properties as Json)) if (!required.has(key)) optional++
+    }
+    if (n.anyOf || Array.isArray(n.type)) unions++
+    for (const v of Object.values(n)) walk(v)
+  }
+  walk(schema)
+  return { optional, unions }
+}
+
+/** Connector (MCP) tools give up strict mode first; the built-in tools keep it. */
+const isConnectorTool = (t: ToolDef): boolean => t.name.startsWith('mcp__')
+
+/**
+ * Which tools of a request go strict: built-in tools first, then connector tools, each only
+ * while the strict-tool, optional and union budgets still fit; the rest go non-strict with
+ * their own schema (the handlers check their input either way).
+ */
+export function strictPlan(tools: readonly ToolDef[], schemas: readonly unknown[]): boolean[] {
+  const plan = tools.map(() => false)
+  const left = {
+    tools: STRICT_LIMITS.tools,
+    optional: STRICT_LIMITS.optional,
+    unions: STRICT_LIMITS.unions
+  }
+  const order = tools
+    .map((_, i) => i)
+    .sort((a, b) => Number(isConnectorTool(tools[a])) - Number(isConnectorTool(tools[b])) || a - b)
+  for (const i of order) {
+    if (tools[i].strict === false) continue
+    const c = strictCounts(schemas[i])
+    if (left.tools < 1 || c.optional > left.optional || c.unions > left.unions) continue
+    plan[i] = true
+    left.tools--
+    left.optional -= c.optional
+    left.unions -= c.unions
+  }
+  return plan
+}
+
+/**
+ * Strict tools (schema-valid inputs) within the request-wide budget, auto tool choice
+ * (Sonnet/Opus 5.5 reject forced choice), and three cache breakpoints: system, the last
+ * tool, and the newest user message, so each turn reads the previous turn's prefix from the
+ * cache.
  */
 export function buildToolParams(req: ToolTurnRequest): CreateParams {
   const base = buildParams({
@@ -180,16 +240,17 @@ export function buildToolParams(req: ToolTurnRequest): CreateParams {
     maxTokens: req.maxTokens,
     effort: req.effort
   })
+  const schemas = req.tools.map((t) =>
+    t.strict === false ? null : (anthropicJsonSchema(t.schema) as Json)
+  )
+  const plan = strictPlan(req.tools, schemas)
   const tools: Anthropic.Tool[] = req.tools.map((t, i) => ({
     name: t.name,
     description: t.description,
-    ...(t.strict === false
-      ? {
-          input_schema: looseToolSchema(t, anthropicJsonSchema) as Anthropic.Tool.InputSchema
-        }
+    ...(plan[i]
+      ? { input_schema: schemas[i] as Anthropic.Tool.InputSchema, strict: true }
       : {
-          input_schema: anthropicJsonSchema(t.schema) as Anthropic.Tool.InputSchema,
-          strict: true
+          input_schema: looseToolSchema(t, anthropicJsonSchema) as Anthropic.Tool.InputSchema
         }),
     ...(i === req.tools.length - 1 ? { cache_control: { type: 'ephemeral' as const } } : {})
   }))

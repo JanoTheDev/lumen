@@ -18,7 +18,11 @@ import { compactSchema, fromToolSchema } from './schema'
 export const MCP_PREFIX = 'mcp__'
 const MAX_NAME = 64
 const MAX_DESC = 800
-/** Optional parameters MCP tools may add on top of the built-in tools (Anthropic caps 24). */
+/**
+ * Optional parameters MCP tools may add on top of the built-in tools (Anthropic caps 24). The
+ * Anthropic provider also applies the request-wide strict budget (anthropic.strictPlan), which
+ * turns connector tools non-strict first.
+ */
 export const DEFAULT_OPTIONAL_BUDGET = 4
 const MAX_OBSERVED = 20_000
 /** A non-strict tool's compacted schema above this many characters takes JSON text instead. */
