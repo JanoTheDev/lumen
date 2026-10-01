@@ -82,6 +82,14 @@ describe('task XML', () => {
     expect(mo).toContain('<DaysOfMonth><Day>1</Day></DaysOfMonth>')
     expect(mo).toContain('<December />')
     expect(triggerXml({ kind: 'monthly', day: 31, at: '09:00' }, NOW)).toContain('<Day>Last</Day>')
+    // Day 29 / 30: Task Scheduler skips February, so February's last day gets its own trigger.
+    for (const day of [29, 30]) {
+      const x = triggerXml({ kind: 'monthly', day, at: '09:00' }, NOW)
+      expect(x.match(/<CalendarTrigger>/g)).toHaveLength(2)
+      expect(x).toContain(`<Day>${day}</Day>`)
+      expect(x).toContain('<DaysOfMonth><Day>Last</Day></DaysOfMonth><Months><February /></Months>')
+    }
+    expect(mo.match(/<CalendarTrigger>/g)).toHaveLength(1)
     expect(triggerXml({ kind: 'once', at: at(2026, 10, 2, 8) }, NOW)).toBe(
       '<TimeTrigger><StartBoundary>2026-10-02T08:00:00</StartBoundary><Enabled>true</Enabled></TimeTrigger>'
     )

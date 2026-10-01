@@ -107,9 +107,16 @@ export function triggerXml(t: TimeTrigger, now: number): string {
     case 'daily':
       return `<CalendarTrigger><StartBoundary>${stampAt(now, t.at)}</StartBoundary><Enabled>true</Enabled>${bySchedule(t.days)}</CalendarTrigger>`
     case 'monthly': {
-      // Day 31 means the month's last day (as in Lumen); 29 / 30 skip shorter months here.
+      // Day 31 means the month's last day (as in Lumen). Task Scheduler skips a month without
+      // day 29 / 30 (February), so those get a second trigger on February's last day; in a leap
+      // year day 29 fires twice on Feb 29 and the wake run's 5-minute dedupe drops the second.
       const day = t.day >= 31 ? 'Last' : String(t.day)
-      return `<CalendarTrigger><StartBoundary>${stampAt(now, t.at)}</StartBoundary><Enabled>true</Enabled><ScheduleByMonth><DaysOfMonth><Day>${day}</Day></DaysOfMonth><Months>${MONTH_TAGS.map((m) => `<${m} />`).join('')}</Months></ScheduleByMonth></CalendarTrigger>`
+      const monthly = (d: string, months: string[]): string =>
+        `<CalendarTrigger><StartBoundary>${stampAt(now, t.at)}</StartBoundary><Enabled>true</Enabled><ScheduleByMonth><DaysOfMonth><Day>${d}</Day></DaysOfMonth><Months>${months.map((m) => `<${m} />`).join('')}</Months></ScheduleByMonth></CalendarTrigger>`
+      return (
+        monthly(day, MONTH_TAGS) +
+        (t.day === 29 || t.day === 30 ? monthly('Last', ['February']) : '')
+      )
     }
     case 'every': {
       const from = t.from ?? '00:00'
