@@ -11,7 +11,7 @@ import { setStatus } from '../windows/status'
 
 export function interceptLocal(prompt: string): unknown | undefined {
   return routeLocal(prompt, { ...guideState(), hasLastTask: hasLastTask() }, (hit) => {
-    if (hit.kind === 'memory') return handleMemoryCommand(hit.command)
+    if (hit.kind === 'memory') return handleMemoryCommand(hit.command, prompt)
     if (hit.kind !== 'cancel') return handleGuideCommand(hit)
     if (cancelAll()) log('skip', 'cancel word: aborting in-flight work')
     else {

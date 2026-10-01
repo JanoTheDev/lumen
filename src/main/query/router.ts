@@ -76,10 +76,12 @@ export function isContinuation(utterance: string): boolean {
 /** High-precision local commands only; anything else (or anything long) returns null. */
 export function prefilter(utterance: string, state: PrefilterState): PrefilterHit | null {
   const text = normalizeUtterance(utterance)
-  if (!text || utterance.length > MAX_COMMAND_CHARS) return null
-  if (CANCEL_RE.test(text)) return { kind: 'cancel' }
+  if (!text) return null
+  // "remember that …" can carry a longer fact; the matcher caps its own length.
   const memory = matchMemoryCommand(utterance)
   if (memory) return { kind: 'memory', command: memory }
+  if (utterance.length > MAX_COMMAND_CHARS) return null
+  if (CANCEL_RE.test(text)) return { kind: 'cancel' }
   if (state.guideActive) {
     const command = parseGuideNav(utterance)
     if (command) return { kind: 'guide-nav', command }
