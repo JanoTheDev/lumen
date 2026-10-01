@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { THEMES, applyTheme, type ThemeName } from '../themes'
 import { HotkeyCapture } from './HotkeyCapture'
-import { useDraft, isHexColor, parseClamped } from './draft'
+import { useDraft, isHexColor, parseClamped } from '../ui/draft'
 
 type Panel =
   | 'general'

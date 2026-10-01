@@ -19,6 +19,7 @@ const shortText = (max: number): z.ZodString => z.string().max(max)
 const modelId = z.union([z.literal(''), z.string().regex(MODEL_ID_RE)])
 
 export const THEME_NAMES = [
+  'system',
   'dark',
   'light',
   'high-contrast',
@@ -29,6 +30,8 @@ export const THEME_NAMES = [
   'custom'
 ] as const
 
+export const ACCENT_IDS = ['blue', 'teal', 'green', 'orange', 'pink', 'violet', 'yellow'] as const
+
 export const configV1Schema = z.object({
   version: z.literal(1),
   theme: z.enum(THEME_NAMES),
@@ -37,8 +40,8 @@ export const configV1Schema = z.object({
       accent: hex,
       background: hex,
       foreground: hex,
-      opacity: z.number().min(0).max(1),
-      blur: z.number().min(0).max(64)
+      opacity: z.number().min(0).max(1).optional(),
+      blur: z.number().min(0).max(64).optional()
     })
     .optional(),
   models: z.object({
@@ -109,6 +112,8 @@ export const configV2Schema = z.object({
   agentImpl: z.enum(['auto', 'python', 'native']),
   theme: v1.theme,
   themeCustom: v1.themeCustom,
+  /** Accent preset id (blue, teal, …) or #RRGGBB; unset = theme default. */
+  accent: z.union([z.enum(ACCENT_IDS), hex]).optional(),
   models: z.object({
     main: modelId.optional(),
     fast: modelId.optional(),
@@ -277,6 +282,7 @@ export const configPatchSchema = z
     agentImpl: s2.agentImpl,
     theme: s2.theme,
     themeCustom: s2.themeCustom,
+    accent: s2.accent,
     models: s2.models.partial().strict(),
     hotkey: s2.hotkey,
     hudAutoCloseMs: s2.hudAutoCloseMs,

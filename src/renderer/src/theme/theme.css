@@ -1,0 +1,189 @@
+/* Base layer shared by every window. Values come from tokens written by applyTheme(). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-text);
+  font-size: 16px;
+  line-height: var(--leading-body);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  text-size-adjust: none;
+}
+
+body {
+  font-size: var(--text-md);
+  font-weight: var(--weight-regular);
+  background: transparent;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-heading);
+}
+
+h1 {
+  font-size: var(--text-xl);
+}
+
+h2,
+h3 {
+  font-size: var(--text-lg);
+}
+
+h4 {
+  font-size: var(--text-md);
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--accent);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.surface {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus: a double ring that stays visible on accent fills. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--surface);
+}
+
+:root[data-theme='high-contrast'] :focus-visible {
+  outline-width: 3px;
+}
+
+:root[data-theme='high-contrast'] .surface {
+  border-width: 2px;
+  border-color: var(--fg);
+}
+
+/* Scrollbars that are visible but quiet. */
+::-webkit-scrollbar {
+  width: 0.625rem;
+  height: 0.625rem;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Reduced motion: the app setting wins, otherwise follow the OS. */
+:root[data-reduce-motion='true'] *,
+:root[data-reduce-motion='true'] *::before,
+:root[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion='false']) *,
+  :root:not([data-reduce-motion='false']) *::before,
+  :root:not([data-reduce-motion='false']) *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows contrast themes. */
+@media (forced-colors: active) {
+  :root {
+    --bg: Canvas;
+    --surface: Canvas;
+    --surface-raised: Canvas;
+    --surface-sunken: Canvas;
+    --fg: CanvasText;
+    --fg-muted: CanvasText;
+    --border: CanvasText;
+    --border-subtle: CanvasText;
+    --accent: Highlight;
+    --on-accent: HighlightText;
+    --accent-soft: Canvas;
+    --focus: Highlight;
+    --danger: CanvasText;
+    --success: CanvasText;
+    --warning: CanvasText;
+  }
+
+  * {
+    box-shadow: none !important;
+  }
+
+  .surface {
+    border: 2px solid CanvasText;
+  }
+
+  button,
+  [role='switch'] {
+    forced-color-adjust: auto;
+  }
+
+  :focus-visible {
+    outline: 3px solid Highlight;
+  }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-export const DRAFT_DEBOUNCE_MS = 600
+export const DRAFT_DEBOUNCE_MS = 500
 
 export const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i
 

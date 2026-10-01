@@ -4,7 +4,7 @@ import {
   isHexColor,
   parseClamped,
   DRAFT_DEBOUNCE_MS
-} from '../src/renderer/src/settings/draft'
+} from '../src/renderer/src/ui/draft'
 
 describe('createDraftCommitter', () => {
   beforeEach(() => {
