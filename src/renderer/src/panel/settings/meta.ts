@@ -20,6 +20,7 @@ export type SectionId =
   | 'background'
   | 'helpers'
   | 'bridges'
+  | 'claude-code'
   | 'connectors'
   | 'privacy'
   | 'about'
@@ -114,6 +115,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Connectors',
     icon: icons.external,
     keywords: 'connectors mcp servers tools calendar email files folder integrations agent token'
+  },
+  {
+    id: 'claude-code',
+    label: 'Claude Code',
+    icon: icons.cpu,
+    keywords:
+      'claude code cli copilot coding agent autopilot projects permissions approve hooks terminal sessions commands'
   },
   {
     id: 'privacy',
