@@ -4,7 +4,7 @@
 import type { ReadingLevel } from '@shared/config'
 
 export type HelperCommand =
-  | { kind: 'focus-on'; level?: 'soft' | 'strong'; region?: string }
+  | { kind: 'focus-on'; level?: 'soft' | 'strong'; region?: string; loose?: boolean }
   | { kind: 'focus-off' }
   /** "undo that": Lumen's last action, only right after it acted. */
   | { kind: 'undo'; n: number; that?: boolean }
@@ -72,8 +72,17 @@ const RULES: Rule[] = [
   ],
   [/^hide (?:the|all the|all this) clutter$/, () => ({ kind: 'focus-on' })],
   [
-    /^(?:focus mode on|only show|just show) (?:me )?(?:the )?([a-z0-9 ]{3,40})$/,
+    /^focus mode on (?:the )?([a-z0-9 ]{3,40})$/,
     (m) => (/^(everything|all|it all)$/.test(m[1]) ? null : { kind: 'focus-on', region: m[1] })
+  ],
+  // "just show me the weather" is a question: this form is focus mode only when the words
+  // name an app area (loose: checked against the pack regions before it is claimed).
+  [
+    /^(?:only show|just show) (?:me )?(?:the )?([a-z0-9 ]{3,40})$/,
+    (m) =>
+      /^(everything|all|it all)$/.test(m[1])
+        ? null
+        : { kind: 'focus-on', region: m[1], loose: true }
   ],
   [
     /^(?:turn off |stop |end |exit |switch off |disable )focus mode$|^focus mode off$/,

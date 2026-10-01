@@ -9,7 +9,7 @@ import { join } from 'path'
 import type { CoachStatus } from '@shared/channels'
 import type { ElementNode } from '@shared/types'
 import { bus } from '../bus'
-import { loadConfig, saveConfig, type AppConfig } from '../config'
+import { loadConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
@@ -23,6 +23,7 @@ import { flattenElements } from '../query/uia-list'
 import { skillRegistry } from '../teach'
 import { requestConfirm } from '../windows/assistant'
 import { focusOff, focusOn, installFocus } from '../focus'
+import { matchRegions } from '../focus/mask'
 import { installUndo, recentlyActed, undoLast } from '../undo'
 import { JournalStore, summarize } from '../journal/journal'
 import { parseHelperCommand, type HelperCommand } from './grammar'
@@ -209,7 +210,10 @@ async function maybePropose(): Promise<void> {
     fatigue.answer(p.id, yes, Date.now())
     saveSoon()
     if (!yes) return
-    if (p.patch) saveConfig(p.patch as Parameters<typeof saveConfig>[0])
+    // patchConfig, not saveConfig: the agent's dwell timing, open Settings windows and the
+    // config listeners all follow the change.
+    const saved = p.patch ? await patchConfig(p.patch) : null
+    if (saved && 'error' in saved) return
     announce(p.done, { kind: 'status' })
     log('step', `fatigue proposal ${p.id} accepted`)
   } catch (e) {
@@ -349,13 +353,22 @@ async function setReadingLevel(
   const current = readingLevelFor(cfg, app?.id)
   const level =
     cmd.level === 'simpler' || cmd.level === 'deeper' ? stepLevel(current, cmd.level) : cmd.level
-  saveConfig({ helpers: readingLevelPatch(cfg, level, app?.id) })
+  await patchConfig({ helpers: readingLevelPatch(cfg, level, app?.id) })
   const where = app ? ` in ${app.name}` : ''
   if (level === current) return `I’m already using ${levelName(level)} explanations${where}.`
   return `OK, ${levelName(level)} explanations${where} from now on. Ask your question again for a new answer.`
 }
 
 // ---- Voice entry ----
+
+/** Whether the words name an area in some app pack's regions.json (by its id). */
+function namesPackRegion(words: string): boolean {
+  const rect = { x: 0, y: 0, w: 0, h: 0 }
+  const regions = (skillRegistry()?.all() ?? []).flatMap((s) =>
+    Object.keys(s.regions).map((name) => ({ name, desc: '', rect }))
+  )
+  return matchRegions(words, regions).length > 0
+}
 
 const answer = (text: string): { mode: 'answer'; text: string } => ({ mode: 'answer', text })
 
@@ -387,6 +400,7 @@ export function interceptHelpers(prompt: string): unknown | undefined {
   if (!cmd) return undefined
   switch (cmd.kind) {
     case 'focus-on':
+      if (cmd.loose && !(cmd.region && namesPackRegion(cmd.region))) return undefined
       return focusOn({ region: cmd.region, level: cmd.level }).then(answer)
     case 'focus-off':
       return answer(focusOff())
@@ -414,7 +428,8 @@ export function interceptHelpers(prompt: string): unknown | undefined {
     case 'shortcut-tips':
       coach.setMuted(!cmd.on)
       saveSoon()
-      if (cmd.on && !cfg.shortcutCoach) saveConfig({ helpers: { shortcutCoach: true } })
+      // Through patchConfig, so the coach's uia / key subscriptions start right away.
+      if (cmd.on && !cfg.shortcutCoach) void patchConfig({ helpers: { shortcutCoach: true } })
       return answer(cmd.on ? 'Shortcut tips are on.' : 'OK, no more shortcut tips.')
     case 'quiet-mode': {
       const background = { ...loadConfig().agent.background, quiet: cmd.on }

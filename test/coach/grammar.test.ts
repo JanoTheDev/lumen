@@ -7,7 +7,12 @@ describe('helper voice commands', () => {
     expect(p('turn on focus mode')).toEqual({ kind: 'focus-on' })
     expect(p('declutter this app')).toEqual({ kind: 'focus-on' })
     expect(p('strong focus')).toEqual({ kind: 'focus-on', level: 'strong' })
-    expect(p('only show the viewport')).toEqual({ kind: 'focus-on', region: 'viewport' })
+    expect(p('only show the viewport')).toEqual({
+      kind: 'focus-on',
+      region: 'viewport',
+      loose: true
+    })
+    expect(p('focus mode on the viewport')).toEqual({ kind: 'focus-on', region: 'viewport' })
     expect(p('focus mode on the properties panel')).toEqual({
       kind: 'focus-on',
       region: 'properties panel'

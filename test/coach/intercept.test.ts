@@ -14,13 +14,18 @@ vi.mock('../../src/main/config', () => ({
 }))
 vi.mock('../../src/main/agent/instance', () => ({ getAgent: () => null }))
 vi.mock('../../src/main/a11y', () => ({ announce: vi.fn() }))
-vi.mock('../../src/main/teach', () => ({ skillRegistry: () => null }))
+vi.mock('../../src/main/teach', () => ({
+  skillRegistry: () => ({ all: () => [{ regions: { viewport: {}, 'properties-panel': {} } }] })
+}))
 vi.mock('../../src/main/windows/assistant', () => ({ requestConfirm: vi.fn(async () => false) }))
 vi.mock('../../src/main/actions/executor', () => ({ executeActions: vi.fn() }))
-const patchConfig = vi.fn(async (p: unknown) => p)
+const patchConfig = vi.fn(async (p: { helpers?: Partial<HelpersConfig> }) => {
+  helpers = { ...helpers, ...p.helpers }
+  return p
+})
 vi.mock('../../src/main/ipc/settings', () => ({
   onConfigPatched: vi.fn(),
-  patchConfig: (p: unknown) => patchConfig(p)
+  patchConfig: (p: { helpers?: Partial<HelpersConfig> }) => patchConfig(p)
 }))
 const focusOn = vi.fn(async () => 'Focus mode on.')
 vi.mock('../../src/main/focus', () => ({
@@ -35,6 +40,7 @@ describe('interceptHelpers', () => {
   beforeEach(() => {
     helpers = { ...HELPERS_DEFAULTS }
     saveConfig.mockClear()
+    patchConfig.mockClear()
   })
 
   it('leaves other utterances alone', () => {
@@ -51,6 +57,13 @@ describe('interceptHelpers', () => {
       mode: 'answer',
       text: 'Showing everything.'
     })
+  })
+
+  it('"just show me the …" is a question unless it names an app area (review med)', () => {
+    focusOn.mockClear()
+    expect(interceptHelpers('just show me the weather')).toBeUndefined()
+    expect(interceptHelpers('only show the unread emails')).toBeUndefined()
+    expect(focusOn).not.toHaveBeenCalled()
   })
 
   it('"undo that" stays the app’s Ctrl+Z unless Lumen just acted', () => {
@@ -71,7 +84,9 @@ describe('interceptHelpers', () => {
     expect(await interceptHelpers('explain simpler')).toMatchObject({
       text: expect.stringContaining('plain and simple')
     })
-    expect(saveConfig).toHaveBeenCalledWith({ helpers: { readingLevel: 'plain' } })
+    // Through patchConfig (review med): Settings and the config listeners see it.
+    expect(patchConfig).toHaveBeenCalledWith({ helpers: { readingLevel: 'plain' } })
+    expect(saveConfig).not.toHaveBeenCalled()
   })
 
   it('"turn on shortcut tips" switches the coach on', () => {
@@ -80,6 +95,8 @@ describe('interceptHelpers', () => {
       text: 'Shortcut tips are on.'
     })
     expect(helpers.shortcutCoach).toBe(true)
+    expect(patchConfig).toHaveBeenCalledWith({ helpers: { shortcutCoach: true } })
+    expect(saveConfig).not.toHaveBeenCalled()
   })
 
   it('"quiet mode on" sets agent.background.quiet and keeps the other limits', async () => {
