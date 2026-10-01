@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { appUrl } from '../ai/app-context'
 import { parseJsonAs } from '../ai/json'
 import { routerSystem, routerTurn, type RouterInput } from '../ai/prompts/router'
-import { skillIndex } from '../skills'
+import { getSkillRegistry, skillIndex } from '../skills'
 import { getProvider } from '../ai/providers'
 import {
   isReplayRequest,
@@ -247,6 +247,17 @@ export function normalizeRoute(raw: Route): Route {
 }
 
 /**
+ * Skills the router may run on its own: built-in, the user's own and community skills the user
+ * trusted. An untrusted community skill's description still reaches the router (fenced), so it
+ * could steer the pick; such a skill runs only from its exact trigger phrase.
+ */
+export function routerMaySelectSkill(name: string): boolean {
+  const registry = getSkillRegistry()
+  const s = registry?.get(name)
+  return !!s && registry!.trustOf(s) !== 'community-untrusted'
+}
+
+/**
  * One fast-model call. Returns null when the router fails, times out or replies with
  * something unusable: the main model then decides the mode itself. Throws only when the
  * caller's signal aborted.
@@ -282,6 +293,10 @@ export async function routeWithLlm(
       return null
     }
     const route = normalizeRoute(raw)
+    if (route.skill && !routerMaySelectSkill(route.skill.name)) {
+      log('skip', `router picked community skill ${route.skill.name}; needs its trigger phrase`)
+      delete route.skill
+    }
     log('time', `router ${ms}ms → ${describeRoute(route)}`, { model: res.model, timeMs: ms })
     return route
   } catch (e) {
