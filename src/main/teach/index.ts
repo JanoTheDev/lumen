@@ -232,6 +232,10 @@ function wireAgentEvents(): void {
     const combo = (data as { combo?: unknown } | null)?.combo
     if (typeof combo === 'string') for (const cb of keySubs) cb(combo)
   })
+  // A fresh agent has no subscriptions; ask again while a step watches for keys.
+  agent.onEvent('agent-ready', () => {
+    if (keySubs.size) setKeyObservation(true)
+  })
 }
 
 function setKeyObservation(on: boolean): void {
