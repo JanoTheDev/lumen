@@ -33,6 +33,8 @@ import { interceptLocal } from './query/local'
 import { installHelpers, interceptHelpers } from './coach'
 import { registerHelpersIpc } from './coach/ipc'
 import { installDeictic, interceptDeictic } from './deictic'
+import { interceptDocs } from './docs-out/answer'
+import { sharePointedFile } from './files/share'
 import { installLabels, interceptLabels } from './labels'
 import { registerLabelsIpc } from './labels/ipc'
 import { registerFirstsIpc } from './teach/firsts-ipc'
@@ -178,10 +180,15 @@ function registerIpc(): void {
       interceptRoutines(prompt) ??
       interceptHelpers(prompt) ??
       interceptDeictic(prompt) ??
+      interceptDocs(prompt) ??
       interceptLabels(prompt) ??
       interceptLocal(prompt),
-    preempt: (prompt, opts, scope) =>
-      opts.lowDetail ? Promise.resolve(false) : maybeAutoDictate(prompt, scope.signal),
+    preempt: async (prompt, opts, scope) => {
+      if (opts.lowDetail) return false
+      // "Summarize this file" while pointing at one in File Explorer: share it first.
+      await sharePointedFile(prompt).catch(() => null)
+      return maybeAutoDictate(prompt, scope.signal)
+    },
     runQuery: (prompt, opts, scope) =>
       runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide })
   })
