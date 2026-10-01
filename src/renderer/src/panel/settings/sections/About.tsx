@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react'
-import type { AgentImplInfo, AppBuildInfo } from '@shared/channels'
-import { Button, Card, icons } from '../../../ui'
+import type { AgentImplInfo, AppBuildInfo, UpdateStatus } from '@shared/channels'
+import { Button, Card, Switch, icons } from '../../../ui'
+import type { SectionProps } from '../meta'
 import { agentLine } from './agent-line'
+import { updateLine } from './update-line'
 
 const REPO = 'https://github.com/JanoTheDev/lumen'
 
-export function About(): JSX.Element {
+const BUSY = new Set(['checking', 'downloading'])
+
+export function About({ cfg, patch }: SectionProps): JSX.Element {
   const open = (url: string): void => window.lumen.send('assistant:open-link', url)
   const [agent, setAgent] = useState<AgentImplInfo | null>(null)
   const [build, setBuild] = useState<AppBuildInfo | null>(null)
+  const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [diag, setDiag] = useState('')
   useEffect(() => {
     window.lumen
@@ -20,6 +25,31 @@ export function About(): JSX.Element {
       .then(setBuild)
       .catch(() => {})
   }, [])
+  const busy = !!update && BUSY.has(update.state)
+  useEffect(() => {
+    const read = (): void => {
+      window.lumen
+        .invoke('update:status')
+        .then(setUpdate)
+        .catch(() => {})
+    }
+    read()
+    if (!busy) return
+    const t = setInterval(read, 1000)
+    return () => clearInterval(t)
+  }, [busy])
+  // Portable, or automatic updates off: the new version is a link to its release page.
+  const linkUrl =
+    update?.state === 'available' && (update.mode === 'portable' || !cfg.system.autoUpdate)
+      ? update.url
+      : undefined
+  const checkNow = (): void => {
+    setUpdate((u) => (u ? { ...u, state: 'checking' } : u))
+    window.lumen
+      .invoke('update:check')
+      .then(setUpdate)
+      .catch(() => {})
+  }
   const exportDiag = async (): Promise<void> => {
     const r = await window.lumen.invoke('diag:export').catch(() => null)
     if (r?.ok && r.path) setDiag(`Saved to ${r.path}`)
@@ -48,6 +78,38 @@ export function About(): JSX.Element {
         </p>
       )}
       <p className="ui-hint">{agentLine(agent)}</p>
+      {update && update.mode !== 'dev' && (
+        <Switch
+          checked={cfg.system.autoUpdate}
+          onChange={(autoUpdate) => patch({ system: { autoUpdate } })}
+          label="Check for updates automatically"
+          hint={
+            update.mode === 'portable'
+              ? 'Once a day. The portable version shows a link to the new version.'
+              : 'Once a day. Updates download in the background and install when you quit Lumen.'
+          }
+        />
+      )}
+      <p className="ui-hint" role="status">
+        {updateLine(update, cfg.system.autoUpdate)}
+      </p>
+      {update && update.mode !== 'dev' && (
+        <div className="panel-row">
+          <Button icon={icons.download} onClick={checkNow} disabled={busy}>
+            Check for updates
+          </Button>
+          {update.state === 'ready' && (
+            <Button icon={icons.repeat} onClick={() => void window.lumen.invoke('update:install')}>
+              Restart to update
+            </Button>
+          )}
+          {linkUrl && (
+            <Button icon={icons.external} onClick={() => open(linkUrl)}>
+              Get version {update.version}
+            </Button>
+          )}
+        </div>
+      )}
       <div className="panel-row">
         <Button icon={icons.sparkles} onClick={() => window.lumen.send('panel:open', 'onboarding')}>
           Run setup again
