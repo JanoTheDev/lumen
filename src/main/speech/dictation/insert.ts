@@ -57,6 +57,12 @@ export type InsertResult =
 
 export const PASSWORD_NOTICE = 'Dictation does not type into password fields.'
 
+/** The agent refused the input (its terminal / IDE guard), said plainly. */
+export function deniedNotice(message: string): string {
+  const reason = message.replace(/^\w+ denied:\s*/i, '').trim()
+  return `Not typed, for safety (${reason || 'the app may have a terminal focused'}). The text is kept below to copy.`
+}
+
 /** Text split on line breaks into typed parts and Shift+Enter presses (for chat apps). */
 export function softBreakActions(text: string, allowTerminal: boolean): AgentAction[] {
   const out: AgentAction[] = []
@@ -91,9 +97,16 @@ export async function insertDictation(
   try {
     for (const a of actions) await agent.execute(a)
   } catch (e) {
-    return { ok: false, notice: `Could not type the dictation: ${(e as Error).message}` }
+    const err = e as Error & { code?: string }
+    if (err.code === 'E_DENIED') {
+      // A password field the focus read missed: never shown or kept.
+      if (/password/i.test(err.message))
+        return { ok: false, notice: PASSWORD_NOTICE, refused: 'password' }
+      return { ok: false, notice: deniedNotice(err.message), refused: 'terminal' }
+    }
+    return { ok: false, notice: `Could not type the dictation: ${err.message}` }
   }
-  return decision.terminal
-    ? { ok: true, terminal: true, notice: decision.notice }
-    : { ok: true, terminal: false }
+  return decision.notice
+    ? { ok: true, terminal: decision.terminal, notice: decision.notice }
+    : { ok: true, terminal: decision.terminal }
 }

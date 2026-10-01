@@ -14,7 +14,7 @@ import { log } from '../logger'
 import { patchConfig } from '../ipc/settings'
 import { setStatus } from '../windows/assistant'
 import { readFocus } from './dictation/insert'
-import { isTerminalTarget, type FocusTarget } from './dictation/terminal-guard'
+import { isOpaqueIde, isTerminalTarget, type FocusTarget } from './dictation/terminal-guard'
 
 export type SpokenKey = 'enter' | 'send' | 'stop'
 
@@ -77,6 +77,8 @@ export interface SpokenKeyDeps {
 }
 
 export const TERMINAL_ENTER = 'Not pressing Enter in a terminal. Press it yourself.'
+export const IDE_ENTER =
+  'Not pressing Enter here: this IDE may have its terminal focused. Press it yourself.'
 
 async function focusOf(agent: AgentBridge | null): Promise<FocusTarget | null> {
   return agent ? readFocus(agent) : null
@@ -144,6 +146,11 @@ export async function dictateWithSpokenKeys(
   if (isTerminalTarget(target)) {
     deps.status(TERMINAL_ENTER, false)
     return { ok: !!text, notice: TERMINAL_ENTER }
+  }
+  // JetBrains, Android Studio, Zed, Fleet: UIA cannot tell their terminal from the editor.
+  if (isOpaqueIde(target)) {
+    deps.status(IDE_ENTER, false)
+    return { ok: !!text, notice: IDE_ENTER }
   }
   // Give the app a moment to take the typed text before Enter.
   if (text) await new Promise((r) => setTimeout(r, 60))

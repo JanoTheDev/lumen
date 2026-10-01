@@ -55,8 +55,37 @@ export function isTerminalTarget(t: Pick<FocusTarget, 'process' | 'title' | 'nam
   return !proc && isShellWindow(t.title)
 }
 
+/**
+ * IDEs whose focused element UI Automation cannot see (JetBrains and Android Studio are
+ * Swing, Zed and Fleet draw their own UI), so their terminal tool window looks like the
+ * editor. The agent refuses a line break there, and Enter right after typing; dictation
+ * types one line and never presses Enter in them.
+ */
+export const OPAQUE_IDES = new Set([
+  'idea64.exe',
+  'idea.exe',
+  'pycharm64.exe',
+  'webstorm64.exe',
+  'rider64.exe',
+  'clion64.exe',
+  'goland64.exe',
+  'phpstorm64.exe',
+  'rubymine64.exe',
+  'datagrip64.exe',
+  'studio64.exe',
+  'zed.exe',
+  'fleet.exe'
+])
+
+export function isOpaqueIde(t: Pick<FocusTarget, 'process'>): boolean {
+  return OPAQUE_IDES.has(t.process.trim().toLowerCase())
+}
+
+export const OPAQUE_IDE_NOTICE =
+  'Typed on one line: this IDE may have its terminal focused, so no line breaks or Enter here.'
+
 export type GuardDecision =
-  | { kind: 'type'; text: string; terminal: false }
+  | { kind: 'type'; text: string; terminal: false; notice?: string }
   | { kind: 'type'; text: string; terminal: true; notice: string }
   | { kind: 'block'; notice: string }
 
@@ -82,6 +111,18 @@ export function guardText(
   target: FocusTarget,
   policy: TerminalPolicy
 ): GuardDecision {
+  if (isOpaqueIde(target) && !isTerminalTarget(target)) {
+    // A line break could run a command in the IDE's terminal: one line, never an Enter.
+    const clean = sanitize(text)
+    return /[\r\n\u2028\u2029]/.test(clean)
+      ? {
+          kind: 'type',
+          text: flattenForTerminal(clean),
+          terminal: false,
+          notice: OPAQUE_IDE_NOTICE
+        }
+      : { kind: 'type', text: clean, terminal: false }
+  }
   if (!isTerminalTarget(target)) return { kind: 'type', text: sanitize(text), terminal: false }
   if (policy === 'block') return { kind: 'block', notice: TERMINAL_BLOCKED }
   return { kind: 'type', text: flattenForTerminal(text), terminal: true, notice: TERMINAL_NOTICE }

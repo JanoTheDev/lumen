@@ -2,11 +2,17 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   flattenForTerminal,
   guardText,
+  isOpaqueIde,
   isTerminalTarget,
+  OPAQUE_IDE_NOTICE,
   TERMINAL_NOTICE,
   type FocusTarget
 } from '../../src/main/speech/dictation/terminal-guard'
-import { insertDictation, withJoiningSpace } from '../../src/main/speech/dictation/insert'
+import {
+  insertDictation,
+  PASSWORD_NOTICE,
+  withJoiningSpace
+} from '../../src/main/speech/dictation/insert'
 import type { AgentBridge } from '../../src/main/agent/bridge'
 
 function target(over: Partial<FocusTarget> = {}): FocusTarget {
@@ -121,6 +127,54 @@ describe('insertDictation', () => {
     })
     const res = await insertDictation({ execute } as unknown as AgentBridge, 'x', target(), 'block')
     expect(res.ok).toBe(false)
+  })
+
+  it('types one line into an IDE whose terminal UIA cannot see', async () => {
+    const a = agent()
+    const ide = target({ process: 'idea64.exe', uia: false, role: '', editable: false })
+    expect(isOpaqueIde(ide)).toBe(true)
+    const res = await insertDictation(a.bridge, '1. Build\n2. Test', ide, 'type-no-enter', {
+      softBreaks: true
+    })
+    expect(res).toEqual({ ok: true, terminal: false, notice: OPAQUE_IDE_NOTICE })
+    expect(a.execute).toHaveBeenCalledTimes(1)
+    expect(a.execute).toHaveBeenCalledWith({
+      type: 'type',
+      text: '1. Build 2. Test',
+      allowTerminal: false
+    })
+    // One line already: typed as it is, no notice.
+    expect(await insertDictation(a.bridge, 'let  x', ide, 'type-no-enter')).toEqual({
+      ok: true,
+      terminal: false
+    })
+    expect(a.execute).toHaveBeenLastCalledWith({
+      type: 'type',
+      text: 'let  x',
+      allowTerminal: false
+    })
+  })
+
+  it('says plainly when the agent refused, and marks it as refused', async () => {
+    const deny = (msg: string): AgentBridge =>
+      ({
+        execute: vi.fn(async () => {
+          throw Object.assign(new Error(msg), { code: 'E_DENIED' })
+        })
+      }) as unknown as AgentBridge
+    const ide = target({ process: 'zed.exe' })
+    const res = await insertDictation(
+      deny('type denied: zed.exe may have its terminal focused, so no Enter after typing there'),
+      'x',
+      ide,
+      'type-no-enter'
+    )
+    expect(res).toMatchObject({ ok: false, refused: 'terminal' })
+    expect(res.notice).toContain('zed.exe may have its terminal focused')
+    expect(res.notice).toContain('kept below')
+    expect(
+      await insertDictation(deny('type denied: target is a password field'), 'x', ide, 'block')
+    ).toEqual({ ok: false, notice: PASSWORD_NOTICE, refused: 'password' })
   })
 
   it('adds a joining space only when the text would glue onto a word', () => {

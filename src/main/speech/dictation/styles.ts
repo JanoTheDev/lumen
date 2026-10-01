@@ -44,6 +44,12 @@ const PROCESS_KINDS: Record<string, DictationAppKind> = {
   'rider64.exe': 'code',
   'clion64.exe': 'code',
   'goland64.exe': 'code',
+  'idea.exe': 'code',
+  'phpstorm64.exe': 'code',
+  'rubymine64.exe': 'code',
+  'datagrip64.exe': 'code',
+  'studio64.exe': 'code',
+  'fleet.exe': 'code',
   'sublime_text.exe': 'code',
   'notepad++.exe': 'code',
   'zed.exe': 'code'

@@ -122,5 +122,6 @@ describe('fieldKindOf', () => {
     expect(fieldKindOf({ process: 'chrome.exe', title: 'Search', role: 'Edit' })).toBe('single')
     expect(fieldKindOf({ process: 'notepad.exe', title: '', role: 'Document' })).toBe('rich')
     expect(fieldKindOf({ process: 'foo.exe', title: '', role: '' })).toBe('plain')
+    expect(fieldKindOf({ process: 'idea64.exe', title: '', role: 'Document' })).toBe('single')
   })
 })

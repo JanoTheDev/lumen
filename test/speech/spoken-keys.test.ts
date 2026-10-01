@@ -7,6 +7,7 @@ vi.mock('../../src/main/ipc/settings', () => ({ patchConfig: vi.fn() }))
 vi.mock('../../src/main/windows/assistant', () => ({ setStatus: vi.fn() }))
 
 import {
+  IDE_ENTER,
   TERMINAL_ENTER,
   dictateWithSpokenKeys,
   matchWhisperToggle,
@@ -98,6 +99,18 @@ describe('dictateWithSpokenKeys', () => {
     const r = await dictateWithSpokenKeys('press enter', async () => ({ ok: false }), d)
     expect(d.pressed).toHaveLength(0)
     expect(r.notice).toBe(TERMINAL_ENTER)
+  })
+
+  it('never presses Enter in an IDE whose terminal UIA cannot see', async () => {
+    for (const process of ['idea64.exe', 'PyCharm64.exe', 'studio64.exe', 'zed.exe', 'fleet.exe']) {
+      const d = deps({ focus: async () => field({ process, uia: false }) })
+      const dictate = vi.fn(async () => ({ ok: true }))
+      const r = await dictateWithSpokenKeys('run the tests, press enter', dictate, d)
+      expect(dictate).toHaveBeenCalledWith('run the tests')
+      expect(d.pressed).toHaveLength(0)
+      expect(r.notice).toBe(IDE_ENTER)
+      expect(d.statuses).toContain(IDE_ENTER)
+    }
   })
 
   it('no Enter when the text did not go in as a plain insert', async () => {

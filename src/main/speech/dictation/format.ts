@@ -5,7 +5,7 @@
 // cleaned text on canonical tokens; a formatting that lost or added a word is dropped.
 import { tokenize } from './cleanup'
 import { formatNumbers, numbersToDigits } from './numbers'
-import type { FocusTarget } from './terminal-guard'
+import { isOpaqueIde, type FocusTarget } from './terminal-guard'
 
 /** rich: Word / mail / docs editors; plain: multi-line text; single: a one-line field. */
 export type FieldKind = 'rich' | 'plain' | 'single'
@@ -36,6 +36,8 @@ const RICH_TITLE = /\b(?:gmail|notion|google docs|docs|outlook|slack|confluence)
 export function fieldKindOf(t: Pick<FocusTarget, 'process' | 'title' | 'role'>): FieldKind {
   const proc = t.process.toLowerCase()
   const role = t.role.toLowerCase()
+  // No line breaks into an IDE whose terminal UIA cannot see (see OPAQUE_IDES).
+  if (isOpaqueIde(t)) return 'single'
   if (RICH_PROCESSES.has(proc) || role === 'document') return 'rich'
   if (BROWSERS.has(proc) && RICH_TITLE.test(t.title)) return 'rich'
   if (role === 'edit' || role === 'combobox') return 'single'

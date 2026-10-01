@@ -14,7 +14,8 @@ const h = vi.hoisted(() => ({
   dictation: {} as Record<string, unknown>,
   claude: [] as string[],
   session: true,
-  selection: ''
+  selection: '',
+  deny: ''
 }))
 
 vi.mock('../../../src/main/ai/providers', () => ({
@@ -78,6 +79,7 @@ vi.mock('../../../src/main/agent/instance', () => ({
           ? { source: 'selection', text: h.selection }
           : { source: 'none', text: '' },
     execute: async (a: unknown) => {
+      if (h.deny) throw Object.assign(new Error(h.deny), { code: 'E_DENIED' })
       h.executed.push(a)
     },
     activeWindow: async () => ''
@@ -125,6 +127,7 @@ beforeEach(() => {
   h.claude.length = 0
   h.session = true
   h.selection = ''
+  h.deny = ''
   vi.mocked(showAnswer).mockClear()
   reports.length = 0
   setDictationRecorder((r) => reports.push(r))
@@ -300,6 +303,29 @@ describe('dictate', () => {
     h.focus = { ...h.focus, role: 'Edit' }
     expect(await maybeAutoDictate('Hello there everyone, see you soon')).toBe(true)
     expect(h.executed).toHaveLength(1)
+  })
+
+  it('types one line in a JetBrains IDE and says why (opaque IDE)', async () => {
+    h.focus = { process: 'idea64.exe', title: 'demo - Main.kt', uia: false, role: '' }
+    const res = await dictate('first build it, second test it')
+    expect(res.ok).toBe(true)
+    expect(h.executed).toHaveLength(1)
+    expect(h.executed).toEqual([
+      { type: 'type', text: 'first build it, second test it', allowTerminal: false }
+    ])
+  })
+
+  it('keeps the text on a card and for recovery when the agent refuses (opaque IDE)', async () => {
+    h.focus = { process: 'pycharm64.exe', title: 'demo', uia: false, role: '' }
+    h.deny =
+      'type denied: pycharm64.exe may have its terminal focused, so no Enter after typing there'
+    vi.mocked(archivePending).mockClear()
+    const res = await dictate('print hello')
+    expect(res.ok).toBe(false)
+    expect(res.notice).toContain('Not typed, for safety')
+    expect(archivePending).toHaveBeenCalled()
+    expect(vi.mocked(showAnswer).mock.calls[0][0]).toContain('print hello')
+    expect(reports).toEqual([])
   })
 
   it('edits the selection in an editable field', async () => {
