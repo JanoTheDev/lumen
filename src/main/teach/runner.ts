@@ -1,7 +1,7 @@
 // Effect runner for the lesson reducer (plans 07 lesson-engine.md). Owns the timers, the
 // running checks and the resolved target; talks to the app only through Ports. No Electron.
 import { PausableTimer, realClock, type Clock } from '../a11y/timings'
-import { startCheck, newBudget, type CheckHandle } from './checks'
+import { startCheck, newBudget, type CheckHandle, type VisionBudget } from './checks'
 import { accepts, reduce } from './engine'
 import {
   buildScene,
@@ -53,6 +53,8 @@ export class LessonRunner {
   private timers = new Map<TimerId, PausableTimer>()
   private holds = new Set<string>()
   private checks: CheckHandle | null = null
+  /** Vision cost guard per step index; a failed "done" restarts the checks, not the budget. */
+  private budgets = new Map<number, VisionBudget>()
   /** Bumped on every step change and check restart; stale async results are dropped. */
   private token = 0
   private stepAbort = new AbortController()
@@ -101,6 +103,7 @@ export class LessonRunner {
 
   start(lesson: Lesson, o: StartOptions = {}): void {
     this.skill = o.skill ?? null
+    this.budgets.clear()
     this.dispatch({
       type: 'start',
       lesson,
@@ -239,11 +242,13 @@ export class LessonRunner {
     if (!st) return
     const token = ++this.token
     this.stepAbort = new AbortController()
+    let budget = this.budgets.get(step)
+    if (!budget) this.budgets.set(step, (budget = newBudget()))
     const handle = startCheck(st.check, {
       ports: this.ports,
       clock: this.clock,
       step: st,
-      budget: newBudget(),
+      budget,
       log: (msg) => this.ports.log('verify', `lesson ${this.s.lesson?.id}/${st.id}: ${msg}`)
     })
     this.checks = handle

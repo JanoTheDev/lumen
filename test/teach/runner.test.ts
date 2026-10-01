@@ -297,3 +297,34 @@ describe('accessible pacing (T21)', () => {
     expect(pacingFor({ profiles: ['eye-gaze'] }).offerEarly).toBe(false)
   })
 })
+
+describe('vision budget', () => {
+  it('keeps one budget per step across failed "done" checks', async () => {
+    const vision = vi.fn(async () => 'fail' as const)
+    let n = 0
+    const t = setup({
+      screen: {
+        capture: async () => ({ id: `f${++n}` }),
+        diff: () => null,
+        emitScene: () => {},
+        emitState: () => {}
+      },
+      verify: { vision }
+    })
+    const lesson = {
+      ...LESSON,
+      steps: [{ ...LESSON.steps[2], check: { type: 'vision' as const, prompt: 'Is it open?' } }]
+    }
+    t.runner.start(lesson, { autoStart: true })
+    await flush()
+    t.runner.command('done')
+    await flush()
+    expect(vision).toHaveBeenCalledTimes(1)
+    expect(t.runner.state.phase).toBe('step.waiting')
+    // The restarted checks reuse the step's budget: no second model call inside the gap.
+    t.runner.command('done')
+    await flush()
+    expect(vision).toHaveBeenCalledTimes(1)
+    expect(t.runner.state.stats.look.attempts).toBe(2)
+  })
+})
