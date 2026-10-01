@@ -170,7 +170,14 @@ export function installSwitch(deps: SwitchInstallDeps): SwitchControl {
     try {
       await withInputLane(
         'switch',
-        () => commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+        // The user's own switch input: password fields are fine.
+        () =>
+          commands.input(
+            requireAgent(),
+            steps,
+            { timeoutMs: INPUT_TIMEOUT_MS },
+            { allowPassword: true }
+          ),
         { user: true }
       )
     } finally {

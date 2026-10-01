@@ -14,6 +14,8 @@ export interface AgentAction {
   n?: number
   direction?: 'up' | 'down' | 'left' | 'right'
   amount?: number
+  /** The user's own direct input: the agent may type into a password field. */
+  allowPassword?: boolean
 }
 
 export interface ModelAction {

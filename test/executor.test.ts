@@ -108,6 +108,21 @@ describe('executeActions', () => {
     expect(openExternal).toHaveBeenCalledWith('https://example.com/')
   })
 
+  it('lets only user-direct input type into password fields', async () => {
+    const m = mockAgent()
+    const actions: Action[] = [
+      { type: 'type', text: 'hello' },
+      { type: 'input', steps: [{ t: 'type', text: 'x' }] }
+    ]
+    await executeActions(actions, { origin: 'user-direct' })
+    expect(executed(m)).toEqual([{ type: 'type', text: 'hello', allowPassword: true }])
+    expect(m.calls.find((c) => c.cmd === 'input')?.action).toMatchObject({ allowPassword: true })
+    m.calls.length = 0
+    await executeActions(actions, { origin: 'agent' })
+    expect(executed(m)).toEqual([{ type: 'type', text: 'hello' }])
+    expect(m.calls.find((c) => c.cmd === 'input')?.action).not.toHaveProperty('allowPassword')
+  })
+
   it('drops the click preview without suppressing the screen layer (review high #1)', async () => {
     mockAgent()
     hl.hide.mockClear()

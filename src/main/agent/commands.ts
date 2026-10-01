@@ -72,6 +72,8 @@ export interface UiaActArgs {
   elementId: string
   action: UiaAction
   value?: string
+  /** Lets set_value write a password field: the user's own direct input only. */
+  allowPassword?: boolean
 }
 
 const CAPABILITY: Record<string, string> = {
@@ -146,9 +148,16 @@ export function focusInfo(bridge: AgentBridge, opts?: RequestOptions): Promise<F
 export function input(
   bridge: AgentBridge,
   steps: InputStep[],
-  opts?: RequestOptions
+  opts?: RequestOptions,
+  /** allowPassword: the user's own direct input (a11y keyboards); never for agent or lessons. */
+  flags: { allowPassword?: boolean } = {}
 ): Promise<{ done: boolean }> {
-  return send(bridge, 'input', { steps }, opts)
+  return send(
+    bridge,
+    'input',
+    { steps, ...(flags.allowPassword ? { allowPassword: true } : {}) },
+    opts
+  )
 }
 
 export function uiaSnapshot(

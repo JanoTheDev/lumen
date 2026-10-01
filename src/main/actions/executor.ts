@@ -236,6 +236,10 @@ export async function executeActions(
     maxRisk: 'low'
   }
   const frame = currentFrame()
+  // Only the user's own direct input may type into a password field (the agent refuses it
+  // otherwise, as a second line behind the policy gate).
+  const passwordOk = gateCtx.origin === 'user-direct'
+  const pw = passwordOk ? { allowPassword: true } : {}
   log(
     'step',
     `execute: ${actions.map((a) => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`
@@ -352,14 +356,15 @@ export async function executeActions(
         {
           elementId: a.elementId,
           action: a.action,
-          ...(a.value !== undefined ? { value: a.value } : {})
+          ...(a.value !== undefined ? { value: a.value } : {}),
+          ...pw
         },
         { signal }
       )
       result.executed++
     } else if (scaled.type === 'input') {
       const steps = (scaled as AgentAction & { steps?: InputStep[] }).steps ?? []
-      await agent.request('input', { steps }, { signal })
+      await agent.request('input', { steps, ...pw }, { signal })
       result.executed++
     } else {
       // Show pointer preview before first click
@@ -378,7 +383,9 @@ export async function executeActions(
         highlight.show()
         await sleep(300)
       }
-      const actionResult = (await agent.execute(scaled)) as Record<string, unknown> | null
+      const actionResult = (await agent.execute(
+        scaled.type === 'type' || scaled.type === 'hotkey' ? { ...scaled, ...pw } : scaled
+      )) as Record<string, unknown> | null
       result.executed++
       if (actionResult?.reached_bottom) {
         console.log('[execute] reached_bottom detected — stopping action loop')

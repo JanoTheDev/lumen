@@ -218,7 +218,14 @@ function createIo(): A11yIo {
     input: async (steps) => {
       await withInputLane(
         'a11y',
-        () => commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS }),
+        // The user's own keyboard (scan / command sheet): password fields are fine.
+        () =>
+          commands.input(
+            requireAgent(),
+            steps,
+            { timeoutMs: INPUT_TIMEOUT_MS },
+            { allowPassword: true }
+          ),
         { user: true }
       )
     },
