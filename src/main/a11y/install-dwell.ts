@@ -7,7 +7,6 @@ import { loadConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import { logicalToPhys, physRectToLogical, physToLogical } from '../actions/coords'
 import * as commands from '../agent/commands'
-import { AgentError } from '../agent/bridge'
 import { getAgent, requireAgent } from '../agent/instance'
 import { applyDwellState } from '../agent/sync'
 import { onConfigPatched } from '../ipc/settings'
@@ -28,19 +27,8 @@ export interface DwellInstallDeps {
   wantFocusEvents: (owner: string, on: boolean) => void
 }
 
-/** v1 agents have no `input`: clicks go through the old execute; drag and scroll cannot. */
 async function inputSteps(steps: InputStep[]): Promise<void> {
-  const agent = requireAgent()
-  if (agent.protocol === 2) {
-    await commands.input(agent, steps, { timeoutMs: INPUT_TIMEOUT_MS })
-    return
-  }
-  for (const s of steps) {
-    if (s.t !== 'click' || s.x === undefined || s.y === undefined)
-      throw new AgentError('E_UNSUPPORTED', `dwell ${s.t} needs the newer helper app`)
-    for (let i = 0; i < (s.count ?? 1); i++)
-      await agent.execute({ type: 'click', x: s.x, y: s.y, button: s.button ?? 'left' })
-  }
+  await commands.input(requireAgent(), steps, { timeoutMs: INPUT_TIMEOUT_MS })
 }
 
 function snapWanted(cfg: AppConfig): boolean {
@@ -55,7 +43,7 @@ export function installDwell(deps: DwellInstallDeps): DwellController {
 
   const refreshNodes = (): void => {
     const agent = getAgent()
-    if (refreshing || !agent || agent.protocol !== 2) return
+    if (refreshing || !agent?.running) return
     refreshing = true
     commands
       .uiaSnapshot(
@@ -94,7 +82,7 @@ export function installDwell(deps: DwellInstallDeps): DwellController {
     },
     holdAgent: (paused) => {
       const agent = getAgent()
-      if (!agent || agent.protocol !== 2 || !agent.hasCapability('dwell')) return
+      if (!agent?.hasCapability('dwell')) return
       agent.request(paused ? 'dwell_pause' : 'dwell_resume').catch(() => {})
     },
     ring: (data) => dwellRing.progress(data),

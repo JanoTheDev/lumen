@@ -292,6 +292,21 @@ describe('config', () => {
     expect(loadConfig().theme).toBe('midnight')
   })
 
+  it.each(['python', 'auto', 'native'])(
+    'loads and saves a v2 file with the retired agentImpl %s',
+    (agentImpl) => {
+      writeRaw({ ...DEFAULT_CONFIG, agentImpl, theme: 'ocean' })
+      const cfg = loadConfig()
+      expect(lastConfigWarning()).toBeNull()
+      expect(cfg.theme).toBe('ocean')
+      expect(cfg).not.toHaveProperty('agentImpl')
+      expect(readdirSync(dir).some((f) => f.startsWith('config.invalid'))).toBe(false)
+      saveConfig({ hotkey: 'F9' })
+      expect(readDisk()).toMatchObject({ theme: 'ocean', hotkey: 'F9' })
+      expect(readDisk()).not.toHaveProperty('agentImpl')
+    }
+  )
+
   it('fills wake sensitivity and mic device for a v2 file written before they existed', () => {
     const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
     delete old.wakeWord.sensitivity

@@ -4,7 +4,9 @@ vi.mock('electron', () => ({ app: { getAppPath: () => '/app' } }))
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
 
 import { AgentBridge } from '../../src/main/agent/bridge'
-import { fakeSpawn, flushMicrotasks, splitAt } from './fake-child'
+import { buildAgentInitState } from '../../src/main/agent/state'
+import { DEFAULT_CONFIG } from '../../src/main/config'
+import { FAKE_PATHS, fakeSpawn, flushMicrotasks, splitAt } from './fake-child'
 
 describe('fake-child helper', () => {
   beforeEach(() => {
@@ -13,20 +15,19 @@ describe('fake-child helper', () => {
   })
   afterEach(() => vi.restoreAllMocks())
 
-  it('drives a v1 bridge: handshake, respondTo and a UTF-8 event split mid-character', async () => {
-    const { spawnFn, latest } = fakeSpawn({ framing: 'v1' })
-    const bridge = new AgentBridge({ spawnFn })
+  it('drives a bridge: ready, respondTo and a UTF-8 event split mid-character', async () => {
+    const { spawnFn, latest } = fakeSpawn()
+    const bridge = new AgentBridge({ spawnFn, paths: FAKE_PATHS })
     await bridge.start()
     const child = latest()
-    expect(bridge.protocol).toBe(1)
-    expect(child.last('ping')).toBeDefined()
+    expect(bridge.impl).toBe('native')
 
-    child.respondTo('active_window', 'Größe — 日本')
+    child.respondTo('active_window', { title: 'Größe — 日本' })
     await expect(bridge.activeWindow()).resolves.toBe('Größe — 日本')
 
     const seen: unknown[] = []
     bridge.onEvent('update', (d) => seen.push(d?.text))
-    const line = JSON.stringify({ event: 'update', text: 'Größe — 日本' }) + '\n'
+    const line = JSON.stringify({ v: 2, event: 'update', data: { text: 'Größe — 日本' } }) + '\n'
     const bytes = Buffer.byteLength(line)
     for (let cut = 1; cut < bytes; cut++) child.emitRaw(splitAt(line, [cut]))
     expect(seen).toHaveLength(bytes - 1)
@@ -34,20 +35,15 @@ describe('fake-child helper', () => {
     bridge.stop()
   })
 
-  it('drives a v2 bridge through ready + init', async () => {
-    const { spawnFn, latest } = fakeSpawn({ framing: 'v2' })
+  it('answers init automatically', async () => {
+    const { spawnFn, latest } = fakeSpawn()
     const bridge = new AgentBridge({
       spawnFn,
-      initArgs: () => ({
-        hotkey: 'Ctrl+Shift+Space',
-        wake: { enabled: false, phrase: '', cancelPhrases: [] },
-        dwell: { enabled: false, ms: 1400, cooldownMs: 1500 },
-        logLevel: 'info'
-      })
+      paths: FAKE_PATHS,
+      initArgs: () => buildAgentInitState(DEFAULT_CONFIG)
     })
     await bridge.start()
     await flushMicrotasks()
-    expect(bridge.protocol).toBe(2)
     expect(latest().last('init')?.v).toBe(2)
     bridge.stop()
   })

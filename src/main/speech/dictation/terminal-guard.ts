@@ -51,7 +51,7 @@ export function isTerminalTarget(t: Pick<FocusTarget, 'process' | 'title' | 'nam
   const proc = t.process.trim().toLowerCase()
   if (TERMINAL_PROCESSES.has(proc)) return true
   if (EDITORS_WITH_TERMINAL.has(proc) && TERMINAL_ELEMENT_RE.test(t.name)) return true
-  // v1 agents report only the title.
+  // No process known: judge by the title.
   return !proc && isShellWindow(t.title)
 }
 

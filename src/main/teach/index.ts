@@ -13,7 +13,8 @@ import { log, type LogTag } from '../logger'
 import { physRectToLogical, physToLogical, rectCenter } from '../actions/coords'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
-import { announce, wantFocusEvents } from '../a11y'
+import { announce } from '../a11y'
+import { wantFocusEvents } from '../a11y/focus-events'
 import { LOCAL_HANDLED as HANDLED } from '../a11y/dispatch'
 import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
 import { verifyExpectation } from '../ai/verify'
@@ -101,9 +102,9 @@ function diff(a: Frame, b: Frame): number | null {
 // ---- Foreground window, UIA, OCR ----
 
 /** The last foreground window any lesson code asked for (checks poll it at 2 Hz). */
-let lastForeground: { at: number; w: commands.ActiveWindowResult } | null = null
+let lastForeground: { at: number; w: commands.ActiveWindowInfo } | null = null
 
-async function foreground(signal?: AbortSignal): Promise<commands.ActiveWindowResult | null> {
+async function foreground(signal?: AbortSignal): Promise<commands.ActiveWindowInfo | null> {
   const agent = getAgent()
   if (!agent || signal?.aborted) return null
   const w = await commands.activeWindow(agent, { timeoutMs: 1500, signal }).catch(() => null)
@@ -112,7 +113,7 @@ async function foreground(signal?: AbortSignal): Promise<commands.ActiveWindowRe
 }
 
 /** The foreground window, reusing one seen within `maxAgeMs` (no second poller). */
-function recentForeground(maxAgeMs: number): Promise<commands.ActiveWindowResult | null> {
+function recentForeground(maxAgeMs: number): Promise<commands.ActiveWindowInfo | null> {
   const last = lastForeground
   return last && Date.now() - last.at < maxAgeMs ? Promise.resolve(last.w) : foreground()
 }

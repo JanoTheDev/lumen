@@ -78,14 +78,16 @@ interface FakeAgent {
 }
 
 function fakeAgent(results: Record<string, unknown>, delayMs = 0): FakeAgent {
+  // A bare window title stands for the full active_window result.
+  if (typeof results.active_window === 'string')
+    results.active_window = { title: results.active_window }
   const fake: FakeAgent = { calls: [], results }
   const bridge = {
-    protocol: 1,
-    hasCapability: () => false,
+    hasCapability: () => true,
     request: async (cmd: string, args: Record<string, unknown> = {}) => {
       fake.calls.push({ cmd, args })
       if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
-      if (!(cmd in fake.results)) throw new AgentError('E_AGENT_CMD', `Unknown command: ${cmd}`)
+      if (!(cmd in fake.results)) throw new AgentError('E_UNSUPPORTED', `no result for ${cmd}`)
       return fake.results[cmd]
     }
   }
@@ -207,8 +209,11 @@ describe('captureContext', () => {
     ])
   })
 
-  it('falls back to the v1 screenshot on the primary display', async () => {
-    fakeAgent({ active_window: 'Notepad', screenshot: '/9j/' })
+  it('maps a frame without monitor info onto the primary display', async () => {
+    fakeAgent({
+      active_window: 'Notepad',
+      capture: { frames: [{ id: 'f2', width: 0, height: 0, mime: 'image/jpeg', data: '/9j/' }] }
+    })
     const ctx = await captureContext(true)
     expect(ctx.screenshot).toBe('/9j/')
     expect(ctx.frames[0].monitor).toBeUndefined()

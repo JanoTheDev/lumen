@@ -132,7 +132,7 @@ export interface FrameMeta {
 
 /**
  * Geometry of a captured frame: the region or monitor rect it shows (physical px) and its
- * image size. Without monitor info (a v1 `screenshot`) it is the primary display.
+ * image size. Without monitor info it is the primary display.
  */
 export function frameGeometryOf(meta: FrameMeta): FrameGeometry {
   const rect = meta.region ?? meta.monitor?.rect

@@ -22,7 +22,7 @@ const SETTLE_INTERVAL_MS = 100
 /** Without any visible change, frames only count as settled after this long. */
 const SETTLE_MIN_MS = 400
 
-/** The focused element, or null when the agent cannot tell (v1 agent, no UIA). */
+/** The focused element, or null when the agent cannot tell (no UIA). */
 export async function readFocus(signal?: AbortSignal): Promise<FocusInfo | null> {
   try {
     const r = await requireAgent().request<Record<string, unknown>>(

@@ -21,9 +21,9 @@ export const SETTINGS_URI = {
 
 export interface AgentView {
   running: boolean
-  impl: string | null
   version: string | null
-  fallback: string | null
+  /** Why it is not running, or null. */
+  error: string | null
 }
 
 export interface CheckProbes {
@@ -37,6 +37,8 @@ export interface CheckProbes {
   /** OCR on a small screen region; throws with `code` on failure. */
   ocr: () => Promise<void>
   wakeEnabled: () => boolean
+  /** Why the wake word engine cannot run here, or null. */
+  wakeUnavailable: () => string | null
   wakeModelInstalled: () => boolean
   wakeModelSizeMb: () => number
   installWakeModel: () => Promise<void>
@@ -75,17 +77,16 @@ function micCheck(p: CheckProbes): FirstRunCheck {
 function agentCheck(p: CheckProbes): FirstRunCheck {
   const a = p.agent()
   if (!a || !a.running) {
-    return check('agent', 'fail', 'The Lumen helper is not running.', 'Restart the helper')
+    const why = a?.error ? ` (${a.error})` : ''
+    return check('agent', 'fail', `The Lumen helper is not running${why}.`, 'Restart the helper')
   }
-  if (a.impl === 'python' && a.fallback) {
-    return check('agent', 'warn', `Using the backup helper: ${a.fallback}.`)
-  }
-  const name = a.impl === 'native' ? 'Lumen helper' : 'Helper'
-  return check('agent', 'ok', `${name} running${a.version ? ` (version ${a.version})` : ''}.`)
+  return check('agent', 'ok', `Lumen helper running${a.version ? ` (version ${a.version})` : ''}.`)
 }
 
 function wakeCheck(p: CheckProbes): FirstRunCheck {
   if (!p.wakeEnabled()) return check('wake-model', 'ok', 'Wake word is off.')
+  const unavailable = p.wakeUnavailable()
+  if (unavailable) return check('wake-model', 'warn', `Wake word unavailable. ${unavailable}`)
   if (p.wakeModelInstalled()) return check('wake-model', 'ok', 'Wake word model installed.')
   return check(
     'wake-model',

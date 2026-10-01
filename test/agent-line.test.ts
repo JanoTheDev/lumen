@@ -4,14 +4,17 @@ import { agentLine } from '../src/renderer/src/panel/settings/sections/agent-lin
 describe('agent line', () => {
   it('names the running agent', () => {
     expect(agentLine(null)).toBe('OS agent: starting')
-    expect(agentLine({ impl: null, version: null, protocol: null, fallback: null })).toBe(
+    expect(agentLine({ impl: null, version: null, protocol: null, error: null })).toBe(
       'OS agent: starting'
     )
-    expect(agentLine({ impl: 'native', version: '0.1.0', protocol: 2, fallback: null })).toBe(
+    expect(agentLine({ impl: 'native', version: '0.1.0', protocol: 2, error: null })).toBe(
       'OS agent: Native 0.1.0'
     )
+  })
+
+  it('says why the agent is not running', () => {
     expect(
-      agentLine({ impl: 'python', version: null, protocol: 1, fallback: 'native crashed' })
-    ).toBe('OS agent: Python (fallback: native crashed)')
+      agentLine({ impl: null, version: null, protocol: null, error: 'native agent not found' })
+    ).toBe('OS agent: not running (native agent not found)')
   })
 })

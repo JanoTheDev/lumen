@@ -18,11 +18,12 @@ function probes(over: Partial<CheckProbes> = {}): CheckProbes {
     keyProviders: () => ['anthropic'],
     localMode: () => false,
     micAccess: () => 'granted',
-    agent: () => ({ running: true, impl: 'native', version: '0.1.0', fallback: null }),
+    agent: () => ({ running: true, version: '0.1.0', error: null }),
     hotkey: () => 'Ctrl+Shift+Space',
     waitForHotkey: async () => true,
     ocr: async () => {},
     wakeEnabled: () => true,
+    wakeUnavailable: () => null,
     wakeModelInstalled: () => true,
     wakeModelSizeMb: () => 18,
     installWakeModel: async () => {},
@@ -65,16 +66,19 @@ describe('first-run checks', () => {
     expect(opened).toEqual([SETTINGS_URI.microphone])
   })
 
-  it('agent: down fails with a restart, python fallback warns', async () => {
+  it('agent: down fails with a restart and says why', async () => {
     const restart = vi.fn(async () => {})
     const down = probes({ agent: () => null, restartAgent: restart })
     expect(byId(down, 'agent').status).toBe('fail')
     await fixCheck('agent', down)
     expect(restart).toHaveBeenCalled()
-    const py = probes({
-      agent: () => ({ running: true, impl: 'python', version: null, fallback: 'crashed' })
+    const missing = probes({
+      agent: () => ({ running: false, version: null, error: 'native agent not found' })
     })
-    expect(byId(py, 'agent').status).toBe('warn')
+    expect(byId(missing, 'agent')).toMatchObject({
+      status: 'fail',
+      message: expect.stringContaining('native agent not found')
+    })
   })
 
   it('hotkey: waits for a press', async () => {
@@ -119,6 +123,13 @@ describe('first-run checks', () => {
       }
     })
     expect(await fixCheck('wake-model', failing)).toEqual({ ok: false, error: 'offline' })
+  })
+
+  it('wake model: an engine that cannot load warns without a download', () => {
+    const p = probes({ wakeUnavailable: () => 'The engine could not load.' })
+    const c = byId(p, 'wake-model')
+    expect(c).toMatchObject({ status: 'warn', message: expect.stringContaining('could not load') })
+    expect(c.fixAction).toBeUndefined()
   })
 
   it('elevation: warns when running as admin', async () => {

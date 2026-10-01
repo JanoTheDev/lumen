@@ -7,7 +7,7 @@ import { physRectToImage, type FrameGeometry } from '../actions/coords'
 /** good: elements list only. partial: list + marks for the unnamed parts. none: marks only. */
 export type UiaQuality = 'good' | 'partial' | 'none'
 
-// Mirrors agent/uia.py INTERACTIVE (+ editable documents).
+// Interactive control types (+ editable documents).
 const INTERACTIVE = new Set([
   'button',
   'edit',

@@ -19,7 +19,7 @@ import { getAgent, setAgent } from './agent/instance'
 import { startAgent, wireAgentEvents } from './agent/events'
 import { holdEscape, releaseEscape, resetEscape, setEscapeHandler } from './agent/escape'
 import {
-  applyAgentState,
+  agentInitArgs,
   applyDictationHotkey,
   applyDwellState,
   applyListenerState,
@@ -171,8 +171,8 @@ app.whenReady().then(() => {
   applyListenerState(loadConfig())
   applyDwellState(loadConfig())
 
-  // Hotkey, listener and dwell state are re-sent after every agent (re)start.
-  const agent = new AgentBridge({ initState: () => applyAgentState(loadConfig()) })
+  // Hotkeys, dwell and event subscriptions go out as `init` after every agent (re)start.
+  const agent = new AgentBridge({ initArgs: () => agentInitArgs(loadConfig()) })
   setAgent(agent)
   wireAgentEvents(agent)
   // Not awaited: IPC handlers below must be registered before the windows finish loading.

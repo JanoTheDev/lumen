@@ -233,7 +233,6 @@ export const A11Y_DEFAULTS = {
 
 export const configV2Schema = z.object({
   version: z.literal(2),
-  agentImpl: z.enum(['auto', 'python', 'native']),
   theme: v1.theme,
   themeCustom: v1.themeCustom,
   /** Accent preset id (blue, teal, …) or #RRGGBB; unset = theme default. */
@@ -368,7 +367,6 @@ export const WAKE_SENSITIVITY_DEFAULT = 0.5
 // New sections default to off/neutral so a migrated install behaves exactly like v1.
 export const DEFAULT_CONFIG_V2: ConfigV2 = {
   version: 2,
-  agentImpl: 'auto',
   theme: DEFAULT_CONFIG_V1.theme,
   models: { provider: 'auto' },
   hotkey: DEFAULT_CONFIG_V1.hotkey,
@@ -492,7 +490,6 @@ const s2 = configV2Schema.shape
 
 const patchObject = z
   .object({
-    agentImpl: s2.agentImpl,
     theme: s2.theme,
     themeCustom: s2.themeCustom,
     accent: s2.accent,

@@ -5,15 +5,15 @@ import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import type { AgentAction } from '../actions/agent-action'
 import type { AgentInitArgs } from './state'
-import { ImplSelector, type AgentImplPref, type AgentPathEnv, type LaunchSpec } from './impl'
+import { missingCapabilities, nativeCandidates, nativeLaunch, type AgentPathEnv } from './impl'
 
 export type AgentErrorCode =
   | 'E_AGENT_EXIT'
   | 'E_AGENT_STOPPED'
   | 'E_AGENT_NOT_RUNNING'
+  | 'E_AGENT_MISSING'
   | 'E_AGENT_EPIPE'
   | 'E_AGENT_TIMEOUT'
-  | 'E_AGENT_CMD'
   | 'E_TIMEOUT'
   | 'E_CANCELLED'
   | 'E_NOT_FOUND'
@@ -34,8 +34,6 @@ export class AgentError extends Error {
 
 export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => ChildProcess
 
-export type AgentProtocol = 1 | 2
-
 export interface AgentInfo {
   impl: string
   version: string
@@ -51,21 +49,18 @@ export interface RestartPolicy {
 
 export interface AgentBridgeOptions {
   spawnFn?: SpawnFn
-  // Runs after every successful (re)start; use it to re-send hotkey, listener and dwell state.
-  // On a v2 agent it is skipped when initArgs is set, since `init` carries the full state.
-  initState?: () => Promise<void>
-  // v2 only: state sent as the `init` command after every ready handshake.
+  // State sent as the `init` command after every ready handshake (start and restarts).
   initArgs?: () => AgentInitArgs | Promise<AgentInitArgs>
   restart?: Partial<RestartPolicy>
-  // Which binary to run; read on every (re)start. Default 'python'.
-  impl?: () => AgentImplPref
+  // How long a fresh agent may take to send its `ready` event.
+  readyTimeoutMs?: number
   // Overrides for path resolution (tests).
   paths?: Partial<AgentPathEnv>
 }
 
 export interface RequestOptions {
   timeoutMs?: number
-  // Aborting rejects with E_CANCELLED and, on v2, sends `cancel` for the in-flight id.
+  // Aborting rejects with E_CANCELLED and sends `cancel` for the in-flight id.
   signal?: AbortSignal
 }
 
@@ -76,6 +71,11 @@ interface PendingCall {
   resolve: (v: unknown) => void
   reject: (e: Error) => void
   timer: ReturnType<typeof setTimeout>
+}
+
+interface Handshake {
+  resolve: () => void
+  reject: (e: Error) => void
 }
 
 interface WireMessage {
@@ -89,10 +89,9 @@ interface WireMessage {
 }
 
 const DEFAULT_TIMEOUT_MS = 15000
+const READY_TIMEOUT_MS = 15000
 const CMD_TIMEOUT_MS: Record<string, number> = {
-  screenshot: 5000,
   capture: 10000,
-  wake_enable: 30000,
   init: 30000,
   cancel: 5000
 }
@@ -138,6 +137,14 @@ function parseInfo(data: unknown): AgentInfo {
   }
 }
 
+function describeDown(info: Record<string, unknown>): string {
+  if (info.reason === 'spawn-error') return `agent could not start (${String(info.error)})`
+  if (info.reason === 'start-failed') return String(info.error)
+  const how = info.signal ? `signal ${String(info.signal)}` : `code ${String(info.code)}`
+  return `agent exited (${how})`
+}
+
+/** Runs the native agent (`lumen-native --protocol 2`) and speaks NDJSON protocol v2 to it. */
 export class AgentBridge {
   private proc: ChildProcess | null = null
   private pending = new Map<number, PendingCall>()
@@ -150,48 +157,22 @@ export class AgentBridge {
   private restartTimer: ReturnType<typeof setTimeout> | null = null
   private restartTimes: number[] = []
   private spawnFn: SpawnFn
-  private initState?: () => Promise<void>
   private initArgs?: () => AgentInitArgs | Promise<AgentInitArgs>
   private restartPolicy: RestartPolicy
-  private proto: AgentProtocol = 1
+  private readyTimeoutMs: number
   private info: AgentInfo | null = null
-  private onReady: (() => void) | null = null
-  private handshakePingId: number | null = null
-  private implPref: () => AgentImplPref
-  private selector: ImplSelector
-  private spec: LaunchSpec | null = null
+  private handshake: Handshake | null = null
+  // Bumped by every launch and stop: a launch whose generation is no longer current is stale.
+  private generation = 0
+  private failure: string | null = null
+  private paths: Partial<AgentPathEnv>
 
   constructor(opts: AgentBridgeOptions = {}) {
     this.spawnFn = opts.spawnFn ?? (spawn as SpawnFn)
-    this.initState = opts.initState
     this.initArgs = opts.initArgs
     this.restartPolicy = { ...DEFAULT_RESTART, ...opts.restart }
-    this.implPref = opts.impl ?? (() => 'python')
-    const paths = opts.paths ?? {}
-    this.selector = new ImplSelector(
-      () => this.implPref(),
-      () => ({
-        dev: is.dev,
-        appPath: app.getAppPath(),
-        resourcesPath: process.resourcesPath,
-        platform: process.platform,
-        exists: existsSync,
-        ...paths
-      })
-    )
-  }
-
-  setImpl(fn: () => AgentImplPref): void {
-    this.implPref = fn
-  }
-
-  /** Why the native agent was dropped for this session, or null. */
-  get implFallback(): string | null {
-    return this.selector.fallenBack
-  }
-
-  setInitState(fn: () => Promise<void>): void {
-    this.initState = fn
+    this.readyTimeoutMs = opts.readyTimeoutMs ?? READY_TIMEOUT_MS
+    this.paths = opts.paths ?? {}
   }
 
   setInitArgs(fn: () => AgentInitArgs | Promise<AgentInitArgs>): void {
@@ -207,9 +188,9 @@ export class AgentBridge {
     return this.proc !== null
   }
 
-  /** Wire framing of the current agent: 2 once it sent the v2 ready event, else 1. */
-  get protocol(): AgentProtocol {
-    return this.proto
+  /** Why the agent is not running (missing exe, failed handshake, exit), or null. */
+  get lastError(): string | null {
+    return this.proc ? null : this.failure
   }
 
   get impl(): string | null {
@@ -234,27 +215,24 @@ export class AgentBridge {
 
   async start(): Promise<void> {
     this.stopping = false
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer)
-      this.restartTimer = null
-    }
+    this.restartTimes = []
+    this.clearRestartTimer()
     await this.launch()
   }
 
   stop(): void {
     this.stopping = true
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer)
-      this.restartTimer = null
-    }
+    this.generation++
+    this.clearRestartTimer()
     const proc = this.proc
     this.proc = null
     this.resetStream()
+    this.failHandshake(new AgentError('E_AGENT_STOPPED', 'Agent stopped'))
     this.rejectAll('E_AGENT_STOPPED', 'Agent stopped')
     proc?.kill()
   }
 
-  /** Sends a command in the agent's framing and resolves with its result. */
+  /** Sends a command and resolves with its result. */
   request<T = unknown>(
     cmd: string,
     args: Record<string, unknown> = {},
@@ -263,30 +241,15 @@ export class AgentBridge {
     return this.call(cmd, args, opts) as Promise<T>
   }
 
-  /** v2 only: asks the agent to abort the in-flight command `targetId`. */
+  /** Asks the agent to abort the in-flight command `targetId`. */
   async cancel(targetId: number): Promise<void> {
-    if (this.proto !== 2) throw new AgentError('E_UNSUPPORTED', 'cancel needs agent protocol v2')
     await this.call('cancel', { target: targetId })
   }
 
-  async screenshot(): Promise<string> {
-    if (this.proto === 2) {
-      const res = (await this.call('capture', { monitor: 'primary' })) as {
-        frames?: { data?: string }[]
-      }
-      const data = res?.frames?.[0]?.data
-      if (typeof data !== 'string') throw new AgentError('E_INTERNAL', 'capture returned no frame')
-      return data
-    }
-    return this.call('screenshot', {}) as Promise<string>
-  }
-
+  /** Title of the foreground window. */
   async activeWindow(): Promise<string> {
-    if (this.proto === 2) {
-      const res = (await this.call('active_window', {})) as { title?: unknown }
-      return typeof res?.title === 'string' ? res.title : 'Unknown'
-    }
-    return this.call('active_window', {}) as Promise<string>
+    const res = (await this.call('active_window', {})) as { title?: unknown } | null
+    return typeof res?.title === 'string' ? res.title : 'Unknown'
   }
 
   async execute(action: AgentAction): Promise<unknown> {
@@ -303,33 +266,53 @@ export class AgentBridge {
     return this.call('set_dictation_hotkey', { combo })
   }
 
-  async enableListener(phrase: string, cancelPhrases: string[]): Promise<unknown> {
-    return this.call('wake_enable', { phrase, cancel_phrases: cancelPhrases })
+  private env(): AgentPathEnv {
+    return {
+      dev: is.dev,
+      appPath: app.getAppPath(),
+      resourcesPath: process.resourcesPath,
+      platform: process.platform,
+      exists: existsSync,
+      ...this.paths
+    }
   }
 
-  async disableListener(): Promise<unknown> {
-    return this.call('wake_disable', {})
+  private clearRestartTimer(): void {
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
   }
 
-  async enableDwell(dwellMs: number, cooldownMs: number): Promise<unknown> {
-    return this.call('dwell_enable', { dwell_ms: dwellMs, cooldown_ms: cooldownMs })
-  }
-
-  async disableDwell(): Promise<unknown> {
-    return this.call('dwell_disable', {})
+  private failHandshake(err: Error): void {
+    const hs = this.handshake
+    this.handshake = null
+    hs?.reject(err)
   }
 
   private async launch(): Promise<void> {
-    const spec = this.selector.choose()
-    this.spec = spec
-
+    const gen = ++this.generation
+    const stale = (): boolean => gen !== this.generation || this.stopping
+    // start() while a child runs replaces it; its exit is then ignored by handleDown.
+    const old = this.proc
+    this.proc = null
+    this.failHandshake(new AgentError('E_AGENT_STOPPED', 'Agent replaced'))
+    this.rejectAll('E_AGENT_EXIT', 'Agent replaced')
+    old?.kill()
     this.resetStream()
-    this.proto = 1
     this.info = null
+
+    const env = this.env()
+    const spec = nativeLaunch(env)
+    if (!spec) {
+      this.failure = `native agent not found (${nativeCandidates(env)[0]})`
+      console.error('[agent] %s', this.failure)
+      throw new AgentError('E_AGENT_MISSING', this.failure)
+    }
+
     const proc = this.spawnFn(spec.command, spec.args, {
       cwd: spec.cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...spec.env }
+      stdio: ['pipe', 'pipe', 'pipe']
     })
     this.proc = proc
 
@@ -352,79 +335,58 @@ export class AgentBridge {
       this.handleDown(proc, { reason: 'exit', code, signal })
     })
 
-    // A v1 agent says nothing until pinged; a v2 agent opens with a ready event.
-    // Ping right away and let whichever answers first decide the framing.
+    // The agent opens with a `ready` event carrying impl, version and capabilities.
+    let hs!: Handshake
+    const ready = new Promise<void>((resolve, reject) => {
+      hs = { resolve, reject }
+    })
+    this.handshake = hs
+    const timer = setTimeout(
+      () => hs.reject(new AgentError('E_AGENT_TIMEOUT', 'Agent sent no ready event')),
+      this.readyTimeoutMs
+    )
     try {
-      await new Promise<void>((resolve, reject) => {
-        this.onReady = resolve
-        this.handshakePingId = this.idCounter + 1
-        this.call('ping', {}).then(
-          () => resolve(),
-          (err) => {
-            if (this.proto !== 2) reject(err)
-          }
-        )
-      })
+      await ready
     } catch (err) {
-      if (spec.impl === 'native' && this.implPref() === 'auto' && !this.stopping) {
-        this.selector.fallBack(`native agent failed to start (${(err as Error).message})`)
-        return this.switchToPython(proc)
+      if (!stale()) {
+        this.failure = `agent failed to start: ${(err as Error).message}`
+        // Killing it goes through handleDown, which schedules the next try with backoff.
+        if (this.proc === proc) proc.kill()
       }
-      if (this.proc === proc) proc.kill()
       throw err
     } finally {
-      this.onReady = null
-      this.handshakePingId = null
+      clearTimeout(timer)
+      if (this.handshake === hs) this.handshake = null
     }
 
-    if (this.proc !== proc) throw new AgentError('E_AGENT_EXIT', 'Agent exited during start')
-
-    const reject = this.selector.check(spec, this.capabilities)
-    if (reject) {
-      this.selector.fallBack(reject)
-      return this.switchToPython(proc)
-    }
+    const missing = missingCapabilities(this.capabilities)
+    if (missing.length) console.error('[agent] native agent lacks %s', missing.join(', '))
 
     try {
-      if (this.protocol === 2 && this.initArgs) {
-        await this.call('init', { ...(await this.initArgs()) })
-      } else if (this.initState) {
-        await this.initState()
-      }
+      const args = this.initArgs ? await this.initArgs() : null
+      if (args && !stale() && this.proc === proc) await this.call('init', { ...args })
     } catch (err) {
-      console.error('[bridge] init state failed:', (err as Error).message)
+      console.error('[bridge] init failed:', (err as Error).message)
     }
-    if (this.proc === proc) this.emit('agent-ready', { protocol: this.protocol, ...this.agentInfo })
-  }
-
-  /** Drops the native child for this session and starts the Python agent in its place. */
-  private async switchToPython(proc: ChildProcess): Promise<void> {
-    if (this.proc === proc) this.proc = null
-    if (this.restartTimer) {
-      clearTimeout(this.restartTimer)
-      this.restartTimer = null
+    if (stale() || this.proc !== proc) {
+      throw new AgentError('E_AGENT_EXIT', 'Agent exited during start')
     }
-    this.restartTimes = []
-    this.resetStream()
-    this.rejectAll('E_AGENT_EXIT', 'Agent replaced')
-    proc.kill()
-    this.emit('agent-impl-fallback', { from: 'native', to: 'python', reason: this.implFallback })
-    await this.launch()
+    this.failure = null
+    this.emit('agent-ready', { ...this.agentInfo })
   }
 
   private handleDown(proc: ChildProcess, info: Record<string, unknown>): void {
     if (this.proc !== proc) return
     this.proc = null
     this.resetStream()
+    this.failure = describeDown(info)
+    this.failHandshake(new AgentError('E_AGENT_EXIT', this.failure))
     this.rejectAll('E_AGENT_EXIT', 'Agent exited')
-
     if (this.stopping) return
+    this.scheduleRestart(info)
+  }
 
-    if (this.spec && this.selector.crashed(this.spec)) {
-      this.restartTimes = []
-      this.emit('agent-impl-fallback', { from: 'native', to: 'python', reason: this.implFallback })
-    }
-
+  private scheduleRestart(info: Record<string, unknown>): void {
     const { baseMs, maxMs, maxRestarts, windowMs } = this.restartPolicy
     const now = Date.now()
     this.restartTimes = this.restartTimes.filter((t) => now - t < windowMs)
@@ -442,6 +404,10 @@ export class AgentBridge {
       if (this.stopping) return
       this.launch().catch((err) => {
         console.error('[agent] restart failed:', (err as Error).message)
+        // No child whose exit would retry (exe missing): keep trying on the same backoff.
+        if (!this.proc && !this.restartTimer && !this.stopping) {
+          this.scheduleRestart({ reason: 'start-failed', error: (err as Error).message })
+        }
       })
     }, delay)
   }
@@ -477,20 +443,19 @@ export class AgentBridge {
       console.log('[bridge] non-JSON from agent:', line)
       return
     }
-    if (!isRecord(msg)) {
-      console.log('[bridge] non-JSON from agent:', line)
+    if (!isRecord(msg) || msg.v !== 2) {
+      console.log('[bridge] not a v2 frame from agent:', line)
       return
     }
 
-    if (msg.v === 2 && msg.event === 'ready') {
+    if (msg.event === 'ready') {
       this.handleReady(msg.data)
       return
     }
 
     if (typeof msg.event === 'string') {
-      const data = msg.v === 2 ? (isRecord(msg.data) ? msg.data : {}) : this.v1EventData(msg)
       if (!QUIET_EVENTS.has(msg.event)) console.log('[bridge] event:', msg.event)
-      this.emit(msg.event, data)
+      this.emit(msg.event, isRecord(msg.data) ? msg.data : {})
       return
     }
 
@@ -500,47 +465,21 @@ export class AgentBridge {
     this.pending.delete(msg.id)
     clearTimeout(pending.timer)
 
-    if (msg.v === 2) {
-      if (msg.ok) {
-        pending.resolve(msg.result)
-        return
-      }
-      const err = isRecord(msg.error) ? msg.error : {}
-      const code = typeof err.code === 'string' ? err.code : 'E_INTERNAL'
-      const message = typeof err.message === 'string' ? err.message : `${pending.cmd} failed`
-      console.error('[bridge] cmd error id=%d %s:', msg.id, code, message)
-      pending.reject(new AgentError(code, message))
+    if (msg.ok) {
+      pending.resolve(msg.result)
       return
     }
-
-    if (msg.error) {
-      console.error('[bridge] cmd error id=%d:', msg.id, msg.error)
-      pending.reject(new AgentError('E_AGENT_CMD', String(msg.error)))
-    } else {
-      pending.resolve(msg.result)
-    }
-  }
-
-  private v1EventData(msg: WireMessage): Record<string, unknown> {
-    const rest: Record<string, unknown> = { ...msg }
-    delete rest.event
-    return rest
+    const err = isRecord(msg.error) ? msg.error : {}
+    const code = typeof err.code === 'string' ? err.code : 'E_INTERNAL'
+    const message = typeof err.message === 'string' ? err.message : `${pending.cmd} failed`
+    console.error('[bridge] cmd error id=%d %s:', msg.id, code, message)
+    pending.reject(new AgentError(code, message))
   }
 
   private handleReady(data: unknown): void {
-    this.proto = 2
     this.info = parseInfo(data)
-    console.log('[bridge] agent v2 ready: %s %s', this.info.impl, this.info.version)
-    // The handshake ping went out in v1 framing; drop it instead of waiting on a reply.
-    const pingId = this.handshakePingId
-    if (pingId !== null) {
-      const p = this.pending.get(pingId)
-      if (p) {
-        clearTimeout(p.timer)
-        this.pending.delete(pingId)
-      }
-    }
-    this.onReady?.()
+    console.log('[bridge] agent ready: %s %s', this.info.impl, this.info.version)
+    this.handshake?.resolve()
   }
 
   private emit(event: string, data: Record<string, unknown>): void {
@@ -568,8 +507,9 @@ export class AgentBridge {
     opts: RequestOptions = {}
   ): Promise<unknown> {
     return new Promise((resolve, reject) => {
-      const stdin = this.proc?.stdin
-      if (!this.proc || !stdin) {
+      const proc = this.proc
+      const stdin = proc?.stdin
+      if (!proc || !stdin) {
         reject(new AgentError('E_AGENT_NOT_RUNNING', `Agent not running: ${cmd}`))
         return
       }
@@ -584,7 +524,6 @@ export class AgentBridge {
       }
 
       const id = ++this.idCounter
-      const proto = this.proto
       const settle = (): PendingCall | undefined => {
         const p = this.pending.get(id)
         if (!p) return undefined
@@ -595,11 +534,11 @@ export class AgentBridge {
       const onAbort = (): void => {
         if (!settle()) return
         reject(new AgentError('E_CANCELLED', `Cancelled: ${cmd}`))
-        if (proto === 2 && this.proto === 2) {
-          this.call('cancel', { target: id }).catch((err) => {
-            console.error('[bridge] cancel failed:', (err as Error).message)
-          })
-        }
+        // Only the agent that got the command can cancel it.
+        if (this.proc !== proc) return
+        this.call('cancel', { target: id }).catch((err) => {
+          console.error('[bridge] cancel failed:', (err as Error).message)
+        })
       }
       const done = (): void => signal?.removeEventListener('abort', onAbort)
       const timer = setTimeout(
@@ -629,9 +568,8 @@ export class AgentBridge {
         if (!p) return
         p.reject(new AgentError('E_AGENT_EPIPE', `Agent write failed (${err.message}): ${cmd}`))
       }
-      const frame = proto === 2 ? { v: 2, id, cmd, args: params } : { id, cmd, ...params }
       try {
-        stdin.write(JSON.stringify(frame) + '\n', (err) => {
+        stdin.write(JSON.stringify({ v: 2, id, cmd, args: params }) + '\n', (err) => {
           if (err) fail(err)
         })
       } catch (err) {

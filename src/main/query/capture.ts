@@ -57,7 +57,7 @@ async function framesOf(
 
 function ocrFor(agent: AgentBridge, frame: Frame | undefined): QueryContext['ocr'] {
   return lazyOcr(async () => {
-    if (frame && !frame.id.startsWith('v1-')) {
+    if (frame) {
       try {
         return await commands.ocr(agent, { frameId: frame.id })
       } catch (e) {
@@ -160,7 +160,7 @@ export async function captureContext(
     at: Date.now()
   }
   let marksNote = ''
-  if (first && quality && quality !== 'good' && !first.id.startsWith('v1-')) {
+  if (first && quality && quality !== 'good') {
     const t0 = Date.now()
     const marked = await setOfMarks(agent, ctx, first, quality, signal).catch((e) => {
       log('fail', `set-of-marks skipped: ${(e as Error).message}`)
@@ -178,7 +178,7 @@ export async function captureContext(
     log(
       'plan',
       `context: frame ${first.label} ${g.imgW}x${g.imgH} ← phys ${g.width}x${g.height} @(${g.originX},${g.originY})` +
-        `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ' (v1 screenshot)'}` +
+        `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ''}` +
         ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote}` +
         `${frames.length > 1 ? ` | +${frames.length - 1} more screens` : ''}` +
         `${skill ? ` | skill ${skill.id}` : ''} | ${Date.now() - started}ms`

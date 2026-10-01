@@ -1,5 +1,5 @@
 // Converts model actions (image px, Rect bboxes) into what the agent executes
-// (physical px; click_element bbox as [x1,y1,x2,y2] for the Python agent).
+// (physical px; click_element bbox as [x1,y1,x2,y2]).
 import { imageToPhys, imageRectToPhys, rectCenter, type FrameGeometry, type Rect } from './coords'
 
 export interface AgentAction {

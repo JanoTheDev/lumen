@@ -44,7 +44,7 @@ const probes: CheckProbes = {
   agent: () => {
     const a = getAgent()
     if (!a) return null
-    return { running: a.running, impl: a.impl, version: a.version, fallback: a.implFallback }
+    return { running: a.running, version: a.version, error: a.lastError }
   },
   hotkey: () => loadConfig().hotkey,
   waitForHotkey,
@@ -55,14 +55,15 @@ const probes: CheckProbes = {
       await ocr(agent, { region: { x: 0, y: 0, w: 320, h: 120 } }, { timeoutMs: 8000 })
     } catch (e) {
       const err = e as Error & { code?: string }
-      // The helper itself can't do OCR (old protocol): not a missing language pack.
-      if (err.code === 'E_UNSUPPORTED' && /protocol|unsupported by/.test(err.message)) {
+      // The helper itself lacks OCR: not a missing language pack.
+      if (err.code === 'E_UNSUPPORTED' && /unsupported by/.test(err.message)) {
         throw new Error('this helper cannot read the screen')
       }
       throw err
     }
   },
   wakeEnabled: () => loadConfig().wakeWord.enabled,
+  wakeUnavailable: () => wakeStatus().unavailable,
   wakeModelInstalled: () => wakeStatus().installed,
   wakeModelSizeMb: () => wakeStatus().sizeMb,
   installWakeModel,

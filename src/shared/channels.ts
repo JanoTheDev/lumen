@@ -391,14 +391,14 @@ export interface AppBuildInfo {
   logsDir: string
 }
 
-/** The running OS agent: the Rust sidecar or the Python fallback. */
+/** The running OS agent (the native sidecar). */
 export interface AgentImplInfo {
-  impl: 'native' | 'python' | null
-  /** Agent version; null for the Python agent on protocol v1. */
+  /** "native" once the agent sent its ready event, else null. */
+  impl: 'native' | null
   version: string | null
-  protocol: 1 | 2 | null
-  /** Why `auto` dropped the native agent this session, or null. */
-  fallback: string | null
+  protocol: 2 | null
+  /** Why the agent is not running (missing exe, failed start, exit), or null. */
+  error: string | null
 }
 
 /** One lesson in the picker (07 T22). */

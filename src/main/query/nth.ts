@@ -1,7 +1,7 @@
 // Ordinal helpers shared by the target resolver (text + nth) and set-of-marks numbering.
 import type { Rect } from '@shared/types'
 
-/** Normalize OCR-confusable characters (mirrors Python _ocr_norm). */
+/** Normalize OCR-confusable characters. */
 export function ocrNorm(s: string): string {
   return s.toLowerCase().replace(/0/g, 'o').replace(/1/g, 'l').replace(/i/g, 'l')
 }

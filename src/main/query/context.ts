@@ -17,7 +17,7 @@ export interface Frame {
   /** Name the model uses in point/rect targets: "1", "2", ... */
   label: string
   geometry: FrameGeometry
-  /** Absent for a v1 `screenshot`. */
+  /** Absent when the frame came without monitor info. */
   monitor?: MonitorInfo
   mime: string
   /** Base64 image of the screen, without marks. */

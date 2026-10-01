@@ -40,7 +40,6 @@ import type { AgentBridge } from '../src/main/agent/bridge'
 import { DwellController, setDwellController, type DwellIo } from '../src/main/a11y/dwell'
 
 interface MockAgent {
-  protocol: 1 | 2
   caps: string[]
   window: string
   calls: Array<{ cmd: string; action?: Record<string, unknown> }>
@@ -48,13 +47,9 @@ interface MockAgent {
 }
 
 function mockAgent(over: Partial<MockAgent> = {}): MockAgent {
-  const m: MockAgent = { protocol: 1, caps: [], window: 'Page - Google Chrome', calls: [], ...over }
+  const m: MockAgent = { caps: [], window: 'Page - Google Chrome', calls: [], ...over }
   const bridge = {
-    get protocol() {
-      return m.protocol
-    },
     hasCapability: (name: string) => m.caps.includes(name),
-    screenshot: async () => 'img',
     activeWindow: async () => m.window,
     execute: async (action: Record<string, unknown>) => {
       m.calls.push({ cmd: 'execute', action })
@@ -223,7 +218,7 @@ describe('executeActions', () => {
   })
 
   it('holds dwell (a11y dwell controller) around the batch', async () => {
-    const m = mockAgent({ protocol: 2, caps: ['dwell'] })
+    const m = mockAgent({ caps: ['dwell'] })
     const holds: string[] = []
     const io = { holdAgent: (on: boolean) => holds.push(on ? 'hold' : 'release') }
     setDwellController(new DwellController(io as unknown as DwellIo))
@@ -236,8 +231,8 @@ describe('executeActions', () => {
     expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
   })
 
-  it('does not pause dwell on a v1 agent', async () => {
-    const m = mockAgent({ protocol: 1, caps: ['dwell'] })
+  it('does not pause dwell without a dwell controller', async () => {
+    const m = mockAgent({ caps: ['dwell'] })
     await executeActions([{ type: 'click', x: 1, y: 1 }])
     expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
   })

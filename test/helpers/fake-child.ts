@@ -2,28 +2,34 @@ import { EventEmitter } from 'events'
 import { PassThrough, Writable } from 'stream'
 import type { ChildProcess } from 'child_process'
 import type { SpawnFn } from '../../src/main/agent/bridge'
-
-export type Framing = 'v1' | 'v2'
+import { REQUIRED_NATIVE_CAPABILITIES, type AgentPathEnv } from '../../src/main/agent/impl'
 
 export interface SentMessage {
-  v?: number
+  v: number
   id: number
   cmd: string
-  args?: Record<string, unknown>
-  [k: string]: unknown
+  args: Record<string, unknown>
 }
 
 export const READY_V2 = {
   v: 2,
   event: 'ready',
-  data: { impl: 'python', version: '0.0.0-test', capabilities: ['hotkey', 'input', 'capture'] }
+  data: { impl: 'native', version: '0.0.0-test', capabilities: [...REQUIRED_NATIVE_CAPABILITIES] }
+}
+
+/** Path env under which the bridge finds a native exe (pass as `paths`). */
+export const FAKE_PATHS: AgentPathEnv = {
+  dev: true,
+  appPath: '/app',
+  resourcesPath: '/res',
+  platform: 'win32',
+  exists: () => true
 }
 
 export interface FakeChildOptions {
-  framing?: Framing
-  /** v2 only: emit the ready event on the next microtask (default true). */
+  /** Emit the ready event on the next microtask (default true). */
   autoReady?: boolean
-  /** Answer ping (and init/cancel on v2) automatically (default true). */
+  /** Answer ping, init and cancel automatically (default true). */
   autoPing?: boolean
 }
 
@@ -31,7 +37,6 @@ type Responder = unknown | ((msg: SentMessage) => unknown)
 
 /** A stand-in for the agent child process, driven from the test. */
 export class FakeChild extends EventEmitter {
-  readonly framing: Framing
   readonly stdout = new PassThrough()
   readonly stderr = new PassThrough()
   readonly stdin: Writable
@@ -47,7 +52,6 @@ export class FakeChild extends EventEmitter {
 
   constructor(opts: FakeChildOptions = {}) {
     super()
-    this.framing = opts.framing ?? 'v1'
     this.autoPing = opts.autoPing ?? true
     this.stdin = new Writable({
       write: (chunk: Buffer | string, _enc, cb): void => {
@@ -62,7 +66,7 @@ export class FakeChild extends EventEmitter {
         cb()
       }
     })
-    if (this.framing === 'v2' && (opts.autoReady ?? true)) {
+    if (opts.autoReady ?? true) {
       queueMicrotask(() => this.emitLine(READY_V2))
     }
   }
@@ -103,17 +107,13 @@ export class FakeChild extends EventEmitter {
     return [...this.received].reverse().find((m) => m.cmd === cmd)
   }
 
-  /** Reply to a specific request in this child's framing. */
+  /** Reply to a specific request. */
   reply(id: number, result: unknown): void {
-    this.emitLine(this.framing === 'v2' ? { v: 2, id, ok: true, result } : { id, result })
+    this.emitLine({ v: 2, id, ok: true, result })
   }
 
   replyError(id: number, code: string, message = code): void {
-    this.emitLine(
-      this.framing === 'v2'
-        ? { v: 2, id, ok: false, error: { code, message } }
-        : { id, error: message }
-    )
+    this.emitLine({ v: 2, id, ok: false, error: { code, message } })
   }
 
   asChildProcess(): ChildProcess {
@@ -125,9 +125,9 @@ export class FakeChild extends EventEmitter {
     const msg = JSON.parse(line) as SentMessage
     this.received.push(msg)
 
-    if (this.framing === 'v2' && msg.v !== 2) {
-      // A real v2 agent rejects v1-framed lines (the bridge's handshake ping).
-      queueMicrotask(() => this.replyError(msg.id, 'E_INTERNAL', 'bad frame'))
+    if (msg.v !== 2) {
+      // The real agent rejects frames that are not v2.
+      queueMicrotask(() => this.replyError(msg.id, 'E_INVALID', 'bad frame'))
       return
     }
     if (this.responders.has(msg.cmd)) {
@@ -138,8 +138,8 @@ export class FakeChild extends EventEmitter {
     }
     if (!this.autoPing) return
     if (msg.cmd === 'ping') {
-      queueMicrotask(() => this.reply(msg.id, this.framing === 'v2' ? { t: 1 } : 'pong'))
-    } else if (this.framing === 'v2' && (msg.cmd === 'init' || msg.cmd === 'cancel')) {
+      queueMicrotask(() => this.reply(msg.id, { t: 1 }))
+    } else if (msg.cmd === 'init' || msg.cmd === 'cancel') {
       queueMicrotask(() => this.reply(msg.id, {}))
     }
   }

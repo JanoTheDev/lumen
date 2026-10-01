@@ -1,33 +1,25 @@
 import type { AppConfig } from '../config'
+import { agentDwellConfig, dwellSettings, type AgentDwellConfig } from '../a11y/dwell'
 
 export type AgentLogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-/** Args of the v2 `init` command: the full agent state, resent after every restart. */
+/** Args of the `init` command: the full agent state, resent after every (re)start. */
 export interface AgentInitArgs {
   hotkey: string
   /** Dictation push-to-talk; "" when dictation or its hotkey is off. */
   dictationHotkey: string
-  wake: { enabled: boolean; phrase: string; cancelPhrases: string[] }
-  dwell: { enabled: boolean; ms: number; cooldownMs: number }
+  dwell: AgentDwellConfig
+  /** Subscribable events to turn on; every other one is turned off. */
+  subscriptions: string[]
   logLevel: AgentLogLevel
 }
 
-const DEFAULT_HOTKEY = 'Ctrl+Shift+Space'
-const DEFAULT_DWELL_MS = 1400
-const DEFAULT_COOLDOWN_MS = 1500
-
-type Loose = Record<string, unknown>
-
-function obj(v: unknown): Loose {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Loose) : {}
-}
-
-function str(v: unknown, fallback: string): string {
-  return typeof v === 'string' ? v : fallback
-}
-
-function num(v: unknown, fallback: number): number {
-  return typeof v === 'number' && Number.isFinite(v) ? v : fallback
+export interface AgentInitOptions {
+  /** Primary display scale (the dwell move tolerance is in physical px). */
+  scale?: number
+  /** focus-changed is wanted by an a11y feature. */
+  focusEvents?: boolean
+  logLevel?: AgentLogLevel
 }
 
 export function splitPhrases(raw: unknown): string[] {
@@ -39,37 +31,26 @@ export function splitPhrases(raw: unknown): string[] {
 }
 
 /** The dictation combo to bind, or "" when dictation is off or it would shadow the main hotkey. */
-export function dictationHotkeyOf(cfg: unknown, mainHotkey: string): string {
-  const d = obj(obj(cfg).dictation)
-  if (d.enabled === false) return ''
-  const combo = str(d.hotkey, '').trim()
+export function dictationHotkeyOf(cfg: AppConfig, mainHotkey: string): string {
+  if (!cfg.dictation.enabled) return ''
+  const combo = cfg.dictation.hotkey.trim()
   return combo && combo.toLowerCase() !== mainHotkey.trim().toLowerCase() ? combo : ''
 }
 
-export function buildAgentInitState(
-  cfg: AppConfig | Partial<AppConfig> | null | undefined,
-  logLevel: AgentLogLevel = 'info'
-): AgentInitArgs {
-  const c = obj(cfg)
-  const wakeWord = obj(c.wakeWord)
-  const cancelVoice = obj(c.cancelVoice)
-  const dwellClick = obj(c.dwellClick)
-  const hotkey = str(c.hotkey, DEFAULT_HOTKEY) || DEFAULT_HOTKEY
+/** Agent events main needs while `cfg` (and the a11y features) are as they are. */
+export function agentSubscriptions(cfg: AppConfig, focusEvents = false): string[] {
+  const subs: string[] = []
+  if (cfg.guideAutoDismissOnMove) subs.push('mouse-moved')
+  if (focusEvents) subs.push('focus-changed')
+  return subs
+}
 
-  const phrase = str(wakeWord.phrase, '').trim()
+export function buildAgentInitState(cfg: AppConfig, opts: AgentInitOptions = {}): AgentInitArgs {
   return {
-    hotkey,
-    dictationHotkey: dictationHotkeyOf(c, hotkey),
-    wake: {
-      enabled: wakeWord.enabled === true && phrase.length > 0,
-      phrase,
-      cancelPhrases: cancelVoice.enabled === true ? splitPhrases(cancelVoice.phrases) : []
-    },
-    dwell: {
-      enabled: dwellClick.enabled === true,
-      ms: num(dwellClick.dwellMs, DEFAULT_DWELL_MS),
-      cooldownMs: num(dwellClick.cooldownMs, DEFAULT_COOLDOWN_MS)
-    },
-    logLevel
+    hotkey: cfg.hotkey,
+    dictationHotkey: dictationHotkeyOf(cfg, cfg.hotkey),
+    dwell: agentDwellConfig(dwellSettings(cfg), opts.scale ?? 1),
+    subscriptions: agentSubscriptions(cfg, opts.focusEvents),
+    logLevel: opts.logLevel ?? 'info'
   }
 }
