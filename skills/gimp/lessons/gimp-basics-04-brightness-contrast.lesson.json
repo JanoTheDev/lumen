@@ -1,0 +1,185 @@
+{
+  "id": "gimp-basics-04-brightness-contrast",
+  "app": "gimp",
+  "title": "Adjust brightness and contrast",
+  "summary": "Use Colors, Brightness-Contrast to lighten a photo and compare the result.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": [],
+  "appVersion": ">=3.0",
+  "tags": ["adjustment", "color"],
+  "steps": [
+    {
+      "id": "check-image-open",
+      "say": "Open a photo with Control O, or check that one is already showing in the middle.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "\\d+x\\d+ – GIMP$"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is an image open and visible in the middle of the GIMP window?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use File, then Open, and pick any JPG from your Pictures folder.",
+        "Dragging a photo file onto the GIMP window opens it too."
+      ],
+      "why": "Every edit needs an open image to act on."
+    },
+    {
+      "id": "open-tool",
+      "say": "Open the Colors menu and choose Brightness-Contrast.",
+      "target": {
+        "text": "Colors"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "Brightness.Contrast"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Brightness-Contrast"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Brightness-Contrast dialog open with Brightness and Contrast sliders?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Colors sits in the menu bar between Layer and Tools.",
+        "Press Alt and C to open the Colors menu from the keyboard."
+      ],
+      "why": "This tool lightens or darkens the whole layer in one go."
+    },
+    {
+      "id": "raise-brightness",
+      "say": "Drag the Brightness slider to the right until the photo looks lighter.",
+      "target": {
+        "text": "Brightness"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the photo look brighter than at the start of this step?"
+        }
+      },
+      "hints": [
+        "You can click the number box and type a value such as 20.",
+        "Drag down or up inside the image to change brightness too."
+      ],
+      "why": "Brightness lifts the overall lightness of the photo."
+    },
+    {
+      "id": "raise-contrast",
+      "say": "Drag the Contrast slider a little to the right.",
+      "target": {
+        "text": "Contrast"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the photo show stronger contrast than at the start of this step?"
+        }
+      },
+      "hints": [
+        "Small values, around 10 to 20, usually look natural.",
+        "Typing in the number box works too."
+      ],
+      "why": "Contrast spreads lights and darks further apart."
+    },
+    {
+      "id": "compare-preview",
+      "say": "Untick Preview to compare with the original, then tick it again.",
+      "target": {
+        "element": {
+          "name": "Preview"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is the Preview box ticked in the Brightness-Contrast dialog?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Preview is a checkbox near the bottom of the dialog.",
+        "Say done when you have compared both versions."
+      ],
+      "why": "Comparing keeps you from overdoing the effect."
+    },
+    {
+      "id": "apply",
+      "say": "Click OK to apply the change.",
+      "target": {
+        "element": {
+          "name": "OK",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "– GIMP$"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Brightness-Contrast dialog closed with the photo looking brighter?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Press Enter to click OK from the keyboard.",
+        "Control Z undoes it if you do not like the result."
+      ],
+      "why": "OK writes the change into the layer.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "OK",
+              "role": "Button"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

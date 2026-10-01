@@ -1,0 +1,16 @@
+{
+  "id": "gimp",
+  "name": "GIMP",
+  "version": "1.0.0",
+  "description": "Free image editing basics in GIMP 3: crop and scale, layers, selections and masks, color adjustments and export.",
+  "match": {
+    "process": ["gimp-3.exe", "gimp-3.0.exe", "gimp-3.2.exe", "gimp-2.10.exe", "gimp.exe"],
+    "title": ["– GIMP"]
+  },
+  "uiaQuality": "none",
+  "appVersion": ">=3.0",
+  "appVersionTested": "GIMP 3.0 manual, 3.2.x release, Windows",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "UIA quality is an estimate: GTK on Windows exposes little beyond the window and dialog titles. The default window title shows layer count and pixel size, which several checks use."
+}

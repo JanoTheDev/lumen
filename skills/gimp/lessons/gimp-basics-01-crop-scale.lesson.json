@@ -1,0 +1,197 @@
+{
+  "id": "gimp-basics-01-crop-scale",
+  "app": "gimp",
+  "title": "Crop and scale an image",
+  "summary": "Trim a photo with the Crop tool, then change its size with Scale Image.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": ">=3.0",
+  "tags": ["crop", "resize"],
+  "steps": [
+    {
+      "id": "check-image-open",
+      "say": "Open a photo with Control O, or check that one is already showing in the middle.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "\\d+x\\d+ – GIMP$"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is an image open and visible in the middle of the GIMP window?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use File, then Open, and pick any JPG from your Pictures folder.",
+        "Dragging a photo file onto the GIMP window opens it too."
+      ],
+      "why": "Every edit needs an open image to act on."
+    },
+    {
+      "id": "pick-crop",
+      "say": "Press Shift C to pick the Crop tool.",
+      "target": {
+        "shortcut": "Shift+C"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+C"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Crop tool selected in the toolbox, with crop settings in Tool Options?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Tools, then Transform Tools, then Crop in the menu bar also picks it.",
+        "Click on the image first so GIMP has focus, then press the keys."
+      ],
+      "why": "The Crop tool trims the outer parts of an image.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Shift+C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "draw-crop",
+      "say": "Drag across the photo to draw a rectangle around the part you want to keep.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a crop rectangle drawn on the photo, with the area outside it darkened?"
+        }
+      },
+      "hints": [
+        "Drag the edges or corners of the rectangle to adjust it.",
+        "Tick Fixed in Tool Options to lock a shape such as a square."
+      ],
+      "why": "Framing first shows exactly what stays before anything is removed."
+    },
+    {
+      "id": "apply-crop",
+      "say": "Press Enter to apply the crop.",
+      "target": {
+        "shortcut": "Enter"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Enter"
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the photo been trimmed and the crop rectangle gone?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Clicking inside the rectangle applies it too.",
+        "Control Z undoes the crop if you change your mind."
+      ],
+      "why": "The crop is only a preview until you confirm it.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-scale",
+      "say": "Open the Image menu at the top and choose Scale Image.",
+      "target": {
+        "text": "Image"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Scale Image"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Scale Image"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Scale Image dialog open with Width and Height boxes?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Image menu sits in the menu bar between View and Layer.",
+        "Press Alt and I to open the Image menu from the keyboard."
+      ],
+      "why": "Scale Image changes how many pixels the whole image has."
+    },
+    {
+      "id": "set-width",
+      "say": "Type 1200 in the Width box, press Tab, then click Scale.",
+      "target": {
+        "element": {
+          "name": "Width"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "\\b1200x\\d+ – GIMP$"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Scale Image dialog closed and the image smaller than before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Keep the chain icon beside Width and Height joined so the photo does not stretch.",
+        "Check that the unit menu next to the sizes says px."
+      ],
+      "why": "A smaller pixel size makes the file lighter for email and the web."
+    }
+  ]
+}

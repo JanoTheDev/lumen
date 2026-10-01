@@ -1,0 +1,70 @@
+{
+  "window": "main",
+  "layout": "Single-window mode",
+  "notes": "Estimated on a 1920x1080 window in single-window mode with the default docks. Multi-window mode or moved docks break these; the engine falls back to OCR or vision.",
+  "regions": {
+    "menu-bar": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.03,
+      "desc": "Menu bar along the top edge"
+    },
+    "toolbox": {
+      "x": 0.0,
+      "y": 0.03,
+      "w": 0.13,
+      "h": 0.42,
+      "desc": "Tool icons, upper left"
+    },
+    "tool-options": {
+      "x": 0.0,
+      "y": 0.45,
+      "w": 0.13,
+      "h": 0.55,
+      "desc": "Tool Options for the active tool, lower left"
+    },
+    "image-tabs": {
+      "x": 0.13,
+      "y": 0.03,
+      "w": 0.67,
+      "h": 0.04,
+      "desc": "Tabs of open images, above the canvas"
+    },
+    "canvas": {
+      "x": 0.13,
+      "y": 0.07,
+      "w": 0.67,
+      "h": 0.89,
+      "desc": "The image with rulers, center"
+    },
+    "status-bar": {
+      "x": 0.13,
+      "y": 0.96,
+      "w": 0.67,
+      "h": 0.04,
+      "desc": "Pointer position, zoom and hints, bottom of the canvas"
+    },
+    "right-dock-top": {
+      "x": 0.8,
+      "y": 0.03,
+      "w": 0.2,
+      "h": 0.45,
+      "desc": "Brushes, Patterns, Fonts and History tabs, upper right"
+    },
+    "layers-dock": {
+      "x": 0.8,
+      "y": 0.48,
+      "w": 0.2,
+      "h": 0.48,
+      "desc": "Layers, Channels and Paths tabs, lower right"
+    },
+    "layers-buttons": {
+      "x": 0.8,
+      "y": 0.96,
+      "w": 0.2,
+      "h": 0.04,
+      "desc": "Icon row at the bottom of the Layers tab"
+    }
+  }
+}

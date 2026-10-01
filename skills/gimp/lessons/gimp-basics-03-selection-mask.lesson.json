@@ -1,0 +1,155 @@
+{
+  "id": "gimp-basics-03-selection-mask",
+  "app": "gimp",
+  "title": "Select an area and mask it",
+  "summary": "Draw a selection, turn it into a layer mask and switch it off and on.",
+  "level": "beginner",
+  "minutes": 7,
+  "prereqs": ["gimp-basics-02-layers-basics"],
+  "appVersion": ">=3.0",
+  "tags": ["selection", "mask"],
+  "steps": [
+    {
+      "id": "pick-photo-layer",
+      "say": "In the Layers tab, click the photo layer so it is highlighted.",
+      "target": {
+        "region": "layers-dock"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the photo layer highlighted in the Layers tab?"
+        }
+      },
+      "hints": [
+        "It is usually the bottom row.",
+        "Press Control L if the Layers tab is not showing."
+      ],
+      "why": "Selections and masks act on the highlighted layer."
+    },
+    {
+      "id": "free-select",
+      "say": "Press F for Free Select, then click around your subject, ending on the first point.",
+      "target": {
+        "shortcut": "F"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a dashed selection outline around an object in the photo?"
+        }
+      },
+      "hints": [
+        "Press Enter to close and confirm the shape if clicking the first point is tricky.",
+        "For a plain background, press U for Fuzzy Select and click the background, then press Control I."
+      ],
+      "why": "The selection tells GIMP which part of the photo to keep."
+    },
+    {
+      "id": "open-add-mask",
+      "say": "Open the Layer menu, then Mask, then Add Layer Mask.",
+      "target": {
+        "text": "Layer"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "[Mm]ask"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a dialog open listing ways to start the layer mask, such as White and Selection?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Layer menu is in the menu bar at the top.",
+        "Right-clicking the layer in the Layers tab shows Add Layer Mask too."
+      ],
+      "why": "A mask hides parts of a layer without deleting pixels."
+    },
+    {
+      "id": "choose-selection",
+      "say": "Choose Selection in the list, then click Add.",
+      "target": {
+        "element": {
+          "name": "Selection"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the layer now show a mask thumbnail, with everything outside the selection hidden or transparent?"
+        }
+      },
+      "hints": [
+        "Selection is one of the options under Initialize Layer Mask to.",
+        "If the result is reversed, undo and tick Invert Mask before clicking Add."
+      ],
+      "why": "Starting from the selection gives the mask the right shape at once."
+    },
+    {
+      "id": "select-none",
+      "say": "Press Control Shift A to remove the selection outline.",
+      "target": {
+        "shortcut": "Ctrl+Shift+A"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+Shift+A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the dashed selection outline gone from the image?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Select, then None in the menu bar does the same.",
+        "The mask stays; only the outline goes away."
+      ],
+      "why": "Leftover selections limit later edits in confusing ways.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Shift+A"
+          }
+        ]
+      }
+    },
+    {
+      "id": "disable-mask",
+      "say": "Open Layer, then Mask, and tick Disable Layer Mask to see the full photo.",
+      "target": {
+        "text": "Layer"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the full photo visible again, with the mask thumbnail outlined in red?"
+        }
+      },
+      "hints": [
+        "Open the same menu and untick it to turn the mask back on.",
+        "Right-clicking the layer shows the same option."
+      ],
+      "why": "Switching a mask off proves that nothing was deleted."
+    }
+  ]
+}

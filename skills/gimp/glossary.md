@@ -1,0 +1,24 @@
+# GIMP glossary
+
+- **XCF** — GIMP's own file format; it keeps layers, masks and paths.
+- **Export As** — writes a flat copy in another format such as JPG, PNG or WebP.
+- **Overwrite** — File menu entry that saves an opened JPG or PNG back over itself.
+- **Layer** — one sheet in the image stack.
+- **Active layer** — the highlighted layer in the Layers tab; edits go to it.
+- **Layer group** — a folder that holds several layers.
+- **Alpha channel** — the transparency information of a layer.
+- **Selection** — the area, outlined by marching ants, where edits happen.
+- **Marching ants** — the moving dashed outline of a selection.
+- **Fuzzy Select** — selects a connected area of similar color with one click (magic wand).
+- **Free Select** — draws a selection by clicking points or dragging (lasso).
+- **Feather** — soft selection edge.
+- **Layer mask** — a grayscale map on a layer: white shows it, black hides it.
+- **Floating selection** — a temporary layer made by pasting; anchor it or make it a new layer.
+- **Anchor** — merges a floating selection into the layer below.
+- **Scale Image** — changes the pixel size of the whole image.
+- **Canvas Size** — changes the drawing area without scaling the picture.
+- **Interpolation** — the math used to compute new pixels when scaling.
+- **Tool Options** — the dock under the toolbox with settings for the current tool.
+- **Dockable dialog** — a panel such as Layers or Brushes that can sit in a dock as a tab.
+- **Single-window mode** — the default layout with docks on both sides of one window.
+- **GEGL** — the image engine behind GIMP filters and color tools.

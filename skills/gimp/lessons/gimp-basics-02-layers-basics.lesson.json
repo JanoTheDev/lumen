@@ -1,0 +1,161 @@
+{
+  "id": "gimp-basics-02-layers-basics",
+  "app": "gimp",
+  "title": "Layers basics",
+  "summary": "Add, rename, paint on and hide a layer.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["gimp-basics-01-crop-scale"],
+  "appVersion": ">=3.0",
+  "tags": ["layers"],
+  "steps": [
+    {
+      "id": "show-layers",
+      "say": "Press Control L to show the Layers tab at the lower right.",
+      "target": {
+        "shortcut": "Ctrl+L"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Ctrl+L"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Layers tab visible, listing at least one layer?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Windows, then Dockable Dialogs, then Layers opens it from the menu.",
+        "Press Tab if all the side docks are hidden."
+      ],
+      "why": "The Layers tab is where you see and control every part of the image.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+L"
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-layer",
+      "say": "Press Control Shift N, then click OK in the New Layer dialog.",
+      "target": {
+        "shortcut": "Ctrl+Shift+N"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "\\b2 layers\\b"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new layer listed above the photo in the Layers tab?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Layer, then New Layer in the menu bar opens the same dialog.",
+        "Set Fill with to Transparency so the new layer does not cover the photo."
+      ],
+      "why": "New marks go on their own layer so the photo below stays untouched.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Shift+N"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rename-layer",
+      "say": "Double-click the new layer's name, type Sketch, and press Enter.",
+      "target": {
+        "region": "layers-dock"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a layer named Sketch in the Layers tab?"
+        }
+      },
+      "hints": [
+        "Double-click the name text, not the small thumbnail.",
+        "Layer, then Edit Layer Attributes also lets you rename it."
+      ],
+      "why": "Clear names make layers quick to find later."
+    },
+    {
+      "id": "paint-strokes",
+      "say": "Press P for the Paintbrush and paint a few strokes on the image.",
+      "target": {
+        "shortcut": "P"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are there new brush strokes on the image that were not there before?"
+        }
+      },
+      "hints": [
+        "Press D to reset the paint color to black.",
+        "Press the right bracket key for a bigger brush."
+      ],
+      "why": "Painting on the Sketch layer keeps your marks separate from the photo."
+    },
+    {
+      "id": "hide-layer",
+      "say": "Click the eye icon to the left of Sketch to hide that layer.",
+      "target": {
+        "region": "layers-dock"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are the brush strokes hidden now, with the eye next to Sketch turned off?"
+        }
+      },
+      "hints": [
+        "The eye is in the first column of each row in the Layers tab.",
+        "Make sure you click on the Sketch row, not the photo row."
+      ],
+      "why": "Hiding a layer lets you compare without deleting anything."
+    },
+    {
+      "id": "show-layer",
+      "say": "Click the same spot again to bring the strokes back.",
+      "target": {
+        "region": "layers-dock"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are the brush strokes visible on the image again?"
+        }
+      },
+      "hints": [
+        "The empty box where the eye was is still clickable.",
+        "Control Z also brings back the last change."
+      ],
+      "why": "Layers can be switched on and off as often as you like."
+    }
+  ]
+}
