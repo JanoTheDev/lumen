@@ -239,3 +239,40 @@ export interface SkillSummary {
   /** Loader warnings (long body, unknown keys). */
   warnings: string[]
 }
+
+/** Background tasks (CONTRACTS C11, 08 T26–T30). */
+export type BackgroundTaskPhase =
+  | 'queued'
+  | 'running'
+  | 'needs-foreground'
+  | 'asking'
+  | 'done'
+  | 'failed'
+  | 'cancelled'
+  | 'interrupted'
+
+export type BackgroundArtifact =
+  | { kind: 'text'; text: string }
+  | { kind: 'file'; path: string }
+  | { kind: 'link'; url: string; title?: string }
+
+export interface BackgroundTask {
+  id: string
+  title: string
+  /** The request as given (Run again starts it anew). */
+  prompt: string
+  skill?: string
+  origin: 'voice' | 'agent' | 'routine'
+  phase: BackgroundTaskPhase
+  /** Newest last, capped. */
+  progress: string[]
+  result?: { summary: string; report?: string; artifacts?: BackgroundArtifact[] }
+  counters: { modelCalls: number; costUsd: number; startedAt: number }
+  /** A queued question (ask_user, a cap reached, request_foreground declined for later). */
+  question?: { text: string; choices?: string[] }
+  /** spawn_task child: the parent's id (children cannot spawn). */
+  parentId?: string
+  endedAt?: number
+  /** Finished and not looked at yet (the tray badge counts these). */
+  unseen?: boolean
+}

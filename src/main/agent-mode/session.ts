@@ -29,6 +29,12 @@ import {
   type SavedRun
 } from './runner'
 import { FOREGROUND_TOOLS } from './tools'
+import { foregroundSpawnHandler } from './background'
+import { BG_TOOLS } from './background/tools'
+import { preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
+import { MEMORY_SEARCH_TOOL, memorySearchInput } from '../ai/memory/search'
+import { memorySearchFor } from '../ai/memory/runtime'
+import { observed } from './prompts'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -209,10 +215,20 @@ const askIo: AskIo = {
 }
 let lastQuestion = ''
 
-function deps(env: TaskEnv): RunnerDeps {
+function deps(env: TaskEnv, spawn: boolean, skills: SkillToolSet): RunnerDeps {
   return {
     model,
-    handlers: createHandlers(env),
+    handlers: {
+      ...createHandlers(env),
+      ...skills.handlers,
+      memory_search: async (input) => {
+        const q = memorySearchInput.safeParse(input)
+        if (!q.success)
+          return { content: [{ type: 'text', text: 'Invalid input.' }], isError: true }
+        return { content: [{ type: 'text', text: observed('memory', memorySearchFor(q.data)) }] }
+      },
+      ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {})
+    },
     publish: (task) => {
       if (task.question?.text) lastQuestion = task.question.text
       showOnBar(task)
@@ -267,8 +283,9 @@ async function run(
   env: TaskEnv,
   context: TaskContext,
   signal: AbortSignal,
-  extra: { skipPlan?: boolean; resume?: SavedRun }
+  extra: { skipPlan?: boolean; resume?: SavedRun; noSpawn?: boolean }
 ): Promise<ModelResponse> {
+  const { noSpawn, ...more } = extra
   if (running) throw new Error('An agent task is already running.')
   const ac = new AbortController()
   const onOuter = (): void => ac.abort(signal.reason)
@@ -276,6 +293,8 @@ async function run(
   signal.addEventListener('abort', onOuter, { once: true })
   running = { taskId: env.taskId, abort: () => ac.abort() }
   lastStatus = ''
+  // Skills (11 T02): the L1 list after the agent prompt, use_skill / read_skill_file as tools.
+  const skills = skillToolSet()
   try {
     const r = await withCancelArmed(() =>
       runAgent(
@@ -283,12 +302,20 @@ async function run(
           prompt,
           context,
           tools: FOREGROUND_TOOLS,
+          // Helper tasks in the background (T28): parallel research fan-out.
+          extraTools: [
+            MEMORY_SEARCH_TOOL,
+            ...skills.defs,
+            ...(noSpawn ? [] : [BG_TOOLS.spawn_task])
+          ],
+          parallelTools: ['spawn_task'],
+          ...(skills.index ? { systemExtra: skills.index } : {}),
           cancelWindowMs: loadConfig().agent.cancelWindowMs,
           signal: ac.signal,
           speakSummary: false,
-          ...extra
+          ...more
         },
-        deps(env)
+        deps(env, !noSpawn, skills)
       )
     )
     paused =
@@ -329,11 +356,21 @@ export function runAgentTask(
   prompt: string,
   ctx: QueryContext,
   signal: AbortSignal,
-  opts: { skipPlan?: boolean } = {}
+  opts: {
+    skipPlan?: boolean
+    noSpawn?: boolean
+    skill?: string
+    skillArgs?: { name: string; value: string }[]
+  } = {}
 ): Promise<ModelResponse> {
   paused = null
   const taskId = `t_${Date.now().toString(36)}${(seq++).toString(36)}`
-  return run(prompt, newEnv(taskId, prompt), taskContext(ctx, prompt), signal, opts)
+  const { skill, skillArgs, ...extra } = opts
+  const context = taskContext(ctx, prompt)
+  // A skill named by its trigger phrase: its instructions are the task's guide.
+  const loaded = skill ? preloadSkill(skill, skillArgs) : null
+  if (loaded) context.skill = loaded
+  return run(prompt, newEnv(taskId, prompt), context, signal, extra)
 }
 
 /** "resume the task": continues the paused task by asking its question again. */

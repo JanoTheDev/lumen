@@ -1,5 +1,5 @@
 // Internal bus events (CONTRACTS C6). Features publish; window modules subscribe.
-import type { Action, ModelResponse, Point, Rect } from './types'
+import type { Action, BackgroundTask, ModelResponse, Point, Rect } from './types'
 
 export type AssistantPhase =
   | 'idle'
@@ -197,6 +197,8 @@ export type AppEvent =
     }
   /** Agent-mode task state; null once the task is over and its card is gone. */
   | { type: 'agent.task'; task: AgentTask | null }
+  /** A background task changed (CONTRACTS C11). */
+  | { type: 'task.changed'; task: BackgroundTask }
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
 

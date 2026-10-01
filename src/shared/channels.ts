@@ -2,6 +2,7 @@
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
+import type { BackgroundTask } from './types'
 import type {
   GuideStep,
   LocateItem,
@@ -97,6 +98,15 @@ export interface InvokeChannels {
   /** Stored "always" grants for medium-risk actions (08 T03). */
   'agent:grants-list': { args: []; result: AgentGrant[] }
   'agent:grants-revoke': { args: [scope: string]; result: { ok: boolean } }
+  /** Background tasks (CONTRACTS C11), newest first; listing marks finished ones seen. */
+  'tasks:list': { args: []; result: BackgroundTask[] }
+  'tasks:cancel': { args: [id: string]; result: { ok: boolean } }
+  /** Shows the result on the assistant bar (or the waiting question). */
+  'tasks:open': { args: [id: string]; result: { ok: boolean } }
+  /** Answers a task's queued question. */
+  'tasks:answer': { args: [id: string, answer: string]; result: { ok: boolean } }
+  /** Starts an interrupted, failed or cancelled task again as a new task. */
+  'tasks:run-again': { args: [id: string]; result: { ok: boolean; id?: string } }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
   /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
@@ -786,6 +796,8 @@ export interface EventChannels {
   'voice:tts': [msg: TtsMessage]
   /** Start or stop streaming mic audio to the wake-word spotter. */
   'voice:wake-listen': [on: boolean]
+  /** Background task list changed (Home flyout Tasks). */
+  'tasks:changed': [tasks: BackgroundTask[]]
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -842,6 +854,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'agent:info',
   'agent:grants-list',
   'agent:grants-revoke',
+  'tasks:list',
+  'tasks:cancel',
+  'tasks:open',
+  'tasks:answer',
+  'tasks:run-again',
   'audit:list',
   'teach:list',
   'teach:start',
@@ -940,7 +957,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'a11y:sheet-refresh',
   'a11y:dwell-state',
   'a11y:keyboard-state',
-  'assistant:focus'
+  'assistant:focus',
+  'tasks:changed'
 ]
 
 /** Typed surface exposed to renderers as `window.lumen`. */

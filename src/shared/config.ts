@@ -329,7 +329,27 @@ export const configV2Schema = z.object({
   }),
   agent: z.object({
     confirm: z.enum(['always', 'risky', 'never']),
-    cancelWindowMs: z.number().int().min(0).max(30_000)
+    cancelWindowMs: z.number().int().min(0).max(30_000),
+    /** Background tasks (08 T26–T29): concurrency, per-task caps, granted folders, quiet. */
+    background: z
+      .object({
+        max: z.number().int().min(1).max(3),
+        maxModelCalls: z.number().int().min(1).max(200),
+        maxCostUsd: z.number().min(0.01).max(5),
+        maxWallMin: z.number().int().min(1).max(120),
+        /** Folders read_file may read (besides a skill's own grants). */
+        readFolders: z.array(z.string().max(260)).max(20),
+        /** Focus mode: finished tasks wait in the list, nothing is spoken. */
+        quiet: z.boolean()
+      })
+      .default({
+        max: 3,
+        maxModelCalls: 30,
+        maxCostUsd: 0.25,
+        maxWallMin: 15,
+        readFolders: [],
+        quiet: false
+      })
   }),
   privacy: z.object({ saveScreenshots: z.boolean(), telemetry: z.boolean() }),
   teach: z.object({
@@ -440,7 +460,18 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     coexist: { yieldToVoiceControl: true, wakeWithDragon: false }
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
-  agent: { confirm: 'risky', cancelWindowMs: 3000 },
+  agent: {
+    confirm: 'risky',
+    cancelWindowMs: 3000,
+    background: {
+      max: 3,
+      maxModelCalls: 30,
+      maxCostUsd: 0.25,
+      maxWallMin: 15,
+      readFolders: [],
+      quiet: false
+    }
+  },
   privacy: { saveScreenshots: false, telemetry: false },
   teach: {
     activeSkill: null,

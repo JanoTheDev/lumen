@@ -66,6 +66,9 @@ export const auditQuerySchema = z
     taskId: z.string().max(64).optional()
   })
   .strict()
+/** Background task ids (08 T29) and a typed answer to a task's question. */
+export const bgTaskIdSchema = z.string().regex(/^bg_[a-z0-9]{4,40}$/)
+export const bgTaskAnswerSchema = z.tuple([bgTaskIdSchema, z.string().trim().min(1).max(500)])
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([
   'left',

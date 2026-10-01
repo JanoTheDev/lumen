@@ -1,5 +1,6 @@
 // Safety wiring (08 Phase 1): grants file, audit log, the bar's confirm card as the policy's
 // confirm UI, IPC for the grants list and the audit viewer, and "what did you just do".
+// Background tasks (08 Phase 5): persisted task list and the tasks:* IPC.
 import { ipcMain } from 'electron'
 import { dirname, join } from 'path'
 import { auditQuerySchema, grantScopeSchema } from '@shared/ipc'
@@ -9,11 +10,14 @@ import * as assistant from '../windows/assistant'
 import { installAudit, lastTaskSummary, listAudit } from '../audit/log'
 import { setConfirmUi } from './confirm'
 import { grants, installGrants } from './grants'
+import { installBackground } from './background'
+import { registerTasksIpc } from '../ipc/tasks'
 
 export function installAgentMode(): void {
   const root = dirname(configPath())
   installGrants(join(root, 'grants.json'))
   installAudit(join(root, 'audit'))
+  installBackground(join(root, 'tasks'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
     confirm: () => assistant.command({ type: 'confirm' })
@@ -21,6 +25,7 @@ export function installAgentMode(): void {
 }
 
 export function registerAgentModeIpc(): void {
+  registerTasksIpc()
   ipcMain.handle('agent:grants-list', (_e, ...args: unknown[]) =>
     args.length ? INVALID : grants().list()
   )
