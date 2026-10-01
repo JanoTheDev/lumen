@@ -18,6 +18,7 @@ export default defineConfig({
     },
     plugins: [react()],
     build: {
+      minify: true,
       rollupOptions: {
         input: {
           index: resolve('src/renderer/index.html'),
