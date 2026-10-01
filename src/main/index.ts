@@ -9,7 +9,7 @@ try {
   /* userData unavailable this early on some setups; repo .env still applies */
 }
 
-import { app, shell, BrowserWindow } from 'electron'
+import { app, session, shell, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { bus } from './bus'
 import { loadConfig, lastConfigWarning } from './config'
@@ -49,6 +49,7 @@ import {
 } from './speech/dictation/pipeline'
 import { recordDictation } from './speech/dictation/history'
 import { isOwnRendererUrl } from './windows/factory'
+import { installPermissionHandlers } from './windows/permissions'
 import { applyUiScaleOnLoad } from './windows/registry'
 import * as tray from './windows/tray'
 import * as assistantWin from './windows/assistant'
@@ -96,8 +97,9 @@ installLogFile(app.getPath('logs'))
 startCrashReporter()
 installCrashHandlers()
 
-// No Lumen window may open popups or navigate away from its own renderer.
+// No Lumen window may open popups, navigate away from its own renderer or use devices it doesn't need.
 function hardenWebContents(): void {
+  installPermissionHandlers(session.defaultSession)
   app.on('web-contents-created', (_, contents) => {
     contents.setWindowOpenHandler(({ url }) => {
       if (isSafeUrl(url)) shell.openExternal(assertSafeUrl(url)).catch(() => {})
