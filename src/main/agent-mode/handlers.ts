@@ -24,6 +24,8 @@ import * as screenLayer from '../windows/screen-layer'
 import { focusOff, focusOn } from '../focus'
 import { loadContent } from '../files/content'
 import { getFile } from '../files/store'
+import { createFileHandler } from '../docs-out/tool'
+import { attachFileHandler } from '../files/attach-tool'
 import { howtoToolHandler, taskLearner } from '../howto'
 import type { LearnedTarget } from '../howto/learn'
 import { appRegistry, findApp, launchEntry } from './apps'
@@ -515,6 +517,14 @@ export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
     wait_for: (i, c) => waitForTool(i as WaitForInput, c.signal),
     ask_user: (i, c) => ask(i as AskUserInput, env, c.signal, c.update),
     focus_mode: (i) => focusMode(i as FocusModeInput),
-    read_file: (i) => readDropped(i as ReadFileInput, env)
+    read_file: (i) => readDropped(i as ReadFileInput, env),
+    create_file: createFileHandler(() => ({
+      origin: 'agent',
+      taskId: env.taskId,
+      userText: env.prompt,
+      observedText: env.observedText,
+      task: env.state
+    })),
+    attach_file: attachFileHandler(env)
   }
 }

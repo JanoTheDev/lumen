@@ -5,6 +5,8 @@
 import { z } from 'zod'
 import type { ToolDef } from '../ai/providers/types'
 import { CREATE_SKILL_TOOL, UPDATE_SKILL_TOOL } from '../skills/agent-tool-defs'
+import { CREATE_FILE_TOOL } from '../docs-out/tool'
+import { ATTACH_FILE_TOOL } from '../files/attach-tool'
 import { LOOKUP_HOWTO_TOOL } from '../howto/tool'
 
 const step = z
@@ -193,6 +195,8 @@ export const TOOLS = {
   },
   create_skill: CREATE_SKILL_TOOL,
   update_skill: UPDATE_SKILL_TOOL,
+  create_file: CREATE_FILE_TOOL,
+  attach_file: ATTACH_FILE_TOOL,
   finish: {
     name: 'finish',
     description:
@@ -219,6 +223,8 @@ export const FOREGROUND_TOOLS: readonly ToolName[] = [
   'focus_mode',
   'create_skill',
   'update_skill',
+  'create_file',
+  'attach_file',
   'finish'
 ]
 
