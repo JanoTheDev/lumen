@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Action, ElementNode } from '@shared/types'
-import { attachFile, dialogFields, type AttachPorts } from '../../src/main/files/attach-dialog'
+import {
+  attachFile,
+  dialogFields,
+  dialogGone,
+  type AttachPorts
+} from '../../src/main/files/attach-dialog'
 import type { SharedFile } from '../../src/main/files/store'
 
 const node = (n: Partial<ElementNode>): ElementNode => ({
@@ -131,7 +136,11 @@ describe('attachFile', () => {
     expect(r.isError).toBe(true)
     expect(noDialog.ran).toHaveLength(0)
     const outlook = ports({
-      foreground: async () => ({ title: 'Insert File', process: 'OUTLOOK.EXE' })
+      foreground: async () => ({
+        title: 'Insert File',
+        process: 'OUTLOOK.EXE',
+        className: '#32770'
+      })
     })
     expect((await attachFile(FILE.id, outlook)).isError).toBeUndefined()
   })
@@ -162,5 +171,52 @@ describe('attachFile', () => {
     await attachFile(FILE.id, p)
     expect(p.ran[0][1]).toEqual({ type: 'hotkey', keys: ['enter'] })
     expect(check).toHaveBeenCalledWith(FILE.path)
+  })
+})
+
+describe('attach_file needs a real file dialog (review M2)', () => {
+  it('a web page with a "File name" box and an Upload button is refused', async () => {
+    const page = node({
+      role: 'document',
+      name: 'Upload your files',
+      children: [
+        node({ id: 'p1', role: 'edit', name: 'File name', patterns: ['value'] }),
+        node({ id: 'p2', role: 'button', name: 'Upload', patterns: ['invoke'] })
+      ]
+    })
+    const p = ports({
+      foreground: async () => ({
+        title: 'Upload - Chrome',
+        process: 'chrome.exe',
+        className: 'Chrome_WidgetWin_1'
+      }),
+      snapshot: async () => page
+    })
+    const r = await attachFile(FILE.id, p)
+    expect(r.isError).toBe(true)
+    expect(r.content[0]).toMatchObject({ text: expect.stringMatching(/^E_DENIED/) })
+    expect(p.ran).toHaveLength(0)
+  })
+})
+
+describe('dialogGone (review L3)', () => {
+  const dialog = { hwnd: 10, title: 'Open', process: 'chrome.exe', className: '#32770' }
+  it('an error box from the dialog is not "attached"', () => {
+    expect(
+      dialogGone(dialog, { hwnd: 11, title: 'Open', process: 'chrome.exe', className: '#32770' })
+    ).toBe(false)
+    expect(dialogGone(dialog, dialog)).toBe(false)
+    expect(dialogGone(dialog, null)).toBe(false)
+  })
+  it('another app in front proves nothing; the browser back in front does', () => {
+    expect(dialogGone(dialog, { hwnd: 20, title: 'Notes', process: 'notepad.exe' })).toBe(false)
+    expect(
+      dialogGone(dialog, {
+        hwnd: 5,
+        title: 'Inbox - Gmail',
+        process: 'chrome.exe',
+        className: 'Chrome_WidgetWin_1'
+      })
+    ).toBe(true)
   })
 })

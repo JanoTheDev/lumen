@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { ToolDef } from '../ai/providers/types'
 import type { TaskState } from '../actions/safety'
 import type { ToolHandler } from '../agent-mode/runner'
-import { attachFile, type AttachPorts } from './attach-dialog'
+import { attachFile, dialogGone, type AttachPorts } from './attach-dialog'
 import { checkDroppedPath, getFile } from './store'
 
 export const attachFileInput = z.object({
@@ -39,6 +39,7 @@ function realPorts(env: AttachEnv, signal: AbortSignal): AttachPorts {
       const { activeWindow } = await import('../agent/commands')
       const w = await activeWindow(await agent(), { signal })
       return {
+        hwnd: w.hwnd,
         title: w.title,
         process: w.process,
         ...(w.className ? { className: w.className } : {})
@@ -68,13 +69,13 @@ function realPorts(env: AttachEnv, signal: AbortSignal): AttachPorts {
         { signal }
       )
     },
-    closed: async (title) => {
+    closed: async (dialog) => {
       const { activeWindow } = await import('../agent/commands')
       const bridge = await agent()
       for (let waited = 0; waited < CLOSE_WAIT_MS; waited += POLL_MS) {
         await new Promise((r) => setTimeout(r, POLL_MS))
         const w = await activeWindow(bridge, { signal }).catch(() => null)
-        if (w && w.title !== title) return true
+        if (dialogGone(dialog, w)) return true
       }
       return false
     }
