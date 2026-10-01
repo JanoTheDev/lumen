@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "lumen/curriculum.schema.json",
+  "title": "Skill tree (skills/<app-id>/curriculum.json)",
+  "description": "Ordered units of a pack's lessons. A lesson unlocks when its prereqs are done; prereqs must come earlier in this order.",
+  "type": "object",
+  "required": ["app", "units"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "app": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "units": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/unit" }
+    }
+  },
+  "$defs": {
+    "unit": {
+      "type": "object",
+      "required": ["id", "title", "lessons"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "summary": { "type": "string", "maxLength": 240 },
+        "lessons": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "vscode",
+  "units": [
+    {
+      "id": "get-around",
+      "title": "Get around",
+      "summary": "Open a folder, run commands and find files.",
+      "lessons": [
+        "vscode-basics-01-open-folder",
+        "vscode-basics-02-command-palette",
+        "vscode-basics-03-search-files"
+      ]
+    },
+    {
+      "id": "tools",
+      "title": "Tools",
+      "summary": "Terminal, extensions and Git.",
+      "lessons": [
+        "vscode-basics-04-terminal",
+        "vscode-basics-05-install-extension",
+        "vscode-basics-06-git-commit"
+      ]
+    }
+  ]
+}

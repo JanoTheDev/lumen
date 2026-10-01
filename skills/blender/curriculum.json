@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "blender",
+  "units": [
+    {
+      "id": "getting-around",
+      "title": "Getting around",
+      "summary": "Move the view and place objects.",
+      "lessons": ["blender-basics-01-navigate-viewport", "blender-basics-02-add-transform"]
+    },
+    {
+      "id": "make-something",
+      "title": "Make something",
+      "summary": "Shape a model, colour it and render it.",
+      "lessons": [
+        "blender-basics-03-edit-mode-extrude",
+        "blender-basics-04-material-color",
+        "blender-basics-05-render-save"
+      ]
+    }
+  ]
+}

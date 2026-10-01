@@ -260,6 +260,55 @@ describe('validator rules (fixture packs)', () => {
     })
     expect(messages().some((m) => m.startsWith('$.id: duplicate lesson id'))).toBe(true)
   })
+
+  it('checks curriculum.json: app, known lessons, all listed once, prereq order', () => {
+    const second = lesson({
+      id: 'demo-basics-02-second',
+      title: 'Second',
+      prereqs: ['demo-basics-01-first-steps']
+    })
+    writePack(root, (f) => {
+      f['lessons/demo-basics-02-second.lesson.json'] = second
+      f['curriculum.json'] = {
+        app: 'demo',
+        units: [
+          {
+            id: 'basics',
+            title: 'Basics',
+            lessons: ['demo-basics-01-first-steps', 'demo-basics-02-second']
+          }
+        ]
+      }
+    })
+    expect(run(root).errors).toEqual([])
+
+    writePack(root, (f) => {
+      f['lessons/demo-basics-02-second.lesson.json'] = second
+      f['curriculum.json'] = {
+        app: 'other',
+        units: [
+          { id: 'a', title: 'A', lessons: ['demo-basics-02-second', 'demo-nope'] },
+          { id: 'a', title: 'A again', lessons: ['demo-basics-02-second'] }
+        ]
+      }
+    })
+    const m = messages()
+    expect(m).toContain('$.app: must equal folder name "demo"')
+    expect(m).toContain(
+      '$.units[0].lessons[0]: "demo-basics-02-second" comes before its prereq "demo-basics-01-first-steps"'
+    )
+    expect(m).toContain('$.units[0].lessons[1]: unknown lesson id "demo-nope" in this pack')
+    expect(m).toContain('$.units[1].id: duplicate unit id "a"')
+    expect(m).toContain('$.units[1].lessons[0]: "demo-basics-02-second" is listed twice')
+    expect(m).toContain('$.units: lesson "demo-basics-01-first-steps" is in no unit')
+  })
+
+  it('rejects a curriculum that breaks the schema', () => {
+    writePack(root, (f) => {
+      f['curriculum.json'] = { app: 'demo', units: [] }
+    })
+    expect(messages().some((m) => m.startsWith('$.units'))).toBe(true)
+  })
 })
 
 describe('helpers', () => {

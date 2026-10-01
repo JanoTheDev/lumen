@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "windows",
+  "units": [
+    {
+      "id": "settings",
+      "title": "Settings",
+      "summary": "Make Windows easier to see and use.",
+      "lessons": [
+        "windows-basics-01-display-scaling",
+        "windows-basics-02-accessibility-features",
+        "windows-basics-05-uninstall-app"
+      ]
+    },
+    {
+      "id": "files-and-windows",
+      "title": "Files and windows",
+      "summary": "Folders and arranging windows.",
+      "lessons": ["windows-basics-03-explorer-folders", "windows-basics-04-snap-windows"]
+    }
+  ]
+}

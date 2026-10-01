@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "figma",
+  "units": [
+    {
+      "id": "design",
+      "title": "Design",
+      "summary": "Frames, layout and components.",
+      "lessons": [
+        "figma-basics-01-frame-shapes",
+        "figma-basics-02-auto-layout",
+        "figma-basics-03-components"
+      ]
+    },
+    {
+      "id": "share",
+      "title": "Share",
+      "summary": "Prototype and export.",
+      "lessons": ["figma-basics-04-prototype-link", "figma-basics-05-export"]
+    }
+  ]
+}

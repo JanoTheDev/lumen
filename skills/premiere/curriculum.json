@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "premiere",
+  "units": [
+    {
+      "id": "edit",
+      "title": "Edit",
+      "summary": "Start a project, cut clips and add text.",
+      "lessons": [
+        "premiere-basics-01-new-project-import",
+        "premiere-basics-02-cut-on-timeline",
+        "premiere-basics-03-add-text"
+      ]
+    },
+    {
+      "id": "finish",
+      "title": "Finish",
+      "summary": "Balance the audio and export.",
+      "lessons": ["premiere-basics-04-audio-levels", "premiere-basics-05-export"]
+    }
+  ]
+}

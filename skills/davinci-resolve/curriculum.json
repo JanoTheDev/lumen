@@ -1,0 +1,25 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "davinci-resolve",
+  "units": [
+    {
+      "id": "edit",
+      "title": "Edit",
+      "summary": "Bring in clips, cut them and add titles.",
+      "lessons": [
+        "davinci-resolve-basics-01-import-and-timeline",
+        "davinci-resolve-basics-02-cut-and-trim",
+        "davinci-resolve-basics-03-title-and-transition"
+      ]
+    },
+    {
+      "id": "finish",
+      "title": "Finish",
+      "summary": "Colour and export your video.",
+      "lessons": [
+        "davinci-resolve-basics-04-color-basics",
+        "davinci-resolve-basics-05-deliver-youtube"
+      ]
+    }
+  ]
+}

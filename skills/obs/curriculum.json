@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "obs",
+  "units": [
+    {
+      "id": "set-up",
+      "title": "Set up",
+      "summary": "Capture your screen and microphone, choose recording settings.",
+      "lessons": [
+        "obs-basics-01-display-capture",
+        "obs-basics-03-recording-settings",
+        "obs-basics-02-add-microphone"
+      ]
+    },
+    {
+      "id": "record",
+      "title": "Record",
+      "summary": "Record a video and switch scenes.",
+      "lessons": ["obs-basics-04-record-video", "obs-basics-05-switch-scenes"]
+    }
+  ]
+}

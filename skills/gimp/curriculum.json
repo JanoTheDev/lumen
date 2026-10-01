@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "gimp",
+  "units": [
+    {
+      "id": "fix-photos",
+      "title": "Fix photos",
+      "summary": "Crop, resize and adjust a photo.",
+      "lessons": ["gimp-basics-01-crop-scale", "gimp-basics-04-brightness-contrast"]
+    },
+    {
+      "id": "layers-and-export",
+      "title": "Layers and export",
+      "summary": "Work in layers and save for the web.",
+      "lessons": [
+        "gimp-basics-02-layers-basics",
+        "gimp-basics-03-selection-mask",
+        "gimp-basics-05-export-web"
+      ]
+    }
+  ]
+}

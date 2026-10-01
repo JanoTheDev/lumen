@@ -216,6 +216,7 @@ function loadSchemas(skillsDir) {
     skill: load('skill.schema.json'),
     regions: load('regions.schema.json'),
     lesson: load('lesson.schema.json'),
+    curriculum: load('curriculum.schema.json'),
     bridgeKeys: load('bridge-keys.json')
   }
 }
@@ -382,6 +383,7 @@ function validatePack(packDir, schemas, errors, lessonIndex) {
     if (!n.endsWith('.lesson.json'))
       errors.push({ file: join(lessonsDir, n), path: '$', message: 'unexpected file in lessons/' })
 
+  const packLessons = new Map()
   for (const name of lessonFiles) {
     const lf = join(lessonsDir, name)
     const lesson = readJson(lf, errors)
@@ -389,6 +391,8 @@ function validatePack(packDir, schemas, errors, lessonIndex) {
     validateSchema(lesson, schemas.lesson).forEach((e) => errors.push({ file: lf, ...e }))
     if (typeof lesson !== 'object' || lesson === null) continue
     validateLesson(lesson, { file: lf, packId, regionKeys, errors, bridgeKeys: schemas.bridgeKeys })
+    if (typeof lesson.id === 'string')
+      packLessons.set(lesson.id, Array.isArray(lesson.prereqs) ? lesson.prereqs : [])
     if (typeof lesson.id === 'string') {
       if (lessonIndex.has(lesson.id))
         errors.push({
@@ -399,7 +403,44 @@ function validatePack(packDir, schemas, errors, lessonIndex) {
       else lessonIndex.set(lesson.id, { file: lf, prereqs: lesson.prereqs ?? [] })
     }
   }
+  if (existsSync(file('curriculum.json')))
+    validateCurriculum(file('curriculum.json'), packId, packLessons, schemas, errors)
   return lessonFiles.length
+}
+
+/**
+ * curriculum.json (plans 07 T28): schema, app = folder, every pack lesson listed exactly once,
+ * and each lesson after the prereqs it has in this pack.
+ */
+function validateCurriculum(cf, packId, packLessons, schemas, errors) {
+  const c = readJson(cf, errors)
+  if (c === undefined) return
+  const before = errors.length
+  validateSchema(c, schemas.curriculum).forEach((e) => errors.push({ file: cf, ...e }))
+  if (errors.length > before || typeof c !== 'object' || c === null) return
+  if (c.app !== packId)
+    errors.push({ file: cf, path: '$.app', message: `must equal folder name "${packId}"` })
+  const seen = new Set()
+  const unitIds = new Set()
+  c.units.forEach((u, ui) => {
+    if (unitIds.has(u.id))
+      errors.push({ file: cf, path: `$.units[${ui}].id`, message: `duplicate unit id "${u.id}"` })
+    unitIds.add(u.id)
+    u.lessons.forEach((id, li) => {
+      const path = `$.units[${ui}].lessons[${li}]`
+      if (!packLessons.has(id))
+        errors.push({ file: cf, path, message: `unknown lesson id "${id}" in this pack` })
+      else if (seen.has(id)) errors.push({ file: cf, path, message: `"${id}" is listed twice` })
+      else
+        for (const p of packLessons.get(id))
+          if (packLessons.has(p) && !seen.has(p))
+            errors.push({ file: cf, path, message: `"${id}" comes before its prereq "${p}"` })
+      seen.add(id)
+    })
+  })
+  for (const id of packLessons.keys())
+    if (!seen.has(id))
+      errors.push({ file: cf, path: '$.units', message: `lesson "${id}" is in no unit` })
 }
 
 /**

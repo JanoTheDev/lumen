@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "excel",
+  "units": [
+    {
+      "id": "data-and-formulas",
+      "title": "Data and formulas",
+      "summary": "Enter data and add it up.",
+      "lessons": ["excel-basics-01-enter-autofill", "excel-basics-02-sum-average"]
+    },
+    {
+      "id": "tables-and-charts",
+      "title": "Tables and charts",
+      "summary": "Format, sort and chart your data.",
+      "lessons": [
+        "excel-basics-03-format-table",
+        "excel-basics-04-sort-filter",
+        "excel-basics-05-make-chart"
+      ]
+    }
+  ]
+}

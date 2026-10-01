@@ -1,0 +1,22 @@
+{
+  "$schema": "../schema/curriculum.schema.json",
+  "app": "photoshop",
+  "units": [
+    {
+      "id": "fix-photos",
+      "title": "Fix photos",
+      "summary": "Crop, layers and adjustments.",
+      "lessons": [
+        "photoshop-basics-01-crop-resize",
+        "photoshop-basics-02-layers-basics",
+        "photoshop-basics-04-brightness-contrast"
+      ]
+    },
+    {
+      "id": "masks-and-export",
+      "title": "Masks and export",
+      "summary": "Select, mask and save for the web.",
+      "lessons": ["photoshop-basics-03-selection-mask", "photoshop-basics-05-export-web"]
+    }
+  ]
+}
