@@ -675,7 +675,21 @@ export const configV2Schema = z.object({
     /** Keep a local history of dictations (04 T44); off = nothing stored. */
     history: z.boolean().optional(),
     /** Show the dictation stats card in Home (04 T46). */
-    showStats: z.boolean().optional()
+    showStats: z.boolean().optional(),
+    /** Extra dictionary terms per app: a process or site word → terms (04 T39). */
+    appDictionary: z
+      .record(z.string().min(1).max(80), z.array(shortText(60)).max(200))
+      .refine((o) => Object.keys(o).length <= 100, 'at most 100 apps')
+      .default({}),
+    /** "Spell as" rules: what the recogniser hears → how it is written (04 T39). */
+    spellAs: z
+      .array(z.object({ from: z.string().min(1).max(60), to: z.string().min(1).max(60) }))
+      .max(300)
+      .default([]),
+    /** Names visible in the focused window fix dictated spellings; local only (04 T41). */
+    screenNames: z.boolean().default(false),
+    /** In code editors and terminals: "camel case …", spoken symbols, "at file …" (04 T42). */
+    codingMode: z.boolean().default(true)
   }),
   ui: z.object({
     /** Opens the Home flyout from anywhere; "" = no shortcut. Optional so patches never reset it. */
@@ -797,7 +811,11 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     terminal: 'type-no-enter',
     dictionary: [],
     history: true,
-    showStats: false
+    showStats: false,
+    appDictionary: {},
+    spellAs: [],
+    screenNames: false,
+    codingMode: true
   },
   ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
