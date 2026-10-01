@@ -24,6 +24,8 @@ export interface AssistantState {
     summary: string
     risk: 'low' | 'medium' | 'high'
     countdownMs?: number
+    /** A grantable medium confirm: the scope the "Always" button allows ("Outlook"). */
+    alwaysLabel?: string
   }
   error?: { message: string; hint?: string; announced?: boolean }
   /**

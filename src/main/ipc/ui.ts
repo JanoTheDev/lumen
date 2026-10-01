@@ -9,6 +9,7 @@ import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
 import { activeWindow } from '../agent/commands'
 import { agentCommand, agentRunning, hasPausedTask } from '../agent-mode/session'
+import { confirmAlways } from '../agent-mode/confirm'
 import { screenReaderActive } from '../a11y/at-state'
 import { reportError } from '../a11y/live-feedback'
 import { openEditor, submitEdit } from '../a11y/transcript'
@@ -27,6 +28,7 @@ const commandSchema = z
       'copy',
       'cancel',
       'confirm',
+      'confirm-always',
       'deny',
       'unmute',
       'edit',
@@ -132,7 +134,11 @@ export function registerUiIpc(deps: UiIpcDeps): void {
 
   ipcMain.on('assistant:command', (_e, raw: unknown) => {
     const cmd = safeParse('assistant:command', commandSchema, raw)
-    if (cmd && !agentBarCommand(cmd, runQuery)) assistant.command(cmd)
+    if (!cmd) return
+    // Always on a card without a grant scope (or one already answered) is a plain confirm.
+    if (cmd.type === 'confirm-always') {
+      if (!confirmAlways()) assistant.command({ ...cmd, type: 'confirm' })
+    } else if (!agentBarCommand(cmd, runQuery)) assistant.command(cmd)
   })
   ipcMain.on('assistant:error', (_e, raw: unknown) => {
     const message = safeParse('assistant:error', errorSchema, raw)

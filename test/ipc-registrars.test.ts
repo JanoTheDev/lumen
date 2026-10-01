@@ -23,6 +23,7 @@ vi.mock('../src/main/a11y/transcript', () => ({
 }))
 vi.mock('../src/main/agent-mode/confirm', () => ({
   answerAlways: vi.fn(() => false),
+  confirmAlways: vi.fn(() => false),
   lastUserRequest: vi.fn(() => '')
 }))
 vi.mock('../src/main/agent-mode/session', () => ({

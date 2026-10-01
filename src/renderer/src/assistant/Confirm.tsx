@@ -22,6 +22,10 @@ export function Confirm({
       autoFocus={!timed}
       onConfirm={() => send('assistant:command', { type: 'confirm', turnId: confirm.actionId })}
       onDeny={() => send('assistant:command', { type: 'deny', turnId: confirm.actionId })}
+      alwaysLabel={confirm.risk === 'medium' ? confirm.alwaysLabel : undefined}
+      onAlways={() =>
+        send('assistant:command', { type: 'confirm-always', turnId: confirm.actionId })
+      }
     />
   )
 }

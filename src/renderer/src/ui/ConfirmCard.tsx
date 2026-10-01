@@ -15,6 +15,9 @@ export interface ConfirmCardProps {
   hint?: string
   onConfirm: () => void
   onDeny: () => void
+  /** Shows a third button, "Always for <alwaysLabel>", that confirms and remembers the choice. */
+  alwaysLabel?: string
+  onAlways?: () => void
   /** Move focus into the card (when the window is focusable). */
   autoFocus?: boolean
 }
@@ -31,6 +34,8 @@ export function ConfirmCard({
   hint = 'Say “stop” or press Esc.',
   onConfirm,
   onDeny,
+  alwaysLabel,
+  onAlways,
   autoFocus
 }: ConfirmCardProps): JSX.Element {
   const id = useId()
@@ -49,6 +54,11 @@ export function ConfirmCard({
     setOutcome('confirmed')
     onConfirm()
   }
+  const always = (): void => {
+    if (outcome !== 'pending' || !onAlways) return
+    setOutcome('confirmed')
+    onAlways()
+  }
   const deny = (): void => {
     if (outcome !== 'pending') return
     setOutcome('denied')
@@ -63,6 +73,11 @@ export function ConfirmCard({
       <Button ref={goRef} variant="primary" onClick={confirm} disabled={outcome !== 'pending'}>
         {confirmLabel}
       </Button>
+      {alwaysLabel && onAlways && (
+        <Button onClick={always} disabled={outcome !== 'pending'}>
+          Always for {alwaysLabel}
+        </Button>
+      )}
     </div>
   )
 

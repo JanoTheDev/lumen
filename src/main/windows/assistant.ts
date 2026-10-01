@@ -278,6 +278,7 @@ export function requestConfirm(
     summary: string
     risk: 'low' | 'medium' | 'high'
     countdownMs?: number
+    alwaysLabel?: string
   },
   opts: { gatesExecute?: boolean } = {}
 ): Promise<boolean> {

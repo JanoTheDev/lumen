@@ -33,7 +33,12 @@ import { gate } from '../../src/main/actions/policy'
 import { newTaskState } from '../../src/main/actions/safety'
 import { setAgent } from '../../src/main/agent/instance'
 import type { AgentBridge } from '../../src/main/agent/bridge'
-import { answerAlways, setConfirmUi, type ConfirmCard } from '../../src/main/agent-mode/confirm'
+import {
+  answerAlways,
+  confirmAlways,
+  setConfirmUi,
+  type ConfirmCard
+} from '../../src/main/agent-mode/confirm'
 import { grants, installGrants } from '../../src/main/agent-mode/grants'
 import { installAudit, listAudit, uninstallAudit } from '../../src/main/audit/log'
 import { setConfigDir } from '../../src/main/config'
@@ -188,7 +193,9 @@ describe('policy gate', () => {
     await executeActions([{ type: 'hotkey', keys: ['ctrl', 'enter'] }], { origin: 'agent' })
     expect(f.executed).toHaveLength(1)
     expect(cards[0].summary).not.toContain('always')
+    expect(cards[0].alwaysLabel).toBeUndefined()
     expect(answerAlways('always')).toBe(false)
+    expect(confirmAlways()).toBe(false)
   })
 
   it('without a confirm UI a confirm is a no (fail closed)', async () => {
@@ -223,7 +230,7 @@ describe('policy gate', () => {
     })
     expect(first.executed).toBe(1)
     expect(cards).toHaveLength(1)
-    expect(cards[0]).toMatchObject({ risk: 'medium', countdownMs: 3000 })
+    expect(cards[0]).toMatchObject({ risk: 'medium', countdownMs: 3000, alwaysLabel: 'Outlook' })
     expect(cards[0].summary).toContain('Say “always” to allow Outlook')
     expect(grants().has('app:outlook.exe')).toBe(true)
     expect(listAudit(today(), 't_g1')[0].decision).toBe('always-by-user')

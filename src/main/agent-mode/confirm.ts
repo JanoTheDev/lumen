@@ -1,5 +1,5 @@
 // The confirm step of the safety policy (safety-policy §5) on top of the assistant bar's
-// existing confirm card: Allow once (yes / Do it) · Always for <scope> (voice "always") ·
+// existing confirm card: Allow once (yes / Do it) · Always for <scope> (voice "always" or the Always button) ·
 // Not now (no / Stop). Low and medium get the cancel-window countdown; high never does and
 // never offers "always".
 import type { Decision } from '../actions/safety'
@@ -12,6 +12,8 @@ export interface ConfirmCard {
   summary: string
   risk: 'low' | 'medium' | 'high'
   countdownMs?: number
+  /** Set for a grantable medium confirm: the card shows "Always for <label>". */
+  alwaysLabel?: string
 }
 
 export interface ConfirmUi {
@@ -71,7 +73,8 @@ export async function askUser(
     const ok = await ui.ask({
       summary: confirmSummary(what, d),
       risk,
-      countdownMs: risk === 'high' ? undefined : countdownMs
+      countdownMs: risk === 'high' ? undefined : countdownMs,
+      alwaysLabel: p.scope ? scopeLabel(p.scope) : undefined
     })
     if (!ok) return 'deny'
     if (p.always && p.scope && grants().add(p.scope, risk)) return 'always'
@@ -96,6 +99,12 @@ export function answerAlways(utterance: string): boolean {
     .replace(/\s+/g, ' ')
     .trim()
   if (!ALWAYS_RE.test(words)) return false
+  return confirmAlways()
+}
+
+/** The card's Always button: confirms a grantable confirm and stores the grant. */
+export function confirmAlways(): boolean {
+  if (!pending?.scope || !ui) return false
   pending.always = true
   ui.confirm()
   return true
