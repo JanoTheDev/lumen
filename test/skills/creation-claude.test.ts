@@ -322,11 +322,24 @@ describe('agent tools create_skill / update_skill', () => {
     expect(r.isError).toBeUndefined()
     expect(r.content[0].text).toMatch(/Saved the skill "weekly-report"/)
     expect(t.confirms[0]).toMatch(
-      /Save a new skill “weekly report”\? Builds the weekly report\. \(You do this every Friday\.\) It may use your mouse and keyboard and open docs\.example\.com\./
+      /Save a new skill “weekly report”\? Builds the weekly report\. \(You do this every Friday\.\) Starts when you say “weekly report”\. It may use your mouse and keyboard and open docs\.example\.com\./
     )
     expect(t.saved[0].permissions).toEqual({ input: true, network: ['https://docs.example.com'] })
     const again = await h.create_skill(input)
     expect(again.isError).toBe(true)
+  })
+
+  it('shows every phrase on the card and leaves out ones that start something else', async () => {
+    const t = setup()
+    t.deps.covered = (p) => p === 'check my email'
+    const r = await skillAuthoringHandlers(() => t.c).create_skill({
+      ...input,
+      triggers: ['weekly report', 'friday numbers', 'check my email', 'cancel']
+    })
+    expect(t.confirms[0]).toContain('Starts when you say “weekly report” or “friday numbers”.')
+    expect(t.confirms[0]).not.toMatch(/check my email|“cancel”/)
+    expect(t.saved[0].triggers).toEqual(['weekly report', 'friday numbers'])
+    expect(r.content[0].text).toMatch(/Left out the phrases "check my email", "cancel"/)
   })
 
   it('saves nothing when the user says no', async () => {

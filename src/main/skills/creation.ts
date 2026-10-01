@@ -176,6 +176,14 @@ const answer = (text: string): ModelResponse => ({ mode: 'answer', text, spoken:
 
 const sayable = (name: string): string => name.replace(/-/g, ' ')
 
+/** " Starts when you say “a” or “b”." for the confirm card. */
+const startsWhen = (triggers: readonly string[]): string =>
+  triggers.length ? ` Starts when you say ${triggers.map((t) => `“${t}”`).join(' or ')}.` : ''
+
+/** Lumen's own short commands a skill phrase may never take over. */
+const RESERVED_PHRASE_RE =
+  /^(?:cancel|stop|abort|never ?mind|forget it|yes|no|ok|okay|do it|go ahead|undo(?: that| it)?|help|next|back|repeat|done|save it|discard it|read it back|what can you do)$/
+
 export interface SkillCreation {
   /** A finished agent run that "save that as a skill" can use. */
   rememberRun(run: AgentRunTrace): void
@@ -392,6 +400,19 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
     return answer('Okay, I will not ask about this one again.')
   }
 
+  /** A phrase an existing skill or one of Lumen's own commands already answers. */
+  function phraseTaken(phrase: string): boolean {
+    return (
+      RESERVED_PHRASE_RE.test(phrase) ||
+      !!deps.covered?.(phrase) ||
+      !!matchDraftCommand(phrase) ||
+      !!matchOfferAnswer(phrase) ||
+      !!matchCreateIntent(phrase) ||
+      !!matchEditIntent(phrase) ||
+      !!matchComposeIntent(phrase)
+    )
+  }
+
   function similarToFailed(prompt: string): boolean {
     const now = deps.now()
     failed = failed.filter((f) => now - f.at <= RETRY_MS)
@@ -592,6 +613,12 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
         references: []
       }
       const { draft } = draftFromCompose(out, { description: input.description }, deps.taken)
+      // Phrases another skill or Lumen's own commands already answer are not taken over.
+      const clashes = draft.triggers.filter(phraseTaken)
+      draft.triggers = draft.triggers.filter((t) => !clashes.includes(t))
+      const dropped = clashes.length
+        ? ` Left out the phrases ${clashes.map((t) => `"${t}"`).join(', ')}: they already start something else.`
+        : ''
       let files: ReturnType<typeof draftFiles>
       try {
         files = draftFiles(draft)
@@ -601,7 +628,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       }
       const why = input.why.replace(/\s+/g, ' ').trim().slice(0, 160)
       const yes = await deps.confirm(
-        `Save a new skill “${sayable(draft.name)}”? ${draft.description}${why ? ` (${why})` : ''} ${permissionWords(draft.permissions)}`,
+        `Save a new skill “${sayable(draft.name)}”? ${draft.description}${why ? ` (${why})` : ''}${startsWhen(draft.triggers)} ${permissionWords(draft.permissions)}`,
         draft.permissions.input || draft.permissions.network.length ? 'medium' : 'low'
       )
       if (!yes)
@@ -610,7 +637,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       if (!r.ok) return { ok: false, text: `Not saved: ${r.error}` }
       return {
         ok: true,
-        text: `Saved the skill "${r.name}".${draft.triggers[0] ? ` It runs when the user says "${draft.triggers[0]}".` : ''}`
+        text: `Saved the skill "${r.name}".${draft.triggers[0] ? ` It runs when the user says "${draft.triggers[0]}".` : ''}${dropped}`
       }
     },
 
