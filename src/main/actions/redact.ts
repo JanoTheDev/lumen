@@ -1,7 +1,7 @@
 // Secret redaction (safety-policy §3). Detection lives in ai/memory/sensitive (one detector for
 // memory, logs, model input and typed output); this module adds what the action path needs:
 // which secrets a typed text holds, masked for the confirm card, and the log/model rewrites.
-import { findSensitive, redact, type SensitiveKind } from '../ai/memory/sensitive'
+import { findSensitive, luhn, redact, type SensitiveKind } from '../ai/memory/sensitive'
 
 /** Kinds that make typed text a secret (API keys, JWTs, private keys, cards, IBANs). */
 const SECRET_KINDS = new Set<SensitiveKind>(['api-key', 'private-key', 'card', 'iban'])
@@ -60,12 +60,44 @@ function redactConfigSecrets(text: string): string {
     )
 }
 
+/** A card security code after its label ("CVC: 123", "Prüfnummer 1234", nl/de/fr/es too). */
+const CVC_LABEL_RE =
+  /\b(cvc2?|cvv2?|csc|security code|card verification(?: code| value)?|beveiligingscode|kaartcode|kartenprüfnummer|prüfnummer|sicherheitscode|cryptogramme(?: visuel)?|code de sécurité|código de seguridad)(\s*(?:is|was|=|:|-|#)?\s*)\d{3,4}(?!\d)/giu
+
+/** "[redacted:card] 12/27 123": the 3-4 digits right after a card number (and its expiry). */
+const CVC_AFTER_CARD_RE =
+  /(\[redacted:card\](?:[ \t]*[,;]?[ \t]*(?:exp\w*\.?:?[ \t]*)?\d{1,2}[ \t]*\/[ \t]*\d{2,4})?[ \t]*[,;]?[ \t]*(?:cvc|cvv)?:?[ \t]*)\d{3,4}(?![\d/.-])/gi
+
+/**
+ * Card numbers in their printed groups (4-4-4-4, Amex 4-6-5) even when more digits follow
+ * ("4242 4242 4242 4242 12/27"), where the detector's longer run fails the Luhn check.
+ */
+const CARD_GROUPS_RE =
+  /(?<![\d-])(?:\d{4}([ -]?)\d{4}\1\d{4}\1\d{4}|\d{4}([ -]?)\d{6}\2\d{5})(?![\d-])/g
+
+/** The text holds a number that passes the card check (Luhn), grouped or not. */
+export function hasCardNumber(text: string): boolean {
+  if (findSensitive(text).some((h) => h.kind === 'card')) return true
+  return [...text.matchAll(CARD_GROUPS_RE)].some((m) => luhn(m[0].replace(/\D/g, '')))
+}
+
+function redactCardGroups(text: string): string {
+  return text.replace(CARD_GROUPS_RE, (m) => (luhn(m.replace(/\D/g, '')) ? '[redacted:card]' : m))
+}
+
+/** Card security codes next to their label or a card number (cards and IBANs: the detector). */
+function redactPayment(text: string): string {
+  return text
+    .replace(CVC_LABEL_RE, (_m, label: string, gap: string) => `${label}${gap}[redacted:cvc]`)
+    .replace(CVC_AFTER_CARD_RE, (_m, head: string) => `${head}[redacted:cvc]`)
+}
+
 /** Log lines: every sensitive span becomes `[redacted:<kind>]`. */
 export function redactForLog(text: string): string {
-  return redact(redactConfigSecrets(text))
+  return redactPayment(redact(redactCardGroups(redactConfigSecrets(text))))
 }
 
 /** Model input (screen text, page text, tool results): same rewrite as the log. */
 export function redactForModel(text: string): string {
-  return redact(redactConfigSecrets(text))
+  return redactPayment(redact(redactCardGroups(redactConfigSecrets(text))))
 }

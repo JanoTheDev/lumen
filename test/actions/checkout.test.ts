@@ -1,0 +1,300 @@
+import { describe, it, expect } from 'vitest'
+import {
+  checkoutName,
+  isPaymentFieldName,
+  isPersonalFieldName
+} from '../../src/main/actions/risk-names'
+import { evaluate, type PolicyCtx } from '../../src/main/actions/safety'
+
+const agent: PolicyCtx = { origin: 'agent' }
+const browser = { title: 'Checkout - Microsoft Edge', process: 'msedge.exe' }
+const field = (name: string, extra: Record<string, unknown> = {}): PolicyCtx => ({
+  origin: 'agent',
+  activeWindow: { ...browser, focusKnown: true, focusName: name, focusRole: 'edit', ...extra }
+})
+
+describe('checkoutName', () => {
+  it.each([
+    ['Book', 'book'],
+    ['Book now', 'book now'],
+    ['Reserve', 'reserve'],
+    ['Pay €120.00', 'pay'],
+    ['Pay now', 'pay now'],
+    ['Confirm booking', 'confirm booking'],
+    ['Complete booking', 'complete booking'],
+    ['Place order', 'place order'],
+    ['Buy now', 'buy now'],
+    ['Confirm and pay', 'confirm and pay'],
+    ['Checkout', 'checkout'],
+    ['Proceed to checkout', 'proceed to checkout'],
+    ['Nu boeken', 'nu boeken'],
+    ['Reserveren', 'reserveren'],
+    ['Afrekenen', 'afrekenen'],
+    ['Bestelling plaatsen', 'bestelling plaatsen'],
+    ['Jetzt buchen', 'jetzt buchen'],
+    ['Zahlungspflichtig bestellen', 'zahlungspflichtig bestellen'],
+    ['Buchung bestätigen', 'buchung bestätigen'],
+    ['Réserver', 'réserver'],
+    ['Confirmer et payer', 'confirmer et payer'],
+    ['Passer la commande', 'passer la commande'],
+    ['Reservar ahora', 'reservar ahora'],
+    ['Finalizar compra', 'finalizar compra'],
+    ['→ Pay', 'pay']
+  ])('%s → %s', (name, word) => {
+    expect(checkoutName(name)).toBe(word)
+  })
+
+  it.each([
+    'Address book',
+    'Booking.com',
+    'Facebook',
+    'Books',
+    'Payment methods',
+    'Repay',
+    'Notebook'
+  ])('leaves %s alone', (name) => {
+    expect(checkoutName(name)).toBeNull()
+  })
+})
+
+describe('payment and personal field names', () => {
+  it.each([
+    'Card number',
+    'Credit card number',
+    'Cardholder name',
+    'Name on card',
+    'Expiry date',
+    'MM/YY',
+    'CVC',
+    'CVV',
+    'Security code',
+    'IBAN',
+    'Account number',
+    'cc-number',
+    'Kaartnummer',
+    'Vervaldatum',
+    'Kartennummer',
+    'Prüfnummer',
+    'Numéro de carte',
+    'Cryptogramme visuel',
+    'Número de tarjeta',
+    'Código de seguridad'
+  ])('payment: %s', (name) => {
+    expect(isPaymentFieldName(name)).toBe(true)
+  })
+
+  it.each(['Search', 'Message', 'Promo code', 'Number of guests'])('not payment: %s', (name) => {
+    expect(isPaymentFieldName(name)).toBe(false)
+  })
+
+  it.each([
+    'First name',
+    'Last name',
+    'Name *',
+    'Your name (required)',
+    'Email address',
+    'Phone number',
+    'Billing address',
+    'Address',
+    'Postcode',
+    'Voornaam',
+    'Achternaam',
+    'Telefoonnummer',
+    'Vorname',
+    'Postleitzahl',
+    'Prénom',
+    'Code postal',
+    'Apellidos',
+    'Correo electrónico'
+  ])('personal: %s', (name) => {
+    expect(isPersonalFieldName(name)).toBe(true)
+  })
+
+  it.each([
+    'File name',
+    'Address and search bar',
+    'Search email',
+    'Subject',
+    'Message',
+    'Username'
+  ])('not personal: %s', (name) => {
+    expect(isPersonalFieldName(name)).toBe(false)
+  })
+})
+
+describe('checkout guard', () => {
+  it.each([
+    'Book now',
+    'Reserve',
+    'Pay now',
+    'Confirm booking',
+    'Place order',
+    'Buy now',
+    'Nu betalen'
+  ])('an agent click on %s is high, confirms and is never grantable', (name) => {
+    const d = evaluate({ type: 'click_element', elementName: name }, agent)
+    expect(d.risk).toBe('high')
+    expect(d.needsConfirm).toBe(true)
+    expect(d.grantScope).toBeUndefined()
+    expect(d.checkout).toBeTruthy()
+    expect(d.reason).toMatch(/books or pays/)
+  })
+
+  it('confirms even in never mode and with every grant', () => {
+    const d = evaluate(
+      { type: 'uia_act', action: 'invoke', elementName: 'Complete booking' },
+      { ...agent, confirmMode: 'never', grants: { has: () => true } }
+    )
+    expect(d.needsConfirm).toBe(true)
+    expect(d.checkout).toBe('complete booking')
+  })
+
+  it('Enter on a focused Book button is a checkout', () => {
+    const d = evaluate(
+      { type: 'hotkey', keys: ['Enter'] },
+      { ...agent, activeWindow: { ...browser, focusName: 'Book', focusRole: 'button' } }
+    )
+    expect(d.risk).toBe('high')
+    expect(d.checkout).toBe('book')
+  })
+
+  it('a routine is guarded too', () => {
+    expect(
+      evaluate({ type: 'click_element', elementName: 'Reserve' }, { origin: 'routine' }).checkout
+    ).toBe('reserve')
+  })
+
+  it('user-direct clicks keep the older rules (no checkout flag)', () => {
+    const d = evaluate(
+      { type: 'click_element', elementName: 'Book now' },
+      { origin: 'user-direct' }
+    )
+    expect(d.checkout).toBeUndefined()
+    expect(d.risk).toBe('low')
+  })
+})
+
+describe('payment fields', () => {
+  it.each(['Card number', 'CVC', 'IBAN', 'Kaartnummer', 'Expiry date'])(
+    'agent typing into %s is blocked',
+    (name) => {
+      const d = evaluate({ type: 'type', text: '12' }, field(name))
+      expect(d.risk).toBe('blocked')
+      expect(d.reason).toMatch(/payment field/)
+    }
+  )
+
+  it('set_value into a payment field is blocked', () => {
+    const d = evaluate(
+      { type: 'uia_act', action: 'set_value', value: '123', elementName: 'Security code' },
+      agent
+    )
+    expect(d.risk).toBe('blocked')
+  })
+
+  it.each([
+    '4242 4242 4242 4242',
+    '4242424242424242',
+    '4242-4242-4242-4242 12/27 123',
+    '378282246310005'
+  ])('a Luhn-valid number %s is blocked anywhere for an agent', (text) => {
+    const d = evaluate({ type: 'type', text }, field('Message'))
+    expect(d.risk).toBe('blocked')
+    expect(d.reason).toMatch(/card number/)
+  })
+
+  it('a number that fails Luhn is not a card', () => {
+    const d = evaluate({ type: 'type', text: '4242 4242 4242 4241' }, field('Message'))
+    expect(d.risk).not.toBe('blocked')
+  })
+
+  it('input steps typing a card number are blocked', () => {
+    const d = evaluate(
+      { type: 'input', steps: [{ t: 'type', text: '4111111111111111' }] },
+      field('Notes')
+    )
+    expect(d.risk).toBe('blocked')
+  })
+
+  it('the user typing their own card (user-direct) is not blocked', () => {
+    const d = evaluate(
+      { type: 'type', text: '4242 4242 4242 4242' },
+      { ...field('Card number'), origin: 'user-direct' }
+    )
+    expect(d.risk).not.toBe('blocked')
+  })
+})
+
+describe('personal details', () => {
+  it('a name the user said is fine', () => {
+    const d = evaluate(
+      { type: 'type', text: 'Anna Berg' },
+      { ...field('Full name'), userText: 'book it for Anna Berg' }
+    )
+    expect(d.risk).not.toBe('high')
+  })
+
+  it('a name from the memory profile is high and shows the value', () => {
+    const d = evaluate(
+      { type: 'type', text: 'Anna Berg' },
+      { ...field('Full name'), userText: 'book the second one' }
+    )
+    expect(d.risk).toBe('high')
+    expect(d.needsConfirm).toBe(true)
+    expect(d.reason).toContain('“Anna Berg”')
+  })
+
+  it('a partial word does not count as said', () => {
+    const d = evaluate(
+      { type: 'type', text: 'Ann' },
+      { ...field('First name'), userText: 'book it for Anna' }
+    )
+    expect(d.risk).toBe('high')
+  })
+
+  it('an email typed anywhere must be said in full', () => {
+    const ok = evaluate(
+      { type: 'type', text: 'anna@example.com' },
+      { ...field('Contact'), userText: 'use anna@example.com' }
+    )
+    expect(ok.risk).not.toBe('high')
+    const bad = evaluate(
+      { type: 'type', text: 'anna@example.com' },
+      { ...field('Contact'), userText: 'book it' }
+    )
+    expect(bad.risk).toBe('high')
+  })
+
+  it('a phone number said with spaces matches its digits', () => {
+    const ok = evaluate(
+      { type: 'type', text: '+31 6 12345678' },
+      { ...field('Phone'), userText: 'my number is +31 612 345 678' }
+    )
+    expect(ok.risk).not.toBe('high')
+    const bad = evaluate(
+      { type: 'type', text: '0612345678' },
+      { ...field('Phone'), userText: 'book' }
+    )
+    expect(bad.risk).toBe('high')
+  })
+
+  it('dates and plain numbers are not phone numbers', () => {
+    expect(evaluate({ type: 'type', text: '2026-10-02' }, field('Check-in')).risk).not.toBe('high')
+    expect(evaluate({ type: 'type', text: '2' }, field('Guests')).risk).not.toBe('high')
+  })
+
+  it('a search box or file name is not a personal field', () => {
+    expect(evaluate({ type: 'type', text: 'hotels in Lyon' }, field('Search')).risk).not.toBe(
+      'high'
+    )
+    expect(evaluate({ type: 'type', text: 'report' }, field('File name')).risk).not.toBe('high')
+  })
+
+  it('the user typing their own details is not rated', () => {
+    const d = evaluate(
+      { type: 'type', text: 'Anna Berg' },
+      { ...field('Full name'), origin: 'user-direct' }
+    )
+    expect(d.risk).not.toBe('high')
+  })
+})

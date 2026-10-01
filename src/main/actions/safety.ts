@@ -4,9 +4,12 @@
 // helpers (assertSafeUrl, classifyHotkey) stay for Lumen's own UI and the a11y voice commands.
 import { domainToUnicode } from 'url'
 import type { InputStep } from '@shared/types'
-import { findSecrets, maskSecrets } from './redact'
+import { findSecrets, hasCardNumber, maskSecrets } from './redact'
 import {
+  checkoutName,
   isNoSendFieldName,
+  isPaymentFieldName,
+  isPersonalFieldName,
   isRecipientName,
   isSendName,
   mailRiskyName,
@@ -212,6 +215,8 @@ export interface Decision {
   redactions?: string[]
   /** "app:<process>" | "mcp:<server>/<tool>" | "domain:<site>" | "scheme:mailto" (medium only). */
   grantScope?: string
+  /** The agent books, buys or pays ("Book now"): the gate adds the price on the page now. */
+  checkout?: string
 }
 
 interface Finding {
@@ -219,6 +224,8 @@ interface Finding {
   reason: string
   /** A grant for this scope removes this finding's confirm (medium only). */
   scope?: string
+  /** A book / pay / order button (Decision.checkout). */
+  checkout?: string
 }
 
 const RANK: Record<Risk, number> = { low: 0, medium: 1, high: 2, blocked: 3 }
@@ -638,6 +645,11 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   // Enter or Space on a focused Send / Delete / Pay button presses it (list rows are left out:
   // their names hold arbitrary subject text).
   const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
+  const buys = pressed && agentish(ctx.origin) ? checkoutName(w?.focusName) : null
+  if (buys) {
+    out.push(checkoutFinding(buys))
+    return
+  }
   const focusWord = pressed
     ? (riskyName(w?.focusName) ?? (isMail(w) ? mailRiskyName(w?.focusName) : null))
     : null
@@ -722,9 +734,12 @@ function typeFindings(
       out.push({ risk: 'high', reason: 'may type into the editor’s terminal' })
       return
     }
+    const field = fieldName ?? w?.focusName
+    if (paymentFindings(text, field, out)) return
     if (w?.focusKnown === false)
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
-    if (isMail(w)) mailTypeFindings(text, fieldName ?? w?.focusName, ctx, out)
+    if (isMail(w)) mailTypeFindings(text, field, ctx, out)
+    if (!(isMail(w) && isRecipientField(field))) personalFindings(text, field, ctx, out)
   }
   const secrets = findSecrets(text)
   if (secrets.length) {
@@ -770,6 +785,66 @@ function mailTypeFindings(
     out.push({ risk: 'medium', reason: 'types into the message list, keys act as shortcuts' })
 }
 
+// ---- checkout (05 T41) ----
+
+function checkoutFinding(word: string): Finding {
+  return { risk: 'high', reason: `books or pays: “${word}”`, checkout: word }
+}
+
+/**
+ * Card numbers, CVCs and IBANs are the user's to type: an agent never types into a payment
+ * field, and never types a number that passes the card check (Luhn) anywhere.
+ */
+function paymentFindings(text: string, field: string | undefined, out: Finding[]): boolean {
+  if (isPaymentFieldName(field)) {
+    out.push({ risk: 'blocked', reason: 'never types into a payment field (you type those)' })
+    return true
+  }
+  if (hasCardNumber(text)) {
+    out.push({ risk: 'blocked', reason: 'never types a card number (you type those)' })
+    return true
+  }
+  return false
+}
+
+/** The whole typed text is one email address, or one phone number (not a date). */
+const EMAIL_ONLY_RE = /^[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+$/u
+const PHONE_ONLY_RE = /^\+?\(?\d[\d\s()./-]{5,}\d$/
+const DATE_RE = /^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/
+
+function looksLikePhone(t: string): boolean {
+  const digits = t.replace(/\D/g, '').length
+  return PHONE_ONLY_RE.test(t) && !DATE_RE.test(t) && digits >= 7 && digits <= 15
+}
+
+/** The user said these digits (a phone number said with or without spaces). */
+function saidDigits(text: string, userText: string | undefined): boolean {
+  const d = text.replace(/\D/g, '')
+  return !!d && (userText ?? '').replace(/\D/g, '').includes(d)
+}
+
+/**
+ * Personal details (name, email, phone, address) an agent types into a form come from the
+ * user's own words; anything else (a memory profile fact, a page's suggestion) is high and
+ * shows the value on the card.
+ */
+function personalFindings(
+  text: string,
+  field: string | undefined,
+  ctx: PolicyCtx,
+  out: Finding[]
+): void {
+  const t = text.trim()
+  if (!t) return
+  const phone = looksLikePhone(t)
+  if (!phone && !EMAIL_ONLY_RE.test(t) && !isPersonalFieldName(field)) return
+  if (phone ? saidDigits(t, ctx.userText) : userNamed(t, ctx.userText)) return
+  out.push({
+    risk: 'high',
+    reason: `fills in personal details you did not give: “${t.slice(0, 120)}”`
+  })
+}
+
 // ---- clicks ----
 
 function nameOf(a: EvalAction): string {
@@ -795,6 +870,8 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
   }
   if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
+  const buys = agentish(ctx.origin) ? checkoutName(name) : null
+  if (buys) return void out.push(checkoutFinding(buys))
   const mailWord = isMail(ctx.activeWindow) ? mailRiskyName(name) : null
   const word = riskyName(name) ?? mailWord
   if (!word) return recipientPickFindings(name, ctx, out)
@@ -971,6 +1048,7 @@ export function evaluate(action: EvalAction, ctx: PolicyCtx): Decision {
   const atTop = findings.filter((f) => f.risk === top)
   const reason = atTop.map((f) => f.reason).join('; ') || action.type
   if (top === 'blocked') return { risk: top, reason, needsConfirm: false }
+  const checkout = atTop.find((f) => f.checkout)?.checkout
   // Grantable only when every medium reason is covered by the same scope.
   const scopes = new Set(atTop.map((f) => f.scope))
   const grantScope = top === 'medium' && scopes.size === 1 ? [...scopes][0] : undefined
@@ -982,7 +1060,8 @@ export function evaluate(action: EvalAction, ctx: PolicyCtx): Decision {
     reason,
     needsConfirm: confirmNeeded(top, mode, granted),
     ...(redactions.length ? { redactions } : {}),
-    ...(grantScope ? { grantScope } : {})
+    ...(grantScope ? { grantScope } : {}),
+    ...(checkout ? { checkout } : {})
   }
 }
 

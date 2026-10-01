@@ -226,3 +226,331 @@ export function isRecipientName(name: string | undefined): boolean {
 export function isNoSendFieldName(name: string | undefined): boolean {
   return !!name && NO_SEND_RE.test(name.trim())
 }
+
+// ---- checkout, payment and personal-detail fields (05 T41) ----
+
+interface CheckoutNames {
+  /** Buttons that book, buy or pay. One word: only at the start of the name ("Book now",
+   * "Pay €120", not "Address book"); several words: anywhere as whole words. */
+  checkout: string[]
+  /** Fields only the user fills: card number, holder, expiry, CVC, IBAN, account number. */
+  payment: string[]
+  /** Personal-detail fields, matched anywhere as whole words ("Billing address", "First name"). */
+  personal: string[]
+  /** Personal-detail fields that must be the whole field name ("Name", "Address": Edge's
+   * "Address and search bar" and "File name" are not). */
+  personalExact: string[]
+}
+
+const CHECKOUT: Record<string, CheckoutNames> = {
+  en: {
+    checkout: [
+      'book',
+      'book now',
+      'book it',
+      'reserve',
+      'reserve now',
+      'pay',
+      'pay now',
+      'confirm booking',
+      'complete booking',
+      'confirm reservation',
+      'complete reservation',
+      'place order',
+      'buy now',
+      'buy',
+      'purchase',
+      'complete purchase',
+      'confirm purchase',
+      'confirm and pay',
+      'confirm order',
+      'submit order',
+      'confirm payment',
+      'checkout',
+      'check out',
+      'proceed to checkout',
+      'proceed to payment'
+    ],
+    payment: [
+      'card number',
+      'credit card number',
+      'debit card number',
+      'cardholder',
+      'card holder',
+      'cardholder name',
+      'name on card',
+      'expiry',
+      'expiry date',
+      'expiration',
+      'expiration date',
+      'exp date',
+      'mm yy',
+      'mm/yy',
+      'cvc',
+      'cvv',
+      'cvc2',
+      'cvv2',
+      'csc',
+      'security code',
+      'card verification',
+      'card verification code',
+      'iban',
+      'account number',
+      'bank account',
+      'sort code',
+      'routing number',
+      'cc number',
+      'cc exp',
+      'cc csc',
+      'cc name'
+    ],
+    personal: [
+      'first name',
+      'last name',
+      'full name',
+      'given name',
+      'family name',
+      'surname',
+      'email',
+      'e-mail',
+      'email address',
+      'phone',
+      'phone number',
+      'mobile number',
+      'telephone',
+      'street',
+      'street address',
+      'billing address',
+      'delivery address',
+      'shipping address',
+      'house number',
+      'postcode',
+      'postal code',
+      'zip code',
+      'date of birth'
+    ],
+    personalExact: ['name', 'your name', 'address', 'city', 'town', 'zip', 'mobile', 'birthday']
+  },
+  nl: {
+    checkout: [
+      'boeken',
+      'nu boeken',
+      'reserveren',
+      'nu reserveren',
+      'betalen',
+      'nu betalen',
+      'boeking bevestigen',
+      'boeking afronden',
+      'reservering bevestigen',
+      'bestelling plaatsen',
+      'bestellen',
+      'nu kopen',
+      'kopen',
+      'afrekenen',
+      'bevestigen en betalen'
+    ],
+    payment: [
+      'kaartnummer',
+      'kaarthouder',
+      'naam op de kaart',
+      'naam op kaart',
+      'vervaldatum',
+      'geldig tot',
+      'beveiligingscode',
+      'rekeningnummer'
+    ],
+    personal: [
+      'voornaam',
+      'achternaam',
+      'e-mailadres',
+      'emailadres',
+      'telefoonnummer',
+      'telefoon',
+      'mobiel nummer',
+      'straat',
+      'straatnaam',
+      'huisnummer',
+      'postcode',
+      'woonplaats',
+      'factuuradres',
+      'afleveradres',
+      'geboortedatum'
+    ],
+    personalExact: ['naam', 'adres', 'plaats', 'mobiel']
+  },
+  de: {
+    checkout: [
+      'buchen',
+      'jetzt buchen',
+      'reservieren',
+      'jetzt reservieren',
+      'bezahlen',
+      'jetzt bezahlen',
+      'zahlungspflichtig buchen',
+      'zahlungspflichtig bestellen',
+      'buchung bestätigen',
+      'buchung abschließen',
+      'reservierung bestätigen',
+      'bestellung abschicken',
+      'jetzt kaufen',
+      'kaufen',
+      'zur kasse',
+      'bestätigen und bezahlen'
+    ],
+    payment: [
+      'kartennummer',
+      'karteninhaber',
+      'name auf der karte',
+      'ablaufdatum',
+      'gültig bis',
+      'prüfnummer',
+      'kartenprüfnummer',
+      'sicherheitscode',
+      'kontonummer'
+    ],
+    personal: [
+      'vorname',
+      'nachname',
+      'e-mail-adresse',
+      'telefonnummer',
+      'handynummer',
+      'straße',
+      'hausnummer',
+      'postleitzahl',
+      'rechnungsadresse',
+      'lieferadresse',
+      'geburtsdatum'
+    ],
+    personalExact: ['name', 'adresse', 'ort', 'stadt', 'plz', 'telefon', 'handy']
+  },
+  fr: {
+    checkout: [
+      'réserver',
+      'réserver maintenant',
+      'payer',
+      'payer maintenant',
+      'confirmer la réservation',
+      'finaliser la réservation',
+      'passer la commande',
+      'valider la commande',
+      'commander',
+      'acheter',
+      'acheter maintenant',
+      'confirmer et payer'
+    ],
+    payment: [
+      'numéro de carte',
+      'titulaire de la carte',
+      "date d'expiration",
+      'cryptogramme',
+      'cryptogramme visuel',
+      'code de sécurité',
+      'numéro de compte'
+    ],
+    personal: [
+      'prénom',
+      'nom de famille',
+      'adresse e-mail',
+      'adresse électronique',
+      'courriel',
+      'téléphone',
+      'numéro de téléphone',
+      'rue',
+      'code postal',
+      'adresse de facturation',
+      'adresse de livraison',
+      'date de naissance'
+    ],
+    personalExact: ['nom', 'adresse', 'ville', 'portable']
+  },
+  es: {
+    checkout: [
+      'reservar',
+      'reservar ahora',
+      'pagar',
+      'pagar ahora',
+      'confirmar reserva',
+      'completar reserva',
+      'realizar pedido',
+      'hacer pedido',
+      'tramitar pedido',
+      'finalizar compra',
+      'comprar',
+      'comprar ahora',
+      'confirmar y pagar'
+    ],
+    payment: [
+      'número de tarjeta',
+      'titular de la tarjeta',
+      'fecha de caducidad',
+      'fecha de vencimiento',
+      'código de seguridad',
+      'número de cuenta'
+    ],
+    personal: [
+      'apellido',
+      'apellidos',
+      'correo electrónico',
+      'teléfono',
+      'número de teléfono',
+      'calle',
+      'código postal',
+      'dirección de facturación',
+      'dirección de envío',
+      'fecha de nacimiento'
+    ],
+    personalExact: ['nombre', 'dirección', 'ciudad', 'móvil', 'correo']
+  }
+}
+
+const allOf = (k: keyof CheckoutNames): string[] => [
+  ...new Set(Object.values(CHECKOUT).flatMap((l) => l[k]))
+]
+
+const altOf = (names: string[]): string =>
+  [...new Set(names.map(fold))]
+    .sort((a, b) => b.length - a.length)
+    .map((n) => escape(n).replace(/ /g, '[\\s_-]+'))
+    .join('|')
+
+const CHECKOUT_ALL = allOf('checkout')
+const CHECKOUT_SHOWN = new Map(CHECKOUT_ALL.map((n) => [fold(n), n] as const))
+// Any listed name at the start (after symbols: "→ Pay"), or a several-word name anywhere.
+const CHECKOUT_RE = new RegExp(
+  `^[^\\p{L}\\p{N}]*(${altOf(CHECKOUT_ALL)})${B}|(?:^|[^\\p{L}\\p{N}])(${altOf(CHECKOUT_ALL.filter((n) => n.includes(' ')))})${B}`,
+  'iu'
+)
+
+/** The book / reserve / pay / order words of a button name ("Book now", "Pay €120"), or null. */
+export function checkoutName(name: string | undefined): string | null {
+  if (!name) return null
+  const m = CHECKOUT_RE.exec(fold(name.trim()))
+  if (!m) return null
+  const word = (m[1] ?? m[2]).replace(/[\s_-]+/g, ' ')
+  return CHECKOUT_SHOWN.get(word) ?? word
+}
+
+const PAYMENT_RE = wordsRe(allOf('payment'))
+const PERSONAL_RE = wordsRe(allOf('personal'))
+const PERSONAL_EXACT = new Set(allOf('personalExact').map(fold))
+/** "Search email" or "Zoeken op plaats" is a search box, not a form field. */
+const SEARCH_RE = wordsRe(['search', 'zoeken', 'suchen', 'rechercher', 'buscar', 'find'])
+
+/** "Name *", "Your name (required)", "City:" → the bare label. */
+function bareLabel(name: string): string {
+  return fold(name)
+    .replace(/\((?:required|optional|verplicht|optioneel|pflicht|obligatoire|obligatorio)\)/g, '')
+    .replace(/[\s*:.]+$/, '')
+    .replace(/^[\s*]+/, '')
+}
+
+/** A card number / holder / expiry / CVC / IBAN / account number field, any listed language. */
+export function isPaymentFieldName(name: string | undefined): boolean {
+  return !!name && PAYMENT_RE.test(fold(name.trim()))
+}
+
+/** A name / email / phone / address / birth date field, any listed language. */
+export function isPersonalFieldName(name: string | undefined): boolean {
+  if (!name?.trim() || SEARCH_RE.test(fold(name))) return false
+  return PERSONAL_RE.test(fold(name.trim())) || PERSONAL_EXACT.has(bareLabel(name))
+}
