@@ -52,7 +52,8 @@ const emptyScene = (s: Scene): boolean =>
   !s.dwellUi?.scrollAt &&
   !s.dwellUi?.dragFrom &&
   !s.scan?.ring &&
-  !s.scan?.menu
+  !s.scan?.menu &&
+  !s.focus
 
 /**
  * What is drawn right now. While hidden for a screenshot, the a11y numbers and grid stay up:
@@ -108,6 +109,14 @@ export function localize(s: Scene, d: { id: number; bounds: Electron.Rectangle }
       scan.ring = { ...sc.ring, rect: shift(sc.ring.rect, b) }
     if (sc.menu && contains(b, sc.menu.at)) scan.menu = { ...sc.menu, at: shiftPt(sc.menu.at, b) }
     if (scan.ring || scan.menu) out.scan = scan
+  }
+  const fx = s.focus
+  if (fx) {
+    const keep = fx.keep.filter((r) => intersects(r, b)).map((r) => shift(r, b))
+    const labels = fx.labels?.filter((l) => intersects(l.rect, b))
+    // A display with nothing kept on it is dimmed whole.
+    out.focus = { level: fx.level, keep }
+    if (labels?.length) out.focus.labels = labels.map((l) => ({ ...l, rect: shift(l.rect, b) }))
   }
   const ann = s.annotations?.filter((a) => a.points.some((p) => contains(b, p)))
   if (ann?.length)
@@ -348,7 +357,10 @@ export function flashFailure(rect: Rect): void {
   flash(rect, 'failure', FAILURE_MS)
 }
 
-/** Drops highlights, buddy and annotations. Numbers, grid, dwell and scan belong to a11y and stay. */
+/**
+ * Drops highlights, buddy and annotations. Numbers, grid, dwell and scan belong to a11y and
+ * stay; so does focus mode (only "show everything" ends it).
+ */
 export function clear(): void {
   if (locateTimer) clearTimeout(locateTimer)
   locateTimer = null
@@ -357,7 +369,8 @@ export function clear(): void {
     marks: scene.marks,
     grid: scene.grid,
     dwellUi: scene.dwellUi,
-    scan: scene.scan
+    scan: scene.scan,
+    focus: scene.focus
   }
   render()
 }

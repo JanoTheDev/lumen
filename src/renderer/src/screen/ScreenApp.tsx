@@ -14,6 +14,7 @@ import { HighlightLabels, HighlightsSvg, type Highlight } from './Highlights'
 import { Buddy, type BuddyConfig } from './Buddy'
 import { AnnotationTexts, AnnotationsSvg, CaptureLayer } from './Annotations'
 import { usePresence } from './usePresence'
+import { FocusLabels, FocusMaskSvg } from './FocusMask'
 import { containsPoint } from './geometry'
 import '../a11y/a11y-layer.css'
 
@@ -125,9 +126,11 @@ export function ScreenApp(): JSX.Element {
         viewBox={`0 0 ${view.w} ${view.h}`}
         aria-hidden="true"
       >
+        {scene?.focus && <FocusMaskSvg focus={scene.focus} view={view} />}
         <HighlightsSvg {...props} />
         <AnnotationsSvg list={annotations} />
       </svg>
+      {scene?.focus && <FocusLabels focus={scene.focus} />}
       <HighlightLabels {...props} />
       <AnnotationTexts list={annotations} />
       {scene?.grid && <GridLayer grid={scene.grid} />}

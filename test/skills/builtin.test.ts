@@ -16,6 +16,7 @@ const STARTERS = [
   'clean-downloads',
   'export-for-youtube',
   'fill-this-form-from-profile',
+  'focus-mode-on',
   'make-text-bigger-here',
   'morning-briefing',
   'read-this-aloud',
@@ -52,7 +53,12 @@ describe('builtin skills', () => {
 
   it('only claim the permissions they need', () => {
     const p = (n: string): ReturnType<typeof reg.get> => reg.get(n)
-    for (const n of ['summarize-this-page', 'read-this-aloud', 'screenshot-and-explain'])
+    for (const n of [
+      'summarize-this-page',
+      'read-this-aloud',
+      'screenshot-and-explain',
+      'focus-mode-on'
+    ])
       expect(p(n)!.manifest.permissions.input, n).toBe(false)
     expect(p('clean-downloads')!.manifest.permissions).toMatchObject({
       input: false,
