@@ -13,6 +13,7 @@ const GAP = 12
 
 let win: BrowserWindow | null = null
 let shownAt = 0
+let blurredAt = 0
 
 export function get(): BrowserWindow | null {
   return live(win)
@@ -60,7 +61,10 @@ export function create(): void {
   })
   win.on('blur', () => {
     // A blur right after opening comes from the tray click itself.
-    if (Date.now() - shownAt > 250) hide()
+    if (Date.now() - shownAt > 250) {
+      blurredAt = Date.now()
+      hide()
+    }
   })
   loadRenderer(win, 'panel', '/home')
 }
@@ -90,7 +94,8 @@ export function hide(): void {
 export function toggle(anchor: Rectangle | null = null): void {
   const w = get()
   if (w?.isVisible()) hide()
-  else show(anchor)
+  // Clicking the tray icon while Home is open blurs it first; that click means "close".
+  else if (Date.now() - blurredAt > 300) show(anchor)
 }
 
 registerWindow(get, { interactive: true })
