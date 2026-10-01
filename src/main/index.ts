@@ -61,6 +61,8 @@ import { registerAgentIpc } from './ipc/agent'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
+import { installTeach } from './teach'
+import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
 import { registerKeysIpc } from './keys/ipc'
 
@@ -152,6 +154,8 @@ app.whenReady().then(() => {
   startAgent(agent)
   registerIpc()
   installA11y()
+  installLessonOutput()
+  installTeach()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
   warmTts()
   prepareStt()

@@ -35,6 +35,8 @@ export interface TurnContext {
   regions?: string
   /** `<memory>` block about the user (capped by the memory module). */
   memory?: string
+  /** The running lesson (07), one line. */
+  lesson?: string
   now?: Date
 }
 
@@ -68,6 +70,7 @@ export function userTurn(ctx: TurnContext): string {
       `target_app: ${ctx.targetApp.name}${ctx.targetApp.url ? ` ${ctx.targetApp.url}` : ''} (not in front)`
     )
   lines.push(`app_style: ${writingRulesFor(ctx.activeWindow)}`)
+  if (ctx.lesson) lines.push(ctx.lesson)
   if (ctx.marks)
     lines.push(
       `marks: ${ctx.marks} numbered boxes drawn on frame "1" (text and unlabelled controls); point at them with {"kind":"mark","n":N}`

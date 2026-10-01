@@ -12,6 +12,7 @@ import { parseReplyText, replySchema, toModelResponse, type Reply } from './sche
 import { streamReply } from './stream-reply'
 import { appNameOf, matchSkill, regionsLine, skillContext } from './skills'
 import { memoryContextFor } from './memory/runtime'
+import { lessonContext, lessonContextLine } from '../teach/context'
 import {
   LlmError,
   REFUSAL_MESSAGE,
@@ -79,6 +80,8 @@ export async function callModel(
     ? memoryContextFor(prompt, skill?.name ?? appNameOf(ctx?.foreground.process))
     : ''
   if (memoryText) log('plan', `memory: ~${estimateTokens(memoryText)} tokens`)
+  const lesson = withConversation ? lessonContext() : null
+  const lessonLine = lesson ? lessonContextLine(lesson) : undefined
   // More than one monitor captured (router needsAllScreens): frame "1" (the image passed in,
   // marks drawn) first, then the other monitors' frames.
   const extra = screenshotBase64 && ctx && ctx.frames.length > 1 ? ctx.frames.slice(1) : []
@@ -112,6 +115,7 @@ export async function callModel(
           marks: screenshotBase64 ? ctx?.marks?.length : undefined,
           skill: skill ? { name: skill.name, text: skillText } : undefined,
           memory: memoryText || undefined,
+          lesson: lessonLine,
           regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
         })
       }
