@@ -10,6 +10,7 @@
 //! web content child.
 
 pub mod browser;
+pub mod point;
 pub mod text;
 pub mod tree;
 
