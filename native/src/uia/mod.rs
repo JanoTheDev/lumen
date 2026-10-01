@@ -597,10 +597,31 @@ pub fn caret_from(x: i32, y: i32, w: i32, h: i32) -> Option<Rect> {
     (h > 0 && h <= 400 && (0..=400).contains(&w)).then(|| Rect::new(x, y, w.max(1), h))
 }
 
+/// `rcCaret` (the app's own client coordinates, left/top/right/bottom) placed at the caret
+/// window's physical client origin. A DPI-unaware or system-aware app on a monitor of another
+/// DPI works in virtualized px: its offsets and size scale by `monitor_dpi / window_dpi`.
+pub fn caret_physical(
+    origin: (i32, i32),
+    rc: (i32, i32, i32, i32),
+    window_dpi: u32,
+    monitor_dpi: u32,
+) -> Option<Rect> {
+    let f = if window_dpi == 0 || monitor_dpi == 0 {
+        1.0
+    } else {
+        f64::from(monitor_dpi) / f64::from(window_dpi)
+    };
+    let s = |v: i32| (f64::from(v) * f).round() as i32;
+    let (l, t, r, b) = rc;
+    let (x, y) = (origin.0 + s(l), origin.1 + s(t));
+    caret_from(x, y, s(r) - s(l), s(b) - s(t))
+}
+
 /// The foreground thread's system caret (Win32 edits, many editors and browsers), in screen px.
 fn system_caret() -> Option<Rect> {
     use windows::Win32::Foundation::POINT;
-    use windows::Win32::Graphics::Gdi::ClientToScreen;
+    use windows::Win32::Graphics::Gdi::{ClientToScreen, MONITOR_DEFAULTTONEAREST, MonitorFromWindow};
+    use windows::Win32::UI::HiDpi::{GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI};
     use windows::Win32::UI::WindowsAndMessaging::{
         GUITHREADINFO, GetGUIThreadInfo, GetWindowThreadProcessId,
     };
@@ -617,12 +638,21 @@ fn system_caret() -> Option<Rect> {
         return None;
     }
     let r = gti.rcCaret;
-    let mut tl = POINT { x: r.left, y: r.top };
+    let mut origin = POINT { x: 0, y: 0 };
     // SAFETY: valid out-param; the caret window may be gone, which returns false.
-    if !unsafe { ClientToScreen(gti.hwndCaret, &mut tl) }.as_bool() {
+    if !unsafe { ClientToScreen(gti.hwndCaret, &mut origin) }.as_bool() {
         return None;
     }
-    caret_from(tl.x, tl.y, r.right - r.left, r.bottom - r.top)
+    // SAFETY: pure queries; a stale window gives 0 (no scaling) and the nearest monitor.
+    let (window_dpi, monitor_dpi) = unsafe {
+        let window_dpi = GetDpiForWindow(gti.hwndCaret);
+        let hmon = MonitorFromWindow(gti.hwndCaret, MONITOR_DEFAULTTONEAREST);
+        let (mut dx, mut dy) = (0u32, 0u32);
+        let monitor_dpi =
+            if GetDpiForMonitor(hmon, MDT_EFFECTIVE_DPI, &mut dx, &mut dy).is_ok() { dx } else { 0 };
+        (window_dpi, monitor_dpi)
+    };
+    caret_physical((origin.x, origin.y), (r.left, r.top, r.right, r.bottom), window_dpi, monitor_dpi)
 }
 
 // ---- focus-changed events --------------------------------------------------
@@ -639,6 +669,16 @@ mod tests {
         assert_eq!(caret_from(10, 20, 0, 18), Some(Rect::new(10, 20, 1, 18)));
         assert_eq!(caret_from(10, 20, 2, 0), None);
         assert_eq!(caret_from(10, 20, 2, 2000), None);
+    }
+
+    #[test]
+    fn caret_scaled_for_dpi_unaware_apps() {
+        // Per-monitor aware (or same DPI): offsets as given.
+        assert_eq!(caret_physical((100, 200), (40, 10, 41, 26), 144, 144), Some(Rect::new(140, 210, 1, 16)));
+        // Unaware app (96) on a 150% monitor: offset and height scale by 1.5.
+        assert_eq!(caret_physical((100, 200), (40, 10, 42, 26), 96, 144), Some(Rect::new(160, 215, 3, 24)));
+        // Unknown DPI: no scaling.
+        assert_eq!(caret_physical((0, 0), (5, 5, 6, 20), 0, 144), Some(Rect::new(5, 5, 1, 15)));
     }
 
     #[test]
