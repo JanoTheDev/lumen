@@ -288,6 +288,19 @@ export class ProgressStore implements ProgressSink {
     this.flush()
   }
 
+  /** A practice challenge (11 T22) moves the mastery of its skill tags like a lesson run. */
+  practice(app: string, skills: string[], quality: number): void {
+    const out = { ...this.data.mastery }
+    const score = Math.max(0, Math.min(5, quality)) / 5
+    for (const tag of skills) {
+      const k = masteryKey(app, tag)
+      const m = out[k] ?? 0
+      out[k] = Math.round((m + MASTERY_RATE * (score - m)) * 1000) / 1000
+    }
+    this.data = { ...this.data, mastery: out }
+    this.flush()
+  }
+
   /** Writes now (app quit). */
   flush(): void {
     if (this.timer) this.clock.clearTimeout(this.timer)

@@ -15,6 +15,7 @@ import {
   icons
 } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { Challenges } from './Challenges'
 import { CommunityPacks } from './CommunityPacks'
 import { Handoff } from './Handoff'
 import { RecordSteps } from './RecordSteps'
@@ -263,6 +264,8 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       <CommunityPacks apps={apps} onChanged={refresh} />
+
+      <Challenges apps={apps} />
 
       <Handoff mine={mine} onChanged={refresh} />
 

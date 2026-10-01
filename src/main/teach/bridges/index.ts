@@ -56,6 +56,16 @@ function bridges(): Map<string, AppBridge> {
 
 export const bridgePort: BridgePort = makeBridgePort(() => bridges())
 
+/** The app bridge's full state (for challenge checks, 11 T22); null when not connected. */
+export async function bridgeState(
+  appId: string,
+  signal?: AbortSignal
+): Promise<Record<string, unknown> | null> {
+  const b = bridges().get(appId)
+  if (!b) return null
+  return ((await b.state({}, signal).catch(() => null)) as Record<string, unknown> | null) ?? null
+}
+
 export async function bridgeStatus(id: BridgeId): Promise<BridgeStatus> {
   const b = bridges().get(id)!
   const st = await b.status()

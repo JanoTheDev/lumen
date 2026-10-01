@@ -117,6 +117,36 @@ export interface HandoffInstallResult {
   problems?: string[]
 }
 
+/** Practice challenges (11 T22): the running one, the streak and recent results. */
+export interface ChallengeView {
+  active: {
+    id: string
+    app: string
+    appName: string
+    title: string
+    goal: string
+    setup: string
+    level: 'beginner' | 'intermediate' | 'advanced'
+    minutes: number
+    rubric: string[]
+    secondsLeft: number
+  } | null
+  streak: number
+  best: number
+  passed: number
+  recent: {
+    id: string
+    app: string
+    title: string
+    level: 'beginner' | 'intermediate' | 'advanced'
+    finishedAt: number
+    passed: boolean
+    met: number
+    total: number
+    feedback: string
+  }[]
+}
+
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
   'assistant:query': {
@@ -313,6 +343,16 @@ export interface InvokeChannels {
   'teach:handoff-install': { args: []; result: HandoffInstallResult }
   'teach:handoff-list': { args: []; result: HandoffInfo[] }
   'teach:handoff-remove': { args: [id: string]; result: { ok: boolean } }
+  /** Practice challenges (11 T22). Start in an app by pack id, or the app in front. */
+  'teach:challenge-status': { args: []; result: ChallengeView }
+  'teach:challenge-start': {
+    args: [
+      opts: { app?: string; level?: 'beginner' | 'intermediate' | 'advanced' | 'harder' | 'easier' }
+    ]
+    result: { ok: boolean; error?: string }
+  }
+  'teach:challenge-check': { args: []; result: { ok: boolean; text: string } }
+  'teach:challenge-stop': { args: []; result: { ok: boolean } }
   /** Skills (11 T05/T06): Settings → Skills. */
   'skills:list': { args: []; result: SkillSummary[] }
   /** The full SKILL.md and the skill's file list, for View / Edit. */
@@ -1082,6 +1122,10 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:handoff-install',
   'teach:handoff-list',
   'teach:handoff-remove',
+  'teach:challenge-status',
+  'teach:challenge-start',
+  'teach:challenge-check',
+  'teach:challenge-stop',
   'skills:list',
   'skills:get',
   'skills:set-enabled',

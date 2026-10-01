@@ -65,6 +65,7 @@ import type { RawUiaEvent, RecordedApp } from './recorder'
 import { createRecorder, type Recorder } from './recording'
 import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
 import { withInputLane } from '../agent-mode/input-lane'
+import { installChallenges, interceptChallenge } from './challenge-install'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -891,6 +892,11 @@ export function interceptLesson(utterance: string): unknown | undefined {
     log('plan', `lesson command: ${cmd}`)
     return HANDLED
   }
+  // Practice challenges (11 T22): start / check / give up / streak.
+  if (!running) {
+    const ch = interceptChallenge(utterance)
+    if (ch !== undefined) return ch
+  }
   // A newer suggestion (next lesson, review prompt) and the learning commands (T27-T33).
   const learned = learning?.intercept(utterance)
   if (learned !== undefined) return learned
@@ -1037,6 +1043,7 @@ export function installTeach(): void {
   installLearning()
   installRecorder(base)
   installPackSupport({ registry: () => registry, skillsRoot: () => skillsRoot })
+  installChallenges({ registry: () => registry, store: () => store })
   installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
 
   // Passive resume offer once the bar can show it; nothing starts by itself.
