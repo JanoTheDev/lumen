@@ -91,7 +91,8 @@ export interface TurnCostSummary {
 
 export type AppEvent =
   | { type: 'voice.started'; handsFree: boolean }
-  | { type: 'voice.stopped' }
+  /** `ended`: the renderer already finished the recording itself (silence, no speech, error). */
+  | { type: 'voice.stopped'; ended?: boolean }
   | { type: 'voice.cancelled' }
   /** Dictation hotkey pressed: record for typing, not for the assistant. */
   | { type: 'dictation.started' }

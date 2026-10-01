@@ -5,39 +5,20 @@ import { z } from 'zod'
 import { INVALID, safeParse } from '../ipc/validate'
 import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
-import type { AgentBridge } from '../agent/bridge'
 import { ocr } from '../agent/commands'
 import { KEY_PROVIDERS, hasKey } from '../keys/vault'
 import { installWakeModel } from '../ipc/wake'
 import { patchConfig } from '../ipc/settings'
+import { captureNextHotkey } from '../speech/hotkey'
 import { wakeStatus } from '../speech/wake'
 import { CHECK_IDS, fixCheck, listChecks, runCheck, type CheckProbes } from './checks'
 
 const idSchema = z.enum(CHECK_IDS)
 
-// One hotkey-down listener per bridge; waiters resolve on the next press.
-const hooked = new WeakSet<AgentBridge>()
-const hotkeyWaiters = new Set<() => void>()
-
+/** The setup hotkey test: the press is consumed, so it does not start a voice turn. */
 function waitForHotkey(ms: number): Promise<boolean> {
-  const agent = getAgent()
-  if (!agent) return Promise.resolve(false)
-  if (!hooked.has(agent)) {
-    hooked.add(agent)
-    agent.onEvent('hotkey-down', () => {
-      for (const w of [...hotkeyWaiters]) w()
-    })
-  }
-  return new Promise((resolve) => {
-    const done = (pressed: boolean): void => {
-      clearTimeout(timer)
-      hotkeyWaiters.delete(onPress)
-      resolve(pressed)
-    }
-    const onPress = (): void => done(true)
-    const timer = setTimeout(() => done(false), ms)
-    hotkeyWaiters.add(onPress)
-  })
+  if (!getAgent()) return Promise.resolve(false)
+  return captureNextHotkey(ms)
 }
 
 let elevatedCache: boolean | null = null

@@ -90,5 +90,7 @@ bus.on('dictation.started', () => {
   startDictation()
 })
 bus.on('dictation.hands-free', () => dictationHandsFree())
-bus.on('voice.stopped', () => stopVoice())
+bus.on('voice.stopped', (e) => {
+  if (!e.ended) stopVoice()
+})
 bus.on('voice.cancelled', () => send('assistant:cancel-request'))

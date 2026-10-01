@@ -1,7 +1,7 @@
 // Wires the assistant hotkey gestures (speech/activation.ts) to the voice renderer and status.
 import { bus } from '../bus'
 import { loadConfig } from '../config'
-import { holdEscape } from '../agent/escape'
+import { holdEscape, keepEscapeWhile } from '../agent/escape'
 import { startSpeculativeCapture } from '../query/context'
 import { captureContext } from '../query/capture'
 import * as hud from '../windows/hud'
@@ -29,18 +29,53 @@ const activation = new AssistantActivation(
   () => (loadConfig().handsFreeMode ? 'tap' : 'hold')
 )
 
+// Setup's hotkey test: while it waits, a press only answers the test and starts no turn.
+const pressWaiters = new Set<() => void>()
+let swallowUp = false
+
+/** Resolves true on the next assistant hotkey press (consumed), false after `ms`. */
+export function captureNextHotkey(ms: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const done = (pressed: boolean): void => {
+      clearTimeout(timer)
+      pressWaiters.delete(onPress)
+      resolve(pressed)
+    }
+    const onPress = (): void => done(true)
+    const timer = setTimeout(() => done(false), ms)
+    pressWaiters.add(onPress)
+  })
+}
+
 export function onAssistantHotkeyDown(): void {
+  if (pressWaiters.size) {
+    swallowUp = true
+    for (const w of [...pressWaiters]) w()
+    return
+  }
+  // Key repeat of a captured press.
+  if (swallowUp) return
   activation.down()
 }
 
 export function onAssistantHotkeyUp(): void {
+  if (swallowUp) {
+    swallowUp = false
+    return
+  }
   activation.up()
 }
 
-/** A hands-free recording ended in the renderer (silence, no speech, error). */
+/**
+ * A recording ended in the renderer (silence, no speech, error), including wake-word and
+ * barge-in recordings the hotkey never started: tray, teach and others see it stop.
+ */
 export function onRecordingEnded(): void {
   activation.reset()
+  bus.emit({ type: 'voice.stopped', ended: true })
 }
+
+keepEscapeWhile(() => activation.current !== 'idle')
 
 bus.on('voice.cancelled', () => activation.reset())
 bus.on('query.started', () => activation.reset())
