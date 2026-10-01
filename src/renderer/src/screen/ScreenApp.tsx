@@ -102,6 +102,10 @@ export function ScreenApp(): JSX.Element {
       if (m.duration > 16) console.warn(`[screen] scene render took ${m.duration.toFixed(1)}ms`)
     } catch {
       /* first paint, no mark yet */
+    } finally {
+      // Entries would pile up in the performance timeline for the life of the window.
+      performance.clearMarks?.('screen:render-start')
+      performance.clearMeasures?.('screen:render')
     }
   }, [scene])
 
