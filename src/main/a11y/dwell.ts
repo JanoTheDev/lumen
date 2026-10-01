@@ -206,7 +206,7 @@ export interface DwellEvent {
   element?: { rect?: Rect; role?: string; name?: string }
 }
 
-export function parseDwellEvent(raw: unknown): DwellEvent | null {
+function parseDwellEvent(raw: unknown): DwellEvent | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   if (typeof r.x !== 'number' || typeof r.y !== 'number') return null

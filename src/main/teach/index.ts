@@ -478,10 +478,6 @@ function realPorts(): Ports {
 
 // ---- Public API ----
 
-export function teachRunner(): LessonRunner | null {
-  return runner
-}
-
 export function skillRegistry(): SkillRegistry | null {
   return registry
 }

@@ -15,7 +15,7 @@ import type { Skill, SkillRegistry } from './registry'
 const MAX_TOKENS = 2500
 
 /** The real model call: main role, the screenshot attached, structured output. */
-export const completeLesson: GenerateCall = async ({ system, user, image, signal }) => {
+const completeLesson: GenerateCall = async ({ system, user, image, signal }) => {
   const { llm, model, effort } = getProvider('main')
   const res = await llm.complete(
     {
@@ -47,7 +47,7 @@ export interface ShowMeDeps {
 }
 
 /** The reply for a started lesson: handled (no answer card), with a line for history. */
-export function lessonStartedReply(lesson: Lesson): ModelResponse {
+function lessonStartedReply(lesson: Lesson): ModelResponse {
   return {
     mode: 'answer',
     text: `Started a ${lesson.steps.length}-step lesson: ${lesson.title}.`,

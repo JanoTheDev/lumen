@@ -21,7 +21,7 @@ export const HINT_AT_MS: Record<number, number> = { 1: 0, 2: 20_000, 3: 40_000, 
 export const PACES = [1, 1.5, 2] as const
 
 /** Hint pace from the a11y timings: a longer status hold means a slower pace. */
-export function paceFromTimings(t: { statusHoldMs: number } | undefined): number {
+function paceFromTimings(t: { statusHoldMs: number } | undefined): number {
   const hold = t?.statusHoldMs ?? 4000
   if (hold >= 12_000) return 2
   if (hold >= 8000) return 1.5
@@ -187,7 +187,7 @@ const KEY_WORDS: Record<string, string> = {
   del: 'Delete'
 }
 
-export function spokenCombo(combo: string): string {
+function spokenCombo(combo: string): string {
   return combo
     .split('+')
     .map((k) => KEY_WORDS[k.trim().toLowerCase()] ?? k.trim())

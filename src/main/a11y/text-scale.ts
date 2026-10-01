@@ -43,7 +43,7 @@ function read(): Promise<number> {
   })
 }
 
-export async function refreshTextScale(): Promise<number> {
+async function refreshTextScale(): Promise<number> {
   const next = await read()
   if (next !== factor) {
     factor = next

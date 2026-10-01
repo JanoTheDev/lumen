@@ -246,7 +246,7 @@ export function hasMatchRules(skill: Skill): boolean {
 const APP_NAMES: Record<string, string> = { general: 'Your guides' }
 
 /** "my-app" → "My app"; "general" (migrated guides) → "Your guides". */
-export function appDisplayName(id: string): string {
+function appDisplayName(id: string): string {
   const named = APP_NAMES[id]
   if (named) return named
   const words = id.replace(/-/g, ' ')

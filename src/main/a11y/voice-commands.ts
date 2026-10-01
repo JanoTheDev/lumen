@@ -87,7 +87,7 @@ const SLOT: Record<string, string> = {
   amount: '(?<amount>a little bit|a little|a bit|a lot|lots)'
 }
 
-export function compilePattern(pattern: string, flags = ''): RegExp {
+function compilePattern(pattern: string, flags = ''): RegExp {
   let src = ''
   for (let i = 0; i < pattern.length; i++) {
     const c = pattern[i]

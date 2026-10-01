@@ -59,7 +59,7 @@ function scanSettings(cfg: AppConfig): ScanSettings {
 }
 
 /** Config key name → Electron accelerator ("space" → "Space", "f8" → "F8"). */
-export function switchAccelerator(key: string): string {
+function switchAccelerator(key: string): string {
   const k = key.trim()
   if (/^f\d{1,2}$/i.test(k)) return k.toUpperCase()
   if (k.length === 1) return k.toUpperCase()

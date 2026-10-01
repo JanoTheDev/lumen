@@ -201,7 +201,7 @@ export function derivedVisionPrompt(say: string): string {
 }
 
 /** The stored `expect` as a full CheckSpec (C9 allows a bare check name). */
-export function normalizeCheck(step: Pick<StoredStep, 'say' | 'target' | 'expect'>): CheckSpec {
+function normalizeCheck(step: Pick<StoredStep, 'say' | 'target' | 'expect'>): CheckSpec {
   const e = step.expect
   if (!e) return { type: 'manual' }
   if (typeof e.check === 'object') return withVisionPrompts(e.check, step.say)
@@ -260,13 +260,6 @@ export function parseLesson(raw: unknown): Lesson {
       ...(s.timeoutSec ? { timeoutSec: s.timeoutSec } : {})
     }))
   }
-}
-
-/** Every check type a spec uses (combinators expanded). */
-export function checkTypes(c: CheckSpec, out = new Set<CheckSpec['type']>()): Set<string> {
-  out.add(c.type)
-  if (c.type === 'anyOf' || c.type === 'allOf') for (const x of c.checks) checkTypes(x, out)
-  return out
 }
 
 /** The stored (C9) form of a lesson, for writing user lessons; parseLesson reads it back. */

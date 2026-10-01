@@ -10,7 +10,7 @@ import { isRunning, type LessonState } from './state'
 const LEVEL_ORDER = { beginner: 0, intermediate: 1, advanced: 2 } as const
 const RECENT = 5
 
-export function lessonItem(
+function lessonItem(
   lesson: Lesson,
   skill: Skill,
   progress: Progress,
