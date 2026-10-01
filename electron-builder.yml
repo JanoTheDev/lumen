@@ -1,43 +1,77 @@
-appId: com.electron.app
-productName: react-ts
+# Windows-only. Build with `npm run build:win` (native sidecar, app bundle, installer, checks).
+# appId must equal src/main/app-id.ts (taskbar grouping, notifications, updates).
+appId: io.github.janothedev.lumen
+productName: Lumen
+copyright: Copyright © 2026 JanoTheDev
 directories:
   buildResources: build
+  output: dist
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - out/**
+  - resources/**
+  - skills/**
+  - package.json
+  - '!**/*.map'
+  - '!resources/tray/generate.mjs'
+  # Main loads the CommonJS builds only: drop TS sources, typings, ESM copies and docs.
+  - '!node_modules/**/*.{d.ts,d.mts,d.cts,md}'
+  - '!node_modules/{openai,@anthropic-ai/sdk,zod}/src/**'
+  - '!node_modules/{openai,@anthropic-ai/sdk}/**/*.mjs'
+# UI is English; Chromium's other locale packs are ~45 MB.
+electronLanguages:
+  - en-US
+asar: true
 asarUnpack:
   - resources/**
+  # Native addon + onnxruntime DLLs cannot load from inside the asar.
+  - node_modules/sherpa-onnx-*/**
+extraResources:
+  - from: native/target/release/lumen-native.exe
+    to: native/lumen-native.exe
+  - from: agent/vendor/nvda/x64/nvdaControllerClient.dll
+    to: native/nvdaControllerClient.dll
+  - from: build/third_party/
+    to: third_party/
+  - from: agent/vendor/nvda/license.txt
+    to: third_party/nvda/license.txt
+  - from: agent/vendor/nvda/SOURCE.txt
+    to: third_party/nvda/SOURCE.txt
+  - from: LICENSE
+    to: third_party/LICENSE.txt
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 win:
-  executableName: react-ts
-nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
-mac:
-  entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSCameraUsageDescription: Application requests access to the device's camera.
-    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
-  notarize: false
-dmg:
-  artifactName: ${name}-${version}.${ext}
-linux:
   target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: electronjs.org
-  category: Utility
-appImage:
-  artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  executableName: Lumen
+  icon: build/icon.ico
+  requestedExecutionLevel: asInvoker
+  # Unsigned builds: updates are checked against the sha512 in latest.yml only.
+  verifyUpdateCodeSignature: false
+nsis:
+  # Per-user, no Admin, no pages. The uninstaller asks about removing settings (installer.nsh).
+  oneClick: true
+  perMachine: false
+  artifactName: Lumen-Setup-${version}.${ext}
+  shortcutName: Lumen
+  uninstallDisplayName: Lumen
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  include: build/installer.nsh
+  deleteAppDataOnUninstall: false
+portable:
+  artifactName: Lumen-${version}-portable.${ext}
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: JanoTheDev
+  repo: lumen
+  releaseType: draft
+npmRebuild: false
