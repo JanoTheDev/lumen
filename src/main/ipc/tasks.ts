@@ -1,5 +1,6 @@
 // Background tasks IPC (08 T29, CONTRACTS C11): the Home flyout's Tasks list. tasks:changed
-// carries the whole list (it is short) to the Home window. The task chat view (08 T43) in the
+// carries the whole list (it is short) to the Home window, and to the panel window, whose task
+// chat list follows it (also on foreground task and Claude session changes). The task chat view (08 T43) in the
 // panel window: tasks:chat / tasks:chats read, tasks:watch subscribes the open view to
 // tasks:chat pushes, tasks:steer and tasks:control act on the task.
 import { ipcMain } from 'electron'
@@ -22,7 +23,9 @@ import {
 } from '../agent-mode/transcript-wire'
 import { transcripts } from '../agent-mode/transcript-hub'
 import { bus } from '../bus'
+import { onSessionChange } from '../claude-code'
 import * as home from '../windows/home'
+import * as panel from '../windows/settings'
 import { INVALID, safeParse } from './validate'
 
 /** tasks:open takes a Tasks-list id, a chat id, or "all" (the chat view's list). */
@@ -93,11 +96,23 @@ export function registerTasksIpc(): void {
   })
 
   let timer: NodeJS.Timeout | null = null
-  bus.on('task.changed', () => {
+  const changed = (): void => {
     if (timer) return
     timer = setTimeout(() => {
       timer = null
-      home.send('tasks:changed', m.list())
+      const list = m.list()
+      home.send('tasks:changed', list)
+      panel.send('tasks:changed', list)
     }, PUSH_MS)
+  }
+  bus.on('task.changed', changed)
+  bus.on('agent.task', changed)
+  // Only a phase or title change moves a Claude session's row.
+  const seen = new Map<string, string>()
+  onSessionChange((v) => {
+    const key = `${v.phase}|${v.title}|${v.pending ? 1 : 0}`
+    if (seen.get(v.id) === key) return
+    seen.set(v.id, key)
+    changed()
   })
 }
