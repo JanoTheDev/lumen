@@ -4,7 +4,6 @@
 // the logic lives in lookup.ts / learn.ts / ground.ts.
 import { dirname, join } from 'path'
 import { recordUsage } from '../ai/cost'
-import { appIdOf } from '../ai/memory/profile'
 import { usageCost } from '../ai/pricing'
 import { getProvider, hasKey } from '../ai/providers'
 import { anthropicClient, toUsage as anthropicUsage } from '../ai/providers/anthropic'
@@ -22,7 +21,7 @@ import { AppNotesStore } from './notes'
 import { anthropicHowto, openaiHowto, PAID_SEARCH_USD, paidQuestion, type PaidAnswer } from './paid'
 import { lookupHowtoHandler } from './tool'
 import type { AppIdentity, HowtoMode, HowtoResult } from './types'
-import { identityOf } from './version'
+import { browserIdentity, identityOf, isBrowserProcess, namedIdentity } from './version'
 import type { ToolHandler } from '../agent-mode/runner'
 
 export { LOOKUP_HOWTO_TOOL } from './tool'
@@ -116,21 +115,35 @@ function deps(): LookupDeps {
   }
 }
 
-/** The app in front, from the native agent (null without an agent). */
+/** Site of a browser window, by hwnd + title (the address bar read is a native call). */
+const siteCache = new Map<string, { at: number; url: string | null }>()
+const SITE_TTL_MS = 30_000
+
+/**
+ * The app in front, from the native agent (null without an agent). In a browser it is the site
+ * (Gmail, Outlook on the web, github.com), so web apps get their own notes and cached answers.
+ */
 export async function foregroundIdentity(signal?: AbortSignal): Promise<AppIdentity | null> {
   const agent = getAgent()
   if (!agent) return null
   const w = await commands.activeWindow(agent, { signal, timeoutMs: 1500 }).catch(() => null)
-  return w ? identityOf(w) : null
+  if (!w) return null
+  if (!w.isBrowser && !isBrowserProcess(w.process)) return identityOf(w)
+  const key = `${w.hwnd}|${w.title}`
+  let hit = siteCache.get(key)
+  if (!hit || Date.now() - hit.at > SITE_TTL_MS) {
+    const r = await commands.browserUrl(agent, { signal }).catch(() => null)
+    hit = { at: Date.now(), url: r && r.hwnd === w.hwnd ? r.url : null }
+    if (siteCache.size > 50) siteCache.clear()
+    siteCache.set(key, hit)
+  }
+  return browserIdentity(w, hit.url)
 }
 
 /** A named app (version only when it is the one in front). */
 async function identify(app: string | undefined, signal?: AbortSignal): Promise<AppIdentity> {
   const fg = await foregroundIdentity(signal)
-  if (!app) return fg ?? { app: 'this app', appId: 'unknown', version: '' }
-  if (fg && (fg.appId === appIdOf(app) || fg.app.toLowerCase().includes(app.toLowerCase())))
-    return fg
-  return { app, appId: appIdOf(app), version: '' }
+  return namedIdentity(fg, app)
 }
 
 export function lookup(
