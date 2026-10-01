@@ -3,7 +3,7 @@
 //   phys    - physical virtual-desktop pixels (what the agent clicks)
 //   logical - Electron DIP (what overlay windows draw in)
 import { screen } from 'electron'
-import type { Point, Rect } from '@shared/types'
+import type { MonitorInfo, Point, Rect } from '@shared/types'
 
 export type { Point, Rect }
 
@@ -120,8 +120,65 @@ export function rectCenter(rect: Rect): Point {
   return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
 }
 
-// Geometry of the frame the agent captures today (primary display). Replaced by the
-// monitor geometry returned with each capture once the agent speaks protocol v2.
+/** What a capture reports about one frame: image size plus the monitor (and region) it shows. */
+export interface FrameMeta {
+  /** Image px. */
+  width: number
+  height: number
+  monitor?: MonitorInfo
+  /** Physical rect actually captured, when it is a region of the monitor. */
+  region?: Rect
+}
+
+/**
+ * Geometry of a captured frame: the region or monitor rect it shows (physical px) and its
+ * image size. Without monitor info (a v1 `screenshot`) it is the primary display.
+ */
+export function frameGeometryOf(meta: FrameMeta): FrameGeometry {
+  const rect = meta.region ?? meta.monitor?.rect
+  if (rect) {
+    return {
+      originX: rect.x,
+      originY: rect.y,
+      width: rect.w,
+      height: rect.h,
+      imgW: meta.width || rect.w,
+      imgH: meta.height || rect.h
+    }
+  }
+  const primary = primaryFrameGeometry(screen.getPrimaryDisplay())
+  return meta.width > 0 && meta.height > 0
+    ? { ...primary, imgW: meta.width, imgH: meta.height }
+    : primary
+}
+
+export function physToImage(frame: FrameGeometry, pt: Point): Point {
+  return {
+    x: ((pt.x - frame.originX) * frame.imgW) / frame.width,
+    y: ((pt.y - frame.originY) * frame.imgH) / frame.height
+  }
+}
+
+export function physRectToImage(frame: FrameGeometry, rect: Rect): Rect {
+  const tl = physToImage(frame, { x: rect.x, y: rect.y })
+  const br = physToImage(frame, { x: rect.x + rect.w, y: rect.y + rect.h })
+  return {
+    x: Math.round(tl.x),
+    y: Math.round(tl.y),
+    w: Math.round(br.x - tl.x),
+    h: Math.round(br.y - tl.y)
+  }
+}
+
+let latestFrame: FrameGeometry | null = null
+
+/** Records the geometry of the frame the model saw last; null forgets it. */
+export function setCurrentFrame(frame: FrameGeometry | null): void {
+  latestFrame = frame
+}
+
+// Geometry of the last captured frame (the foreground monitor, with its real origin and
+// scale), or the primary display before anything was captured.
 export function currentFrame(): FrameGeometry {
-  return primaryFrameGeometry(screen.getPrimaryDisplay())
+  return latestFrame ?? primaryFrameGeometry(screen.getPrimaryDisplay())
 }

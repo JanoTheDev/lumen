@@ -3,7 +3,7 @@ import type { Action, ModelResponse } from '@shared/types'
 import { buildPlan, executePlan, runResearchAgent } from './task-planner'
 import type { CancelScope } from './cancel'
 import { callModel, type CallOptions } from '../ai'
-import { requireAgent } from '../agent/instance'
+import { captureScreenshot } from './capture'
 import { executeActions } from '../actions/executor'
 import { log, type Timer } from '../logger'
 import { setStatus, type StatusKind } from '../windows/status'
@@ -20,12 +20,11 @@ export function runResearch(
   opts: CallOptions,
   scope: CancelScope
 ): Promise<ModelResponse> {
-  const agent = requireAgent()
   return runResearchAgent(
     prompt,
     activeWindow,
     (p, s, w) => callModel(p, s, w, opts),
-    () => agent.screenshot(),
+    () => captureScreenshot(scope.signal),
     (actions) => runBatch(actions as Action[], scope),
     () => {},
     scope.signal
@@ -40,14 +39,13 @@ export async function runPlanned(
   scope: CancelScope,
   timer: Timer
 ): Promise<ModelResponse> {
-  const agent = requireAgent()
   const plan = await buildPlan(prompt, null, activeWindow, scope.signal)
   timer.split('buildPlan done')
   const result = await executePlan(
     plan,
     activeWindow,
     (p, s, w) => callModel(p, s, w, opts),
-    () => agent.screenshot(),
+    () => captureScreenshot(scope.signal),
     (actions) => runBatch(actions as Action[], scope),
     (progress) => {
       const p = progress as {

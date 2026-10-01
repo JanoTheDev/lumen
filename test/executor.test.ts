@@ -18,6 +18,7 @@ vi.mock('../src/main/ai/computer-use', () => ({
   findClickCoordinates: (...args: unknown[]) => findClickCoordinates(...(args as []))
 }))
 vi.mock('../src/main/ai/app-context', () => ({ isBrowser: () => true }))
+vi.mock('../src/main/query/capture', () => ({ captureScreenshot: async () => 'img' }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../src/main/actions/executor'

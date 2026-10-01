@@ -4,7 +4,8 @@
 import { randomUUID } from 'crypto'
 import type { ModelResponse } from '@shared/types'
 import type { CancelScope } from './cancel'
-import { needsScreenshot, takeSpeculative, type QueryContext } from './context'
+import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext } from './context'
+import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
 import { isResearchIntent } from './legacy/classifier'
 import { correctNthElement } from './nth'
@@ -27,8 +28,6 @@ import { guideState } from '../guides/session'
 import { requireAgent } from '../agent/instance'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
-import * as highlight from '../windows/highlight'
-import { sleep } from '../util'
 
 export interface PipelineDeps {
   speak: (text: string, voice: string) => Promise<void>
@@ -59,27 +58,17 @@ export function hasLastTask(): boolean {
   return loadConfig().ai.router === 'legacy' ? !!legacyTaskContext : !!lastTask
 }
 
-// Active window + optional screenshot. Lumen's own highlight layer is hidden first so it
-// is not in the image; the foreground app is never changed.
-export async function captureContext(withScreenshot: boolean): Promise<QueryContext> {
-  const agent = requireAgent()
-  if (!withScreenshot) return { activeWindow: await agent.activeWindow(), screenshot: null }
-  if (highlight.isVisible()) {
-    highlight.hide()
-    await sleep(32)
-  }
-  const [activeWindow, screenshot] = await Promise.all([agent.activeWindow(), agent.screenshot()])
-  return { activeWindow, screenshot }
-}
-
 /** Awaits a pending capture, capturing again if it failed. */
-async function screenContext(pending: Promise<QueryContext> | null): Promise<QueryContext> {
+async function screenContext(
+  pending: Promise<QueryContext> | null,
+  signal?: AbortSignal
+): Promise<QueryContext> {
   const ctx = pending ? await pending.catch(() => null) : null
   if (ctx) {
     log('plan', 'using speculative screenshot')
     return ctx
   }
-  return captureContext(true)
+  return captureContext(true, { signal })
 }
 
 /** Runs one turn and publishes `query.done` with the model and the turn's summed cost. */
@@ -113,7 +102,9 @@ async function planLegacy(
 ): Promise<{ plan: TurnPlan; ctx: QueryContext }> {
   const needsShot = needsScreenshot(prompt)
   log('plan', `needs screenshot: ${needsShot}`)
-  const ctx = needsShot ? await screenContext(takeSpeculative()) : await captureContext(false)
+  const ctx = needsShot
+    ? await screenContext(takeSpeculative(), opts.signal)
+    : await captureContext(false, { signal: opts.signal })
 
   const { effectivePrompt, flags, intent, requestedApp, nextTaskContext } = applyOverrides({
     prompt,
@@ -164,7 +155,7 @@ async function planRouted(
   // follows from the follow-up instruction.
   let pending = takeSpeculative()
   if (!pending && (opts.lowDetail || forced || needsScreenshot(utterance))) {
-    pending = captureContext(true)
+    pending = captureContext(true, { signal: scope.signal })
     pending.catch(() => {})
   }
 
@@ -183,8 +174,8 @@ async function planRouted(
   const needsScreen = route ? route.needsScreen : true
   const ctx =
     needsScreen || activeWindow === null
-      ? await screenContext(pending)
-      : { activeWindow, screenshot: null }
+      ? await screenContext(pending, scope.signal)
+      : windowOnlyContext(activeWindow)
   if (!opts.lowDetail && route) lastTask = { prompt: utterance, route }
 
   const routedMode = mainModeFor(route) ?? undefined
@@ -242,6 +233,7 @@ async function runTurn(
     split = await runParallelSplit(plan.subqueries, scope, (q, child) =>
       callModel(q, screenshot, activeWindow, {
         ...opts,
+        context: ctx,
         turnId: undefined,
         signal: child.signal,
         routedMode: 'answer'
@@ -255,7 +247,7 @@ async function runTurn(
   } else if (plan.path === 'plan') {
     result = await runPlanned(plan.prompt, activeWindow, opts, scope, timer)
   } else {
-    const callOpts = { ...opts, ...plan.routing }
+    const callOpts = { ...opts, ...plan.routing, context: ctx }
     result = correctNthElement(await callModel(plan.prompt, screenshot, activeWindow, callOpts))
     timer.split('callModel done')
   }

@@ -1,5 +1,7 @@
 // Typed wrappers over the agent protocol v2 commands. On a v1 agent the few commands with a
-// v1 equivalent are mapped; everything else rejects with E_UNSUPPORTED.
+// v1 equivalent are mapped. The Python agent also serves the read commands (capture, ocr,
+// uia_*) in v1 framing, so those are tried there and remembered as unsupported when the
+// agent does not know them; everything else rejects with E_UNSUPPORTED.
 import type { ElementNode, InputStep, MonitorInfo, Rect, UiaAction } from '@shared/types'
 import { AgentBridge, AgentError, RequestOptions } from './bridge'
 import type { AgentInitArgs } from './state'
@@ -24,6 +26,8 @@ export interface CaptureFrame {
   scale?: number
   mime: string
   data: string
+  /** Physical rect actually captured when a region was asked for. */
+  region?: Rect
 }
 
 export interface CaptureResult {
@@ -48,6 +52,8 @@ export interface OcrWord {
   text: string
   rect: Rect
   conf: number
+  /** Index into `lines` (Python agent). */
+  lineIndex?: number
 }
 
 export interface OcrResult {
@@ -81,6 +87,35 @@ const CAPABILITY: Record<string, string> = {
   announce: 'announce'
 }
 
+// v2 commands the Python agent also registers when it runs with v1 framing.
+const V1_READS = new Set(['capture', 'ocr', 'uia_snapshot', 'uia_find', 'uia_act', 'marks_render'])
+const v1Unknown = new WeakMap<AgentBridge, Set<string>>()
+
+/** Whether a v1 agent already said it does not know `cmd`. */
+export function v1Lacks(bridge: AgentBridge, cmd: string): boolean {
+  return !!v1Unknown.get(bridge)?.has(cmd)
+}
+
+async function v1Try<T>(
+  bridge: AgentBridge,
+  cmd: string,
+  args: object,
+  opts?: RequestOptions
+): Promise<T> {
+  if (v1Lacks(bridge, cmd)) throw new AgentError('E_UNSUPPORTED', `${cmd} unsupported by agent`)
+  try {
+    return await bridge.request<T>(cmd, args as Record<string, unknown>, opts)
+  } catch (e) {
+    if (e instanceof AgentError && /^Unknown command/i.test(e.message)) {
+      const set = v1Unknown.get(bridge) ?? new Set<string>()
+      set.add(cmd)
+      v1Unknown.set(bridge, set)
+      throw new AgentError('E_UNSUPPORTED', `${cmd} unsupported by agent`)
+    }
+    throw e
+  }
+}
+
 function v2Only<T>(
   bridge: AgentBridge,
   cmd: string,
@@ -88,6 +123,7 @@ function v2Only<T>(
   opts?: RequestOptions
 ): Promise<T> {
   if (bridge.protocol !== 2) {
+    if (V1_READS.has(cmd)) return v1Try<T>(bridge, cmd, args, opts)
     return Promise.reject(new AgentError('E_UNSUPPORTED', `${cmd} needs agent protocol v2`))
   }
   const cap = CAPABILITY[cmd]
@@ -129,6 +165,14 @@ export async function capture(
   opts?: RequestOptions
 ): Promise<CaptureResult> {
   if (bridge.protocol === 2) return v2Only<CaptureResult>(bridge, 'capture', args, opts)
+  if (!v1Lacks(bridge, 'capture')) {
+    try {
+      return await v1Try<CaptureResult>(bridge, 'capture', args, opts)
+    } catch (e) {
+      // Region captures have no v1 fallback; a full-screen capture falls back to `screenshot`.
+      if (args.region || (e instanceof AgentError && e.code === 'E_CANCELLED')) throw e
+    }
+  }
   const data = await bridge.request<string>('screenshot', {}, opts)
   const { width, height } = jpegSize(data)
   return {

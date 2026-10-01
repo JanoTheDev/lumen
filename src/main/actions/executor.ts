@@ -16,6 +16,7 @@ import { passesPolicy } from './policy'
 import { requireAgent } from '../agent/instance'
 import type { AgentBridge } from '../agent/bridge'
 import { findClickCoordinates } from '../ai/computer-use'
+import { captureScreenshot } from '../query/capture'
 import { isBrowser } from '../ai/app-context'
 import { log } from '../logger'
 import * as highlight from '../windows/highlight'
@@ -45,11 +46,12 @@ function canPauseDwell(agent: AgentBridge): boolean {
 }
 
 async function refineClick(
-  agent: AgentBridge,
+  _agent: AgentBridge,
   description: string,
   signal: AbortSignal | undefined
 ): Promise<{ x: number; y: number } | null> {
-  const freshShot = await agent.screenshot()
+  // Same monitor + geometry as the turn's frame (currentFrame follows the capture).
+  const freshShot = await captureScreenshot(signal)
   if (!freshShot) return null
   const frame = currentFrame()
   const refined = await findClickCoordinates(freshShot, description, frame.imgW, frame.imgH, signal)

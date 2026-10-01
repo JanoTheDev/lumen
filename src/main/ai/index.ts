@@ -1,5 +1,6 @@
 // Model calls for the query pipeline. Provider and model come from the role router.
 import type { ModelResponse } from '@shared/types'
+import { currentContext, type QueryContext } from '../query/context'
 import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
 import { historyMessages } from './history'
@@ -33,6 +34,14 @@ export interface CallOptions {
   routedMode?: string
   /** App the user wants that is not in front (router appSwitch). */
   targetApp?: { name: string; url?: string }
+  /** Screen context of this call; defaults to the latest capture when its image is the one sent. */
+  context?: QueryContext
+}
+
+function contextFor(screenshot: string | null, opts: CallOptions): QueryContext | undefined {
+  if (opts.context) return opts.context
+  const latest = currentContext()
+  return screenshot && latest?.screenshot === screenshot ? latest : undefined
 }
 
 /**
@@ -45,7 +54,8 @@ export async function callModel(
   activeWindow: string,
   opts: CallOptions = {}
 ): Promise<ModelResponse> {
-  const { imgW, imgH } = currentFrame()
+  const ctx = contextFor(screenshotBase64, opts)
+  const { imgW, imgH } = ctx?.frames[0]?.geometry ?? currentFrame()
   const { llm, model, effort } = getProvider('main')
   logPrefixSize()
   const req: StructuredRequest<Reply> = {

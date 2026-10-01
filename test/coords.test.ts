@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ screen: {} }))
 
 import {
+  frameGeometryOf,
   imageRectToPhys,
+  physRectToImage,
+  physToImage,
   imageToPhys,
   isUsableRect,
   logicalToPhys,
@@ -230,5 +233,41 @@ describe('bbox normalization', () => {
 
   it('finds the rect center', () => {
     expect(rectCenter({ x: 10, y: 20, w: 100, h: 50 })).toEqual({ x: 60, y: 45 })
+  })
+})
+
+describe('frame geometry from a capture', () => {
+  it('uses the monitor rect, so a 150% monitor at negative x maps image px correctly', () => {
+    const g = frameGeometryOf({
+      width: 1280,
+      height: 800,
+      monitor: { id: 0, rect: { x: -2880, y: 0, w: 2880, h: 1800 }, scale: 1.5, primary: false }
+    })
+    expect(g).toEqual({
+      originX: -2880,
+      originY: 0,
+      width: 2880,
+      height: 1800,
+      imgW: 1280,
+      imgH: 800
+    })
+    expect(imageToPhys(g, { x: 640, y: 400 })).toEqual({ x: -1440, y: 900 })
+    expect(physToImage(g, { x: -1440, y: 900 })).toEqual({ x: 640, y: 400 })
+    expect(physRectToImage(g, { x: -2880, y: 0, w: 225, h: 90 })).toEqual({
+      x: 0,
+      y: 0,
+      w: 100,
+      h: 40
+    })
+  })
+
+  it('prefers the captured region over the monitor rect', () => {
+    const g = frameGeometryOf({
+      width: 300,
+      height: 300,
+      region: { x: 100, y: 200, w: 300, h: 300 },
+      monitor: { id: 0, rect: { x: 0, y: 0, w: 1920, h: 1080 }, scale: 1, primary: true }
+    })
+    expect(imageToPhys(g, { x: 10, y: 10 })).toEqual({ x: 110, y: 210 })
   })
 })

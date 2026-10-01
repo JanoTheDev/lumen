@@ -33,6 +33,8 @@ class FakeProc extends EventEmitter {
   received: Msg[] = []
   results: Record<string, unknown> = {}
   killed = false
+  /** v1: answer unknown commands like the Python agent does. */
+  v1Unknown = true
 
   constructor(public v2: boolean) {
     super()
@@ -78,6 +80,8 @@ class FakeProc extends EventEmitter {
     if (msg.cmd === 'ping') queueMicrotask(() => this.send({ id: msg.id, result: 'pong' }))
     else if (msg.cmd in this.results)
       queueMicrotask(() => this.send({ id: msg.id, result: this.results[msg.cmd] }))
+    else if (this.v1Unknown)
+      queueMicrotask(() => this.send({ id: msg.id, error: `Unknown command: ${msg.cmd}` }))
   }
 
   send(obj: unknown): void {
@@ -298,15 +302,38 @@ describe('agent commands', () => {
     await bridge.start()
     const calls = [
       cmds.input(bridge, [{ t: 'wait', ms: 1 }]),
-      cmds.uiaSnapshot(bridge),
-      cmds.uiaAct(bridge, { elementId: 'e1', action: 'invoke' }),
-      cmds.ocr(bridge),
       cmds.announce(bridge, 'hi'),
       cmds.cancel(bridge, 1),
       cmds.init(bridge, INIT)
     ]
     for (const c of calls) await expect(c).rejects.toMatchObject({ code: 'E_UNSUPPORTED' })
     expect(procs[0].received.map((m) => m.cmd)).toEqual(['ping'])
+    bridge.stop()
+  })
+
+  it('tries the read commands on v1 and remembers the ones the agent lacks', async () => {
+    const { bridge, procs } = setup(false)
+    await bridge.start()
+    procs[0].results.ocr = { words: [], lines: [] }
+    await expect(cmds.ocr(bridge, { frameId: 'f1' })).resolves.toEqual({ words: [], lines: [] })
+    expect(procs[0].last('ocr')).toMatchObject({ cmd: 'ocr', frameId: 'f1' })
+    await expect(cmds.uiaSnapshot(bridge)).rejects.toMatchObject({ code: 'E_UNSUPPORTED' })
+    await expect(cmds.uiaSnapshot(bridge)).rejects.toMatchObject({ code: 'E_UNSUPPORTED' })
+    expect(procs[0].received.filter((m) => m.cmd === 'uia_snapshot')).toHaveLength(1)
+    bridge.stop()
+  })
+
+  it('uses capture with monitor geometry on a v1 agent that has it', async () => {
+    const { bridge, procs } = setup(false)
+    await bridge.start()
+    const monitor = { id: 1, rect: { x: -1920, y: 0, w: 1920, h: 1080 }, scale: 1, primary: false }
+    const frames = [
+      { id: 'f3', monitor, width: 1280, height: 720, scale: 1.5, mime: 'image/jpeg', data: 'x' }
+    ]
+    procs[0].results.capture = { frames }
+    await expect(cmds.capture(bridge, { monitor: 'foreground' })).resolves.toEqual({ frames })
+    expect(procs[0].last('capture')).toMatchObject({ monitor: 'foreground' })
+    expect(procs[0].last('screenshot')).toBeUndefined()
     bridge.stop()
   })
 
