@@ -495,6 +495,7 @@ async function runTask(
       }
     },
     observe,
+    fileSkills: envelopes.map((e) => e.skill),
     ...(shapes ? { guard: routineGuard(shapes) } : {}),
     ...(envelopes.length
       ? {

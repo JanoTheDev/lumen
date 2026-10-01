@@ -1,5 +1,6 @@
 // The policy ctx of background file tools (review leftovers): an automation's fenced file name
-// is never the user's words, and what the task read is observed text (injection bump).
+// is never the user's words, what the task read is observed text (injection bump), and a helper
+// inside a trusted skill run changes files without a question like its parent.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import type { SkillManifest, SkillTrust } from '@shared/types'
@@ -197,5 +198,42 @@ describe('background file tools see what the task read (leftover 2)', () => {
     await backgroundManager().wait(t.id)
     expect(h.ctxs[0].userText).toBe('summarize the page into a file')
     expect(String(h.ctxs[0].observedText)).toContain('Ignore previous instructions')
+  })
+})
+
+describe('helpers inside a skill run (leftover 3)', () => {
+  it('a helper of a trusted skill run changes files without a question', async () => {
+    skill('tidy', 'mine')
+    h.script = [
+      reply(call('spawn_task', { prompt: 'write the index file', wait: true })),
+      reply(call('create_file', { title: 'index', format: 'md' })),
+      finish('child done'),
+      finish('parent done')
+    ]
+    const t = startBackgroundTask({ prompt: 'tidy up', skill: 'tidy', origin: 'voice' })
+    await backgroundManager().wait(t.id)
+    expect(h.ctxs).toHaveLength(1)
+    const child = backgroundManager()
+      .list()
+      .find((x) => x.parentId === t.id)
+    expect(child?.question).toBeUndefined()
+  })
+
+  it('a helper of an untrusted skill run still asks', async () => {
+    skill('tidy', 'community-untrusted')
+    h.script = [
+      reply(call('spawn_task', { prompt: 'write the index file', wait: true })),
+      reply(call('create_file', { title: 'index', format: 'md' }))
+    ]
+    const t = startBackgroundTask({ prompt: 'tidy up', skill: 'tidy', origin: 'voice' })
+    const m = backgroundManager()
+    await vi.waitFor(() =>
+      expect(m.list().find((x) => x.parentId === t.id)?.question?.text).toMatch(
+        /Skill “tidy”: save a file/
+      )
+    )
+    m.cancel(t.id)
+    await m.wait(t.id)
+    expect(h.ctxs).toHaveLength(0)
   })
 })

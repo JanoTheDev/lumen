@@ -53,6 +53,11 @@ export interface BgRunEnv {
   offers?(tool: string): boolean
   /** The installed skill by name, with its trust (default: the skill registry). */
   skillInfo?(name: string): Promise<RunSkillInfo | null>
+  /**
+   * The skills whose trust decides file-change confirms: the task's own and, for a helper, its
+   * parent's (default: the task's own skill). Every one must be trusted to skip the question.
+   */
+  fileSkills?: string[]
   /** Text the task read (pages, files, how-to steps): the policy's injection check. */
   observe?(text: string): void
 }
@@ -205,18 +210,20 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
   const own = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
   const base = env.observe ? observing(own, env.observe) : own
   const skillRun = !!task.skill || !!env.toolGuard
+  // A helper inside a skill run goes by its parent's skill too (it has none of its own).
+  const fileSkills = env.fileSkills ?? (task.skill ? [task.skill] : [])
   let need: Promise<{ confirm: boolean; skill: string }> | null = null
   const all = skillRun
     ? fileWriteGuarded(
         base,
         () =>
           (need ??= (async () => {
-            const info = task.skill
-              ? await (env.skillInfo ?? registrySkill)(task.skill).catch(() => null)
-              : null
+            const infos = await Promise.all(
+              fileSkills.map((n) => (env.skillInfo ?? registrySkill)(n).catch(() => null))
+            )
             return {
-              confirm: fileWriteNeedsConfirm(true, info),
-              skill: task.skill ? `Skill “${task.skill}”` : 'This skill task'
+              confirm: !infos.length || infos.some((i) => fileWriteNeedsConfirm(true, i)),
+              skill: fileSkills.length ? `Skill “${fileSkills[0]}”` : 'This skill task'
             }
           })()),
         async (text) => {
