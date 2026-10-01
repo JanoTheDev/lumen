@@ -1,5 +1,5 @@
-// Routines (08 T22): prompts Lumen runs on a schedule as background tasks, only while it is
-// open. Pure TS (Settings imports it through channels.ts).
+// Routines (08 T22) and proactive rules (08 T23): the older formats automations are imported
+// from (automations.ts), and the pre-approved call shapes they share. Pure TS.
 
 /** daily at HH:MM (optionally only on some weekdays), or every N minutes (N ≥ 15). */
 export type RoutineSchedule =
@@ -36,20 +36,6 @@ export interface Routine {
   lastResult?: 'done' | 'failed' | 'cancelled'
   /** Why it was turned off by itself (3 failures). */
   disabledReason?: string
-}
-
-/** What Settings shows: the routine plus its next run (ms epoch, none when off). */
-export interface RoutineView extends Routine {
-  nextRunAt?: number
-  scheduleText: string
-}
-
-export interface RoutineUpdate {
-  id: string
-  enabled?: boolean
-  name?: string
-  /** Lets the routine use the mouse (request_foreground) without asking first. */
-  allowForeground?: boolean
 }
 
 /** A user-defined proactive rule: when `app` comes to the front, say `say`. */

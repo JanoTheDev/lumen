@@ -94,10 +94,10 @@ export const SECTIONS: readonly SectionMeta[] = [
   },
   {
     id: 'background',
-    label: 'Background & routines',
+    label: 'Automations',
     icon: icons.repeat,
     keywords:
-      'background tasks routines schedule every day weekday limits cost calls quiet mode do not disturb proactive reminders when i open'
+      'automations automatic background tasks routines schedule every day weekday monthly tomorrow task scheduler when i open close app file folder downloads idle away back online limits cost calls quiet mode do not disturb proactive reminders'
   },
   {
     id: 'helpers',
@@ -130,7 +130,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Claude Code',
     icon: icons.cpu,
     keywords:
-      'claude code cli copilot coding agent autopilot projects permissions approve hooks terminal sessions commands coding skills docs library plugin'
+      'claude code cli copilot coding agent autopilot projects permissions approve hooks terminal sessions commands'
   },
   {
     id: 'privacy',

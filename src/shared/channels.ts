@@ -9,7 +9,6 @@ import type {
   ClaudeSessionView,
   ClaudeSettingsPatch
 } from './claude-code'
-import type { CodingSkillResult, CodingSkillsOverview, CodingSkillsProject } from './coding-skills'
 import type { CompatiblePreset, ConfigPatch, ModelProvider } from './config'
 import type {
   ConnectorInput,
@@ -21,7 +20,14 @@ import type {
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
-import type { RoutineUpdate, RoutineView } from './routines'
+import type {
+  AutomationAction,
+  AutomationDraft,
+  AutomationsInfo,
+  AutomationTrigger,
+  AutomationUpdate,
+  AutomationView
+} from './automations'
 import type {
   GuideStep,
   LocateItem,
@@ -355,49 +361,6 @@ export interface InvokeChannels {
   }
   /** Writes it only if the file still has the previewed hash. */
   'claude:hooks-apply': { args: [install: boolean, hash: string]; result: ClaudeResult }
-  /** Coding skills for Claude Code sessions: the library and the draft under review. */
-  'claude:skills': { args: []; result: CodingSkillsOverview }
-  /** Docs link (or a known library's docs) → a draft; nothing saved until skills-save. */
-  'claude:skills-from-docs': {
-    args: [req: { url?: string; title?: string; project?: string }]
-    result: CodingSkillResult
-  }
-  /** A Claude skill folder or GitHub link → a draft. */
-  'claude:skills-import': {
-    args: [req: { from: string; pick?: string; project?: string }]
-    result: CodingSkillResult
-  }
-  /** The user's own words → a draft. */
-  'claude:skills-write': {
-    args: [req: { title: string; text: string; project?: string }]
-    result: CodingSkillResult
-  }
-  /** Saves the draft (optionally the edited SKILL.md). */
-  'claude:skills-save': { args: [req: { id: string; skillMd?: string }]; result: CodingSkillResult }
-  'claude:skills-discard': { args: []; result: CodingSkillResult }
-  /** Reads the docs / source again → a draft with the diff. */
-  'claude:skills-update': { args: [name: string]; result: CodingSkillResult }
-  'claude:skills-remove': { args: [name: string]; result: CodingSkillResult }
-  'claude:skills-read': { args: [name: string]; result: { ok: boolean; skillMd?: string } }
-  'claude:skills-edit': {
-    args: [req: { name: string; skillMd: string }]
-    result: CodingSkillResult
-  }
-  /** A project's attached skills and suggestions from its dependencies. */
-  'claude:skills-project': { args: [path: string]; result: CodingSkillsProject | { error: string } }
-  'claude:skills-attach': {
-    args: [req: { project: string; names: string[] }]
-    result: CodingSkillsProject | { error: string }
-  }
-  'claude:skills-detach': {
-    args: [req: { project: string; name: string }]
-    result: CodingSkillsProject | { error: string }
-  }
-  /** Copies a skill into <project>/.claude/skills (only when the user asks). */
-  'claude:skills-save-to-project': {
-    args: [req: { project: string; name: string }]
-    result: CodingSkillResult & { path?: string }
-  }
   /** Stored "always" grants for medium-risk actions (08 T03). */
   'agent:grants-list': { args: []; result: AgentGrant[] }
   'agent:grants-revoke': { args: [scope: string]; result: { ok: boolean } }
@@ -410,11 +373,32 @@ export interface InvokeChannels {
   'tasks:answer': { args: [id: string, answer: string]; result: { ok: boolean } }
   /** Starts an interrupted, failed or cancelled task again as a new task. */
   'tasks:run-again': { args: [id: string]; result: { ok: boolean; id?: string } }
-  /** Routines (08 T22): Settings list, on/off, rename, mouse pre-approval, remove, run now. */
-  'routines:list': { args: []; result: RoutineView[] }
-  'routines:update': { args: [update: RoutineUpdate]; result: { ok: boolean } }
-  'routines:remove': { args: [id: string]; result: { ok: boolean } }
-  'routines:run-now': { args: [id: string]; result: { ok: boolean } }
+  /** Automations (Settings → Automations): list, edit, on/off, pre-approval, remove, run now. */
+  'automations:list': { args: []; result: AutomationView[] }
+  'automations:info': { args: []; result: AutomationsInfo }
+  'automations:update': {
+    args: [update: AutomationUpdate]
+    result: { ok: boolean; error?: string }
+  }
+  'automations:remove': { args: [id: string]; result: { ok: boolean } }
+  'automations:run-now': { args: [id: string]; result: { ok: boolean } }
+  /** Typed request → a draft to review (local grammar, else the fast model). */
+  'automations:draft': {
+    args: [text: string]
+    result: { ok: true; draft: AutomationDraft } | { ok: false; error: string }
+  }
+  'automations:create': {
+    args: [
+      input: {
+        name: string
+        trigger: AutomationTrigger
+        action: AutomationAction
+        allowForeground: boolean
+        allowConnectors: boolean
+      }
+    ]
+    result: { ok: boolean; id?: string; error?: string }
+  }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
   /** Learning journal (11 T23): days with a note, newest first; one day's markdown. */
@@ -1322,20 +1306,6 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'claude:permission-answer',
   'claude:hooks-preview',
   'claude:hooks-apply',
-  'claude:skills',
-  'claude:skills-from-docs',
-  'claude:skills-import',
-  'claude:skills-write',
-  'claude:skills-save',
-  'claude:skills-discard',
-  'claude:skills-update',
-  'claude:skills-remove',
-  'claude:skills-read',
-  'claude:skills-edit',
-  'claude:skills-project',
-  'claude:skills-attach',
-  'claude:skills-detach',
-  'claude:skills-save-to-project',
   'agent:grants-list',
   'agent:grants-revoke',
   'tasks:list',
@@ -1343,10 +1313,13 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'tasks:open',
   'tasks:answer',
   'tasks:run-again',
-  'routines:list',
-  'routines:update',
-  'routines:remove',
-  'routines:run-now',
+  'automations:list',
+  'automations:info',
+  'automations:update',
+  'automations:remove',
+  'automations:run-now',
+  'automations:draft',
+  'automations:create',
   'audit:list',
   'helpers:journal-days',
   'helpers:journal-read',
