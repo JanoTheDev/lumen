@@ -20,6 +20,7 @@ mod ocr;
 mod proto;
 mod stdio;
 mod system;
+mod tts;
 #[cfg(windows)]
 mod uia;
 mod window;

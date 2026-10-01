@@ -29,6 +29,8 @@ pub const CAPABILITIES: &[&str] = &[
     "system-settings",
     "a11y-events",
     "system-info",
+    "tts",
+    "audio-output",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -224,6 +226,12 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
     app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
     app.cmd("system_info", Lane::Read, Some(2000), |_, _, _| crate::system::cmd_system_info());
+    app.cmd("tts_voices", Lane::Read, Some(5000), |_, _, _| crate::tts::cmd_voices());
+    app.cmd("tts_synthesize", Lane::Read, Some(15_000), |_, args, token| {
+        crate::tts::cmd_synthesize(args, token)
+    });
+    app.cmd("audio_output", Lane::Read, Some(2000), |_, _, _| crate::tts::cmd_output_state());
+    app.cmd("audio_unmute", Lane::Read, Some(2000), |_, _, _| crate::tts::cmd_unmute());
     for event in [crate::system::SETTINGS_EVENT, crate::system::A11Y_EVENT] {
         let out = app.router.out().clone();
         app.add_subscribable(event, move |on| crate::system::set_enabled(&out, event, on));

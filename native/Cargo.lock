@@ -237,6 +237,7 @@ dependencies = [
  "tracing-subscriber",
  "windows",
  "windows-core",
+ "windows-future",
 ]
 
 [[package]]

@@ -1,7 +1,8 @@
 //! `lumen-native --bench`: latency of the hot paths on this machine, printed
 //! as a table on stdout. Read-only except one zero-delta mouse move per
 //! `inject` sample: typing is measured up to the SendInput call (event build +
-//! INPUT structs) and never sent, so nothing lands in the user's apps.
+//! INPUT structs) and never sent, so nothing lands in the user's apps. Speech is
+//! synthesized to a byte buffer only, never played.
 
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -64,10 +65,15 @@ fn count_nodes(v: &Value) -> usize {
     1 + v.get("children").and_then(Value::as_array).map_or(0, |c| c.iter().map(count_nodes).sum())
 }
 
+fn tts_note(out: Option<&Value>) -> String {
+    let field = |k: &str| out.and_then(|v| v.get(k)).cloned().unwrap_or(Value::Null);
+    format!("44 chars → {} WAV bytes, {} (not played)", field("bytes"), field("voice"))
+}
+
 #[cfg(windows)]
 fn run_all() -> Vec<Stats> {
     use crate::input::sendinput;
-    use crate::{capture, monitors, ocr, uia, window};
+    use crate::{capture, monitors, ocr, tts, uia, window};
 
     let token = CancelToken::new();
     let mut rows = vec![];
@@ -127,6 +133,11 @@ fn run_all() -> Vec<Stats> {
     let (s, _, _) =
         time(200, || Ok(sendinput::key_inputs(&sendinput::text_events_vk(TYPE_TEXT, thread)).len()));
     rows.push(Stats { name: "type.prep.vk", note: "VkKeyScanExW layout mode (not sent)".into(), samples: s });
+    let tts_args = args(json!({"text": "The quick brown fox jumps over the lazy dog."}));
+    let (s, out, e) = time(1, || tts::cmd_synthesize(&tts_args, &token).map_err(err));
+    rows.push(Stats { name: "tts.cold", note: e.unwrap_or_else(|| tts_note(out.as_ref())), samples: s });
+    let (s, out, e) = time(5, || tts::cmd_synthesize(&tts_args, &token).map_err(err));
+    rows.push(Stats { name: "tts.warm", note: e.unwrap_or_else(|| tts_note(out.as_ref())), samples: s });
     let (s, _, e) = time(50, || sendinput::nudge().map_err(err));
     rows.push(Stats {
         name: "inject",
