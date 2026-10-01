@@ -22,6 +22,7 @@ import { CancelledError } from '../query/cancel'
 import { AGENT_SYSTEM, taskTurn, type AgentPlan, type TaskContext } from './prompts'
 import { closeSteps, currentStep, enterStep, newTask, setStep, withPlan } from './task'
 import { INPUT_TOOLS, toolSet, type ToolName } from './tools'
+import { steerTurn, type RunEvent } from './transcript'
 
 export interface Caps {
   maxActions: number
@@ -100,6 +101,10 @@ export interface RunnerDeps {
   inputLane?: InputLane
   newId?(): string
   log?(tag: string, msg: string): void
+  /** Model text, tool calls and results as they happen (the task's transcript). */
+  observe?(e: RunEvent): void
+  /** Before each model turn: waits while the task is paused, then the user's steer messages. */
+  between?(signal: AbortSignal): Promise<string[]>
 }
 
 /** What a paused run needs to continue ("resume the task"). */
@@ -293,6 +298,8 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
         const capHit = capReached(task, caps, deps.now())
         if (capHit && !(await continuePast(capHit)))
           return stop(`I stopped at the limit: ${capHit}.`)
+        const notes = deps.between ? await raced(deps.between(signal), signal) : []
+        if (notes.length) messages = withSteer(messages, notes)
         const turn = await raced(
           deps.model.turn(
             {
@@ -306,6 +313,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
         )
         addCost(turn)
         publish()
+        if (turn.message.text.trim()) deps.observe?.({ type: 'model', text: turn.message.text })
         messages = [...messages, turn.message]
         pending = [...turn.message.calls]
         results = []
@@ -414,6 +422,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     if (explicit !== undefined || INPUT_TOOLS.includes(call.name as ToolName))
       task = enterStep(task, step, describeCall(call))
     publish()
+    deps.observe?.({ type: 'call', call })
     let outcome: ToolOutcome
     try {
       outcome = await raced(
@@ -424,6 +433,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
       if (signal.aborted) throw e
       outcome = { content: text(`Error: ${(e as Error).message}`), isError: true }
     }
+    deps.observe?.({ type: 'result', call, outcome })
     if (outcome.actions)
       task.counters = { ...task.counters, actions: task.counters.actions + outcome.actions }
     if (outcome.verifyFailed && step !== undefined) {
@@ -460,6 +470,15 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     deps.speak(summary)
     return { status: 'stopped', summary, task }
   }
+}
+
+/** Steer messages join the last user turn (tool results first), as the user's own words. */
+export function withSteer(messages: AgentMessage[], notes: readonly string[]): AgentMessage[] {
+  const note: ToolContent = { type: 'text', text: steerTurn(notes) }
+  const last = messages[messages.length - 1]
+  if (last?.role === 'user')
+    return [...messages.slice(0, -1), { role: 'user', content: [...last.content, note] }]
+  return [...messages, { role: 'user', content: [note] }]
 }
 
 /** The first cap the task has reached, in words; null when none. */

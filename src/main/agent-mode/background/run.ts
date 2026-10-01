@@ -134,7 +134,9 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     costOf: env.costOf,
     now: env.now,
     newId: () => task.id,
-    log: env.log
+    log: env.log,
+    ...(ctl.record ? { observe: ctl.record } : {}),
+    ...(ctl.between ? { between: ctl.between } : {})
   }
 
   const r = await runAgent(
