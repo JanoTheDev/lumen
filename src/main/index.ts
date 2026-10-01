@@ -68,6 +68,7 @@ import { registerDiagnosticsIpc } from './diagnostics/ipc'
 import { registerFirstRunIpc } from './first-run/ipc'
 import { applyAutostart, startedHidden } from './first-run/autostart'
 import { onConfigPatched } from './ipc/settings'
+import { installUpdates } from './update'
 
 // Installed builds have no console: keep a log file, local crash dumps, and survive stray errors.
 installLogFile(app.getPath('logs'))
@@ -145,6 +146,7 @@ app.whenReady().then(() => {
   createWindows()
   applyAutostart(loadConfig().system.startAtLogin)
   onConfigPatched((next) => applyAutostart(next.system.startAtLogin))
+  installUpdates()
 
   const configWarning = lastConfigWarning()
   if (configWarning) setStatus('error', configWarning, undefined, 8000)

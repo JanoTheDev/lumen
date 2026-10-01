@@ -57,6 +57,12 @@ export interface InvokeChannels {
   'diag:export': { args: []; result: { ok: boolean; path?: string; error?: string } }
   'diag:open-logs': { args: []; result: { ok: boolean } }
   'diag:info': { args: []; result: AppBuildInfo }
+  /** Update state for About (no network). */
+  'update:status': { args: []; result: UpdateStatus }
+  /** Checks now; the installed build then downloads in the background. */
+  'update:check': { args: []; result: UpdateStatus }
+  /** Restarts into a downloaded update (installed build, user click only). */
+  'update:install': { args: []; result: { ok: boolean } }
   'home:info': { args: []; result: HomeInfo }
   /** "What can I say": every local voice command, with what applies right now first. */
   'a11y:commands': { args: []; result: CommandSheetData }
@@ -128,6 +134,10 @@ export interface SendChannels {
   /** The user talked over a spoken answer (playback already stopped): start listening. */
   'voice:barge-in': []
   'assistant:command': [cmd: AssistantCommand]
+  /** A voice error in the renderer (microphone, transcription): shown in the bar's error row. */
+  'assistant:error': [message: string]
+  /** The corrected caption text: replaces the last utterance and runs it. */
+  'assistant:correct': [text: string]
   /** Card size in CSS px, for dwell suppression over the bar. */
   'assistant:resize': [size: { w: number; h: number }]
   /** Pointer is over the card: stop forwarding clicks through the window. */
@@ -280,7 +290,18 @@ export interface BridgeStatus {
 }
 
 export type AssistantCommand = {
-  type: 'repeat' | 'pin' | 'close' | 'copy' | 'cancel' | 'confirm' | 'deny' | 'unmute'
+  type:
+    | 'repeat'
+    | 'pin'
+    | 'close'
+    | 'copy'
+    | 'cancel'
+    | 'confirm'
+    | 'deny'
+    | 'unmute'
+    /** Open / close the caption for a correction. */
+    | 'edit'
+    | 'edit-cancel'
   turnId?: string
 }
 
@@ -415,6 +436,32 @@ export interface AppBuildInfo {
   /** Running from the portable exe: no updates, no start at login. */
   portable: boolean
   logsDir: string
+}
+
+/** installer: downloads in the background, installs on quit. portable: link only. dev: no checks. */
+export type UpdateMode = 'installer' | 'portable' | 'dev'
+
+export type UpdateState =
+  | 'idle'
+  | 'checking'
+  | 'up-to-date'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'error'
+
+export interface UpdateStatus {
+  mode: UpdateMode
+  state: UpdateState
+  /** The newer version (available, downloading, ready). */
+  version?: string
+  /** Release page of that version. */
+  url?: string
+  /** Download progress 0-100 while downloading. */
+  percent?: number
+  /** Last finished check (ms since epoch). */
+  checkedAt?: number
+  error?: string
 }
 
 /** The running OS agent (the native sidecar). */
@@ -580,6 +627,9 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'diag:export',
   'diag:open-logs',
   'diag:info',
+  'update:status',
+  'update:check',
+  'update:install',
   'home:info',
   'a11y:commands',
   'a11y:dwell-state',
@@ -625,6 +675,8 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'voice:wake-pcm',
   'voice:barge-in',
   'assistant:command',
+  'assistant:error',
+  'assistant:correct',
   'assistant:resize',
   'assistant:interactive',
   'screen:user-drawing',
