@@ -3,7 +3,7 @@
 //! Works on cached full-res frames (physical px), so word rects map straight
 //! to the virtual desktop: rect = crop origin + image px. Images larger than
 //! `OcrEngine::MaxImageDimension` are tiled with overlap and duplicate words
-//! from the overlaps are dropped. Port of agent/ocr.py.
+//! from the overlaps are dropped.
 
 use serde_json::{Value, json};
 

@@ -1,6 +1,5 @@
 //! Agent-side action policy (defense in depth; main applies its own first).
-//! Port of agent/safety.py; both are checked against
-//! conformance/fixtures/safety-vectors.json.
+//! Checked against conformance/fixtures/safety-vectors.json.
 //!
 //! - URLs: http/https with a host only.
 //! - Key combos: no Run/terminal/settings/security shortcuts.

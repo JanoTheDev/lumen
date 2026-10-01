@@ -1,4 +1,4 @@
-//! Dwell clicking: hold the cursor still to click. Port of agent/dwell.py.
+//! Dwell clicking: hold the cursor still to click.
 //!
 //! `Fsm` is pure (fed timestamps + positions). `Dwell` polls the physical
 //! cursor at 25 Hz and turns FSM output into `dwell-progress` / `dwell-trigger`

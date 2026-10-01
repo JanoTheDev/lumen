@@ -1,5 +1,5 @@
-//! `marks_render {frameId, marks:[{n, rect}], maxWidth?, quality?}` (port of
-//! `render_marks` in agent/capture.py): the cached full-res frame with a thin
+//! `marks_render {frameId, marks:[{n, rect}], maxWidth?, quality?}`: the
+//! cached full-res frame with a thin
 //! box per mark and a numbered badge at its top-left, encoded like `capture`.
 //! White digits on black with a yellow outline stay legible on any UI.
 

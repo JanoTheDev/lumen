@@ -1,5 +1,4 @@
-//! Did a scroll move the page? Compares two small grayscale frames
-//! (port of agent/pagediff.py).
+//! Did a scroll move the page? Compares two small grayscale frames.
 //!
 //! Frames are reduced 16x so a blinking caret or a ticking clock barely moves
 //! the mean; only the central 80% is compared so window chrome at the edges

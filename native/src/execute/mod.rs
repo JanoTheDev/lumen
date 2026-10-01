@@ -1,6 +1,5 @@
-//! `execute {action}`: the v1 action command main still calls (port of
-//! agent/actions.py). Same args, results and errors as the Python agent;
-//! coordinates are physical px. Runs on the input lane with a cancel check
+//! `execute {action}`: the model action command (click, type, scroll,
+//! navigate, ...). Coordinates are physical px. Runs on the input lane with a cancel check
 //! between (and inside) every step.
 
 pub mod pagediff;

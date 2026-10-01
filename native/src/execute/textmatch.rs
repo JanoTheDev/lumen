@@ -1,5 +1,5 @@
 //! OCR phrase matching for `click_element` / `click_nth_element`
-//! (port of `_ocr_matches` in agent/actions.py). Pure.
+//! Pure.
 
 use crate::geom::Rect;
 

@@ -1,5 +1,4 @@
-//! Pure tree shaping for UIA snapshots (plans CONTRACTS C3). Port of the
-//! pruning in agent/uia.py so both implementations return the same trees.
+//! Pure tree shaping for UIA snapshots: pruning and node caps.
 
 use std::collections::VecDeque;
 

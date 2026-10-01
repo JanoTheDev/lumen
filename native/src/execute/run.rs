@@ -1,5 +1,5 @@
-//! OS side of `execute`. Timings follow the Python agent (pyautogui pauses
-//! 50 ms after every call; pointer moves glide over 0.2-0.3 s).
+//! OS side of `execute`. Pauses 50 ms after every call; pointer moves glide
+//! over 0.2-0.3 s.
 
 use std::time::{Duration, Instant};
 
