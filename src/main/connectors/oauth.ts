@@ -224,6 +224,20 @@ export interface SignInDeps {
   listen?: typeof listenLoopback
   timeoutMs?: number
   fetchFn?: Parameters<typeof auth>[1]['fetchFn']
+  /** Aborts the sign-in (the connector was edited or removed, or another sign-in started). */
+  signal?: AbortSignal
+}
+
+type FetchLike = NonNullable<SignInDeps['fetchFn']>
+
+/** Rejects when the signal aborts; the work itself is left to settle. */
+function raced<T>(p: Promise<T>, signal: AbortSignal, why: () => string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) return reject(new Error(why()))
+    const onAbort = (): void => reject(new Error(why()))
+    signal.addEventListener('abort', onAbort, { once: true })
+    p.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
 }
 
 /**
@@ -245,15 +259,25 @@ export async function signIn(
     store.save({ ...next, port: loop.port })
     const state = randomBytes(16).toString('hex')
     const provider = new LumenOAuthProvider({ store, port: loop.port, open: deps.open, state })
-    const signal = AbortSignal.timeout(deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS)
-    const opts = { serverUrl, ...(deps.fetchFn ? { fetchFn: deps.fetchFn } : {}) }
+    // One limit for the whole sign-in: discovery, registration and the token exchange too.
+    const timeout = AbortSignal.timeout(deps.timeoutMs ?? SIGN_IN_TIMEOUT_MS)
+    const signal = deps.signal ? AbortSignal.any([timeout, deps.signal]) : timeout
+    const why = (): string => (deps.signal?.aborted ? 'Sign-in cancelled.' : 'Sign-in timed out.')
+    const base: FetchLike = deps.fetchFn ?? ((url, init) => fetch(url, init))
+    const fetchFn: FetchLike = (url, init) =>
+      base(url, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, signal]) : signal })
+    const opts = { serverUrl, fetchFn }
     // Listening before the browser opens, so a fast redirect is not missed.
     const pending = loop.wait(state, signal)
     pending.catch(() => {})
-    const first = await authFn(provider, opts)
+    const first = await raced(authFn(provider, opts), signal, why)
     if (first === 'AUTHORIZED') return
-    const cb = await pending
-    const done = await authFn(provider, { ...opts, authorizationCode: cb.code, iss: cb.iss })
+    const cb = await raced(pending, signal, why)
+    const done = await raced(
+      authFn(provider, { ...opts, authorizationCode: cb.code, iss: cb.iss }),
+      signal,
+      why
+    )
     if (done !== 'AUTHORIZED') throw new Error('The server did not accept the sign-in.')
   } finally {
     loop.close()

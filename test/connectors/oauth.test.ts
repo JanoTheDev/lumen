@@ -10,9 +10,12 @@ import {
   listenLoopback,
   redirectUrlFor,
   signIn,
+  type Loopback,
   type OAuthState,
   type OAuthStore
 } from '../../src/main/connectors/oauth'
+
+type FetchFn = (url: string | URL, init?: RequestInit) => Promise<Response>
 
 function memStore(init: OAuthState = {}): OAuthStore & { state: OAuthState } {
   const s = {
@@ -155,6 +158,36 @@ describe('signIn', () => {
       client: { client_id: 'new' },
       tokens: { access_token: 'fresh' }
     })
+  })
+
+  it('times out when the server never answers before the browser step', async () => {
+    const close = vi.fn()
+    const listen = async (): Promise<Loopback> => ({
+      port: 4555,
+      wait: () => new Promise(() => {}),
+      close
+    })
+    let fetchSignal: AbortSignal | undefined
+    const authFn = vi.fn(async (_p: unknown, opts: { fetchFn: FetchFn }) => {
+      // The SDK's requests carry the sign-in's signal.
+      await opts.fetchFn('https://mcp.example.com/.well-known/x').catch(() => {})
+      return new Promise(() => {})
+    })
+    const fetchFn = vi.fn(async (_u: string | URL, init?: RequestInit) => {
+      fetchSignal = init?.signal ?? undefined
+      throw new Error('offline')
+    })
+    await expect(
+      signIn('https://mcp.example.com/mcp', memStore(), {
+        open: vi.fn(),
+        authFn: authFn as never,
+        listen: listen as never,
+        fetchFn: fetchFn as never,
+        timeoutMs: 50
+      })
+    ).rejects.toThrow(/timed out/)
+    expect(close).toHaveBeenCalledOnce()
+    expect(fetchSignal?.aborted).toBe(true)
   })
 
   it('times out when the browser never comes back', async () => {
