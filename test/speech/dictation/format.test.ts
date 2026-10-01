@@ -22,7 +22,10 @@ describe('formatNumbers', () => {
     ['five dollars', '$5'],
     ['one of them came first', 'one of them came first'],
     ['I have two cats', 'I have two cats'],
-    ['one two three go', 'one two three go']
+    ['one two three go', 'one two three go'],
+    // L3: a weight is not money.
+    ['five pounds of flour', 'five pounds of flour'],
+    ['twenty pounds of flour', '20 pounds of flour']
   ])('%s', (input, want) => {
     expect(formatNumbers(input)).toBe(want)
   })

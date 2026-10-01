@@ -207,7 +207,7 @@ export function formatLists(text: string, kind: FieldKind): string {
 // ---- Check and entry point ----
 
 const DROPPED_PHRASES =
-  /\b(?:new paragraph|new line|next line|question mark|exclamation mark|exclamation point|full stop|period|comma|semicolon|colon|bullet point|next bullet|new bullet|dot|at|slash|number|dollars?|bucks|euros?|pounds?|percent)\b/gi
+  /\b(?:new paragraph|new line|next line|question mark|exclamation mark|exclamation point|full stop|period|comma|semicolon|colon|bullet point|next bullet|new bullet|dot|at|slash|number|dollars?|bucks|euros?|percent)\b/gi
 
 /** The tokens formatting must keep: words, with numbers as digits and spoken syntax removed. */
 export function canonicalTokens(text: string): string[] {

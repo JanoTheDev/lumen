@@ -205,8 +205,7 @@ const CURRENCY: Record<string, (n: string) => string> = {
   bucks: (n) => `$${n}`,
   euro: (n) => `€${n}`,
   euros: (n) => `€${n}`,
-  pound: (n) => `£${n}`,
-  pounds: (n) => `£${n}`,
+  // No "pounds": "five pounds of flour" is a weight as often as money (L3).
   percent: (n) => `${n}%`
 }
 
@@ -260,7 +259,7 @@ export function formatNumbers(text: string): string {
       return run
     })
     .replace(
-      /(\$|€|£)?(\d[\d,.]*)[ \t]+(dollars?|bucks|euros?|pounds?|percent)\b/gi,
+      /(\$|€|£)?(\d[\d,.]*)[ \t]+(dollars?|bucks|euros?|percent)\b/gi,
       (_m, sym: string | undefined, num: string, unit: string) =>
         sym ? `${sym}${num} ${unit}` : CURRENCY[unit.toLowerCase()](num)
     )
