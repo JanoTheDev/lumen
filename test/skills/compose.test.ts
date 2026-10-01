@@ -183,4 +183,16 @@ describe('model-written skills (compose)', () => {
     expect(websitePattern('http://x.com')).toBeNull()
     expect(websitePattern('https://user:pw@x.com')).toBeNull()
   })
+
+  it('refuses wildcards over a whole top-level or shared domain and says what they cover', () => {
+    expect(websitePattern('https://*.com')).toBeNull()
+    expect(websitePattern('https://*.co.uk')).toBeNull()
+    expect(websitePattern('https://*.github.io')).toBeNull()
+    expect(websitePattern('https://*.x*.com')).toBeNull()
+    expect(websitePattern('https://*.google.com')).toBe('https://*.google.com')
+    expect(websitePattern('https://*.bbc.co.uk')).toBe('https://*.bbc.co.uk')
+    expect(permissionWords({ input: true, network: ['https://*.google.com'] })).toBe(
+      'It may use your mouse and keyboard and open any page on google.com.'
+    )
+  })
 })

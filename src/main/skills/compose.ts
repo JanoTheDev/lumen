@@ -17,9 +17,12 @@ import {
   type DraftParam,
   type SkillDraft
 } from './authoring'
+import { INPUT_TOOL_NAMES, SKILL_TOOL_NAMES, websitePattern, websiteWords } from './clamp'
 import { EXTRA_FILE_MAX_BYTES, EXTRA_FILE_RE, EXTRA_FILES_MAX } from './manage'
 import { parseSkillFile } from './manifest'
 import { StepsFileError, parseStepsFile } from './steps'
+
+export { SKILL_TOOL_NAMES, websitePattern }
 
 // ---- the model's output (strict structured output: every field required, no bounds) ----
 
@@ -41,24 +44,6 @@ export const composeSchema = z.object({
 })
 
 export type ComposeOutput = z.infer<typeof composeSchema>
-
-/** Agent tools a skill may list (the foreground set plus memory and skill files). */
-export const SKILL_TOOL_NAMES = [
-  'observe',
-  'act',
-  'keys',
-  'navigate',
-  'launch_app',
-  'wait_for',
-  'ask_user',
-  'focus_mode',
-  'read_file',
-  'memory_search',
-  'use_skill',
-  'read_skill_file',
-  'finish'
-] as const
-const INPUT_TOOL_NAMES = new Set(['act', 'keys', 'navigate', 'launch_app'])
 
 export const COMPOSE_PROMPT = `You write skills for Lumen, an assistant that sees and operates a Windows PC (UI Automation, keyboard, browser). A skill is a SKILL.md: a short header plus instructions another model run follows when the user's request fits.
 
@@ -126,21 +111,6 @@ export function composeTurn(req: AuthorSkillRequest): string {
 const oneLine = (s: string, max: number): string => s.replace(/\s+/g, ' ').trim().slice(0, max)
 const PARAM_RE = /^[a-z_][a-z0-9_]{0,31}$/
 const KEBAB_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/
-
-/** "https://mail.google.com/x" → "https://mail.google.com"; null when not an https origin. */
-export function websitePattern(raw: string): string | null {
-  const t = raw.trim()
-  const wild = /^https:\/\/\*\.([a-z0-9.-]+)$/i.exec(t)
-  if (wild) return `https://*.${wild[1].toLowerCase()}`
-  try {
-    const u = new URL(/^[a-z]+:\/\//i.test(t) ? t : `https://${t}`)
-    if (u.protocol !== 'https:' || !u.hostname.includes('.')) return null
-    if (u.username || u.password) return null
-    return `https://${u.host.toLowerCase()}`
-  } catch {
-    return null
-  }
-}
 
 /**
  * The model's output as a draft, clamped to least privilege: only known apps, connectors and
@@ -277,8 +247,7 @@ export function permissionWords(
         ? `use your mouse and keyboard in ${apps.join(', ')}`
         : 'use your mouse and keyboard'
     )
-  if (p.network.length)
-    out.push(`open ${p.network.map((n) => n.replace(/^https:\/\/(\*\.)?/, '')).join(', ')}`)
+  if (p.network.length) out.push(`open ${p.network.map(websiteWords).join(', ')}`)
   if (p.profile) out.push('read your saved profile')
   if (p.connectors?.length) out.push(`use the connectors ${p.connectors.join(', ')}`)
   if (!out.length) return 'It only reads the screen and answers.'
