@@ -288,15 +288,14 @@ export default function App(): JSX.Element {
   })
 
   useEffect(() => {
-    const w = window as unknown as Record<string, unknown>
-    w.__voiceStart = () => {
-      console.log('[voice] __voiceStart called')
+    const startHold = (): void => {
+      console.log('[voice] start (hold)')
       beginSessionRef.current()
       const vad = vadRef.current ?? DEFAULT_VAD
       start({ speechThreshold: vad.speechThreshold })
     }
-    w.__voiceStop = () => {
-      console.log('[voice] __voiceStop called')
+    const stopRecording = (): void => {
+      console.log('[voice] stop')
       if (stop()) setPhase('processing')
     }
     // Auto-stop after sustained silence once speech was heard, give up when nothing is said
@@ -349,7 +348,7 @@ export default function App(): JSX.Element {
       if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
       wakeTimerRef.current = setTimeout(tick, 200)
     }
-    w.__wakeVoiceStart = () => {
+    const startHandsFree = (): void => {
       console.log('[wake-voice] starting — will auto-stop on silence')
       const session = beginSessionRef.current()
       const vad = vadRef.current ?? DEFAULT_VAD
@@ -364,7 +363,7 @@ export default function App(): JSX.Element {
       })
     }
     // Dictation hotkey: held until release; a double-tap turns it hands-free.
-    w.__dictationStart = () => {
+    const startDictation = (): void => {
       console.log('[dictation] starting')
       beginSessionRef.current()
       dictationRef.current = true
@@ -376,7 +375,7 @@ export default function App(): JSX.Element {
         dictation: true
       })
     }
-    w.__dictationHandsFree = () => {
+    const dictationHandsFree = (): void => {
       if (!dictationRef.current) return
       console.log('[dictation] hands-free — will auto-stop on silence')
       const vad = vadRef.current ?? DEFAULT_VAD
@@ -391,6 +390,13 @@ export default function App(): JSX.Element {
         }
       })
     }
+    const starters = { hold: startHold, 'hands-free': startHandsFree, dictation: startDictation }
+    const offs = [
+      window.lumen.on('voice:start', ({ mode }) => starters[mode]?.()),
+      window.lumen.on('voice:stop', stopRecording),
+      window.lumen.on('voice:hands-free', dictationHandsFree)
+    ]
+    return () => offs.forEach((off) => off())
   }, [start, stop, abort, levelRef])
 
   const analyzing = phase === 'processing'

@@ -5,18 +5,22 @@ import type { EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { live, registerWindow, sendTo } from './registry'
 import { bus } from '../bus'
+import * as assistant from './assistant'
+import { uiV2 } from './ui-mode'
 
 let win: BrowserWindow | null = null
 
+// With ui v2 the assistant window hosts the voice renderer, so every HUD call goes there.
 export function get(): BrowserWindow | null {
-  return live(win)
+  return uiV2() ? assistant.get() : live(win)
 }
 
 export function send<C extends EventChannel>(channel: C, ...args: EventChannels[C]): void {
-  sendTo(win, channel, ...args)
+  sendTo(get(), channel, ...args)
 }
 
 export function create(): void {
+  if (uiV2()) return
   const { width, height } = screen.getPrimaryDisplay().workAreaSize
   const w = 100
   const h = 44
@@ -47,36 +51,32 @@ export function create(): void {
 }
 
 export function show(): void {
+  if (uiV2()) return assistant.open('listening')
   get()?.setOpacity(1)
   get()?.setIgnoreMouseEvents(false)
 }
 
 export function hide(): void {
+  if (uiV2()) return assistant.turnEnded()
   get()?.setOpacity(0)
   get()?.setIgnoreMouseEvents(true)
 }
 
-function run(js: string): void {
-  get()
-    ?.webContents.executeJavaScript(js, true)
-    .catch(() => {})
-}
-
 /** Hands-free uses the same auto-stop-on-silence path as wake-word activation. */
 export function startVoice(handsFree: boolean): void {
-  run(handsFree ? 'window.__wakeVoiceStart?.()' : 'window.__voiceStart?.()')
+  send('voice:start', { mode: handsFree ? 'hands-free' : 'hold' })
 }
 
 export function startDictation(): void {
-  run('window.__dictationStart?.()')
+  send('voice:start', { mode: 'dictation' })
 }
 
 export function dictationHandsFree(): void {
-  run('window.__dictationHandsFree?.()')
+  send('voice:hands-free')
 }
 
 export function stopVoice(): void {
-  run('window.__voiceStop?.()')
+  send('voice:stop')
 }
 
 registerWindow(get, { zoom: true, interactive: true })
