@@ -1,5 +1,6 @@
 // One user turn: gather screen context, steer the prompt, call the model (directly, via the
 // planner or the research loop) and present the result.
+import { randomUUID } from 'crypto'
 import type { ModelResponse } from '@shared/types'
 import type { CancelScope } from './cancel'
 import { needsScreenshot, takeSpeculative, type QueryContext } from './context'
@@ -10,6 +11,8 @@ import { runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
 import { callModel, type CallOptions } from '../ai'
 import { addToHistory } from '../ai/history'
+import { withTurnCost, type TurnCost } from '../ai/cost'
+import { bus } from '../bus'
 import { isHowToQuestion } from '../guides/voice-nav'
 import { requireAgent } from '../agent/instance'
 import { loadConfig } from '../config'
@@ -38,7 +41,29 @@ export async function captureContext(withScreenshot: boolean): Promise<QueryCont
   return { activeWindow, screenshot }
 }
 
+/** Runs one turn and publishes `query.done` with the model and the turn's summed cost. */
 export async function runQuery(
+  prompt: string,
+  baseOpts: CallOptions,
+  scope: CancelScope,
+  deps: PipelineDeps
+): Promise<ModelResponse> {
+  let cost: TurnCost | undefined
+  const response = await withTurnCost(
+    () => runTurn(prompt, baseOpts, scope, deps),
+    (c) => (cost = c)
+  )
+  bus.emit({
+    type: 'query.done',
+    turnId: randomUUID(),
+    response,
+    model: cost?.model,
+    cost: cost && { usd: cost.usd, calls: cost.calls, ...cost.usage }
+  })
+  return response
+}
+
+async function runTurn(
   prompt: string,
   baseOpts: CallOptions,
   scope: CancelScope,

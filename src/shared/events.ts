@@ -44,13 +44,30 @@ export interface ScreenScene {
   annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
 }
 
+/** Summed cost of every model call made for one user turn. */
+export interface TurnCostSummary {
+  usd: number
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+}
+
 export type AppEvent =
   | { type: 'voice.started'; handsFree: boolean }
   | { type: 'voice.stopped' }
   | { type: 'voice.cancelled' }
   | { type: 'query.started'; turnId: string; prompt: string }
   | { type: 'query.delta'; turnId: string; delta: string }
-  | { type: 'query.done'; turnId: string; response: ModelResponse }
+  | {
+      type: 'query.done'
+      turnId: string
+      response: ModelResponse
+      /** Model that produced the answer, e.g. claude-sonnet-5-5. */
+      model?: string
+      cost?: TurnCostSummary
+    }
   | { type: 'query.failed'; turnId: string; error: string; cancelled?: boolean }
   | { type: 'action.planned'; actionId: string; actions: Action[] }
   | { type: 'action.confirmed'; actionId: string }

@@ -6,7 +6,7 @@ import { historyMessages } from './history'
 import { buildSystemBlocks } from './prompts/system'
 import { parseResponse, sanitizeResponse } from './schema'
 import { LlmError, REFUSAL_MESSAGE, getProvider, onUsage, warmupProviders } from './providers'
-import { logUsage } from './pricing'
+import { noteAnswerModel, recordUsage } from './cost'
 
 export type {
   Action,
@@ -49,6 +49,7 @@ export async function callModel(
       },
       opts.signal
     )
+    noteAnswerModel(res.model)
     return sanitizeResponse(parseResponse(res.text))
   } catch (e) {
     if (e instanceof LlmError && e.code === 'E_REFUSED')
@@ -62,6 +63,6 @@ export const callClaude = callModel
 
 // Warm the SDK connection pools at startup (after .env is loaded) and whenever the user starts
 // speaking, so the request after the transcript skips the TLS handshake.
-onUsage(logUsage)
+onUsage(recordUsage)
 if (process.versions.electron) setImmediate(() => warmupProviders())
 bus.on('voice.started', () => warmupProviders())

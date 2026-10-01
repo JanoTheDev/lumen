@@ -1,4 +1,5 @@
-import { anthropicClient } from './providers/anthropic'
+import { anthropicClient, toUsage } from './providers/anthropic'
+import { recordUsage } from './cost'
 import { COMPUTER_USE_MODEL } from './models'
 
 /**
@@ -43,6 +44,7 @@ export async function findClickCoordinates(
       },
       { signal }
     )
+    recordUsage(response.model, toUsage(response.usage), true)
     for (const block of response.content) {
       if (block.type === 'tool_use' && block.name === 'computer') {
         const { action, coordinate } = block.input as { action?: string; coordinate?: unknown }
