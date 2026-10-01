@@ -10,6 +10,11 @@
 //     user's own and always wins: it does not wait for the holder, only for the batch running
 //     right now, and it pauses the holder for a moment so the agent does not fight the user.
 // Background tasks never send input; their request_foreground phase acquires the lane.
+// The user's physical keyboard and mouse pause the holder too: while the lane is held, the
+// native agent sends throttled `user-activity` pings (never which key) for real, non-injected
+// input, and each one pauses the holder for USER_PAUSE_MS.
+import { getAgent } from '../agent/instance'
+import { userActivityEvents } from '../agent/subscriptions'
 
 export const USER_PAUSE_MS = 1500
 
@@ -60,8 +65,14 @@ export class InputLane {
   private waiters: Waiter[] = []
   private batch: Promise<void> = Promise.resolve()
   private pausedUntil = 0
+  private heldListener: ((held: boolean) => void) | null = null
 
   constructor(private readonly clock: LaneClock = realClock) {}
+
+  /** Called when the lane becomes held or free (the user-activity subscription follows it). */
+  onHeldChange(fn: ((held: boolean) => void) | null): void {
+    this.heldListener = fn
+  }
 
   /** Who holds the lane (null when free). */
   holderName(): string | null {
@@ -97,12 +108,15 @@ export class InputLane {
 
   private grant(owner: string): () => void {
     const token = {}
+    const was = this.holder !== null
     this.holder = { owner, token }
+    if (!was) this.heldListener?.(true)
     return () => {
       if (this.holder?.token !== token) return
       this.holder = null
       const next = this.waiters.shift()
       if (next) next.grant(this.grant(next.owner))
+      else this.heldListener?.(false)
     }
   }
 
@@ -151,6 +165,27 @@ export function inputLane(): InputLane {
 /** Test hook. */
 export function setInputLane(next: InputLane | null): void {
   lane = next ?? new InputLane()
+}
+
+const USER_ACTIVITY_OWNER = 'input-lane'
+let activityInstalled = false
+
+/**
+ * Physical input pauses the holder: subscribes to the agent's `user-activity` while the lane
+ * is held (agents without the capability are never asked) and re-asks after a restart.
+ */
+export function installUserActivityPause(): void {
+  if (activityInstalled) return
+  const agent = getAgent()
+  if (!agent) return
+  activityInstalled = true
+  agent.onEvent('user-activity', () => {
+    if (lane.holderName()) lane.noteUserInput()
+  })
+  agent.onEvent('agent-ready', () => {
+    if (userActivityEvents.wanted()) userActivityEvents.push()
+  })
+  lane.onHeldChange((held) => userActivityEvents.want(USER_ACTIVITY_OWNER, held))
 }
 
 /** One real-input batch through the lane (agent, lesson do-it, dwell, switch, a11y). */

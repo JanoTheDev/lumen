@@ -63,6 +63,7 @@ import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
 import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
+import { installUserActivityPause } from './agent-mode/input-lane'
 import { installSkills } from './skills'
 import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
@@ -178,6 +179,7 @@ app.whenReady().then(() => {
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
   installAgentMode()
+  installUserActivityPause()
   registerIpc()
   installA11y()
   installLessonOutput()

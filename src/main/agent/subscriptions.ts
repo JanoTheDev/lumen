@@ -45,6 +45,9 @@ export const uiaEvents = refCountedSubscription('uia-event', 'uia-events')
 /** key-combo (observe-only shortcuts, never typing): lesson keypress checks. */
 export const keyComboEvents = refCountedSubscription('key-combo', 'key-combo')
 
+/** user-activity (throttled pings for physical keyboard / mouse input): input lane pause. */
+export const userActivityEvents = refCountedSubscription('user-activity', 'user-activity')
+
 /** True once the cursor has moved more than `px` from where the last `true` (or the start) was. */
 export function moveGate(px: number): (p: { x: number; y: number }) => boolean {
   let anchor: { x: number; y: number } | null = null
