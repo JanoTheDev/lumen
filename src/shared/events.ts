@@ -130,7 +130,7 @@ export type AppEvent =
   /** Passive "Resume Blender: Add an object, step 3?" at startup. */
   | { type: 'lesson.resume-offer'; lessonId: string; text: string }
   | { type: 'a11y.announce'; text: string; priority: 'polite' | 'assertive' }
-
-export type AppEventType = AppEvent['type']
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
+
+export type AppEventType = AppEvent['type']
