@@ -84,7 +84,8 @@ const CAPABILITY: Record<string, string> = {
   tts_synthesize: 'tts',
   audio_output: 'audio-output',
   audio_unmute: 'audio-output',
-  switch_keys: 'switch'
+  switch_keys: 'switch',
+  browser_url: 'browser-url'
 }
 
 function send<T>(
@@ -289,4 +290,18 @@ export function switchKeys(
   opts?: RequestOptions
 ): Promise<{ keys: string[]; mouse: string[] }> {
   return send(bridge, 'switch_keys', { keys, mouse }, opts)
+}
+
+export interface BrowserUrl {
+  /** The page address from the address bar; null when it holds no web address. */
+  url: string | null
+  /** Browser process image name, e.g. "chrome.exe". */
+  browser: string
+  title: string
+  hwnd: number
+}
+
+/** The front browser window's address-bar URL (UIA, nothing typed). E_NOT_FOUND: no browser. */
+export function browserUrl(bridge: AgentBridge, opts?: RequestOptions): Promise<BrowserUrl> {
+  return send(bridge, 'browser_url', {}, { timeoutMs: 2500, ...opts })
 }

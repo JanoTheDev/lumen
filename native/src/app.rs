@@ -36,6 +36,7 @@ pub const CAPABILITIES: &[&str] = &[
     "switch",
     "uia-text",
     "user-activity",
+    "browser-url",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -208,6 +209,9 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("uia_act", Lane::Input, None, |_, args, token| crate::uia::cmd_act(args, token));
     app.cmd("uia_text", Lane::Uia, Some(crate::uia::text::TIMEOUT_MS), |_, args, token| {
         crate::uia::text::cmd_text(args, token)
+    });
+    app.cmd("browser_url", Lane::Uia, Some(crate::uia::browser::TIMEOUT_MS), |_, args, token| {
+        crate::uia::browser::cmd_browser_url(args, token)
     });
     app.cmd("focus_info", Lane::Read, Some(crate::uia::FOCUS_INFO_TIMEOUT_MS), |_, _, token| {
         crate::uia::cmd_focus_info(token)
