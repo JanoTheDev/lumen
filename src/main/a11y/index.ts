@@ -3,17 +3,16 @@
 import { screen, shell } from 'electron'
 import type { Point, Rect } from '@shared/types'
 import { bus } from '../bus'
-import { loadConfig, saveConfig } from '../config'
+import { loadConfig } from '../config'
 import { log } from '../logger'
 import { appUrl } from '../ai/app-context'
 import { logicalToPhys, physRectToLogical } from '../actions/coords'
 import { assertSafeUrl, isSafeUrl } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent, requireAgent } from '../agent/instance'
-import { applyListenerState } from '../agent/sync'
 import { guideState } from '../guides/session'
 import { registerA11yIpc } from '../ipc/a11y'
-import { broadcastConfig } from '../ipc/settings'
+import { broadcastConfig, patchConfig } from '../ipc/settings'
 import { onBroadcast } from '../windows/registry'
 import { currentContext } from '../query/context'
 import { setLocalGrammar } from '../query/router'
@@ -102,12 +101,13 @@ function setDwellPaused(paused: boolean): boolean {
   return dwellController()?.setPaused(paused) ?? false
 }
 
-function saveAndBroadcast(patch: Parameters<typeof saveConfig>[0]): void {
-  const next = saveConfig(patch)
-  broadcastConfig(next)
+/** Status text plus an announcement for a command's result. */
+function feedback(text: string, ok: boolean): void {
+  setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
+  announce(text, { kind: ok ? 'command' : 'error' })
 }
 
-export function createIo(): A11yIo {
+function createIo(): A11yIo {
   return {
     now: () => Date.now(),
     input: async (steps) => {
@@ -170,10 +170,7 @@ export function createIo(): A11yIo {
       screenLayer.create()
       screenLayer.setScene(part)
     },
-    feedback: (text, ok) => {
-      setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
-      announce(text, { kind: ok ? 'command' : 'error' })
-    },
+    feedback,
     openUrl: (url) => {
       if (!isSafeUrl(url)) return false
       shell.openExternal(assertSafeUrl(url)).catch(() => {})
@@ -187,14 +184,13 @@ export function createIo(): A11yIo {
     },
     setDwellPaused,
     setScanning: (on) => switchCtl?.setScanning(on) ?? false,
+    // Through the settings path, so the listener, tray and other config watchers follow.
     setWakeWord: (on) => {
-      const cfg = loadConfig()
-      saveAndBroadcast({ wakeWord: { ...cfg.wakeWord, enabled: on } })
-      applyListenerState(loadConfig())
+      void patchConfig({ wakeWord: { ...loadConfig().wakeWord, enabled: on } })
     },
     setKeepMarks: (on) => {
       const cfg = loadConfig()
-      saveAndBroadcast({ a11y: { ...cfg.a11y, marks: { ...cfg.a11y.marks, keep: on } } })
+      void patchConfig({ a11y: { ...cfg.a11y, marks: { ...cfg.a11y.marks, keep: on } } })
     },
     keepMarks: () => loadConfig().a11y.marks.keep,
     guideActive: () => guideState().guideActive,
