@@ -170,3 +170,72 @@ export type ModelResponse =
       confidence?: Confidence
     }
   | { mode: 'locate'; items: LocateItem[]; notFoundReason?: string; confidence?: Confidence }
+
+/** Skills (CONTRACTS C10): who a skill comes from, which decides how much Lumen trusts it. */
+export type SkillTrust = 'builtin' | 'mine' | 'community-untrusted' | 'community-trusted'
+
+/** C10 `permissions`; anything not granted here is E_DENIED when the skill runs. */
+export interface SkillPermissions {
+  /** Click / type / keys in the skill's `apps` (any app when `apps` is empty). */
+  input: boolean
+  /** URL patterns open_url / fetch may use, e.g. "https://*.youtube.com". */
+  network: string[]
+  files: { read: string[]; write: string[] }
+  /** MCP server ids. */
+  connectors: string[]
+  /** May read profile fields from memory (form filling). */
+  profile: boolean
+  /** Confirm every action, whatever the trust level. */
+  risky: boolean
+  /** Background runs may capture the screen (C10 v2). */
+  screen: boolean
+}
+
+export interface SkillParam {
+  type: 'string' | 'number' | 'boolean'
+  default?: string | number | boolean
+  description?: string
+  enum?: (string | number)[]
+}
+
+/** The parsed SKILL.md frontmatter (C10 + C10 v2). */
+export interface SkillManifest {
+  name: string
+  description: string
+  when_to_use?: string
+  version: string
+  author?: string
+  license?: string
+  apps: string[]
+  triggers: string[]
+  params: Record<string, SkillParam>
+  permissions: SkillPermissions
+  context: 'foreground' | 'background'
+  model?: 'fast' | 'main' | 'planning'
+  tools?: string[]
+}
+
+/** One skill as Settings shows it. */
+export interface SkillSummary {
+  name: string
+  description: string
+  when_to_use?: string
+  version: string
+  author?: string
+  apps: string[]
+  triggers: string[]
+  permissions: SkillPermissions
+  context: 'foreground' | 'background'
+  trust: SkillTrust
+  /** Where it was loaded from: the app's own skills, an app pack's, or the user's folder. */
+  origin: 'builtin' | 'app-pack' | 'user'
+  enabled: boolean
+  /** It replaces a skill with the same name from an earlier location. */
+  overrides?: 'builtin' | 'app-pack'
+  /** Installed from a `.lumen` file or link. */
+  source?: string
+  /** Bundled steps.json (runs without the model once the runner lands). */
+  hasSteps: boolean
+  /** Loader warnings (long body, unknown keys). */
+  warnings: string[]
+}
