@@ -1,27 +1,17 @@
 // The onboarding steps. Each renders its content only; Onboarding.tsx owns the heading,
 // progress and Back / Skip / Continue.
-import { useCallback, useEffect, useState } from 'react'
-import type { KeyProvider, KeyStatus, SttStatus, WakeModelProgress } from '@shared/channels'
+import { useEffect, useState } from 'react'
+import type { SttStatus, WakeModelProgress } from '@shared/channels'
 import type { ProfileId } from '@shared/profiles'
-import {
-  Button,
-  Field,
-  Kbd,
-  ProgressBar,
-  SegmentedControl,
-  Select,
-  announce,
-  icons
-} from '../../ui'
+import { Button, Field, Kbd, ProgressBar, Select, announce, icons } from '../../ui'
 import { invoke, send } from '../../lib/ipc'
 import type { Config, Patch } from '../settings/useConfig'
 import { MicTest } from '../settings/sections/MicTest'
 import { useMicDevices } from '../settings/sections/use-mic-devices'
+import { KeyForm } from '../settings/sections/KeyForm'
 import { micOptions } from '../settings/sections/voice-options'
 import { PRESET_CARDS, toggleChoice } from './presets'
-import { KEY_LINKS, guessProvider, looksLikeKey, talkHint } from './flow'
-
-const openLink = (url: string): void => send('assistant:open-link', url)
+import { talkHint } from './flow'
 
 // ---- 1. Profile ----
 
@@ -91,8 +81,6 @@ export function ProfileStep({
 
 // ---- 2. Key ----
 
-const PROVIDER_NAME: Record<KeyProvider, string> = { anthropic: 'Anthropic', openai: 'OpenAI' }
-
 export function KeyStep({
   cfg,
   patch,
@@ -102,137 +90,21 @@ export function KeyStep({
   patch: Patch
   onReady: (ready: boolean) => void
 }): JSX.Element {
-  const [status, setStatus] = useState<KeyStatus[] | null>(null)
-  const [provider, setProvider] = useState<KeyProvider>('anthropic')
-  const [key, setKey] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
-  const [replace, setReplace] = useState(false)
-
-  const refresh = useCallback((): void => {
-    invoke('keys:status')
-      .then(setStatus)
-      .catch(() => setStatus([]))
-  }, [])
-  useEffect(refresh, [refresh])
-
-  const existing = status?.find((s) => s.set)
   const local = cfg.models.provider === 'local'
-  useEffect(() => onReady(!!existing || local), [existing, local, onReady])
-
-  const save = async (): Promise<void> => {
-    setBusy(true)
-    setResult(null)
-    try {
-      const set = await invoke('keys:set', { provider, key: key.trim() })
-      if (!set.ok) throw new Error(set.error ?? 'That key wasn’t accepted.')
-      const test = await invoke('keys:test', provider)
-      const text = test.ok
-        ? set.persisted
-          ? 'Key works. It’s saved, encrypted, on this PC.'
-          : 'Key works, but Windows encryption isn’t available, so it lasts until Lumen closes.'
-        : (test.error ?? 'That key didn’t work.')
-      setResult({ ok: test.ok, text })
-      announce(text, test.ok ? 'polite' : 'assertive')
-      if (test.ok) {
-        setKey('')
-        setReplace(false)
-        if (local) await patch({ models: { provider: 'auto' } })
-      }
-      refresh()
-    } catch (e) {
-      const text = (e as Error).message
-      setResult({ ok: false, text })
-      announce(text, 'assertive')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  const [hasKey, setHasKey] = useState(false)
+  useEffect(() => onReady(hasKey || local), [hasKey, local, onReady])
   return (
     <div className="ob-stack">
       <p className="ob-lead">
         Lumen is free. To understand your screen it uses an AI service with your own key, so you pay
         that service directly, usually a few cents a day. One key is enough.
       </p>
-
-      {existing && !replace ? (
-        <div className="ob-note is-ok" role="status">
-          <icons.checkCircle />
-          <span>
-            Lumen already has a {PROVIDER_NAME[existing.provider]} key
-            {existing.last4 ? ` ending in ${existing.last4}` : ''}
-            {existing.source === 'env' ? ' (from the .env file)' : ''}.
-          </span>
-          <Button variant="quiet" onClick={() => setReplace(true)}>
-            Use a different key
-          </Button>
-        </div>
-      ) : (
-        <>
-          <SegmentedControl
-            label="Service"
-            value={provider}
-            options={[
-              { value: 'anthropic', label: 'Anthropic (Claude)' },
-              { value: 'openai', label: 'OpenAI' }
-            ]}
-            onChange={setProvider}
-          />
-          <Field
-            label="API key"
-            hint={
-              <>
-                Paste the key here. It’s stored encrypted on this PC and never shown again.{' '}
-                <button
-                  type="button"
-                  className="ob-link"
-                  onClick={() => openLink(KEY_LINKS[provider])}
-                >
-                  Where do I get a {PROVIDER_NAME[provider]} key?
-                </button>
-              </>
-            }
-            error={result && !result.ok ? result.text : undefined}
-          >
-            {(a) => (
-              <input
-                {...a}
-                type="password"
-                className="ui-input ui-input--mono"
-                autoComplete="off"
-                spellCheck={false}
-                value={key}
-                onChange={(e) => {
-                  setKey(e.target.value)
-                  const guess = guessProvider(e.target.value)
-                  if (guess) setProvider(guess)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && looksLikeKey(provider, key)) void save()
-                }}
-              />
-            )}
-          </Field>
-          <div className="panel-row">
-            <Button
-              variant="primary"
-              icon={icons.key}
-              busy={busy}
-              disabled={busy || !looksLikeKey(provider, key)}
-              onClick={() => void save()}
-            >
-              {busy ? 'Checking…' : 'Save and test'}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {result?.ok && (
-        <p className="panel-ok" role="status">
-          <icons.checkCircle /> {result.text}
-        </p>
-      )}
+      <KeyForm
+        onReady={setHasKey}
+        onSaved={() => {
+          if (local) void patch({ models: { provider: 'auto' } })
+        }}
+      />
 
       <details className="ob-details">
         <summary>No key? Use a free model on this PC</summary>

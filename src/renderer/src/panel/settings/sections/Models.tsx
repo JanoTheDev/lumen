@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Card, Select, TextField } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { KeyForm } from './KeyForm'
 
 type Role = 'main' | 'fast' | 'planning' | 'verify'
 
@@ -90,11 +91,11 @@ export function Models({ cfg, patch }: SectionProps): JSX.Element {
         />
       </Card>
 
-      <Card title="API keys">
-        <p>
-          Keys are read from the <code>.env</code> file next to Lumen. Saving a key here is coming
-          soon.
-        </p>
+      <Card
+        title="API key"
+        description="Stored encrypted on this PC, never in the settings file. A key in .env also works."
+      >
+        <KeyForm />
       </Card>
 
       <Card
