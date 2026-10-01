@@ -10,6 +10,9 @@ let count = 0
 const holders = new Set<string>()
 let watchdog: ReturnType<typeof setTimeout> | null = null
 let handler: () => void = () => {}
+let registerFailedLogged = false
+/** Sessions that legitimately outlive the watchdog (hands-free dictation runs up to 3 min). */
+const keepAlive = new Set<() => boolean>()
 
 export function setEscapeHandler(fn: () => void): void {
   handler = fn
@@ -17,8 +20,13 @@ export function setEscapeHandler(fn: () => void): void {
 
 function sync(): void {
   const registered = globalShortcut.isRegistered('Escape')
-  if (count > 0 && !registered) globalShortcut.register('Escape', () => handler())
-  else if (count === 0 && registered) globalShortcut.unregister('Escape')
+  if (count > 0 && !registered) {
+    // Another app owning Escape globally makes this fail; Escape then only works in our windows.
+    if (!globalShortcut.register('Escape', () => handler()) && !registerFailedLogged) {
+      registerFailedLogged = true
+      log('fail', 'could not register global Escape (in use by another app)')
+    }
+  } else if (count === 0 && registered) globalShortcut.unregister('Escape')
   if (count === 0 && watchdog) {
     clearTimeout(watchdog)
     watchdog = null
@@ -31,14 +39,21 @@ function kickWatchdog(): void {
   watchdog = setTimeout(() => {
     watchdog = null
     if (count === 0) return
-    // A long research or plan turn is still cancellable; only stale holders are released.
-    if (hasActiveScope()) {
+    // A long research or plan turn, or a long hands-free recording, is still cancellable;
+    // only stale holders are released.
+    if (hasActiveScope() || [...keepAlive].some((active) => active())) {
       kickWatchdog()
       return
     }
     log('skip', 'escape watchdog: releasing Escape after 60s')
     resetEscape()
   }, WATCHDOG_MS)
+}
+
+/** Keeps Escape past the watchdog while `active()` is true. Returns the unsubscribe. */
+export function keepEscapeWhile(active: () => boolean): () => void {
+  keepAlive.add(active)
+  return () => keepAlive.delete(active)
 }
 
 /** Takes one reference; pair every call with disarmEscape(). */
@@ -72,8 +87,4 @@ export function resetEscape(): void {
   count = 0
   holders.clear()
   sync()
-}
-
-export function escapeArmed(): boolean {
-  return count > 0
 }

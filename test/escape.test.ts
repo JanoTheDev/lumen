@@ -13,6 +13,7 @@ import {
   armEscape,
   disarmEscape,
   holdEscape,
+  keepEscapeWhile,
   releaseEscape,
   resetEscape,
   setEscapeHandler
@@ -81,5 +82,17 @@ describe('escape', () => {
     endScope(scope)
     vi.advanceTimersByTime(61_000)
     expect(registered.has('Escape')).toBe(false)
+  })
+
+  it('watchdog keeps Escape while a long session is active', () => {
+    let active = true
+    const stop = keepEscapeWhile(() => active)
+    holdEscape('hud')
+    vi.advanceTimersByTime(150_000)
+    expect(registered.has('Escape')).toBe(true)
+    active = false
+    vi.advanceTimersByTime(61_000)
+    expect(registered.has('Escape')).toBe(false)
+    stop()
   })
 })
