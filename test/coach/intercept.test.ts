@@ -29,7 +29,7 @@ vi.mock('../../src/main/focus', () => ({
   installFocus: vi.fn()
 }))
 
-import { interceptHelpers } from '../../src/main/coach'
+import { interceptHelpers, markBaselineBriefly } from '../../src/main/coach'
 
 describe('interceptHelpers', () => {
   beforeEach(() => {
@@ -89,5 +89,11 @@ describe('interceptHelpers', () => {
     expect(patchConfig).toHaveBeenCalledWith({
       agent: { background: { max: 2, quiet: true } }
     })
+  })
+
+  it('the local-command baseline never holds a command back', async () => {
+    await expect(markBaselineBriefly()).resolves.toBeUndefined()
+    helpers.whatChanged = true // no agent: the capture fails fast and is ignored
+    await expect(markBaselineBriefly(50)).resolves.toBeUndefined()
   })
 })

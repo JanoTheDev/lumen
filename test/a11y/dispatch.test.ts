@@ -9,7 +9,7 @@ vi.mock('../../src/main/ai/providers', () => ({
   }
 }))
 
-import { A11yCommands, LOCAL_HANDLED, spellOut } from '../../src/main/a11y/dispatch'
+import { A11yCommands, LOCAL_HANDLED, changesScreen, spellOut } from '../../src/main/a11y/dispatch'
 import { routeLocal, setLocalGrammar } from '../../src/main/query/router'
 import { fakeA11yIo, node, type FakeA11y, type FakeA11yOptions } from '../helpers/fake-a11y-io'
 
@@ -100,6 +100,40 @@ describe('routing (T04)', () => {
     }
     expect(r.response.mode).toBe('answer')
     expect(r.response.text).toMatch(/scroll/i)
+  })
+})
+
+describe('"what changed?" baseline (11 T20)', () => {
+  it('waits for the baseline before a command that may change the screen', async () => {
+    const f = setup()
+    const order: string[] = []
+    let release = (): void => {}
+    f.io.beforeChange = () => {
+      order.push('baseline')
+      return new Promise<void>((r) => (release = r))
+    }
+    f.a11y.tryHandle('scroll down')
+    await f.settle()
+    expect(f.calls.input).toEqual([])
+    release()
+    await f.settle()
+    expect(order).toEqual(['baseline'])
+    expect(f.calls.input).toEqual([[{ t: 'scroll', dx: 0, dy: 5 }]])
+  })
+
+  it('a failing baseline does not stop the command', async () => {
+    const f = setup()
+    f.io.beforeChange = () => Promise.reject(new Error('no capture'))
+    await f.say('scroll down')
+    await f.settle()
+    expect(f.calls.input).toEqual([[{ t: 'scroll', dx: 0, dy: 5 }]])
+  })
+
+  it('reading, showing numbers and help take no baseline', () => {
+    for (const id of ['marks.show', 'grid.show', 'read.page', 'describe.screen', 'lumen.help'])
+      expect(changesScreen(id)).toBe(false)
+    for (const id of ['scroll', 'key.press', 'marks.act', 'pointer.click', 'app.open', 'tab.n'])
+      expect(changesScreen(id)).toBe(true)
   })
 })
 

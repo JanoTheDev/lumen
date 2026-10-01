@@ -51,6 +51,7 @@ const PAGE_MAX_CHARS = 60_000
 const OCR_BOX = { w: 640, h: 180 }
 
 let announcer: Announcer | null = null
+let beforeChange: (() => Promise<void>) | null = null
 let a11y: A11yCommands | null = null
 let narrator: FocusNarrator | null = null
 let switchCtl: SwitchControl | null = null
@@ -177,9 +178,15 @@ async function explainCursor(): Promise<string> {
   return r.spoken
 }
 
+/** A hook run (and awaited) before a local command that may change the screen; null clears. */
+export function setBeforeLocalChange(fn: (() => Promise<void>) | null): void {
+  beforeChange = fn
+}
+
 function createIo(): A11yIo {
   return {
     now: () => Date.now(),
+    beforeChange: () => beforeChange?.() ?? Promise.resolve(),
     input: async (steps) => {
       await withInputLane(
         'a11y',

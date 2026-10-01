@@ -15,7 +15,7 @@ import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
 import { keyComboEvents, uiaEvents } from '../agent/subscriptions'
 import { executeActions } from '../actions/executor'
-import { announce } from '../a11y'
+import { announce, setBeforeLocalChange } from '../a11y'
 import { getProvider } from '../ai/providers'
 import { decodeGray } from '../ai/frames'
 import { onConfigPatched, patchConfig } from '../ipc/settings'
@@ -307,12 +307,25 @@ async function captureState(): Promise<ScreenState | null> {
   }
 }
 
-/** Takes the "before" for "what changed?" (a command is starting). Exported for 06's grammar. */
-export function markBaseline(): void {
-  if (!helpers().whatChanged) return
-  void captureState().then((s) => {
-    if (s) baseline = s
-  })
+/**
+ * Takes the "before" for "what changed?" (a command is starting). Resolves once it is taken
+ * (or failed); never rejects. Runs before queries and before 06's local grammar commands.
+ */
+export function markBaseline(): Promise<void> {
+  if (!helpers().whatChanged) return Promise.resolve()
+  return captureState()
+    .then((s) => {
+      if (s) baseline = s
+    })
+    .catch(() => {})
+}
+
+/** A local command waits this long at most for its baseline, then runs anyway. */
+const BASELINE_WAIT_MS = 400
+
+/** markBaseline, capped so a slow capture never holds a voice command back for long. */
+export function markBaselineBriefly(waitMs = BASELINE_WAIT_MS): Promise<void> {
+  return Promise.race([markBaseline(), new Promise<void>((r) => setTimeout(r, waitMs))])
 }
 
 async function whatChanged(): Promise<string> {
@@ -482,9 +495,10 @@ export function installHelpers(): void {
   wireAgent()
   syncSubscriptions()
   onConfigPatched(() => syncSubscriptions())
+  setBeforeLocalChange(() => markBaselineBriefly())
   bus.on('query.started', (e) => {
     const cfg = helpers()
-    markBaseline()
+    void markBaseline()
     if (cfg.journal && e.prompt.trim()) journal.add({ kind: 'question', text: e.prompt })
   })
   bus.on('lesson.done', (e) => {

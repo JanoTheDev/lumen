@@ -119,6 +119,17 @@ export interface A11yIo {
   simpleMode(): boolean
   /** The voice control app Lumen steps aside for (T20), or null. */
   voiceControl(): string | null
+  /** Runs before a command that may change the screen (11's "what changed?" baseline). */
+  beforeChange?(): Promise<void>
+}
+
+/** Commands that only show, read or set something of Lumen's own: no "what changed?" baseline. */
+const NO_BASELINE =
+  /^(?:marks\.(?:show|hide|more|keep)|grid\.(?:show|close)|read\.|describe\.|answer\.|lumen\.|dwell\.|scan\.|scroll\.(?:speed|stop))/
+
+/** The command may change what is on screen (so "what changed?" should look from before it). */
+export function changesScreen(id: string): boolean {
+  return !NO_BASELINE.test(id)
 }
 
 /** Renderer reply for a locally handled utterance: nothing to show (feedback goes to status). */
@@ -261,7 +272,13 @@ export class A11yCommands {
     if (sync === null) return null
     this.io.log(`local ${cmd.id} ${JSON.stringify(cmd.args)} parsed in ${this.io.now() - t0}ms`)
     if (sync !== undefined) return { response: sync }
-    this.run(cmd)
+    const before = changesScreen(cmd.id) ? this.io.beforeChange : undefined
+    const running = before
+      ? before()
+          .catch(() => {})
+          .then(() => this.run(cmd))
+      : this.run(cmd)
+    running
       .then(() => this.io.log(`local ${cmd.id} done in ${this.io.now() - t0}ms`))
       .catch((e: Error) => {
         this.io.log(`local ${cmd.id} failed: ${e.message}`)
