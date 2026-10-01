@@ -156,12 +156,16 @@ describe('guides', () => {
     expect(deleteSavedGuide).not.toHaveBeenCalled()
   })
 
-  // An invalid name falls back to '' and still saves the last guide.
-  // See 10-quality/tasks.md Notes: guides:save-last should answer E_INVALID instead.
-  it.fails('save-last with an invalid name does not save', async () => {
-    await invokeHandler('guides:save-last', { name: 'x' })
-    await invokeHandler('guides:save-last', big(81))
+  it('save-last with an invalid name does not save', async () => {
+    await expect(invokeHandler('guides:save-last', { name: 'x' })).resolves.toEqual(INVALID)
+    await expect(invokeHandler('guides:save-last', big(81))).resolves.toEqual(INVALID)
+    await expect(invokeHandler('guides:save-last', 42)).resolves.toEqual(INVALID)
     expect(deps.saveLast).not.toHaveBeenCalled()
+  })
+
+  it('save-last without a name still saves', async () => {
+    await invokeHandler('guides:save-last')
+    expect(deps.saveLast).toHaveBeenCalledWith('')
   })
 })
 

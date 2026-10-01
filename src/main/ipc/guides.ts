@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron'
 import { guideIdSchema, nameSchema } from '@shared/ipc'
 import type { SavedGuide } from '@shared/types'
-import { safeParse } from './validate'
+import { INVALID, safeParse } from './validate'
 import { deleteSavedGuide, listSavedGuides } from '../guides/store'
 
 export interface GuidesIpcDeps {
@@ -13,6 +13,7 @@ export function registerGuidesIpc(deps: GuidesIpcDeps): void {
   ipcMain.handle('guides:list', () => listSavedGuides())
   ipcMain.handle('guides:save-last', (_e, raw: unknown) => {
     const name = safeParse('guides:save-last', nameSchema.optional(), raw)
+    if (raw !== undefined && name === undefined) return INVALID
     const g = deps.saveLast(name ?? '')
     return g ?? { error: 'no guide to save — run a guide first' }
   })
