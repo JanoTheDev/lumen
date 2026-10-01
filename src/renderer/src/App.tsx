@@ -44,10 +44,25 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
   const dictationRef = useRef(false)
   const vadRef = useRef<VadConfig | null>(null)
   const barsRef = useRef<Array<HTMLDivElement | null>>([])
+  // A turn waiting on a confirm in the bar survives the recording that answers it ("yes").
+  const confirmWaitRef = useRef<number | null>(null)
+  const confirmShownRef = useRef(false)
+  const survivorsRef = useRef(new Set<number>())
 
   // A newer session (or a cancel) took over: the older turn must not act any further.
   const stale = (session: number): boolean =>
-    session !== voiceSessionRef.current || cancelledRef.current
+    cancelledRef.current ||
+    (session !== voiceSessionRef.current && !survivorsRef.current.has(session))
+
+  /** Awaits a main call that may show a confirm; a recording started meanwhile keeps the turn. */
+  const mayConfirm = async <T,>(session: number, call: Promise<T>): Promise<T> => {
+    confirmWaitRef.current = session
+    try {
+      return await call
+    } finally {
+      if (confirmWaitRef.current === session) confirmWaitRef.current = null
+    }
+  }
 
   const applyResponse = async (
     r: ClaudeResponse & { url?: string; follow_up?: { query: string; delay_ms: number } },
@@ -68,14 +83,17 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
         const summary =
           (r as { summary?: string }).summary ?? r.actions.map((a) => a.type).join(', ')
         const confidence = (r as { confidence?: string }).confidence
-        const { delayMs } = await window.api.announceAction(summary, confidence)
+        const { delayMs } = await mayConfirm(
+          session,
+          window.api.announceAction(summary, confidence)
+        )
         if (stale(session)) return
         if (delayMs > 0) await new Promise((res) => setTimeout(res, delayMs))
         if (stale(session)) return
-        const execResult = (await window.api.executeAction(r.actions)) as
-          | { done: boolean; reached_bottom?: boolean }
+        const execResult = (await mayConfirm(session, window.api.executeAction(r.actions))) as
+          | { done: boolean; reached_bottom?: boolean; cancelled?: boolean }
           | undefined
-        if (stale(session)) return
+        if (stale(session) || execResult?.cancelled) return
         if (execResult?.reached_bottom) {
           console.log('[follow_up] reached_bottom — stopping chain')
           return
@@ -182,6 +200,7 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
         processingTimerRef.current = null
       }
       if (session === voiceSessionRef.current) resetHud()
+      survivorsRef.current.delete(session)
     }
   }
 
@@ -193,7 +212,8 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
       wakeTimerRef.current = null
     }
     setPhase('error')
-    window.api.showAnswerOverlay?.(message)
+    // Main shows it in the error row (role=alert) and announces it.
+    window.lumen.send('assistant:error', message)
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
     errorTimerRef.current = setTimeout(() => {
       errorTimerRef.current = null
@@ -248,6 +268,7 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
       cancelledRef.current = true
       dictationRef.current = false
       queryFiredRef.current = false
+      survivorsRef.current.clear()
       voiceSessionRef.current++
       if (wakeTimerRef.current) {
         clearTimeout(wakeTimerRef.current)
@@ -269,6 +290,13 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
     })
   }, [abort])
 
+  useEffect(
+    () =>
+      window.lumen.on('assistant:state', (v) => {
+        confirmShownRef.current = !!v.confirm
+      }),
+    []
+  )
   useEffect(() => startSpeaker(), [])
   useEffect(() => startBargeIn(), [])
   useEffect(() => startWakeFeed(), [])
@@ -317,6 +345,8 @@ export default function App({ headless = false }: { headless?: boolean }): JSX.E
       cancelledRef.current = false
       dictationRef.current = false
       setPhase('listening')
+      const waiting = confirmWaitRef.current
+      if (waiting !== null && confirmShownRef.current) survivorsRef.current.add(waiting)
       return ++voiceSessionRef.current
     }
     resetHudRef.current = resetHud

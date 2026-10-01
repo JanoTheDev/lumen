@@ -198,8 +198,79 @@ body,
   min-width: 0;
 }
 
+/* Caption: "I heard" + the words, with Edit beside it (outside the live region). The wrapper
+   stays mounted so the live region exists before text arrives; empty, it cancels its gap. */
+.as-caption-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.as-caption-wrap.is-empty {
+  margin-bottom: calc(-1 * var(--space-2));
+}
+
 .as-caption {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
   color: var(--fg);
+}
+
+.as-caption__label {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.as-caption__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Correction editor ("correct that", "spell that", Edit). */
+.as-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.as-edit__label {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.as-edit__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.as-edit__row .ui-input {
+  flex: 1;
+  max-width: none;
+  min-width: 0;
+}
+
+/* Feedback line: what Lumen said, shown calmly for anyone who did not hear it. */
+.as-live {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--fg);
+}
+
+.as-live__icon {
+  display: inline-flex;
+  flex: none;
+  margin-top: 0.15em;
+  color: var(--fg-muted);
+}
+
+.as-live__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 /* Muted output: "Sound is muted" + Unmute. */

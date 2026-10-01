@@ -1,12 +1,18 @@
 // The assistant bar: one bottom-centre card that grows upward. It renders the AssistantView
-// main sends and owns no feature logic. Rows (top to bottom): answer or error, confirm,
-// step, caption, and the bar row that is always there while the card is visible.
+// main sends and owns no feature logic. Rows (top to bottom): answer or error, notice,
+// confirm, step, feedback line, caption (or its editor), and the bar row that is always there
+// while the card is visible.
+//
+// Screen readers (06 T11): main announces phases, answers, steps, errors and confirms through
+// the announce policy, so this window has no shared LiveRegion. Only what nobody voiced is
+// announced here (BarLive, the error row's role="alert"); the caption is a polite live region.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AssistantView } from '@shared/channels'
 import type { AssistantPhase } from '@shared/events'
-import { Button, IconButton, LiveRegion, announce, icons, type IconComponent } from '../ui'
+import { Button, IconButton, icons, type IconComponent } from '../ui'
 import { animateSpring, fadeOut, prefersReducedMotion } from '../ui/motion'
 import { send, useIpc } from '../lib/ipc'
+import { BarLive, CaptionEditor, CaptionRow, FeedbackLine } from './Caption'
 import { Confirm } from './Confirm'
 import { MorphSurface } from './MorphSurface'
 import { errorHint, statusLine } from './model'
@@ -80,13 +86,27 @@ export function AssistantApp(): JSX.Element {
   const answerRef = useRef<HTMLDivElement>(null)
   const wasShown = useRef(false)
 
+  const viewRef = useRef(view)
+  useEffect(() => {
+    viewRef.current = view
+  })
   useIpc('assistant:state', setView)
-  // Focus shortcut (06 T17): main made the window focusable; land on the first control.
+  // Main made the window focusable (focus shortcut, a confirm with a screen reader running,
+  // the caption editor). Land on the editor, the confirm's default button, else the first
+  // control. The state that goes with it may still be rendering, so wait a frame.
   useIpc('assistant:focus', () => {
-    const el = cardRef.current?.querySelector<HTMLElement>(
-      'button, [href], [tabindex]:not([tabindex="-1"])'
-    )
-    el?.focus()
+    window.setTimeout(() => {
+      const card = cardRef.current
+      if (!card) return
+      const confirm = viewRef.current.confirm
+      const buttons = card.querySelectorAll<HTMLElement>('.ui-confirm__actions button')
+      const el =
+        card.querySelector<HTMLElement>('[data-caption-input]') ??
+        (confirm && buttons.length
+          ? buttons[confirm.risk === 'high' ? 0 : buttons.length - 1]
+          : card.querySelector<HTMLElement>('button, [href], [tabindex]:not([tabindex="-1"])'))
+      el?.focus()
+    }, 30)
   })
   if (view.visible && shown !== view) setShown(view)
   const hasCard = shown !== null
@@ -162,9 +182,16 @@ export function AssistantApp(): JSX.Element {
         el.style.transform = Math.abs(x) < 0.05 ? '' : `translateX(${x}px)`
       }
     })
-    announce(errorMsg, 'assertive')
     return () => s.cancel()
   }, [errorMsg])
+
+  // A confirm or editor that had focus went away: its blur never fires, so the countdown
+  // would stay paused.
+  const confirmId = shown?.confirm?.actionId
+  const editing = !!shown?.captionEdit
+  useEffect(() => {
+    if (!cardRef.current?.contains(document.activeElement)) setFocusWithin(false)
+  }, [confirmId, editing])
 
   // Keep the newest streamed words in view.
   const answer = shown?.answer
@@ -216,7 +243,7 @@ export function AssistantApp(): JSX.Element {
   return (
     <>
       <VoiceHost />
-      <LiveRegion />
+      <BarLive live={view.visible ? view.live : undefined} />
       <div className="as-root">
         {hasCard && (
           <div ref={shellRef} className="as-shell">
@@ -224,7 +251,7 @@ export function AssistantApp(): JSX.Element {
               <MorphSurface
                 ref={cardRef}
                 role="region"
-                aria-label="Lumen assistant"
+                aria-label="Lumen"
                 className={`as-card is-${v.phase}`}
                 onPointerEnter={() => {
                   setHover(true)
@@ -249,7 +276,7 @@ export function AssistantApp(): JSX.Element {
 
                 <Fade show={!!(v.answer || v.error)}>
                   {v.error && !v.answer ? (
-                    <div className="as-row as-error">
+                    <div className="as-row as-error" role={v.error.announced ? undefined : 'alert'}>
                       <p className="as-error__msg">{v.error.message}</p>
                       {hint && <p className="as-error__hint">{hint}</p>}
                     </div>
@@ -303,9 +330,15 @@ export function AssistantApp(): JSX.Element {
                   )}
                 </Fade>
 
-                <Fade show={!!v.caption}>
-                  {v.caption && <p className="as-row as-caption">“{v.caption}”</p>}
+                <Fade show={!!v.live && !v.live.echo}>
+                  {v.live && <FeedbackLine live={v.live} />}
                 </Fade>
+
+                {v.captionEdit ? (
+                  <CaptionEditor key={v.captionEdit.mode} edit={v.captionEdit} />
+                ) : (
+                  <CaptionRow caption={v.caption} />
+                )}
 
                 <div className="as-bar">
                   <span className="as-status" role="status">
@@ -326,10 +359,7 @@ export function AssistantApp(): JSX.Element {
                         <IconButton
                           icon={icons.copy}
                           label="Copy"
-                          onClick={() => {
-                            command('copy')
-                            announce('Copied')
-                          }}
+                          onClick={() => command('copy')}
                         />
                         <IconButton
                           icon={icons.pin}
