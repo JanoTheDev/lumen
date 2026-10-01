@@ -157,6 +157,15 @@ describe('assistant bar accessibility (06 T11 / T14)', () => {
     expect(assistant.state().visible).toBe(false)
   })
 
+  it('a different answer does not carry the pin over; the same answer keeps it', () => {
+    assistant.showAnswer('old')
+    assistant.pinAnswer(true)
+    assistant.showAnswer('old')
+    expect(assistant.state().answer?.pinned).toBe(true)
+    assistant.showAnswer('new')
+    expect(assistant.state().answer?.pinned).toBe(false)
+  })
+
   it('Repeat goes through the announce policy as plain text when nothing speaks it', () => {
     assistant.showAnswer('**Compose** is at the [top left](https://x.test).')
     assistant.command({ type: 'repeat' })

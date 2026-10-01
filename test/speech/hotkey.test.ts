@@ -3,9 +3,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 vi.mock('../../src/main/query/context', () => ({ startSpeculativeCapture: vi.fn() }))
 vi.mock('../../src/main/query/capture', () => ({ captureContext: vi.fn() }))
-vi.mock('../../src/main/windows/hud', () => ({ send: vi.fn() }))
 vi.mock('../../src/main/agent/escape', () => ({ holdEscape: vi.fn(), keepEscapeWhile: vi.fn() }))
-vi.mock('../../src/main/windows/status', () => ({ setStatus: vi.fn() }))
+vi.mock('../../src/main/windows/assistant', () => ({ send: vi.fn(), setStatus: vi.fn() }))
 
 import { bus } from '../../src/main/bus'
 import { setConfigDir } from '../../src/main/config'

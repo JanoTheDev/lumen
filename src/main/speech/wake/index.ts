@@ -5,7 +5,7 @@ import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { splitPhrases } from '../../agent/state'
 import type { WakeStatus } from '@shared/channels'
-import * as hud from '../../windows/hud'
+import * as assistant from '../../windows/assistant'
 import { broadcast } from '../../windows/registry'
 import {
   loadSherpa,
@@ -77,7 +77,7 @@ function switchTo(next: WakeEngine): void {
   }
   if (next !== engine) log('step', `wake engine: ${next}`)
   engine = next
-  hud.send('voice:wake-listen', next === 'kws')
+  assistant.send('voice:wake-listen', next === 'kws')
   broadcast('wake:status', wakeStatus())
 }
 

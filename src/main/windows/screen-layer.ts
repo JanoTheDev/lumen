@@ -1,4 +1,4 @@
-// Screen layer (ui v2): one transparent, click-through window per display that draws the
+// Screen layer: one transparent, click-through window per display that draws the
 // ScreenScene (highlights, buddy, marks, grid, annotations, dwell ring).
 //
 // Scene rects are kept in global logical px and translated to each display's own DIP before
@@ -6,7 +6,7 @@
 import { screen, type BrowserWindow, type Display } from 'electron'
 import type { GuideStep, LocateItem, Point, Rect } from '@shared/types'
 import type { ScreenScene } from '@shared/events'
-import type { DwellRingData } from '@shared/channels'
+import type { DwellRingData, EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { onBroadcast, registerWindowSet } from './registry'
 import { loadConfig } from '../config'
@@ -273,7 +273,7 @@ function syncDisplays(): void {
   }
 }
 
-/** Creates the layers once; later calls do nothing (the a11y overlay also needs them in v1). */
+/** Creates the layers once; later calls do nothing. */
 export function create(): void {
   if (created) return
   created = true
@@ -390,6 +390,27 @@ export function show(): void {
 
 export function isVisible(): boolean {
   return !suppressed && [...layers.values()].some((l) => l.win.isVisible())
+}
+
+/** The screen:* event channels mapped onto the scene API. */
+export function send<C extends EventChannel>(channel: C, ...args: EventChannels[C]): void {
+  const arg = args[0]
+  if (channel === 'screen:highlights') setHighlights(arg as GuideStep[])
+  else if (channel === 'screen:pointer') setPointer(arg as Point & { text: string })
+  else if (channel === 'screen:locate') setLocate(arg as LocateItem[])
+  else if (channel === 'screen:clear') clear()
+}
+
+/** The a11y dwell controller decides what the ring shows; off parks it off-screen. */
+export function setDwellEnabled(enabled: boolean): void {
+  if (enabled) create()
+  else dwell({ x: -1e6, y: -1e6, progress: 0, active: false })
+}
+
+/** Ring position in global logical px; creates the layers on first use. */
+export function dwellProgress(data: DwellRingData): void {
+  create()
+  dwell(data)
 }
 
 /** Dwell ring fast path: only the layer under the point gets it, in its own DIP. */

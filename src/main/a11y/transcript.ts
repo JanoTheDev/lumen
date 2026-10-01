@@ -5,13 +5,10 @@
 //   - a11y.confirmTranscript: always = every action batch waits for an explicit yes,
 //     risky = only batches that send, delete, close or pay, off = never
 //   - a word corrected twice joins voiceVocab (Whisper's prompt)
-// The confirm needs the assistant bar (ui v2); v1 only gets "no, I said …".
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { patchConfig } from '../ipc/settings'
 import * as assistant from '../windows/assistant'
-import * as hud from '../windows/hud'
-import { uiV2 } from '../windows/ui-mode'
 import { LOCAL_HANDLED } from './dispatch'
 import {
   CaptionSession,
@@ -21,7 +18,6 @@ import {
   describeActions,
   mergeVocab,
   needsTranscriptConfirm,
-  parseCorrection,
   type ActionRisk,
   type RiskAction
 } from './captions'
@@ -49,13 +45,6 @@ function heardNow(text: string): void {
 
 /** Every user utterance (not the pipeline's own follow-ups), before the router. */
 export function beforeUtterance(prompt: string): UtteranceResult {
-  if (!uiV2()) {
-    const c = parseCorrection(prompt)
-    const text = c?.type === 'replace' ? c.text : prompt
-    if (c?.type === 'replace') learn(session.lastHeard(), text)
-    heardNow(text)
-    return { prompt: text }
-  }
   if (assistant.confirmPending()) {
     const answer = confirmAnswer(prompt)
     if (answer) {
@@ -101,7 +90,7 @@ export function submitEdit(text: string): void {
   assistant.setCaptionEdit(undefined)
   if (!run) return
   learn(heard, run)
-  hud.send('assistant:run-query', run)
+  assistant.send('assistant:run-query', run)
 }
 
 function heardLine(): string {
@@ -133,7 +122,7 @@ export async function explainBeforeDo(
 
 /** Before an action batch runs: waits for yes when the policy asks; false = do not run. */
 export async function confirmActions(actions: readonly RiskAction[]): Promise<boolean> {
-  if (!uiV2() || !actions.length) return true
+  if (!actions.length) return true
   const policy = loadConfig().a11y.confirmTranscript
   const risk = actionRisk(actions)
   if (!needsTranscriptConfirm(policy, risk)) return true

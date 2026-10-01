@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 vi.mock('@electron-toolkit/utils', () => ({ is: { dev: true } }))
-vi.mock('../../src/main/windows/ui-mode', () => ({ uiV2: () => true }))
 const patchConfig = vi.fn<(p: unknown) => Promise<unknown>>(async () => ({}))
 vi.mock('../../src/main/ipc/settings', () => ({ patchConfig: (p: unknown) => patchConfig(p) }))
-const hudSend = vi.fn()
-vi.mock('../../src/main/windows/hud', () => ({ send: (...a: unknown[]) => hudSend(...a) }))
+const barSend = vi.fn()
+vi.mock('../../src/main/windows/assistant', async (orig) => ({
+  ...(await orig<typeof import('../../src/main/windows/assistant')>()),
+  send: (...a: unknown[]) => barSend(...a)
+}))
 
 import { loadConfig, saveConfig, setConfigDir } from '../../src/main/config'
 import * as assistant from '../../src/main/windows/assistant'
@@ -33,7 +35,7 @@ describe('transcript confirmation and corrections (06 T14)', () => {
     tmp = tempDir()
     setConfigDir(tmp.dir)
     patchConfig.mockClear()
-    hudSend.mockClear()
+    barSend.mockClear()
     assistant.setCommandDeps({ cancel: () => {}, edit: openEditor })
   })
   afterEach(() => {
@@ -78,7 +80,7 @@ describe('transcript confirmation and corrections (06 T14)', () => {
     expect(assistant.state().captionEdit).toEqual({ mode: 'edit', draft: 'open spotty fly' })
     submitEdit('open Spotify')
     expect(assistant.state().captionEdit).toBeUndefined()
-    expect(hudSend).toHaveBeenCalledWith('assistant:run-query', 'open Spotify')
+    expect(barSend).toHaveBeenCalledWith('assistant:run-query', 'open Spotify')
   })
 
   it('"spell that" collects letters by voice, "done" runs them', () => {

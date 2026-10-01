@@ -8,8 +8,7 @@ import { bus } from '../../bus'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { beginScope, CancelledError, endScope, isAbortError } from '../../query/cancel'
-import * as answer from '../../windows/answer'
-import { setStatus } from '../../windows/status'
+import { setStatus, showAnswer } from '../../windows/assistant'
 import { DictationActivation } from './activation'
 import {
   autoDictateGate,
@@ -94,7 +93,7 @@ async function finishInsert(
   archivePending(pendingId)
   log('fail', `dictation not typed: ${res.notice}`)
   setStatus('error', res.notice, undefined, 4000)
-  answer.showText(`${res.notice}\n\n${text}`)
+  showAnswer(`${res.notice}\n\n${text}`)
   return { ok: false, notice: res.notice }
 }
 
@@ -111,7 +110,7 @@ export async function dictate(raw: string): Promise<DictateResult> {
   const agent = getAgent()
   if (!agent) {
     archivePending(pendingId)
-    answer.showText(`The helper process is not running, so nothing was typed.
+    showAnswer(`The helper process is not running, so nothing was typed.
 
 ${text}`)
     return { ok: false, notice: 'agent not running' }
@@ -198,5 +197,5 @@ export function offerRecovery(showAfterMs = 0): void {
   if (!items.length) return
   log('plan', `recovered ${items.length} dictation(s)`)
   const message = recoveryMessage(items)
-  setTimeout(() => answer.showText(message), showAfterMs)
+  setTimeout(() => showAnswer(message), showAfterMs)
 }

@@ -11,7 +11,6 @@ import { onConfigPatched } from '../ipc/settings'
 import { cancelAll } from '../query/cancel'
 import * as assistant from '../windows/assistant'
 import * as home from '../windows/home'
-import { uiV2 } from '../windows/ui-mode'
 import type { A11yCommands } from './dispatch'
 import { dwellController } from './dwell'
 import { syncHelpShortcut } from './help'
@@ -34,7 +33,7 @@ export function installShortcuts(deps: ShortcutInstallDeps): { status: () => Sho
   let lessonRunning = false
 
   const answer = (op: 'repeat' | 'pin' | 'close'): void => {
-    if (!uiV2() || !assistant.answerShown()) {
+    if (!assistant.answerShown()) {
       deps.feedback('No answer is showing', false)
       return
     }
@@ -47,7 +46,7 @@ export function installShortcuts(deps: ShortcutInstallDeps): { status: () => Sho
     log('plan', `shortcut ${action}`)
     switch (action) {
       case 'focusBar':
-        if (uiV2() && assistant.focusBar()) return
+        if (assistant.focusBar()) return
         if (home.get()) {
           home.show()
           home.send('home:ask')

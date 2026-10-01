@@ -28,7 +28,6 @@ vi.mock('../../src/main/ipc/settings', () => ({
 vi.mock('../../src/main/query/cancel', () => ({ cancelAll: () => {} }))
 vi.mock('../../src/main/windows/assistant', () => ({}))
 vi.mock('../../src/main/windows/home', () => ({}))
-vi.mock('../../src/main/windows/ui-mode', () => ({ uiV2: () => true }))
 vi.mock('../../src/main/windows/command-sheet', () => ({ show: () => {} }))
 vi.mock('../../src/main/a11y/dwell', () => ({ dwellController: () => null }))
 

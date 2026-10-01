@@ -15,7 +15,6 @@ import * as assistant from '../windows/assistant'
 import * as layer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
 import * as home from '../windows/home'
-import * as hud from '../windows/hud'
 
 const commandSchema = z
   .object({
@@ -130,7 +129,7 @@ export function registerUiIpc(deps: UiIpcDeps): void {
     const text = safeParse('home:run', promptSchema, raw)
     if (!text) return
     home.hide()
-    hud.send('assistant:run-query', text)
+    assistant.send('assistant:run-query', text)
   })
   ipcMain.handle('onboarding:info', () => ({ screenReader: screenReaderActive() }))
   ipcMain.handle('home:info', (): HomeInfo => {

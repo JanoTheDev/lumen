@@ -22,8 +22,6 @@ import * as assistant from '../windows/assistant'
 import * as commandSheet from '../windows/command-sheet'
 import * as screenLayer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
-import { setStatus } from '../windows/status'
-import { uiV2 } from '../windows/ui-mode'
 import { Announcer, type AnnounceOptions } from './announce'
 import { screenReaderActive } from './at-state'
 import { focusEventsWanted, pushFocusSubscription, wantFocusEvents } from './focus-events'
@@ -106,7 +104,12 @@ function setDwellPaused(paused: boolean): boolean {
 
 /** Status text plus an announcement for a command's result. */
 function feedback(text: string, ok: boolean): void {
-  setStatus(ok ? 'answer' : 'error', text, undefined, loadConfig().a11y.timings.statusHoldMs)
+  assistant.setStatus(
+    ok ? 'answer' : 'error',
+    text,
+    undefined,
+    loadConfig().a11y.timings.statusHoldMs
+  )
   announce(text, { kind: ok ? 'command' : 'error' })
 }
 
@@ -169,7 +172,6 @@ function createIo(): A11yIo {
         bounds: { x: d.bounds.x, y: d.bounds.y, w: d.bounds.width, h: d.bounds.height }
       })),
     setScene: (part: A11yScene) => {
-      // v1 has no screen layer of its own; create it for the numbers and the grid.
       screenLayer.create()
       screenLayer.setScene(part)
     },
@@ -197,10 +199,8 @@ function createIo(): A11yIo {
     },
     keepMarks: () => loadConfig().a11y.marks.keep,
     guideActive: () => guideState().guideActive,
-    answerShown: () => uiV2() && assistant.answerShown(),
+    answerShown: () => assistant.answerShown(),
     answer: (op) => {
-      // The v1 answer window keeps its own timer (hover pauses it); only the bar is driven here.
-      if (!uiV2()) return false
       if (op === 'pin') return assistant.pinAnswer(true)
       if (op === 'longer') return assistant.extendTimers()
       assistant.close()

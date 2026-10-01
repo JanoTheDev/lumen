@@ -4,7 +4,7 @@ import { bus } from '../../bus'
 import { dismissGuide } from '../../guides/session'
 import { loadConfig } from '../../config'
 import { cancelAll } from '../../query/cancel'
-import { setStatus } from '../../windows/status'
+import { setStatus } from '../../windows/assistant'
 
 export function handleWake(engine: string): void {
   console.log(`[wake] detected (${engine}) — listening with auto-stop`)

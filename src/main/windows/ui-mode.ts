@@ -1,6 +1,3 @@
-// The old window set (HUD, status bubble, answer card, highlight and dwell ring windows) is
-// gone: the assistant bar, screen layer and panel window always run. Kept for callers that
-// still branch on it; config ui.v2 is ignored.
-export function uiV2(): boolean {
-  return true
-}
+// Deprecated shim: the assistant bar and screen layer are the only UI. Remove once
+// a11y/install-switch.ts and ipc/query.ts drop their uiV2() branches.
+export const uiV2 = (): true => true

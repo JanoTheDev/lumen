@@ -16,7 +16,7 @@ import { createWindow, loadRenderer } from './factory'
 import { currentZoom, live, registerWindow, sendTo } from './registry'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
-import { PausableTimer, answerAutoCloseMs, captionHoldMs } from '../a11y/timings'
+import { PausableTimer, answerAutoCloseMs, captionHoldMs, statusHoldMs } from '../a11y/timings'
 import { screenReaderActive } from '../a11y/at-state'
 import type { AnnounceOptions } from '../a11y/announce'
 
@@ -193,7 +193,7 @@ const PHASE: Record<StatusKind, AssistantPhase> = {
   step: 'waiting-user'
 }
 
-/** Maps the old status bubble calls onto the bar. */
+/** A status line on the bar (listening, thinking, step n of m, errors). */
 export function status(
   kind: StatusKind,
   text: string,
@@ -218,6 +218,16 @@ export function status(
   if (announceAs && !known) say(text, { kind: announceAs })
 }
 
+/** Status line; timed lines stay at least a11y.timings.statusHoldMs (WCAG 2.2.1). */
+export function setStatus(
+  kind: StatusKind,
+  text: string,
+  step?: { index: number; total: number },
+  requestedHideMs?: number
+): void {
+  status(kind, text, step, statusHoldMs(loadConfig(), requestedHideMs))
+}
+
 /** The status line is done: keep showing content, else close. */
 export function settle(): void {
   statusTimer.clear()
@@ -233,12 +243,14 @@ export function turnEnded(): void {
   close()
 }
 
+/** A different answer is a new card; it does not inherit the pin of the one before. */
 export function showAnswer(text: string): void {
   const turnId = view.answer?.turnId ?? inFlight ?? `t${++turnSeq}`
+  const pinned = !!view.answer?.pinned && view.answer.markdown === text
   patch({
     phase: view.phase === 'error' ? 'error' : 'idle',
     statusText: undefined,
-    answer: { turnId, markdown: text, streaming: false, pinned: !!view.answer?.pinned }
+    answer: { turnId, markdown: text, streaming: false, pinned }
   })
 }
 
@@ -606,4 +618,31 @@ bus.on('query.cancelled', (e) => {
   if (inFlight === e.turnId) inFlight = null
   close()
 })
-bus.on('voice.cancelled', () => close())
+bus.on('voice.cancelled', () => {
+  close()
+  send('assistant:cancel-request')
+})
+
+// ---- Voice: the bar hosts the voice controller (assistant/VoiceHost) ----
+
+/** Hands-free uses the same auto-stop-on-silence path as wake-word activation. */
+export function startVoice(handsFree: boolean): void {
+  send('voice:start', { mode: handsFree ? 'hands-free' : 'hold' })
+}
+
+export function startDictation(): void {
+  send('voice:start', { mode: 'dictation' })
+}
+
+bus.on('voice.started', (e) => {
+  open('listening')
+  startVoice(e.handsFree)
+})
+bus.on('dictation.started', () => {
+  open('listening')
+  startDictation()
+})
+bus.on('dictation.hands-free', () => send('voice:hands-free'))
+bus.on('voice.stopped', (e) => {
+  if (!e.ended) send('voice:stop')
+})

@@ -5,9 +5,8 @@ import { findGuideByName, loadSavedGuide, saveGuide } from './store'
 import type { GuideNavCommand } from './voice-nav'
 import { rectCenter } from '../actions/coords'
 import { log } from '../logger'
-import * as hud from '../windows/hud'
-import * as highlight from '../windows/highlight'
-import { setStatus } from '../windows/status'
+import * as assistant from '../windows/assistant'
+import * as layer from '../windows/screen-layer'
 
 interface ActiveGuide {
   steps: GuideStep[]
@@ -30,7 +29,7 @@ export function startGuide(task: string, steps: GuideStep[]): void {
 /** Drops the active guide and clears its highlights. */
 export function dismissGuide(): void {
   activeGuide = null
-  highlight.clear()
+  layer.clear()
 }
 
 export function saveLastAsGuide(name: string): SavedGuide | null {
@@ -47,8 +46,8 @@ export function replaySavedGuide(id: string): SavedGuide | null {
   const entry = loadSavedGuide(id)
   if (!entry) return null
   log('step', `replaying saved guide "${entry.name}" (fresh query)`)
-  setStatus('thinking', `Replaying: ${entry.name}`, { index: 2, total: 3 })
-  hud.send('assistant:run-query', entry.task)
+  assistant.setStatus('thinking', `Replaying: ${entry.name}`, { index: 2, total: 3 })
+  assistant.send('assistant:run-query', entry.task)
   return entry
 }
 
@@ -61,12 +60,12 @@ function handleGuideNavCommand(cmd: GuideNavCommand): { handled: boolean; respon
     activeGuide.index = clamped
     const step = activeGuide.steps[clamped]
     const total = activeGuide.steps.length
-    setStatus('step', step.label, { index: clamped + 1, total })
+    assistant.setStatus('step', step.label, { index: clamped + 1, total })
     if (step.bbox) {
-      highlight.send('screen:highlights', [step])
-      highlight.show()
+      layer.send('screen:highlights', [step])
+      layer.show()
       const c = rectCenter(step.bbox)
-      highlight.send('screen:pointer', {
+      layer.send('screen:pointer', {
         x: Math.round(c.x),
         y: Math.round(c.y),
         text: `${clamped + 1}/${total}: ${step.label}`
@@ -76,12 +75,12 @@ function handleGuideNavCommand(cmd: GuideNavCommand): { handled: boolean; respon
 
   if (cmd === 'done') {
     dismissGuide()
-    setStatus('idle', 'Guide closed', undefined, 900)
+    assistant.setStatus('idle', 'Guide closed', undefined, 900)
     return { handled: true, response: { mode: 'answer', text: 'Guide closed.' } }
   }
   if (cmd === 'next') {
     if (activeGuide.index >= activeGuide.steps.length - 1) {
-      setStatus('answer', 'Last step', undefined, 1400)
+      assistant.setStatus('answer', 'Last step', undefined, 1400)
       return { handled: true, response: { mode: 'answer', text: 'You are on the last step.' } }
     }
     showStep(activeGuide.index + 1)
@@ -105,7 +104,10 @@ function handleGuideNavCommand(cmd: GuideNavCommand): { handled: boolean; respon
   }
   if (cmd === 'repeat') {
     const step = activeGuide.steps[activeGuide.index]
-    setStatus('step', step.label, { index: activeGuide.index + 1, total: activeGuide.steps.length })
+    assistant.setStatus('step', step.label, {
+      index: activeGuide.index + 1,
+      total: activeGuide.steps.length
+    })
     return {
       handled: true,
       response: { mode: 'answer', text: `Step ${activeGuide.index + 1}: ${step.label}` }
@@ -149,12 +151,12 @@ export function handleGuideCommand(cmd: GuideCommand): unknown | undefined {
   }
 
   activeGuide = { steps: lastGuide.steps, index: 0 }
-  setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', {
+  assistant.setStatus('step', lastGuide.steps[0]?.label ?? 'Replaying guide', {
     index: 1,
     total: lastGuide.steps.length
   })
-  highlight.send('screen:highlights', lastGuide.steps)
-  highlight.show()
+  layer.send('screen:highlights', lastGuide.steps)
+  layer.show()
   return {
     mode: 'answer',
     text: `Replaying guide: "${lastGuide.task}" (${lastGuide.steps.length} steps). Say "next" to advance.`

@@ -36,7 +36,6 @@ import { prepareStt, transcribe } from './speech/stt'
 import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pipeline'
 import { isOwnRendererUrl } from './windows/factory'
 import { applyUiScaleOnLoad } from './windows/registry'
-import { setStatus } from './windows/status'
 import * as tray from './windows/tray'
 import * as assistantWin from './windows/assistant'
 import * as screenLayer from './windows/screen-layer'
@@ -149,7 +148,7 @@ app.whenReady().then(() => {
   installUpdates()
 
   const configWarning = lastConfigWarning()
-  if (configWarning) setStatus('error', configWarning, undefined, 8000)
+  if (configWarning) assistantWin.setStatus('error', configWarning, undefined, 8000)
 
   // Escape cancels in-flight work in main directly and tells the HUD to stop recording.
   setEscapeHandler(() => {

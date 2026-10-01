@@ -14,9 +14,6 @@ import { loadConfig } from '../../config'
 import { log } from '../../logger'
 import { screenReaderActive } from '../../a11y/at-state'
 import * as assistant from '../../windows/assistant'
-import * as hud from '../../windows/hud'
-import { setStatus } from '../../windows/status'
-import { uiV2 } from '../../windows/ui-mode'
 import { forTheEar } from './ear'
 import { openAiTtsAvailable, synthOpenAi } from './openai'
 import { OutputGate, ttsAllowed } from './output'
@@ -43,7 +40,7 @@ const output = new OutputGate(
 )
 
 function send(msg: TtsMessage): void {
-  hud.send('voice:tts', msg)
+  assistant.send('voice:tts', msg)
 }
 
 /** Routes answers to the screen reader (a11y announce); set by main at startup. */
@@ -62,8 +59,7 @@ export function stopSpeaking(): void {
 function onMuted(turnId: string): void {
   log('step', 'tts skipped: sound output is muted')
   mutedTurn = turnId
-  if (uiV2()) assistant.setNotice({ text: 'Sound is muted', action: 'unmute' })
-  else setStatus('error', 'Sound is muted, so the answer is not read aloud', undefined, 4000)
+  assistant.setNotice({ text: 'Sound is muted', action: 'unmute' })
   if (lastAnswer?.turnId === turnId) copyIfWanted(lastAnswer.shown)
 }
 
