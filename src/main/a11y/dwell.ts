@@ -28,6 +28,8 @@ export interface DwellSettings {
   safeTargets: boolean
   ringSize: 's' | 'm' | 'l' | 'xl'
   pauseCorner: 'none' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+  /** Cursor smoothing (EMA alpha 0-0.9) the agent applies before the radius test; 0 = off. */
+  smoothing?: number
 }
 
 /** What `dwell_config` gets (C2). The agent always does left; main decides the click type. */
@@ -41,6 +43,7 @@ export interface AgentDwellConfig {
   moveTolerancePx: number
   /** Also on for safeTargets: the trigger then carries the element's name. */
   snapToElement: boolean
+  smoothing: number
 }
 
 export interface DwellConfigSource {
@@ -61,7 +64,8 @@ export function dwellSettings(cfg: DwellConfigSource): DwellSettings {
     snapToElement: d.snapToElement,
     safeTargets: d.safeTargets,
     ringSize: d.ringSize,
-    pauseCorner: d.pauseCorner
+    pauseCorner: d.pauseCorner,
+    smoothing: d.smoothing
   }
 }
 
@@ -73,7 +77,8 @@ export function agentDwellConfig(s: DwellSettings, scale: number): AgentDwellCon
     clickType: 'left',
     maxRepeats: s.maxRepeats,
     moveTolerancePx: Math.round(s.radiusPx * Math.max(1, scale)),
-    snapToElement: s.snapToElement || s.safeTargets
+    snapToElement: s.snapToElement || s.safeTargets,
+    smoothing: Math.min(0.9, Math.max(0, s.smoothing ?? 0))
   }
 }
 

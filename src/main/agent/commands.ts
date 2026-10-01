@@ -83,7 +83,8 @@ const CAPABILITY: Record<string, string> = {
   tts_voices: 'tts',
   tts_synthesize: 'tts',
   audio_output: 'audio-output',
-  audio_unmute: 'audio-output'
+  audio_unmute: 'audio-output',
+  switch_keys: 'switch'
 }
 
 function send<T>(
@@ -272,4 +273,20 @@ export function audioOutput(bridge: AgentBridge, opts?: RequestOptions): Promise
 
 export async function audioUnmute(bridge: AgentBridge, opts?: RequestOptions): Promise<void> {
   await send(bridge, 'audio_unmute', {}, opts)
+}
+
+export type SwitchMouseButton = 'left' | 'right' | 'middle' | 'x1' | 'x2'
+
+/**
+ * Switch access keys on the agent's low-level hooks: physical down and up of these keys
+ * (Electron accelerator names) and mouse buttons are suppressed and reported as
+ * `switch {index, down}` (index into keys, then mouse). Empty lists release them.
+ */
+export function switchKeys(
+  bridge: AgentBridge,
+  keys: string[],
+  mouse: SwitchMouseButton[] = [],
+  opts?: RequestOptions
+): Promise<{ keys: string[]; mouse: string[] }> {
+  return send(bridge, 'switch_keys', { keys, mouse }, opts)
 }

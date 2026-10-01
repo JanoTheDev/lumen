@@ -2,9 +2,11 @@
 // the scan ring / menu on the screen layer, the keyboard window and the scan tree's links
 // to numbers, the grid, the agent and Lumen's own actions. installA11y() calls it.
 //
-// Switch keys are global shortcuts for now (RegisterHotKey): Windows hands the key to Lumen
-// only, so Space does not also type into the app. They are bound only while scanning is on.
-// Key-up, held-key and mouse/gamepad switches need the agent hook (requested from 02).
+// Switch keys are bound only while scanning is on. With an agent that reports `switch` they
+// live on its low-level keyboard hook (`switch_keys`): the physical key is suppressed down and
+// up, auto-repeat is swallowed and injected keys pass through. Otherwise they fall back to
+// Electron global shortcuts (RegisterHotKey: suppressed, but a held key repeats and our own
+// typed keys clash). Gamepad switches are not supported.
 import { globalShortcut, screen } from 'electron'
 import type { InputStep } from '@shared/types'
 import { bus } from '../bus'
@@ -12,7 +14,7 @@ import { loadConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import { logicalToPhys, physRectToLogical } from '../actions/coords'
 import * as commands from '../agent/commands'
-import { requireAgent } from '../agent/instance'
+import { getAgent, requireAgent } from '../agent/instance'
 import { onConfigPatched } from '../ipc/settings'
 import { cancelAll } from '../query/cancel'
 import { handleWake } from '../speech/wake/handlers'
@@ -66,34 +68,61 @@ function switchAccelerator(key: string): string {
   return k[0].toUpperCase() + k.slice(1)
 }
 
+/** The running agent when it can hold switch keys on its hook. */
+function switchHook(): ReturnType<typeof getAgent> {
+  const agent = getAgent()
+  return agent?.running && agent.hasCapability('switch') ? agent : null
+}
+
 export function installSwitch(deps: SwitchInstallDeps): SwitchControl {
+  /** Keys held as Electron global shortcuts (fallback). */
   let bound: string[] = []
+  /** Keys held on the agent hook. */
+  let hooked = false
+  /** Scanning is on, so switch keys should be bound. */
+  let wanted = false
   let lastRaw = -Infinity
   let lessonRunning = false
   bus.on('lesson.step-started', () => (lessonRunning = true))
   bus.on('lesson.done', () => (lessonRunning = false))
 
-  const unbind = (): void => {
+  const releaseShortcuts = (): void => {
     for (const k of bound) globalShortcut.unregister(k)
     bound = []
   }
 
-  const onKey = (i: number): void => {
-    const now = Date.now()
-    const gap = now - lastRaw
-    lastRaw = now
-    if (gap < REPEAT_GAP_MS) return
+  const unbind = (): void => {
+    wanted = false
+    releaseShortcuts()
+    const agent = switchHook()
+    if (hooked && agent) {
+      commands
+        .switchKeys(agent, [])
+        .catch((e: Error) => log('skip', `switch keys release failed (${e.message})`))
+    }
+    hooked = false
+  }
+
+  const press = (i: number): void => {
     const mode = scanSettings(loadConfig()).mode
     const role: SwitchRole = mode === 'step' && i === 0 ? 'next' : 'select'
     scanner.press(role)
   }
 
-  const bind = (): void => {
-    unbind()
-    loadConfig().a11y.switch.keys.forEach((key, i) => {
-      const acc = switchAccelerator(key)
+  /** Global shortcut: no key-up, so auto-repeat is filtered by timing. */
+  const onShortcut = (i: number): void => {
+    const now = Date.now()
+    const gap = now - lastRaw
+    lastRaw = now
+    if (gap < REPEAT_GAP_MS) return
+    press(i)
+  }
+
+  const bindShortcuts = (accels: string[]): void => {
+    releaseShortcuts()
+    accels.forEach((acc, i) => {
       try {
-        if (globalShortcut.register(acc, () => onKey(i))) bound.push(acc)
+        if (globalShortcut.register(acc, () => onShortcut(i))) bound.push(acc)
         else log('skip', `switch key ${acc} is taken by another app`)
       } catch (e) {
         log('fail', `switch key ${acc} rejected (${(e as Error).message})`)
@@ -101,6 +130,35 @@ export function installSwitch(deps: SwitchInstallDeps): SwitchControl {
     })
     if (!bound.length) deps.feedback('No switch key could be set up', false)
   }
+
+  const bind = (): void => {
+    wanted = true
+    const accels = loadConfig().a11y.switch.keys.map(switchAccelerator)
+    const agent = switchHook()
+    if (!agent) {
+      hooked = false
+      bindShortcuts(accels)
+      return
+    }
+    releaseShortcuts()
+    hooked = true
+    commands.switchKeys(agent, accels).catch((e: Error) => {
+      log('fail', `switch keys on the agent hook failed (${e.message}); using global shortcuts`)
+      hooked = false
+      if (wanted) bindShortcuts(accels)
+    })
+  }
+
+  const agent = getAgent()
+  agent?.onEvent('switch', (data) => {
+    const { index, down } = (data ?? {}) as { index?: unknown; down?: unknown }
+    if (hooked && down === true && typeof index === 'number' && Number.isInteger(index))
+      press(index)
+  })
+  // A restarted agent has no switch keys; a native one may now take over from the shortcuts.
+  agent?.onEvent('agent-ready', () => {
+    if (wanted) bind()
+  })
 
   /** A typed key that is also a switch key would be swallowed by the hotkey: release it. */
   const runInput = async (steps: InputStep[]): Promise<void> => {

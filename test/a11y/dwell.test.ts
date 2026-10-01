@@ -110,6 +110,9 @@ describe('dwell config', () => {
     expect(
       agentDwellConfig({ ...s, safeTargets: false, snapToElement: false }, 1).snapToElement
     ).toBe(false)
+    expect(a.smoothing).toBe(0)
+    expect(agentDwellConfig({ ...s, smoothing: 0.5 }, 1).smoothing).toBe(0.5)
+    expect(agentDwellConfig({ ...s, smoothing: 3 }, 1).smoothing).toBe(0.9)
   })
 })
 
