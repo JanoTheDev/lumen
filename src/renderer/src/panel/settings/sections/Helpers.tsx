@@ -1,6 +1,6 @@
 // Settings → Smart helpers (11 Phase C): focus mode, undo, shortcut coach, comfort
-// proposals, error rescue, "what changed?", reading level and the learning journal. Every
-// helper is off until switched on here and works on this PC only.
+// proposals, error rescue, "what changed?", reading level and the learning journal. Undo is on
+// from the start; every other helper is off until switched on here. All stay on this PC.
 import { useCallback, useEffect, useState } from 'react'
 import type { CoachStatus } from '@shared/channels'
 import type { HelpersConfig, ReadingLevel } from '@shared/config'
@@ -112,7 +112,7 @@ export function Helpers({ cfg, patch }: SectionProps): JSX.Element {
           checked={h.undo}
           onChange={(undo) => set({ undo })}
           label="Remember how to undo my actions"
-          hint="Kept in memory for an hour. Before Lumen changes a file, a copy is kept for a day."
+          hint="On from the start. Kept in memory for an hour. Before Lumen changes a file, a copy is kept for a day."
         />
       </Card>
 

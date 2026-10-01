@@ -29,10 +29,10 @@ describe('focus on the screen layer', () => {
 })
 
 describe('helpers config', () => {
-  it('an older config gets the defaults, all off', () => {
+  it('an older config gets the defaults, undo on, the rest off', () => {
     const cfg = configV2Schema.parse(withV2Defaults({ version: 2 }))
     expect(cfg.helpers).toMatchObject({
-      undo: false,
+      undo: true,
       shortcutCoach: false,
       fatigue: false,
       errorRescue: false,

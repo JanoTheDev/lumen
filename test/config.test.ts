@@ -348,6 +348,15 @@ describe('config', () => {
     expect(DEFAULT_CONFIG.a11y.announce).toBe('auto')
   })
 
+  it('has undo on by default but keeps a saved undo off', () => {
+    expect(loadConfig().helpers.undo).toBe(true)
+    const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
+    old.helpers.undo = false
+    writeRaw(old)
+    invalidateConfig()
+    expect(loadConfig().helpers.undo).toBe(false)
+  })
+
   it('still loads a file with the retired ui.v2 switch', () => {
     const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
     old.ui = { v2: false, homeHotkey: 'F8' }

@@ -247,13 +247,15 @@ describe('executeActions', () => {
       setDwellController(null)
     }
     expect(holds).toEqual(['hold', 'release'])
-    expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
+    // Undo (on by default) may look up the active window before the action.
+    expect(m.calls.map((c) => c.cmd).filter((c) => c !== 'active_window')).toEqual(['execute'])
   })
 
   it('does not pause dwell without a dwell controller', async () => {
     const m = mockAgent({ caps: ['dwell'] })
     await executeActions([{ type: 'click', x: 1, y: 1 }])
-    expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
+    // Undo (on by default) may look up the active window before the action.
+    expect(m.calls.map((c) => c.cmd).filter((c) => c !== 'active_window')).toEqual(['execute'])
   })
 
   describe('click targets resolved against the turn context', () => {

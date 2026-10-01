@@ -247,8 +247,9 @@ export const READING_LEVELS = ['plain', 'standard', 'expert'] as const
 export type ReadingLevel = (typeof READING_LEVELS)[number]
 
 /**
- * Opt-in helpers (11 Phase C): focus mode, undo, shortcut coach, fatigue proposals, error
- * rescue, "what changed?", reading level and the learning journal. Everything stays local.
+ * Helpers (11 Phase C): focus mode, undo, shortcut coach, fatigue proposals, error rescue,
+ * "what changed?", reading level and the learning journal. Undo is on by default, the rest
+ * are opt-in. Everything stays local.
  */
 const helpersSchema = z.object({
   /** How strongly focus mode dims the rest of the screen. */
@@ -279,7 +280,7 @@ export type HelpersConfig = z.infer<typeof helpersSchema>
 export const HELPERS_DEFAULTS: HelpersConfig = {
   focusLevel: 'soft',
   focusWithLessons: false,
-  undo: false,
+  undo: true,
   shortcutCoach: false,
   coachMode: 'keys',
   coachAfter: 3,
