@@ -21,7 +21,7 @@ import {
   routeWithLlm,
   type Route
 } from './router'
-import { callModel, type CallOptions } from '../ai'
+import { callModel, newFileClaim, type CallOptions } from '../ai'
 import { addToHistory, historyExchange } from '../ai/history'
 import { recordTurn } from '../ai/memory/runtime'
 import { appNameOf } from '../ai/skills'
@@ -361,14 +361,17 @@ async function runTurn(
       'plan',
       `parallel split: ${plan.subqueries.length} parts (${plan.subqueries.map((q) => q.length).join(', ')} chars)`
     )
-    // No turnId: sub-answers do not stream speech; the merged answer is spoken once.
+    // No turnId: sub-answers do not stream speech; the merged answer is spoken once. Dropped
+    // files go with the first part about them only.
+    const fileClaim = newFileClaim()
     split = await runParallelSplit(plan.subqueries, scope, (q, child) =>
       callModel(q, screenshot, activeWindow, {
         ...opts,
         context: ctx,
         turnId: undefined,
         signal: child.signal,
-        routedMode: 'answer'
+        routedMode: 'answer',
+        fileClaim
       })
     )
     result = mergeSplit(split)

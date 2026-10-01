@@ -29,7 +29,7 @@ import {
 } from './providers'
 import { noteAnswerModel, recordUsage } from './cost'
 import { installTurnMetrics } from './turn-metrics'
-import { attachmentsFor } from '../files/attach'
+import { attachmentsFor, type Attachments } from '../files/attach'
 import { activeStyleBlock } from './style-runtime'
 
 export interface CallOptions {
@@ -45,6 +45,36 @@ export interface CallOptions {
   context?: QueryContext
   /** false: no conversation history (plan, research and follow-up step calls). */
   history?: boolean
+  /** Shared by the parts of one split question: dropped files go with one part only. */
+  fileClaim?: FileClaim
+}
+
+/** One user turn's dropped files: the first part about them takes them, the rest go without. */
+export interface FileClaim {
+  taken: boolean
+  /** Attachment lookups of the parts, one after another. */
+  chain: Promise<unknown>
+}
+
+export function newFileClaim(): FileClaim {
+  return { taken: false, chain: Promise.resolve() }
+}
+
+/** The files for this call; with a claim, only when no earlier part of the turn took them. */
+export function filesForCall(
+  prompt: string,
+  opts: { pdf: boolean },
+  claim: FileClaim | undefined
+): Promise<Attachments | null> {
+  if (!claim) return attachmentsFor(prompt, opts)
+  const next = claim.chain.then(async () => {
+    if (claim.taken) return null
+    const files = await attachmentsFor(prompt, opts)
+    if (files) claim.taken = true
+    return files
+  })
+  claim.chain = next.catch(() => undefined)
+  return next
 }
 
 function contextFor(screenshot: string | null, opts: CallOptions): QueryContext | undefined {
@@ -99,7 +129,11 @@ export async function callModel(
   const { llm, model, effort } = getProvider('main')
   // Files dropped on the bar (08 T21), only when this request is about them.
   const files = withConversation
-    ? await attachmentsFor(prompt, { pdf: llm.id === 'anthropic' || llm.id === 'openai' })
+    ? await filesForCall(
+        prompt,
+        { pdf: llm.id === 'anthropic' || llm.id === 'openai' },
+        opts.fileClaim
+      )
     : null
   if (files)
     log(
