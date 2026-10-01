@@ -1,6 +1,40 @@
+import { useEffect, useState } from 'react'
+import type { ShortcutStatus } from '@shared/channels'
 import { profileSummary } from '@shared/profiles'
 import { Button, Card, NumberField, SegmentedControl, Slider, Switch } from '../../../ui'
 import type { SectionProps } from '../meta'
+
+// Keys a commercial switch interface usually sends; two keys = step scanning (move, pick).
+const SWITCH_KEYS = [
+  { value: 'Space', label: 'Space' },
+  { value: 'Enter', label: 'Enter' },
+  { value: 'F8', label: 'F8' },
+  { value: 'Space,Enter', label: 'Space + Enter' }
+] as const
+
+const SCAN_MODES = [
+  { value: 'auto', label: 'Moves by itself' },
+  { value: 'step', label: 'I move it' }
+] as const
+
+const SHORTCUT_STATE: Record<ShortcutStatus['state'], string> = {
+  bound: 'On',
+  off: 'Off',
+  inactive: 'Only when needed',
+  conflict: 'Clash',
+  taken: 'Used by another app'
+}
+
+function useShortcuts(cfg: SectionProps['cfg']): ShortcutStatus[] {
+  const [list, setList] = useState<ShortcutStatus[]>([])
+  useEffect(() => {
+    window.lumen
+      .invoke('a11y:shortcuts')
+      .then(setList)
+      .catch(() => {})
+  }, [cfg])
+  return list
+}
 
 const TRISTATE = [
   { value: 'system', label: 'Match Windows' },
@@ -10,6 +44,10 @@ const TRISTATE = [
 
 export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
   const summary = profileSummary(cfg)
+  const sw = cfg.a11y.switch
+  const switchKeys = sw.keys.join(',')
+  const keyChoice = SWITCH_KEYS.some((k) => k.value === switchKeys) ? switchKeys : 'Space'
+  const shortcuts = useShortcuts(cfg)
   return (
     <>
       <Card
@@ -116,6 +154,74 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           unit="ms"
           onCommit={(cooldownMs) => patch({ dwellClick: { cooldownMs } })}
         />
+      </Card>
+
+      <Card
+        title="Switch scanning"
+        description="Lumen moves through choices and you press your switch to pick one. Your switch key stops typing in other apps while this is on."
+      >
+        <Switch
+          checked={sw.enabled}
+          onChange={(enabled) => patch({ a11y: { switch: { ...sw, enabled } } })}
+          label="Use a switch"
+          hint="Say “start scanning” or “stop scanning” to turn it on and off for now."
+        />
+        <SegmentedControl
+          label="Switch keys"
+          value={keyChoice}
+          options={SWITCH_KEYS}
+          onChange={(v) => {
+            const keys = v.split(',')
+            patch({
+              a11y: { switch: { ...sw, keys, mode: keys.length > 1 ? 'step' : 'auto' } }
+            })
+          }}
+        />
+        {sw.keys.length > 1 && (
+          <SegmentedControl
+            label="Highlight"
+            value={sw.mode}
+            options={SCAN_MODES}
+            onChange={(mode) => patch({ a11y: { switch: { ...sw, mode } } })}
+          />
+        )}
+        <NumberField
+          label="Scan speed"
+          value={sw.scanIntervalMs}
+          min={300}
+          max={10000}
+          step={100}
+          unit="ms"
+          hint="How long each choice stays highlighted."
+          onCommit={(scanIntervalMs) => patch({ a11y: { switch: { ...sw, scanIntervalMs } } })}
+        />
+      </Card>
+
+      <Card
+        title="Keyboard shortcuts"
+        description="Work anywhere in Windows. Answer keys only act while an answer shows."
+      >
+        <table className="panel-table">
+          <thead>
+            <tr>
+              <th scope="col">Action</th>
+              <th scope="col">Keys</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shortcuts.map((s) => (
+              <tr key={s.action}>
+                <td>{s.label}</td>
+                <td>{s.accelerator ? <kbd>{s.accelerator}</kbd> : 'None'}</td>
+                <td>
+                  {SHORTCUT_STATE[s.state]}
+                  {s.with ? ` with ${s.with}` : ''}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Card>
     </>
   )
