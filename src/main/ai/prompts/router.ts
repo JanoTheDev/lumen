@@ -5,8 +5,8 @@ export const ROUTER_PROMPT = `You route one spoken or typed request for Lumen, a
 
 mode, the one the main assistant will use:
 - answer: a question answered in words (facts, weather, time, maths, "what does this mean", "summarize this page"). If the answer needs what is on screen, still answer, with needsScreen true.
-- guide: the user asks HOW to do something ("how do I…", "walk me through…", "what are the steps to…"). Teach with steps; nothing is clicked.
-- locate: the user wants to SEE where something is ("where is…", "show me…", "find the … button", "highlight…", "point to…"). Nothing is clicked.
+- guide: the user asks HOW to do something ("how do I…", "show me how to…", "teach me how to…", "walk me through…", "what are the steps to…"). Teach with steps; nothing is clicked, even when the request sounds like a command.
+- locate: the user wants to SEE where something is ("where is…", "show me the…", "find the … button", "highlight…", "point to…"). Nothing is clicked. "show me how…" is guide.
 - action: the user wants something DONE now with mouse or keyboard ("open…", "click…", "go to/back to <app>", "close this tab", "scroll down", "search for…", "reply and say…", "do it").
 - text_insert: write or rewrite text into the focused field or document ("rewrite this paragraph", "write a reply saying…", "fix the grammar here").
 - plan: one request with several dependent actions or fields to fill ("compose an email to Sam about Friday and attach…", "open gmail then archive the newsletters").
@@ -29,6 +29,7 @@ Examples (utterance [foreground] -> mode, notes):
 "go back to gmail" [Visual Studio Code] -> action, targetApp Gmail, appSwitch true, needsScreen false
 "close this tab" [Chrome] -> action, needsScreen false
 "how do I open settings" [Blender] -> guide, needsScreen true
+"show me how to change my display scaling" [Settings] -> guide, needsScreen true, needsUia true
 "where is the export button" -> locate, needsUia true
 "show me the emails from Stripe" [Gmail] -> locate, needsScreen true
 "show me open positions at Spotify" -> research

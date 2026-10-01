@@ -14,17 +14,28 @@ import { getAgent } from '../agent/instance'
 import { announce, wantFocusEvents } from '../a11y'
 import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
 import { verifyExpectation } from '../ai/verify'
+import { matchPlayGuide } from '../guides/voice-nav'
+import { setTeachHandler } from '../query/pipeline'
 import { flattenElements } from '../query/uia-list'
-import { matchStartLesson, parseLessonCommand, pickLesson } from './commands'
+import {
+  matchSaveLesson,
+  matchStartLesson,
+  parseLessonCommand,
+  pickLesson,
+  type LessonCandidate
+} from './commands'
 import { setLessonContextProvider } from './context'
 import { paceFromTimings } from './hints'
-import type { DoAction, ElementMatch, LessonTarget } from './lesson'
+import type { DoAction, ElementMatch, Lesson, LessonTarget } from './lesson'
+import { migrateGuides } from './migrate-guides'
 import type { Frame, Ports, ResolvedTarget, UiaEvent, WindowInfo } from './ports'
 import { noopPorts } from './ports'
 import { ProgressStore, resumeOffer, type ResumeOffer } from './progress'
-import { SkillRegistry, type Skill } from './registry'
+import { SkillRegistry, hasMatchRules, type Skill } from './registry'
 import { LessonRunner } from './runner'
 import { lessonKeysAllowed, lessonUrlAllowed } from './safety'
+import { makeShowMeHow } from './show-me'
+import { freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
 
 /** Same reply shape as 06's local grammar: handled, nothing for the renderer to show. */
 const HANDLED = { mode: 'answer', text: '', local: true, dictated: true } as const
@@ -42,6 +53,9 @@ let registry: SkillRegistry | null = null
 let store: ProgressStore | null = null
 let runner: LessonRunner | null = null
 let offer: ResumeOffer | null = null
+/** The last "show me how" lesson, for "save this lesson". */
+let lastGenerated: { lesson: Lesson; skill: Skill | null } | null = null
+let skillsRoot = ''
 
 const frames = new Map<string, string>()
 
@@ -409,6 +423,49 @@ export function startLesson(
   return true
 }
 
+/** Starts a lesson made by "show me how" right at its first step. */
+function startGenerated(lesson: Lesson, skill: Skill | null): void {
+  if (!runner) return
+  offer = null
+  lastGenerated = { lesson, skill }
+  runner.start(lesson, {
+    skill,
+    source: 'generated',
+    autoStart: true,
+    pace: paceFromTimings(loadConfig().a11y.timings)
+  })
+}
+
+/** Writes the last generated lesson to the user's lessons; null when there is none. */
+export function saveGeneratedLesson(name?: string): Lesson | null {
+  const last = lastGenerated
+  if (!last || !registry || !skillsRoot) return null
+  const dir = userLessonsDir(skillsRoot)
+  const title = (name?.trim() || last.lesson.title).slice(0, 80)
+  const lesson: Lesson = {
+    ...last.lesson,
+    id: freeLessonId(dir, last.lesson.app, title),
+    title: title.length >= 3 ? title : last.lesson.title,
+    tags: ['saved']
+  }
+  try {
+    writeUserLesson(dir, lesson)
+  } catch (e) {
+    log('fail', `saving lesson failed: ${(e as Error).message}`)
+    return null
+  }
+  registry.load()
+  lastGenerated = null
+  log('done', `saved lesson "${lesson.title}" as ${lesson.id}`)
+  return lesson
+}
+
+function candidates(): LessonCandidate[] {
+  return (registry?.all() ?? []).flatMap((s) =>
+    s.lessons.map((l) => ({ id: l.id, title: l.title, appId: s.id, appName: s.name }))
+  )
+}
+
 function resumeOffered(): boolean {
   const o = offer
   if (!o || !runner) return false
@@ -432,6 +489,16 @@ function resumeOffered(): boolean {
  */
 export function interceptLesson(utterance: string): unknown | undefined {
   if (!runner || !registry) return undefined
+  const save = lastGenerated ? matchSaveLesson(utterance) : null
+  if (save) {
+    const saved = saveGeneratedLesson(save.name)
+    return saved
+      ? {
+          mode: 'answer',
+          text: `Saved "${saved.title}". Say "start lesson ${saved.title}" to play it again.`
+        }
+      : { mode: 'answer', text: 'I could not save that lesson.' }
+  }
   const cmd = parseLessonCommand(utterance)
   if (runner.running()) {
     if (cmd && runner.command(cmd)) {
@@ -449,14 +516,21 @@ export function interceptLesson(utterance: string): unknown | undefined {
       return HANDLED
     }
   }
+  // "play guide <name>": saved guides are user lessons now (T19).
+  const guide = matchPlayGuide(utterance)
+  if (guide) {
+    const mine = registry.userLessons().map(({ lesson, skill }) => ({
+      id: lesson.id,
+      title: lesson.title,
+      appId: skill.id,
+      appName: skill.name
+    }))
+    const hit = pickLesson(guide, mine)
+    if (hit && startLesson(hit.id)) return HANDLED
+  }
   const query = matchStartLesson(utterance)
   if (query) {
-    const lessons = registry
-      .all()
-      .flatMap((s) =>
-        s.lessons.map((l) => ({ id: l.id, title: l.title, appId: s.id, appName: s.name }))
-      )
-    const hit = pickLesson(query, lessons)
+    const hit = pickLesson(query, candidates())
     if (hit && startLesson(hit.id)) return HANDLED
   }
   return undefined
@@ -467,7 +541,10 @@ function watchFocus(): void {
   let awaySince: number | null = null
   setInterval(() => {
     const r = runner
-    if (!r?.running() || r.state.phase !== 'step.waiting' || r.state.skillId === 'windows') {
+    const skill = registry?.get(r?.state.skillId ?? '')
+    // Windows lessons span many apps; lessons-only skills cannot tell their app.
+    const watched = !!skill && skill.id !== 'windows' && hasMatchRules(skill)
+    if (!r?.running() || r.state.phase !== 'step.waiting' || !watched) {
       awaySince = null
       return
     }
@@ -488,9 +565,18 @@ function watchFocus(): void {
 export function installTeach(): void {
   if (runner) return
   const base = join(homedir(), '.ai-overlay')
+  skillsRoot = join(base, 'skills')
+  // Saved guides become user lessons once; the originals go to guides.bak/ (T19).
+  const moved = migrateGuides({
+    guidesDir: join(base, 'guides'),
+    lessonsDir: userLessonsDir(skillsRoot),
+    backupDir: join(base, 'guides.bak')
+  })
+  for (const m of moved.migrated) log('done', `guide "${m.guide}" is now lesson ${m.lessonId}`)
+  for (const f of moved.failed) log('fail', `guide not migrated: ${f.file} (${f.reason})`)
   registry = new SkillRegistry({
     builtin: join(app.getAppPath(), 'skills'),
-    user: join(base, 'skills')
+    user: skillsRoot
   }).load()
   for (const p of registry.problems()) log('fail', `skill pack: ${p.file}: ${p.message}`)
   log(
@@ -502,6 +588,7 @@ export function installTeach(): void {
   runner = new LessonRunner(realPorts(), { progress: store })
   wireAgentEvents()
   setLessonContextProvider(() => runner?.context() ?? null)
+  setTeachHandler(makeShowMeHow({ registry: () => registry, start: startGenerated }))
 
   bus.on('lesson.command', (e) => {
     if (runner?.running()) runner.command(e.command)

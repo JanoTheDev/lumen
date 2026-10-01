@@ -227,3 +227,14 @@ export function pickLesson(query: string, lessons: LessonCandidate[]): LessonCan
   }
   return best && bestScore * 2 >= q.length ? best : null
 }
+
+const SAVE_RE =
+  /^(?:please\s+)?(?:save|keep|remember)\s+(?:this|that|the)?\s*(?:lesson|guide)(?:\s+as\s+(?<name>.{1,60}?))?[\s.!?]*$/i
+
+/** "save this lesson", "save guide as compose" → { name? }; else null. */
+export function matchSaveLesson(utterance: string): { name?: string } | null {
+  const m = SAVE_RE.exec((utterance ?? '').trim())
+  if (!m) return null
+  const name = m.groups?.name?.replace(/[.!?,;:]+$/, '').trim()
+  return name ? { name } : {}
+}

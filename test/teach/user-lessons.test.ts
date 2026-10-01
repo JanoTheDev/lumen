@@ -105,6 +105,7 @@ describe('user lesson files and guide migration', () => {
     expect(found.skill.name).toBe('Your guides')
     expect(found.skill.source).toBe('user')
     expect(hasMatchRules(found.skill)).toBe(false)
+    expect(reg.userLessons().map((x) => x.lesson.id)).toEqual(['general-compose-in-gmail'])
     expect(reg.matchApp({ process: 'chrome.exe', title: 'Gmail' })).toBeNull()
   })
 })

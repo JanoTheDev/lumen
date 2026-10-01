@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   lessonPhrases,
+  matchSaveLesson,
   matchStartLesson,
   parseLessonCommand,
   pickLesson,
@@ -133,5 +134,19 @@ describe('lesson context line', () => {
     ).toBe(
       'lesson: the user is in the Blender lesson "Add an object"; current step: "Press Shift A.". Answer with this step in mind.'
     )
+  })
+})
+
+describe('matchSaveLesson', () => {
+  it.each([
+    ['save this lesson', {}],
+    ['Save the lesson as Compose mail.', { name: 'Compose mail' }],
+    ['save guide as scaling', { name: 'scaling' }],
+    ['remember this guide', {}]
+  ])('%j → %j', (u, want) => expect(matchSaveLesson(u)).toEqual(want))
+
+  it('ignores other requests', () => {
+    expect(matchSaveLesson('save this file')).toBeNull()
+    expect(matchSaveLesson('how do I save a lesson plan')).toBeNull()
   })
 })

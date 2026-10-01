@@ -18,8 +18,7 @@ import errorDark from '../../../resources/tray/error-dark.ico?asset'
 import errorLight from '../../../resources/tray/error-light.ico?asset'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
-import { listSavedGuides } from '../guides/store'
-import { replaySavedGuide } from '../guides/session'
+import { skillRegistry, startLesson } from '../teach'
 import { onConfigPatched, patchConfig } from '../ipc/settings'
 import {
   trayIconName,
@@ -61,9 +60,13 @@ function input(): TrayInput {
   const cfg = loadConfig()
   let guides: TrayInput['guides'] = []
   try {
-    guides = listSavedGuides().map((g) => ({ id: g.id, name: g.name }))
+    // Saved guides are user lessons now (07 T19).
+    guides = (skillRegistry()?.userLessons() ?? []).map(({ lesson }) => ({
+      id: lesson.id,
+      name: lesson.title
+    }))
   } catch {
-    /* unreadable guides folder: no submenu entries */
+    /* registry not loaded yet: no submenu entries */
   }
   return {
     hotkey: cfg.hotkey,
@@ -100,7 +103,7 @@ export async function setListeningPaused(paused: boolean): Promise<void> {
 
 function run(action: TrayAction): void {
   if (action.startsWith('guide:')) {
-    replaySavedGuide(action.slice('guide:'.length))
+    startLesson(action.slice('guide:'.length))
     return
   }
   switch (action) {

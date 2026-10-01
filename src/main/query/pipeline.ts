@@ -50,6 +50,22 @@ interface TurnPlan {
   locate: boolean
 }
 
+/**
+ * "Show me how" (07 T18): a routed guide request becomes a lesson. The handler returns the
+ * reply when a lesson started, or null to fall back to the old guide reply.
+ */
+export type TeachHandler = (
+  prompt: string,
+  ctx: QueryContext,
+  signal: AbortSignal
+) => Promise<ModelResponse | null>
+
+let teachHandler: TeachHandler | null = null
+
+export function setTeachHandler(fn: TeachHandler | null): void {
+  teachHandler = fn
+}
+
 // LLM path: the previous routed task, for "do it" continuations, and the last reply mode.
 let lastTask: { prompt: string; route: Route } | null = null
 let lastMode: string | undefined
@@ -248,6 +264,26 @@ async function runTurn(
   timer.split('routed + context gathered')
   log('plan', `active window: ${activeWindow}`)
   log('plan', `query: "${plan.prompt.slice(0, 80)}"`)
+
+  if (
+    teachHandler &&
+    !opts.lowDetail &&
+    plan.path === 'model' &&
+    plan.routing.routedMode === 'guide'
+  ) {
+    const taught = await teachHandler(plan.prompt, ctx, scope.signal).catch((e) => {
+      if (scope.cancelled || isAbortError(e)) throw e
+      log('fail', `show me how failed (${(e as Error).message}); falling back to a guide`)
+      return null
+    })
+    scope.throwIfCancelled()
+    if (taught) {
+      timer.total()
+      lastMode = 'guide'
+      addToHistory(historyExchange(prompt, taught))
+      return taught
+    }
+  }
 
   let result: ModelResponse
   let split: SubResult[] | null = null

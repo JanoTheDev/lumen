@@ -98,6 +98,8 @@ function loadRegions(dir: string): Record<string, SkillRegion> {
 export class SkillRegistry {
   private skills = new Map<string, Skill>()
   private problemList: RegistryProblem[] = []
+  /** Ids of the loose user lessons (saved "show me how" lessons, migrated guides). */
+  private loose = new Set<string>()
 
   constructor(private readonly dirs: { builtin: string; user?: string }) {}
 
@@ -105,6 +107,7 @@ export class SkillRegistry {
   load(): this {
     this.skills.clear()
     this.problemList = []
+    this.loose.clear()
     for (const id of listDirs(this.dirs.builtin))
       this.loadPack(join(this.dirs.builtin, id), 'builtin')
     const user = this.dirs.user
@@ -209,7 +212,13 @@ export class SkillRegistry {
     for (const lesson of this.loadLessons(dir)) {
       const skill = this.skills.get(lesson.app) ?? this.lessonsOnlySkill(lesson.app, dir)
       skill.lessons = mergeLessons(skill.lessons, [lesson])
+      this.loose.add(lesson.id)
     }
+  }
+
+  /** The user's own loose lessons, newest file order kept. */
+  userLessons(): { lesson: Lesson; skill: Skill }[] {
+    return [...this.loose].flatMap((id) => this.lesson(id) ?? [])
   }
 
   private lessonsOnlySkill(id: string, dir: string): Skill {

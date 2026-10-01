@@ -57,7 +57,8 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, async () =>
         (await deps.preempt?.(prompt, opts, scope)) ? DICTATED : deps.runQuery(prompt, opts, scope)
       )
-      if (result === DICTATED) return result
+      // Dictated, or handled with its own output (a lesson started): no status here.
+      if ((result as { dictated?: boolean }).dictated) return result
       const modeLabel = (result as { mode?: string }).mode
       if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
       else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)
