@@ -22,7 +22,7 @@ import { applyBacktrack } from './backtrack'
 import { cleanupDictation } from './cleanup'
 import { looksLikeEditCommand } from './command'
 import { dropEditChip, runEditCommand } from './command-run'
-import { handleNoteCommand } from './notes'
+import { addNote, handleNoteCommand } from './notes'
 import { insertDictation, readFocus } from './insert'
 import { watchCorrections, type LearnDeps } from './learn-watch'
 import {
@@ -32,6 +32,7 @@ import {
   savePending,
   takeRecoverable
 } from './recovery'
+import { noTextField, RecordingClock, scratchpadOnFailure } from './scratchpad'
 import { shapeDictation } from './shape'
 import { expandSnippet, loadSnippets, matchSnippet } from './snippets'
 import type { FocusTarget } from './terminal-guard'
@@ -57,6 +58,8 @@ export interface DictationReport {
   ok: boolean
   /** Dictation style applied (T36). */
   style?: string
+  /** Length of the recording, when known (for words per minute). */
+  durationMs?: number
 }
 
 export type DictationRecorder = (report: DictationReport) => void
@@ -113,6 +116,13 @@ keepEscapeWhile(() => activation.active)
 
 bus.on('voice.cancelled', () => activation.reset())
 
+// Recording length for the speaking pace (T46): any recording's start and end.
+const clock = new RecordingClock()
+bus.on('dictation.started', () => clock.start())
+bus.on('voice.started', () => clock.start())
+bus.on('voice.stopped', () => clock.stop())
+bus.on('voice.cancelled', () => clock.reset())
+
 export function onDictationDown(): void {
   if (!loadConfig().dictation.enabled) return
   activation.down()
@@ -137,6 +147,44 @@ interface InsertMeta {
   source: DictationReport['source']
   style?: string
   softBreaks?: boolean
+  durationMs?: number
+}
+
+export const SCRATCHPAD_NOTICE = 'No text field here, so it went to Notes in Home'
+
+/** No text field to type into (T45): the dictation is kept as a note instead of lost. */
+function toScratchpad(
+  pendingId: string,
+  text: string,
+  target: FocusTarget,
+  meta: InsertMeta
+): DictateResult | null {
+  try {
+    addNote({ text, via: 'scratchpad', source: target.process ? { app: target.process } : {} })
+  } catch (e) {
+    log('fail', `dictation scratchpad note failed: ${(e as Error).message}`)
+    return null
+  }
+  clearPending(pendingId)
+  report({ ...reportBase(text, target, meta), ok: false })
+  log('done', `dictation saved as a note (${text.length} chars)`)
+  setStatus('answer', SCRATCHPAD_NOTICE, undefined, 4000)
+  return { ok: true, notice: SCRATCHPAD_NOTICE }
+}
+
+function reportBase(
+  text: string,
+  target: FocusTarget,
+  meta: InsertMeta
+): Omit<DictationReport, 'ok'> {
+  return {
+    raw: meta.raw,
+    text,
+    app: target.process,
+    source: meta.source,
+    style: meta.style,
+    durationMs: meta.durationMs
+  }
 }
 
 /** Types already-cleaned text; on failure the text is kept in recovered.txt and shown. */
@@ -148,17 +196,18 @@ async function finishInsert(
   cfg: DictationConfig,
   meta: InsertMeta
 ): Promise<DictateResult> {
+  if (noTextField(target)) {
+    const kept = toScratchpad(pendingId, text, target, meta)
+    if (kept) return kept
+  }
   const res = await insertDictation(agent, text, target, cfg.terminal, {
     softBreaks: meta.softBreaks
   })
-  report({
-    raw: meta.raw,
-    text,
-    app: target.process,
-    source: meta.source,
-    ok: res.ok,
-    style: meta.style
-  })
+  if (!res.ok && scratchpadOnFailure(target)) {
+    const kept = toScratchpad(pendingId, text, target, meta)
+    if (kept) return kept
+  }
+  report({ ...reportBase(text, target, meta), ok: res.ok })
   if (res.ok) {
     clearPending(pendingId)
     log('done', `dictation typed (${text.length} chars${res.terminal ? ', terminal' : ''})`)
@@ -177,6 +226,7 @@ async function finishInsert(
 /** The dictation hotkey's transcript: clean it up and type it. "" = nothing was heard. */
 export async function dictate(raw: string): Promise<DictateResult> {
   activation.reset()
+  const durationMs = clock.take()
   const text = raw.trim()
   if (!text) {
     setStatus('answer', NOTHING_HEARD, undefined, 1500)
@@ -206,7 +256,14 @@ ${text}`)
       if (edited) {
         clearPending(pendingId)
         const out = edited.text ?? ''
-        report({ raw: text, text: out, app: target.process, source: 'command', ok: edited.ok })
+        report({
+          raw: text,
+          text: out,
+          app: target.process,
+          source: 'command',
+          ok: edited.ok,
+          durationMs
+        })
         return { ok: edited.ok, notice: edited.notice }
       }
     }
@@ -214,7 +271,8 @@ ${text}`)
     if (snippet)
       return await finishInsert(agent, pendingId, snippet, await focus, cfg, {
         raw: text,
-        source: 'snippet'
+        source: 'snippet',
+        durationMs
       })
     // Course correction (T34) before cleanup; the cleanup check runs on the corrected text.
     const spoken = cfg.backtrack ? applyBacktrack(text).text : text
@@ -238,6 +296,7 @@ ${text}`)
     return await finishInsert(agent, pendingId, shaped.text, target, cfg, {
       raw: text,
       source: 'hotkey',
+      durationMs,
       style: shaped.style,
       softBreaks: shaped.softBreaks
     })
@@ -258,6 +317,7 @@ ${text}`)
  * dictation; false sends it on to the assistant as usual.
  */
 export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Promise<boolean> {
+  const durationMs = clock.take()
   // "take a note …" (04 T45) is saved to Home Notes, whatever is focused.
   if (await handleNoteCommand(prompt)) return true
   const cfg = loadConfig().dictation
@@ -270,7 +330,11 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   const snippet = cfg.snippets ? snippetFor(prompt, true) : null
   if (snippet) {
     const id = savePending(prompt)
-    await finishInsert(agent, id, snippet, target, cfg, { raw: prompt, source: 'snippet' })
+    await finishInsert(agent, id, snippet, target, cfg, {
+      raw: prompt,
+      source: 'snippet',
+      durationMs
+    })
     return true
   }
 
@@ -303,6 +367,7 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   await finishInsert(agent, pendingId, shaped.text, target, cfg, {
     raw: prompt,
     source: 'auto',
+    durationMs,
     style: shaped.style,
     softBreaks: shaped.softBreaks
   })
