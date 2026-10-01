@@ -14,11 +14,18 @@ const STDERR_KEEP = 2000
 
 /** The parts of a ChildProcess the session uses (a fake in tests). */
 export interface ChildLike {
-  stdin: { write(s: string): boolean; end(): void; destroyed?: boolean } | null
+  stdin: {
+    write(s: string): boolean
+    end(): void
+    destroyed?: boolean
+    on?(event: 'error', fn: (err: Error) => void): unknown
+  } | null
   stdout: NodeJS.ReadableStream | null
   stderr: NodeJS.ReadableStream | null
   pid?: number
   kill(signal?: NodeJS.Signals | number): boolean
+  /** Ends the process with everything it started (kill-tree.ts); `sync` on app quit. */
+  killTree?(sync: boolean): void
   on(event: 'exit', fn: (code: number | null, signal: NodeJS.Signals | null) => void): unknown
   on(event: 'error', fn: (err: Error) => void): unknown
 }
@@ -136,6 +143,28 @@ export class ClaudeSession extends EventEmitter {
     return false
   }
 
+  /** Throws when the command line cannot be built (before the session is listed anywhere). */
+  checkCommand(): void {
+    command(this.init.cliPath, buildArgs({ ...this.init.args, resume: this.view.sessionId }))
+  }
+
+  /**
+   * App quit: stdin closed, and a process in the middle of a turn is killed now (with its
+   * children); a timer would never fire once the app has exited.
+   */
+  shutdown(): void {
+    const child = this.child
+    if (!child) return
+    const busy = this.inFlight > 0 || this.interrupting
+    this.stopping = true
+    try {
+      child.stdin?.end()
+    } catch {
+      /* already closed */
+    }
+    if (busy) this.kill(true)
+  }
+
   /** Ends the process (stdin closed, killed after a grace period). Resumable later. */
   stop(): void {
     if (!this.child) {
@@ -157,12 +186,13 @@ export class ClaudeSession extends EventEmitter {
 
   // ---- internals ----
 
-  private kill(): void {
+  private kill(sync = false): void {
     const child = this.child
     if (!child) return
     this.stopping = true
     try {
-      child.kill()
+      if (child.killTree) child.killTree(sync)
+      else child.kill()
     } catch {
       /* gone */
     }
@@ -195,6 +225,20 @@ export class ClaudeSession extends EventEmitter {
     child.stdout?.on('end', () => parser.end())
     child.stderr?.on('data', (d: string | Buffer) => {
       this.stderrTail = (this.stderrTail + String(d)).slice(-STDERR_KEEP)
+    })
+    // EPIPE when the CLI exits while a turn is being written: the turn ends as an error.
+    child.stdin?.on?.('error', (err) => {
+      this.deps.log?.(`[${this.view.id}] stdin: ${err.message}`)
+      if (this.child !== child || this.stopping) return
+      const lost = this.inFlight > 0
+      this.inFlight = 0
+      this.update({
+        phase: 'failed',
+        pending: undefined,
+        error: err.message,
+        lastLine: 'Claude Code stopped reading'
+      })
+      if (lost) this.emit('turn', { text: '', isError: true, interrupted: false } satisfies TurnEnd)
     })
     child.on('error', (err) => {
       if (this.child !== child) return

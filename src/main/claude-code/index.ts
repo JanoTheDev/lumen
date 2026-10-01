@@ -25,6 +25,7 @@ import { PermissionBridge, permissionSummary, type PendingPermission } from './b
 import { findClaude } from './cli'
 import { ClaudeCopilot, statusLine, type NoticeKind } from './copilot'
 import { HookServer, type HookCall } from './hook-server'
+import { withTreeKill } from './kill-tree'
 import { applyHooks, previewHooks, writeSessionSettings } from './hooks-config'
 import { matchClaudeCodeIntent, type ClaudeIntent } from './intents'
 import { listClaudeProjects, matchProject, mergeProjects } from './projects'
@@ -310,13 +311,15 @@ export async function installClaudeCode(): Promise<void> {
     cliPath: () => findClaude(st.settings().cliPath),
     projects: allProjects,
     spawn: (cmd, cwd, env) =>
-      spawn(cmd.file, cmd.args, {
-        cwd,
-        env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-        windowsVerbatimArguments: cmd.verbatim
-      }),
+      withTreeKill(
+        spawn(cmd.file, cmd.args, {
+          cwd,
+          env,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          windowsHide: true,
+          windowsVerbatimArguments: cmd.verbatim
+        })
+      ),
     hookBase,
     writeSettings: (key, base) => writeSessionSettings(st.runDir, base, key, token),
     removeSettings: (key) => rmSync(join(st.runDir, `${key}.json`), { force: true }),

@@ -103,6 +103,15 @@ function waitFor<T>(fn: () => T | undefined | false, ms = 8000): Promise<T> {
 }
 
 describe('ClaudeCopilot', () => {
+  it('lists no session when its command line cannot be built', async () => {
+    const h = harness()
+    await expect(
+      h.c.open({ ...project, allowedTools: ['--permission-mode'] }, { prompt: 'x' })
+    ).rejects.toThrow(/refused/)
+    expect(h.c.list()).toEqual([])
+    expect(h.c.focused()).toBeFalsy()
+  })
+
   it('opens a session, runs the first prompt and announces the end', async () => {
     const h = harness()
     const v = await h.c.open(project, { prompt: 'fix it' })

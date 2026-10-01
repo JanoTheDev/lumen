@@ -1,9 +1,16 @@
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { EventEmitter } from 'events'
+import { PassThrough } from 'stream'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClaudeSessionView } from '@shared/claude-code'
-import { ClaudeSession, type TurnEnd } from '../../src/main/claude-code/session'
+import {
+  ClaudeSession,
+  INTERRUPT_WAIT_MS,
+  type ChildLike,
+  type TurnEnd
+} from '../../src/main/claude-code/session'
 import { NdjsonParser } from '../../src/main/claude-code/ndjson'
 import { describeTool, readEvent } from '../../src/main/claude-code/events'
 import { fakeSpawn } from './fake'
@@ -205,5 +212,101 @@ describe('ClaudeSession with a fake claude', () => {
       expect.arrayContaining(['--resume', '11111111-2222-3333-4444-555555555555'])
     )
     s.stop()
+  })
+})
+
+describe('ClaudeSession process ends (fake child)', () => {
+  function fakeChild(): ChildLike & {
+    emitter: EventEmitter
+    stdinEmitter: EventEmitter
+    killTree: ReturnType<typeof vi.fn>
+    ended: boolean
+  } {
+    const emitter = new EventEmitter()
+    const stdinEmitter = new EventEmitter()
+    const c = {
+      emitter,
+      stdinEmitter,
+      ended: false,
+      pid: 999,
+      stdin: {
+        write: () => true,
+        end: () => {
+          c.ended = true
+        },
+        on: (ev: 'error', fn: (err: Error) => void) => stdinEmitter.on(ev, fn)
+      },
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: vi.fn(() => true),
+      killTree: vi.fn(),
+      on: (ev: string, fn: (...a: never[]) => void) => emitter.on(ev, fn)
+    }
+    return c as never
+  }
+
+  function session(child: ChildLike): ClaudeSession {
+    return new ClaudeSession(
+      {
+        id: 'cc_fake1',
+        project: 'C:\\p',
+        projectName: 'p',
+        cliPath: 'claude.exe',
+        autopilot: 'careful',
+        args: {}
+      },
+      { spawn: () => child, now: () => 1 }
+    )
+  }
+
+  it('on app quit kills a busy process tree synchronously; an idle one only gets stdin closed', () => {
+    const busy = fakeChild()
+    const s = session(busy)
+    s.send('long task')
+    s.shutdown()
+    expect(busy.ended).toBe(true)
+    expect(busy.killTree).toHaveBeenCalledWith(true)
+
+    const idle = fakeChild()
+    const t = session(idle)
+    t.send('x')
+    ;(idle.stdout as PassThrough).write(
+      `${JSON.stringify({ type: 'result', subtype: 'success', result: 'ok', session_id: 's1' })}\n`
+    )
+    return new Promise<void>((resolve) =>
+      setImmediate(() => {
+        t.shutdown()
+        expect(idle.ended).toBe(true)
+        expect(idle.killTree).not.toHaveBeenCalled()
+        resolve()
+      })
+    )
+  })
+
+  it('a stdin error (EPIPE) ends the turn as an error instead of crashing', async () => {
+    const child = fakeChild()
+    const s = session(child)
+    const turn = new Promise<TurnEnd>((resolve) => s.once('turn', resolve))
+    s.send('hello')
+    child.stdinEmitter.emit('error', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }))
+    expect(await turn).toEqual({ text: '', isError: true, interrupted: false })
+    expect(s.view.phase).toBe('failed')
+    expect(s.view.error).toContain('EPIPE')
+  })
+
+  it('an interrupt the CLI ignores kills the whole tree, not only the shim', async () => {
+    vi.useFakeTimers()
+    try {
+      const child = fakeChild()
+      const s = session(child)
+      s.send('x')
+      const p = s.interrupt()
+      await vi.advanceTimersByTimeAsync(INTERRUPT_WAIT_MS + 10)
+      expect(await p).toBe(false)
+      expect(child.killTree).toHaveBeenCalledWith(false)
+      expect(child.kill).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

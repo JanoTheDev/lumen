@@ -187,15 +187,18 @@ describe('cli', () => {
     expect(() => buildArgs({ allowedTools: ['bypassPermissions'] })).toThrow(/refused/)
   })
 
-  it('runs a .cmd shim through cmd.exe', () => {
+  it('runs a .exe directly and an unknown .cmd through cmd.exe, every argument quoted', () => {
     expect(command('C:\\a\\claude.exe', ['-p'])).toEqual({
       file: 'C:\\a\\claude.exe',
       args: ['-p'],
       verbatim: false
     })
     const c = command('C:\\Program Files\\npm\\claude.cmd', ['-p', '--settings', 'C:\\x y\\s.json'])
-    expect(c.file).toBe('cmd.exe')
-    expect(c.args[3]).toBe('""C:\\Program Files\\npm\\claude.cmd" -p --settings "C:\\x y\\s.json""')
+    expect(c.file).toMatch(/[\\/]System32[\\/]cmd\.exe$/i)
+    expect(c.verbatim).toBe(true)
+    expect(c.args[3]).toBe(
+      '""C:\\Program Files\\npm\\claude.cmd" "-p" "--settings" "C:\\x y\\s.json""'
+    )
   })
 })
 

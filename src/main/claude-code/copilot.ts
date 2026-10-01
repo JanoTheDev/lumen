@@ -142,6 +142,13 @@ export class ClaudeCopilot {
       },
       { spawn: this.deps.spawn, now: this.deps.now, log: this.deps.log }
     )
+    // A command line that cannot be built fails here, before the session is listed.
+    try {
+      s.checkCommand()
+    } catch (e) {
+      if (settingsPath) this.deps.removeSettings(id)
+      throw e
+    }
     const entry: Entry = { s, recentUser: [], streak: 0, sent: 0 }
     this.entries.set(id, entry)
     this.focusedId = id
@@ -250,8 +257,9 @@ export class ClaudeCopilot {
       e.s.update({ pending: undefined, phase: e.s.alive ? 'running-tool' : e.s.view.phase })
   }
 
+  /** App quit: every process ends now (a busy one is killed with its children). */
   shutdown(): void {
-    for (const e of this.entries.values()) e.s.stop()
+    for (const e of this.entries.values()) e.s.shutdown()
   }
 
   // ---- turn ends ----
