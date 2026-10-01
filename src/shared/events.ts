@@ -42,6 +42,43 @@ export interface AssistantState {
   /** A short notice with an optional action button (muted output → Unmute). */
   notice?: { text: string; action?: 'unmute' }
   model?: string
+  /** The running agent-mode task: plan, step list and counters (08 T13). */
+  agentTask?: AgentTask
+}
+
+export type AgentStepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
+
+export type AgentPhase =
+  | 'planning'
+  | 'countdown'
+  | 'running'
+  | 'confirm'
+  | 'asking'
+  | 'paused'
+  | 'done'
+  | 'failed'
+  | 'aborted'
+
+/**
+ * One agent-mode task (CONTRACTS C6, agent-loop.md). Steps come from the announced plan;
+ * `detail` lists the tool calls made for a step (collapsible in the bar). A failed step can be
+ * retried with `assistant:command {type: "retry", step}`.
+ */
+export interface AgentTask {
+  id: string
+  prompt: string
+  /** "draft an email to Sam" (spoken as "I'll ..."). */
+  summary: string
+  plan: string[]
+  steps: { i: number; label: string; status: AgentStepStatus; detail?: string[] }[]
+  phase: AgentPhase
+  /** ask_user: the question and its answer buttons. */
+  question?: { text: string; choices?: string[] }
+  /** Countdown before the first action (cancel window). */
+  countdownMs?: number
+  /** What the user still has to do (finish needsUserAction), pinned after the task. */
+  needsUserAction?: string
+  counters: { actions: number; modelCalls: number; costUsd: number; startedAt: number }
 }
 
 export interface ScreenScene {
@@ -158,6 +195,8 @@ export type AppEvent =
       /** Who voiced it: the screen reader, Lumen's TTS, or nobody (shown only). */
       via?: 'sr' | 'tts' | 'none'
     }
+  /** Agent-mode task state; null once the task is over and its card is gone. */
+  | { type: 'agent.task'; task: AgentTask | null }
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
 
