@@ -63,8 +63,8 @@ function createAnnouncer(): Announcer {
     sendToScreenReader: async (text, priority) => {
       const agent = getAgent()
       if (!agent?.hasCapability('announce')) return false
-      await commands.announce(agent, text, priority, { timeoutMs: 2000 })
-      return true
+      const r = await commands.announce(agent, text, priority, { timeoutMs: 2000 })
+      return r.spoken
     },
     speak: (text) => void speakAnswer(text).catch(() => {}),
     publish: (text, priority) => bus.emit({ type: 'a11y.announce', text, priority })

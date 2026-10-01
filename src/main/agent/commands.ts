@@ -226,8 +226,14 @@ export async function announce(
   text: string,
   priority: 'polite' | 'assertive' = 'polite',
   opts?: RequestOptions
-): Promise<void> {
-  await v2Only(bridge, 'announce', { text, priority }, opts)
+): Promise<{ spoken: boolean; via?: string }> {
+  const r = await v2Only<{ spoken?: boolean; via?: string } | null>(
+    bridge,
+    'announce',
+    { text, priority },
+    opts
+  )
+  return { spoken: !!r?.spoken, via: r?.via }
 }
 
 export function cancel(bridge: AgentBridge, targetId: number): Promise<void> {
