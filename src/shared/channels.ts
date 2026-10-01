@@ -501,7 +501,6 @@ export interface EventChannels {
   'voice:stt-model-progress': [progress: WakeModelProgress]
   'status:set': [message: StatusMessage]
   'status:hide': []
-  'voice:tts-audio': [audio: { mime: string; data: string }]
   'voice:start': [opts: { mode: VoiceStartMode }]
   'voice:stop': []
   /** The open dictation recording becomes hands-free (ends on silence). */
@@ -629,7 +628,6 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'voice:stt-model-progress',
   'status:set',
   'status:hide',
-  'voice:tts-audio',
   'voice:start',
   'voice:stop',
   'voice:hands-free',

@@ -60,7 +60,6 @@ export function createLegacyApi(lumen: LumenApi) {
     announceAction: (summary: string, confidence?: string) =>
       lumen.invoke('assistant:announce', summary, confidence),
     ttsSpeak: (text: string) => lumen.invoke('voice:speak', text),
-    onTtsAudio: (cb: (p: { mime: string; data: string }) => void) => on('voice:tts-audio', cb),
     guidesList: () => lumen.invoke('guides:list'),
     guidesSaveLast: (name: string) => lumen.invoke('guides:save-last', name),
     guidesReplay: (id: string) => lumen.invoke('guides:replay', id),

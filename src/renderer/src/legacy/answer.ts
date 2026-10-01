@@ -14,7 +14,6 @@ interface AnswerApi {
   hideAnswerOverlay?: () => void
   resizeAnswerOverlay?: (h: number) => void
   onShowAnswer?: (cb: (text: string) => void) => void
-  onTtsAudio?: (cb: (p: { mime: string; data: string }) => void) => void
   openLink?: (url: string) => void
 }
 
@@ -187,21 +186,5 @@ function showAnswer(text: string): void {
 }
 
 if (api?.onShowAnswer) api.onShowAnswer(showAnswer)
-
-// TTS playback
-let currentAudio: HTMLAudioElement | null = null
-api?.onTtsAudio?.(({ mime, data }) => {
-  try {
-    if (currentAudio) {
-      currentAudio.pause()
-      currentAudio = null
-    }
-    const a = new Audio(`data:${mime};base64,${data}`)
-    currentAudio = a
-    a.play().catch(() => {})
-  } catch {
-    // audio playback is best-effort
-  }
-})
 
 export {}
