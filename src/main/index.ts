@@ -45,6 +45,7 @@ import * as tray from './windows/tray'
 import * as assistantWin from './windows/assistant'
 import * as screenLayer from './windows/screen-layer'
 import * as homeWin from './windows/home'
+import * as settingsWin from './windows/settings'
 import { uiV2 } from './windows/ui-mode'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
@@ -93,6 +94,8 @@ function createWindows(): void {
   homeWin.create()
   tray.create()
   applyUiScaleOnLoad(loadConfig().a11y.uiScale)
+  // First run, or setup never finished: open the setup flow.
+  if (!loadConfig().onboarding.done) settingsWin.create('onboarding')
 }
 
 function registerIpc(): void {

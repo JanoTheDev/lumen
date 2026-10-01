@@ -20,6 +20,11 @@ export function About(): JSX.Element {
           Licence
         </Button>
       </div>
+      <div className="panel-row">
+        <Button icon={icons.sparkles} onClick={() => window.lumen.send('panel:open', 'onboarding')}>
+          Run setup again
+        </Button>
+      </div>
     </Card>
   )
 }

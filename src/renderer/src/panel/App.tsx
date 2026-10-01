@@ -5,6 +5,8 @@ import { useIpc } from '../lib/ipc'
 import { SettingsPage } from './settings/SettingsPage'
 import { Home } from './home/Home'
 import './home/home.css'
+import { Onboarding } from './onboarding/Onboarding'
+import './onboarding/onboarding.css'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
 
@@ -34,6 +36,8 @@ export function App(): JSX.Element {
         <Gallery />
       ) : route.name === 'home' ? (
         <Home />
+      ) : route.name === 'onboarding' ? (
+        <Onboarding />
       ) : (
         <SettingsPage section={section} onNavigate={(id) => go(`#/settings/${id}`)} />
       )}

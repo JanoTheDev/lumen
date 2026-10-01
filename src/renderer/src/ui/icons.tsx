@@ -4,19 +4,26 @@ import type { ComponentType, SVGProps } from 'react'
 import {
   Accessibility,
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   BookOpen,
   Brain,
+  Captions,
   Check,
   CheckCircle2,
   ChevronRight,
   Copy,
   Cpu,
+  Download,
   ExternalLink,
+  Eye,
   Hand,
   Info,
   KeyRound,
+  MessageSquareText,
   Mic,
   Minus,
+  Mouse,
   MousePointer2,
   MousePointerClick,
   Palette,
@@ -27,10 +34,14 @@ import {
   Search,
   Settings,
   Shield,
+  Sparkles,
   Square,
+  ToggleRight,
   Trash2,
+  Volume2,
   X,
-  XOctagon
+  XOctagon,
+  ZoomIn
 } from 'lucide-react'
 
 type LucideLike = ComponentType<
@@ -48,6 +59,17 @@ function make(C: LucideLike): IconComponent {
 }
 
 export const icons = {
+  arrowLeft: make(ArrowLeft),
+  arrowRight: make(ArrowRight),
+  captions: make(Captions),
+  download: make(Download),
+  eye: make(Eye),
+  message: make(MessageSquareText),
+  mouse: make(Mouse),
+  sparkles: make(Sparkles),
+  toggle: make(ToggleRight),
+  volume: make(Volume2),
+  zoom: make(ZoomIn),
   accessibility: make(Accessibility),
   alert: make(AlertTriangle),
   book: make(BookOpen),

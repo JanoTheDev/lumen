@@ -1,0 +1,330 @@
+/* Onboarding: one column, large text, big targets (cards are at least 4rem tall). */
+
+.ob-main {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ob-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.ob-dots {
+  list-style: none;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ob-dots li {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-in-out);
+}
+
+.ob-dots li.is-done {
+  background: var(--accent);
+}
+
+.ob-dots li.is-current {
+  background: var(--accent);
+  transform: scaleX(2.2);
+  margin: 0 0.3rem;
+}
+
+.ob-page {
+  max-width: 48rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: panel-in-fwd var(--dur-slow) var(--ease-out) both;
+}
+
+.ob-page.is-back {
+  animation-name: panel-in-back;
+}
+
+.ob-heading-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.ob-heading-row h1 {
+  flex: 1;
+  font-size: calc(var(--text-xl) * 1.2);
+}
+
+.ob-heading-row h1:focus-visible {
+  outline-offset: 4px;
+}
+
+.ob-lead {
+  font-size: var(--text-lg);
+  max-width: 40rem;
+}
+
+.ob-label {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  color: var(--fg-muted);
+}
+
+.ob-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ob-profile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ob-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: var(--space-3);
+}
+
+.ob-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3);
+  max-width: 40rem;
+}
+
+.ob-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-in-out),
+    background-color var(--dur-fast) var(--ease-in-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+
+.ob-card:hover {
+  background: var(--accent-soft);
+}
+
+.ob-card:active {
+  transform: scale(0.98);
+}
+
+.ob-card:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ob-card.is-on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.ob-card__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--accent);
+}
+
+.ob-card__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.ob-card__title {
+  font-weight: var(--weight-strong);
+  font-size: var(--text-md);
+}
+
+.ob-card__desc {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.ob-card__check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  border: 2px solid var(--border);
+  color: var(--on-accent);
+}
+
+.ob-card.is-on .ob-card__check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Dwell progress: a bar that fills along the bottom while the pointer rests. */
+.ob-card__dwell,
+.ob-footer [data-choose]::after {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.ob-footer [data-choose] {
+  position: relative;
+  overflow: hidden;
+}
+
+.ob-footer [data-choose]::after {
+  content: '';
+  background: var(--on-accent);
+}
+
+.is-dwelling > .ob-card__dwell,
+.ob-footer .is-dwelling::after {
+  animation: ob-dwell 1200ms linear forwards;
+}
+
+@keyframes ob-dwell {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.ob-preview {
+  padding: var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ob-preview ul {
+  padding-left: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ob-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ob-note.is-ok svg {
+  color: var(--success);
+}
+
+.ob-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.ob-details summary {
+  cursor: pointer;
+  font-weight: var(--weight-strong);
+}
+
+.ob-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ob-installs {
+  max-width: 28rem;
+  gap: var(--space-3);
+}
+
+.ob-hotkey {
+  font-size: var(--text-xl);
+}
+
+.ob-reminder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 2px solid var(--accent);
+  font-size: var(--text-lg);
+}
+
+.ob-reminder svg {
+  flex: none;
+  color: var(--accent);
+}
+
+.ob-footer {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+/* Reduced motion: the bar shows dwelling without moving. */
+:root[data-reduce-motion='true'] .is-dwelling > .ob-card__dwell,
+:root[data-reduce-motion='true'] .ob-footer .is-dwelling::after {
+  animation: none !important;
+  transform: none;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-reduce-motion='false']) .is-dwelling > .ob-card__dwell,
+  :root:not([data-reduce-motion='false']) .ob-footer .is-dwelling::after {
+    animation: none !important;
+    transform: none;
+    opacity: 0.6;
+  }
+}
+
+@media (max-width: 40rem) {
+  .ob-main,
+  .ob-footer {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}
