@@ -130,7 +130,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Claude Code',
     icon: icons.cpu,
     keywords:
-      'claude code cli copilot coding agent autopilot projects permissions approve hooks terminal sessions commands'
+      'claude code cli copilot coding agent autopilot projects permissions approve hooks terminal sessions commands coding skills docs library plugin'
   },
   {
     id: 'privacy',

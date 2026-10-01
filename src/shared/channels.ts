@@ -9,6 +9,7 @@ import type {
   ClaudeSessionView,
   ClaudeSettingsPatch
 } from './claude-code'
+import type { CodingSkillResult, CodingSkillsOverview, CodingSkillsProject } from './coding-skills'
 import type { CompatiblePreset, ConfigPatch, ModelProvider } from './config'
 import type {
   ConnectorInput,
@@ -361,6 +362,49 @@ export interface InvokeChannels {
   }
   /** Writes it only if the file still has the previewed hash. */
   'claude:hooks-apply': { args: [install: boolean, hash: string]; result: ClaudeResult }
+  /** Coding skills for Claude Code sessions: the library and the draft under review. */
+  'claude:skills': { args: []; result: CodingSkillsOverview }
+  /** Docs link (or a known library's docs) → a draft; nothing saved until skills-save. */
+  'claude:skills-from-docs': {
+    args: [req: { url?: string; title?: string; project?: string }]
+    result: CodingSkillResult
+  }
+  /** A Claude skill folder or GitHub link → a draft. */
+  'claude:skills-import': {
+    args: [req: { from: string; pick?: string; project?: string }]
+    result: CodingSkillResult
+  }
+  /** The user's own words → a draft. */
+  'claude:skills-write': {
+    args: [req: { title: string; text: string; project?: string }]
+    result: CodingSkillResult
+  }
+  /** Saves the draft (optionally the edited SKILL.md). */
+  'claude:skills-save': { args: [req: { id: string; skillMd?: string }]; result: CodingSkillResult }
+  'claude:skills-discard': { args: []; result: CodingSkillResult }
+  /** Reads the docs / source again → a draft with the diff. */
+  'claude:skills-update': { args: [name: string]; result: CodingSkillResult }
+  'claude:skills-remove': { args: [name: string]; result: CodingSkillResult }
+  'claude:skills-read': { args: [name: string]; result: { ok: boolean; skillMd?: string } }
+  'claude:skills-edit': {
+    args: [req: { name: string; skillMd: string }]
+    result: CodingSkillResult
+  }
+  /** A project's attached skills and suggestions from its dependencies. */
+  'claude:skills-project': { args: [path: string]; result: CodingSkillsProject | { error: string } }
+  'claude:skills-attach': {
+    args: [req: { project: string; names: string[] }]
+    result: CodingSkillsProject | { error: string }
+  }
+  'claude:skills-detach': {
+    args: [req: { project: string; name: string }]
+    result: CodingSkillsProject | { error: string }
+  }
+  /** Copies a skill into <project>/.claude/skills (only when the user asks). */
+  'claude:skills-save-to-project': {
+    args: [req: { project: string; name: string }]
+    result: CodingSkillResult & { path?: string }
+  }
   /** Stored "always" grants for medium-risk actions (08 T03). */
   'agent:grants-list': { args: []; result: AgentGrant[] }
   'agent:grants-revoke': { args: [scope: string]; result: { ok: boolean } }
@@ -1306,6 +1350,20 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'claude:permission-answer',
   'claude:hooks-preview',
   'claude:hooks-apply',
+  'claude:skills',
+  'claude:skills-from-docs',
+  'claude:skills-import',
+  'claude:skills-write',
+  'claude:skills-save',
+  'claude:skills-discard',
+  'claude:skills-update',
+  'claude:skills-remove',
+  'claude:skills-read',
+  'claude:skills-edit',
+  'claude:skills-project',
+  'claude:skills-attach',
+  'claude:skills-detach',
+  'claude:skills-save-to-project',
   'agent:grants-list',
   'agent:grants-revoke',
   'tasks:list',
