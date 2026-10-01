@@ -1,3 +1,6 @@
+/* Assistant bar. Only transform and opacity animate; durations come from the motion tokens
+   and collapse to nothing under reduced motion (theme.css). */
+
 html,
 body,
 #root {
@@ -15,8 +18,334 @@ body,
   pointer-events: none;
 }
 
-.as-card {
+.as-shell {
   pointer-events: auto;
   width: min(40rem, calc(100% - 3rem));
-  padding: var(--space-3) var(--space-4);
+  margin-bottom: 1rem;
+  transform-origin: 50% 100%;
+  will-change: transform, opacity;
+}
+
+.as-shell.is-entering {
+  animation: as-opacity-in var(--dur-fast) var(--ease-out) both;
+}
+
+.as-shake {
+  will-change: transform;
+}
+
+/* ---- Morphing surface: caps keep their corners, the body stretches ---- */
+
+.as-morph {
+  position: relative;
+  color: var(--fg);
+}
+
+.as-morph__bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.as-morph__top,
+.as-morph__body,
+.as-morph__bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  will-change: transform;
+}
+
+.as-morph__top {
+  top: 0;
+  height: 17px;
+  border-bottom: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.as-morph__body {
+  top: 16px;
+  bottom: 16px;
+  border-top: 0;
+  border-bottom: 0;
+  transform-origin: 50% 100%;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.28);
+}
+
+.as-morph__bottom {
+  bottom: 0;
+  height: 17px;
+  border-top: 0;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+:root[data-theme='light'] .as-morph__body {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+
+:root[data-theme='high-contrast'] .as-morph__top,
+:root[data-theme='high-contrast'] .as-morph__body,
+:root[data-theme='high-contrast'] .as-morph__bottom {
+  border-width: 2px;
+  border-color: var(--fg);
+  box-shadow: none;
+}
+
+:root[data-theme='high-contrast'] .as-morph__top {
+  border-bottom: 0;
+}
+
+:root[data-theme='high-contrast'] .as-morph__body {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+:root[data-theme='high-contrast'] .as-morph__bottom {
+  border-top: 0;
+}
+
+.as-morph__content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+}
+
+/* ---- Rows ---- */
+
+.as-row {
+  padding-right: var(--space-1);
+}
+
+.as-fade {
+  animation: as-in 160ms var(--ease-out) 40ms both;
+}
+
+.as-fade.is-leaving {
+  animation: as-out 100ms var(--ease-in) both;
+  pointer-events: none;
+}
+
+.as-countdown {
+  position: absolute;
+  top: 0;
+  left: var(--radius-lg);
+  right: var(--radius-lg);
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.as-countdown__fill {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: 0 50%;
+  will-change: transform;
+}
+
+.as-answer__scroll {
+  max-height: 50vh;
+  overflow-y: auto;
+  font-size: var(--text-lg);
+  overscroll-behavior: contain;
+  border-radius: var(--radius-sm);
+}
+
+.as-answer__stream {
+  white-space: pre-wrap;
+}
+
+.as-chunk {
+  animation: as-opacity-in 120ms var(--ease-out) both;
+}
+
+.as-fade-in {
+  animation: as-opacity-in var(--dur-fast) var(--ease-out) both;
+}
+
+.as-answer__meta {
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+  text-align: right;
+}
+
+.as-error__msg {
+  font-weight: var(--weight-strong);
+}
+
+.as-error__hint {
+  color: var(--fg-muted);
+}
+
+.as-step {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.as-step__count {
+  flex: none;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.as-step__label {
+  font-size: var(--text-lg);
+  min-width: 0;
+}
+
+.as-caption {
+  color: var(--fg);
+}
+
+/* ---- Bar row ---- */
+
+.as-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.5rem;
+}
+
+.as-status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: var(--weight-strong);
+}
+
+.as-status__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--accent);
+}
+
+.as-status__icon.is-error {
+  color: var(--danger);
+}
+
+.as-status__icon.is-confirm {
+  color: var(--warning);
+}
+
+.as-status__text {
+  display: grid;
+  min-width: 0;
+}
+
+.as-xfade {
+  grid-area: 1 / 1;
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.as-xfade.is-old {
+  animation: as-out 100ms var(--ease-in) both;
+}
+
+.as-xfade.is-new {
+  animation: as-in 160ms var(--ease-out) 60ms both;
+}
+
+/* The one allowed loop besides the meter: a soft sweep while thinking. */
+.as-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--surface) 60%, transparent),
+    transparent
+  );
+  transform: translateX(-100%);
+  animation: as-shimmer 1.4s linear infinite;
+}
+
+.as-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1rem;
+}
+
+.as-meter__bar {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: scaleY(0.18);
+  will-change: transform;
+}
+
+.as-actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: none;
+}
+
+.as-roll {
+  display: inline-grid;
+  overflow: hidden;
+  vertical-align: bottom;
+}
+
+.as-roll > span {
+  grid-area: 1 / 1;
+}
+
+.as-roll > .is-out {
+  animation: as-roll-out 160ms var(--ease-in) both;
+}
+
+.as-roll > .is-in {
+  animation: as-roll-in 160ms var(--ease-out) both;
+}
+
+@keyframes as-opacity-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes as-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes as-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes as-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes as-roll-out {
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+}
+
+@keyframes as-roll-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
 }
