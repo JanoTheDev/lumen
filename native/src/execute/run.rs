@@ -231,8 +231,15 @@ fn navigate(url: &str, token: &CancelToken) -> Result<(), AgentError> {
     // No browser: main opens the URL itself under its own scheme policy.
     let hwnd =
         window::find_browser().ok_or_else(|| AgentError::not_found("navigate_url: no browser window"))?;
-    bring_to_front(hwnd, token)?;
-    token.sleep(ms(200))?;
+    // Ctrl+L and the URL must never land in whatever else has focus.
+    window::focus(hwnd, token).map_err(|e| match e.code {
+        E_CANCELLED | E_TIMEOUT => e,
+        _ => failed(format!("navigate_url: could not focus the browser: {}", e.message)),
+    })?;
+    token.sleep(ms(500))?;
+    if window::foreground() != hwnd {
+        return Err(failed("navigate_url: the browser lost focus"));
+    }
     chord(&[VK_CONTROL, 0x4C], token)?; // Ctrl+L
     token.sleep(ms(150))?;
     chord(&[VK_CONTROL, 0x41], token)?; // Ctrl+A
