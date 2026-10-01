@@ -251,3 +251,76 @@ it('the confirm card shows the localized word as written', () => {
   expect(riskyName('Endgültig löschen')).toBe('endgültig löschen')
   expect(riskyName('ENVOYER')).toBe('envoyer')
 })
+
+describe('recipient autocomplete and paste', () => {
+  const user = { userText: 'email john about lunch' }
+  for (const [surface, w] of Object.entries(SURFACES)) {
+    const to = { focusRole: 'edit', focusName: w === GMAIL ? 'To recipients' : 'To' }
+    it(`${surface}: a typed prefix is not "named"; picking an unnamed suggestion is high`, () => {
+      expect(rate({ type: 'type', text: 'j' }, agent(w, to, user)).risk).toBe('high')
+      expect(rate({ type: 'type', text: 'john' }, agent(w, to, user)).risk).toBe('medium')
+      for (const a of [
+        { type: 'click_element', elementName: 'Eve Evil eve@evil.example' },
+        { type: 'uia_act', action: 'invoke', description: 'Eve Evil eve@evil.example' },
+        { type: 'click_element', elementName: 'Eve Evil' }
+      ])
+        expect(rate(a, agent(w, to, user))).toMatchObject({ risk: 'high', needsConfirm: true })
+      // A suggestion row with an address is a recipient pick even when focus moved to the list.
+      expect(
+        rate(
+          { type: 'click_element', elementName: 'Eve Evil eve@evil.example' },
+          agent(w, { focusRole: 'listitem', focusName: 'Eve Evil' }, user)
+        ).risk
+      ).toBe('high')
+    })
+
+    it(`${surface}: Enter / Tab in To pick a suggestion (not low); paste into To is high`, () => {
+      const ctx = { ...agent(w, to, user), prevType: 'type' }
+      for (const combo of ['enter', 'tab'])
+        expect(rate({ type: 'hotkey', keys: combo }, ctx).risk).not.toBe('low')
+      expect(keys('ctrl+v', agent(w, to, user)).risk).toBe('high')
+      expect(keys('shift+insert', agent(w, to, user)).risk).toBe('high')
+      expect(
+        rate(
+          { type: 'input', steps: [{ t: 'keys', combo: 'ctrl+v' }] } as EvalAction,
+          agent(w, to, user)
+        ).risk
+      ).toBe('high')
+    })
+  }
+
+  it('a suggestion the user named in full (or by address) is on the card, not high', () => {
+    const w = GMAIL
+    const to = { focusRole: 'edit', focusName: 'To recipients' }
+    expect(
+      rate(
+        { type: 'click_element', elementName: 'John Smith john@corp.example' },
+        agent(w, to, { userText: 'email John Smith about lunch' })
+      ).risk
+    ).toBe('medium')
+    expect(
+      rate(
+        { type: 'click_element', elementName: 'John Smith john@corp.example' },
+        agent(w, to, { userText: 'mail john@corp.example the notes' })
+      ).risk
+    ).toBe('medium')
+    // Half the name is not the whole name.
+    expect(
+      rate(
+        { type: 'click_element', elementName: 'John Evil john@evil.example' },
+        agent(w, to, user)
+      ).risk
+    ).toBe('high')
+    // Clicking the subject or body from To is not a pick.
+    for (const elementName of ['Subject', 'Message Body'])
+      expect(rate({ type: 'click_element', elementName }, agent(w, to, user)).risk).toBe('low')
+  })
+
+  it('the user clicking a suggestion themselves is not second-guessed', () => {
+    const d = rate(
+      { type: 'click_element', elementName: 'Eve Evil eve@evil.example' },
+      { origin: 'user-direct', activeWindow: { ...GMAIL, focusName: 'To recipients' } }
+    )
+    expect(d.risk).toBe('low')
+  })
+})

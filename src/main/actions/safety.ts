@@ -342,15 +342,39 @@ const MAIL_SPAM_COMBOS = new Set(['!', 'shift+1'])
 /** Classic Outlook sends with Alt+S (Ctrl+Enter is caught for every messaging app). */
 const MAIL_SEND_COMBOS = new Set(['alt+s'])
 
-/** The user's own words name this text (the address, or the name typed for autocomplete). */
-function userNamed(text: string, userText: string | undefined): boolean {
+const EMAIL_RE = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu
+
+/** `word` appears in `said` as a whole word or address, not inside another one. */
+function saidWhole(word: string, said: string): boolean {
+  const esc = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(
+    `(?:^|[^\\p{L}\\p{N}._%+@-])${esc}(?=$|[^\\p{L}\\p{N}_%+@-]|\\.(?:$|\\s))`,
+    'iu'
+  ).test(said)
+}
+
+/**
+ * The user's own words name this recipient text: every address in it was said in full, or
+ * every name word was said as a whole word ("Anna", "Anna Berg"). A prefix the agent typed for
+ * autocomplete ("j", "ann") or a name word the user never said is not named.
+ */
+export function userNamed(text: string, userText: string | undefined): boolean {
   const t = text.trim().toLowerCase()
   if (!t || !userText) return false
   const said = userText.toLowerCase()
-  return t
-    .split(/[;,]\s*/)
-    .filter(Boolean)
-    .every((part) => said.includes(part.trim()))
+  const parts = t.split(/[;,]\s*/).filter((p) => p.trim())
+  if (!parts.length) return false
+  return parts.every((part) => {
+    const addresses = part.match(EMAIL_RE) ?? []
+    if (addresses.length && addresses.every((a) => saidWhole(a, said))) return true
+    const words = part
+      .replace(EMAIL_RE, ' ')
+      .split(/[^\p{L}\p{N}'-]+/u)
+      .map((w) => w.replace(/^['-]+|['-]+$/g, ''))
+      .filter(Boolean)
+    if (!words.length || words.join('').length < 3) return false
+    return words.every((w) => saidWhole(w, said))
+  })
 }
 
 function isExplorer(w: WindowInfo | undefined): boolean {
@@ -613,6 +637,18 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
     out.push({ risk: send ? sendRisk : 'high', reason: `presses “${focusWord}”` })
     return
   }
+  if (isMail(w) && agentish(ctx.origin) && isRecipientField(w?.focusName)) {
+    // Enter / Tab in To picks the autocomplete suggestion; a paste adds whatever is on the
+    // clipboard. Either way the recipient is not the text the policy rated.
+    if (combo === 'ctrl+v' || combo === 'shift+insert') {
+      out.push({ risk: 'high', reason: 'pastes into the recipient field' })
+      return
+    }
+    if (combo === 'enter' || combo === 'tab') {
+      out.push({ risk: 'medium', reason: 'picks the suggested recipient' })
+      return
+    }
+  }
   if (isMail(w)) {
     if (MAIL_SEND_COMBOS.has(combo)) {
       out.push({ risk: sendRisk, reason: 'sends the email' })
@@ -744,9 +780,33 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
   if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
   const word = riskyName(name)
-  if (!word) return
+  if (!word) return recipientPickFindings(name, ctx, out)
   const send = ctx.allowSendWithoutReview && isSendName(word)
   out.push({ risk: send ? 'medium' : 'high', reason: `clicks “${word}”` })
+}
+
+/** Compose fields an agent clicks while the focus is still in To (not a suggestion). */
+const COMPOSE_FIELD_RE =
+  /(?:^|[^\p{L}])(message|body|bericht|nachricht|corps|cuerpo|mensaje|attach|bijlage|anhang|pièce jointe|adjuntar)(?=$|[^\p{L}])/iu
+
+/**
+ * Agent click in an email app on an autocomplete suggestion: a row with an address, or anything
+ * picked while the focus is in a To / Cc / Bcc box. Rated as entering that recipient: high
+ * unless the user said the address or the whole name.
+ */
+function recipientPickFindings(name: string, ctx: PolicyCtx, out: Finding[]): void {
+  const w = ctx.activeWindow
+  if (!agentish(ctx.origin) || !isMail(w)) return
+  const shown = name.trim().slice(0, 120)
+  const hasAddress = new RegExp(EMAIL_RE.source, 'u').test(name)
+  const inTo =
+    isRecipientField(w?.focusName) && !isNoSendFieldName(name) && !COMPOSE_FIELD_RE.test(name)
+  if (!hasAddress && !inTo) return
+  out.push(
+    userNamed(name, ctx.userText)
+      ? { risk: 'medium', reason: `picks the recipient “${shown}”` }
+      : { risk: 'high', reason: `picks a recipient you did not name: “${shown}”` }
+  )
 }
 
 // ---- MCP ----
