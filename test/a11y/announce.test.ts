@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import { Announcer, type AnnounceDeps } from '../../src/main/a11y/announce'
 import { atState, screenReaderActive, setAtState } from '../../src/main/a11y/at-state'
 
-function setup(over: Partial<AnnounceDeps> = {}) {
+function setup(over: Partial<AnnounceDeps> = {}): {
+  a: Announcer
+  sr: ReturnType<typeof vi.fn>
+  speak: ReturnType<typeof vi.fn>
+  publish: ReturnType<typeof vi.fn>
+  tick: (ms: number) => number
+} {
   let t = 0
   const sr = vi.fn(async () => true)
   const speak = vi.fn()
@@ -20,7 +26,7 @@ function setup(over: Partial<AnnounceDeps> = {}) {
   return { a: new Announcer(deps), sr, speak, publish, tick: (ms: number) => (t += ms) }
 }
 
-const flush = () => new Promise((r) => setTimeout(r, 0))
+const flush = (): Promise<unknown> => new Promise((r) => setTimeout(r, 0))
 
 describe('announce routing matrix', () => {
   it.each([
