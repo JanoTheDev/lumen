@@ -11,6 +11,7 @@ vi.mock('../../src/main/agent/instance', () => ({ getAgent: () => null }))
 vi.mock('../../src/main/query/context', () => ({ currentContext: () => null }))
 
 import { recentlyActed, recordUndo, undoLast, undoStack } from '../../src/main/undo'
+import { withInputLane } from '../../src/main/agent-mode/input-lane'
 
 describe('undo runtime', () => {
   beforeEach(() => {
@@ -53,5 +54,34 @@ describe('undo runtime', () => {
     const text = await undoLast('task', { run })
     expect(run).not.toHaveBeenCalled()
     expect(text).toBe('Not undone: clicked “Send”, because “Send” can’t be taken back.')
+  })
+
+  it('reversals run in the input lane, never in the middle of an agent batch (review L8)', async () => {
+    ;(await recordUndo({ type: 'hotkey', keys: ['ctrl', 'v'] }, { taskId: 't1' }))!()
+    const order: string[] = []
+    let endAgent!: () => void
+    const agent = withInputLane(
+      'agent-task',
+      () =>
+        new Promise<void>((resolve) => {
+          order.push('agent start')
+          endAgent = () => {
+            order.push('agent end')
+            resolve()
+          }
+        })
+    )
+    await vi.waitFor(() => expect(order).toEqual(['agent start']))
+    const undo = undoLast(1, {
+      run: async () => {
+        order.push('undo')
+        return { executed: 1, blocked: false, cancelled: false }
+      }
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(order).toEqual(['agent start'])
+    endAgent()
+    await Promise.all([agent, undo])
+    expect(order).toEqual(['agent start', 'agent end', 'undo'])
   })
 })

@@ -1,7 +1,8 @@
 // "Undo what you just did" wired to the app (11 T16). The executor calls recordUndo() before
 // each action and commits the record once the action ran; "undo that" plans the reversals from
-// the window in front, runs them through the executor (policy, audit, cancel) and says what
-// could not be undone. File tools call keepFileForUndo() before they change a file.
+// the window in front, runs them through the executor (policy, audit, cancel) as one batch in
+// the input lane (the user's own input: it never waits, and never interleaves with an agent
+// batch) and says what could not be undone. File tools call keepFileForUndo() before they change a file.
 import { homedir } from 'os'
 import { join } from 'path'
 import type { Action } from '@shared/types'
@@ -9,6 +10,7 @@ import { loadConfig } from '../config'
 import { log } from '../logger'
 import type { ActiveWindowInfo } from '../agent/commands'
 import { getAgent } from '../agent/instance'
+import { withInputLane } from '../agent-mode/input-lane'
 import { elementIndex } from '../query/uia-list'
 import { currentContext } from '../query/context'
 import { UndoTrash } from './files'
@@ -108,6 +110,7 @@ export function recentlyActed(ms = UNDO_THAT_MS, now = Date.now()): boolean {
 }
 
 export interface UndoDeps {
+  /** Runs reversal actions (executeActions); undoLast already holds the input lane around it. */
   run(actions: Action[]): Promise<{ executed: number; blocked: boolean; cancelled: boolean }>
 }
 
@@ -146,19 +149,25 @@ export async function undoLast(n: number | 'task', deps: UndoDeps): Promise<stri
   const failed = [...plan.skipped]
   undoing = true
   try {
-    for (let i = 0; i < plan.run.length; i++) {
-      const p = plan.run[i]
-      const why = await runOne(p, deps)
-      if (why) {
-        const rest = plan.run.slice(i + 1).map((q) => ({
-          record: q.record,
-          why: 'it came before a step I couldn’t undo'
-        }))
-        failed.unshift({ record: p.record, why }, ...rest)
-        break
-      }
-      done.push(p.record)
-    }
+    await withInputLane(
+      'undo',
+      async () => {
+        for (let i = 0; i < plan.run.length; i++) {
+          const p = plan.run[i]
+          const why = await runOne(p, deps)
+          if (why) {
+            const rest = plan.run.slice(i + 1).map((q) => ({
+              record: q.record,
+              why: 'it came before a step I couldn’t undo'
+            }))
+            failed.unshift({ record: p.record, why }, ...rest)
+            break
+          }
+          done.push(p.record)
+        }
+      },
+      { user: true }
+    )
   } finally {
     undoing = false
   }
