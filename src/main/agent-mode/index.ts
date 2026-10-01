@@ -1,6 +1,7 @@
 // Safety wiring (08 Phase 1): grants file, audit log, the bar's confirm card as the policy's
 // confirm UI, IPC for the grants list and the audit viewer, and "what did you just do".
 // Background tasks (08 Phase 5): persisted task list and the tasks:* IPC.
+// Skill making by voice (11 T09-T11) hooks in here: it follows agent runs.
 import { ipcMain } from 'electron'
 import { dirname, join } from 'path'
 import { auditQuerySchema, grantScopeSchema } from '@shared/ipc'
@@ -12,6 +13,8 @@ import { setConfirmUi } from './confirm'
 import { grants, installGrants } from './grants'
 import { installBackground } from './background'
 import { registerTasksIpc } from '../ipc/tasks'
+import { installSkillCreation, interceptSkillCreation, recordedSkill } from '../skills/creation'
+import { setSkillRecordingSink, startSkillRecording } from '../teach'
 
 export function installAgentMode(): void {
   const root = dirname(configPath())
@@ -22,6 +25,9 @@ export function installAgentMode(): void {
     ask: (card) => assistant.requestConfirm(card),
     confirm: () => assistant.command({ type: 'confirm' })
   })
+  // Skills made by voice (11 T09-T11): from the last run, "when I say …", the step recorder.
+  installSkillCreation(startSkillRecording)
+  setSkillRecordingSink(recordedSkill)
 }
 
 export function registerAgentModeIpc(): void {
@@ -44,8 +50,10 @@ export function registerAgentModeIpc(): void {
 const WHAT_DID_YOU_DO_RE =
   /^(what (did|have) you (just )?(do|done)|what did you just change|what happened just now)$/
 
-/** Whole-utterance voice commands of the safety layer; undefined = not ours. */
+/** Whole-utterance voice commands of the safety layer and skill making; undefined = not ours. */
 export function interceptAgentMode(prompt: string): unknown | undefined {
+  const skill = interceptSkillCreation(prompt)
+  if (skill !== undefined) return skill
   const words = prompt
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')

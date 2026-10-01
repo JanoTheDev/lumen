@@ -19,6 +19,7 @@ import { readZip, ZIP_LIMITS } from '../packs/zip-read'
 import { agentSkillKind } from './kind'
 import { SKILL_FILE, SKILL_NAME_RE, parseSkillFile, skillTemplate } from './manifest'
 import { RESERVED_DIRS, SKILL_PACK_KIND, appPackIds, type SkillRegistry } from './registry'
+import { STEPS_FILE, parseStepsFile } from './steps'
 
 export type SkillPreview = SkillPreviewInfo
 
@@ -189,4 +190,30 @@ export function deleteSkill(registry: SkillRegistry, name: string): Result {
   }
   registry.reload()
   return { ok: true }
+}
+
+/** A new skill in the user folder from finished files (a saved draft). */
+export function writeNewSkill(
+  registry: SkillRegistry,
+  name: string,
+  files: { skillMd: string; stepsJson?: string }
+): Result<{ name: string }> {
+  const dir = userDir(registry, name)
+  if (!dir) return { ok: false, error: 'use lowercase words joined by "-", like "tidy-desktop"' }
+  if (existsSync(dir) || registry.get(name))
+    return { ok: false, error: `a skill or pack named "${name}" already exists` }
+  if (appPackIds(registry.roots.appPacks).includes(name))
+    return { ok: false, error: `"${name}" is the name of an app pack` }
+  try {
+    const parsed = parseSkillFile(files.skillMd)
+    if (parsed.manifest.name !== name) return { ok: false, error: 'the name does not match' }
+    if (files.stepsJson) parseStepsFile(files.stepsJson)
+  } catch (e) {
+    return { ok: false, error: (e as Error).message }
+  }
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, SKILL_FILE), files.skillMd, { encoding: 'utf8', flag: 'wx' })
+  if (files.stepsJson) writeFileSync(join(dir, STEPS_FILE), files.stepsJson, 'utf8')
+  registry.reload()
+  return { ok: true, name }
 }

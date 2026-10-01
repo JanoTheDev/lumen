@@ -18,7 +18,8 @@ import {
   skeleton,
   waitsFor,
   type RawUiaEvent,
-  type RecordedApp
+  type RecordedApp,
+  type SkeletonStep
 } from './recorder'
 import type { RecordTurnInput } from './record-prompt'
 import { freeLessonId, writeUserLesson } from './user-lessons'
@@ -59,10 +60,15 @@ export interface RecordingDeps {
   appName(id: string): string
   log(msg: string): void
   handled: unknown
+  /** Skill output mode (11 T11): the recorded steps become a skill draft instead of a lesson. */
+  skillOut?(input: { app: RecordedApp; title?: string; steps: SkeletonStep[] }): Promise<void>
 }
 
+/** What a recording turns into: a lesson (07 T31) or a skill draft (11 T11). */
+export type RecordingOutput = 'lesson' | 'skill'
+
 export interface Recorder {
-  start(title?: string): { ok: boolean; error?: string }
+  start(title?: string, output?: RecordingOutput): { ok: boolean; error?: string }
   stop(): Promise<{ ok: boolean; error?: string }>
   cancel(): { ok: boolean }
   /** The user is talking to Lumen: nothing is recorded meanwhile. */
@@ -82,6 +88,7 @@ export function createRecorder(deps: RecordingDeps): Recorder {
   let poll: ReturnType<typeof setInterval> | null = null
   let limit: ReturnType<typeof setTimeout> | null = null
   let app: RecordedApp | null = null
+  let output: RecordingOutput = 'lesson'
   let draft: Lesson | null = loadDraft()
   let draftAt = 0
   if (draft) phase = 'draft'
@@ -112,7 +119,8 @@ export function createRecorder(deps: RecordingDeps): Recorder {
 
   const barLine = (): string => {
     const n = rec?.events.length ?? 0
-    return `● Recording your steps (${n} so far). Say “stop recording” when you are done.`
+    const what = output === 'skill' ? 'your steps for a skill' : 'your steps'
+    return `● Recording ${what} (${n} so far). Say “stop recording” when you are done.`
   }
 
   function stopWatching(): void {
@@ -149,11 +157,13 @@ export function createRecorder(deps: RecordingDeps): Recorder {
   const api: Recorder = {
     recording: () => phase === 'recording',
 
-    start(title) {
+    start(title, mode = 'lesson') {
       if (phase === 'recording' || phase === 'drafting')
         return { ok: false, error: 'already recording' }
       if (deps.lessonRunning()) return { ok: false, error: 'stop the lesson first' }
-      const replaced = !!draft
+      if (mode === 'skill' && !deps.skillOut) return { ok: false, error: 'skills are not ready' }
+      output = mode
+      const replaced = !!draft && mode === 'lesson'
       rec = new Recording(deps.now(), { hotkey: deps.hotkey(), title })
       phase = 'recording'
       app = null
@@ -171,7 +181,9 @@ export function createRecorder(deps: RecordingDeps): Recorder {
       )
       deps.showState(barLine())
       deps.say(
-        `Recording your steps${replaced ? ', this replaces the unsaved draft' : ''}. Do the task now, then say “stop recording”. What you type is not recorded. Say “take a screenshot” to add a picture of a step.`
+        mode === 'skill'
+          ? 'Recording your steps for a new skill. Do the task now, then say “stop recording”. What you type is not recorded; the skill asks for it each time it runs.'
+          : `Recording your steps${replaced ? ', this replaces the unsaved draft' : ''}. Do the task now, then say “stop recording”. What you type is not recorded. Say “take a screenshot” to add a picture of a step.`
       )
       return { ok: true }
     },
@@ -190,8 +202,17 @@ export function createRecorder(deps: RecordingDeps): Recorder {
         deps.say('I did not see any steps, so there is nothing to save.')
         return { ok: false, error: 'no steps recorded' }
       }
-      deps.showState('Writing the lesson from your steps…')
       const lessonApp = mainApp(steps) ?? app ?? { id: 'desktop', name: 'Windows' }
+      if (output === 'skill' && deps.skillOut) {
+        deps.showState('Writing the skill from your steps…')
+        await deps
+          .skillOut({ app: lessonApp, title: r.title, steps })
+          .catch((e: Error) => deps.log(`record: skill draft failed (${e.message})`))
+        deps.showState(null)
+        phase = draft ? 'draft' : 'idle'
+        return { ok: true }
+      }
+      deps.showState('Writing the lesson from your steps…')
       const minutes = Math.max(1, Math.round((deps.now() - r.startedAt) / 60_000))
       const text = await deps
         .draftText({ app: lessonApp, title: r.title, steps, shots: r.shots.length }, r.shots)

@@ -522,7 +522,8 @@ function installRecorder(base: string): void {
     lessonRunning: () => !!runner?.running(),
     appName: (id) => registry?.get(id)?.name ?? id,
     log: (msg) => log('plan', msg),
-    handled: HANDLED
+    handled: HANDLED,
+    skillOut: (input) => (skillSink ? skillSink(input) : Promise.resolve())
   })
   // Nothing is recorded while the user talks to Lumen.
   bus.on('voice.started', () => recorder?.hold(true))
@@ -538,6 +539,20 @@ export function recordAction(action: 'start' | 'stop' | 'cancel'): Promise<{
   if (action === 'start') return Promise.resolve(recorder.start())
   if (action === 'stop') return recorder.stop()
   return Promise.resolve(recorder.cancel())
+}
+
+type SkillSink = NonNullable<Parameters<typeof createRecorder>[0]['skillOut']>
+let skillSink: SkillSink | null = null
+
+/** Skills (11 T11) take recordings made in skill mode. */
+export function setSkillRecordingSink(sink: SkillSink | null): void {
+  skillSink = sink
+}
+
+/** "watch me make a skill": the same recorder, its steps become a skill draft. */
+export function startSkillRecording(title?: string): { ok: boolean; error?: string } {
+  if (!recorder) return { ok: false, error: 'not ready' }
+  return recorder.start(title, 'skill')
 }
 
 export function recordStatus(): RecordingStatus {

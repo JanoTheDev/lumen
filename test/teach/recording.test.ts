@@ -217,3 +217,31 @@ describe('record voice commands', () => {
     expect(matchDraftCommand('save the file')).toBeNull()
   })
 })
+
+describe('skill output mode (11 T11)', () => {
+  it('hands the recorded steps to the skill sink instead of drafting a lesson', async () => {
+    const skillOut = vi.fn(async () => {})
+    const rec = createRecorder({ ...deps, skillOut })
+    expect(rec.start('export png', 'skill')).toEqual({ ok: true })
+    expect(deps.said.at(-1)).toMatch(/new skill/)
+    await vi.advanceTimersByTimeAsync(10)
+    feed!.uia({ kind: 'invoked', element: { name: 'Export As', role: 'menu item' } })
+    now += 2000
+    feed!.uia({ kind: 'value', element: { name: 'File name', role: 'edit', value: 'secret.png' } })
+    expect(rec.intercept('stop recording')).toBe(HANDLED)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(skillOut).toHaveBeenCalledTimes(1)
+    const input = (skillOut.mock.calls[0] as unknown as [{ title?: string; steps: unknown[] }])[0]
+    expect(input.title).toBe('export png')
+    expect(input.steps).toHaveLength(2)
+    expect(JSON.stringify(input)).not.toContain('secret.png')
+    expect(deps.draftText).not.toHaveBeenCalled()
+    expect(rec.status().draft).toBeNull()
+    expect(rec.status().phase).toBe('idle')
+  })
+
+  it('refuses skill mode without a sink', () => {
+    const rec = createRecorder(deps)
+    expect(rec.start(undefined, 'skill')).toEqual({ ok: false, error: 'skills are not ready' })
+  })
+})
