@@ -224,6 +224,14 @@ describe('AutomationScheduler: start, catch-up, wake', () => {
     expect(runs).toHaveLength(1)
   })
 
+  it('a Lumen a wake task started does not run startup triggers', async () => {
+    const { s, runs } = setup()
+    s.start([base({ id: 'au_boot2', trigger: { kind: 'startup' } })], { wakeStart: true })
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS * 2)
+    expect(runs).toEqual([])
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('wake: Task Scheduler drives it (no in-process timer); a wake run is not run twice', async () => {
     const { s, runs, external } = setup()
     external.add('au_wake1')

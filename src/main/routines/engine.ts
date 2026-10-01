@@ -66,6 +66,8 @@ export interface NewAutomation {
 export interface StartOpts {
   /** Ids a wake task asked to run (`--run-automation`), delivered right after start. */
   wakeIds?: readonly string[]
+  /** A wake task started this Lumen: nobody logged in, so startup triggers wait. */
+  wakeStart?: boolean
 }
 
 export type AutomationPatch = Partial<
@@ -91,6 +93,7 @@ export class AutomationScheduler {
     for (const a of [...this.items]) {
       if (!a.enabled) continue
       if (a.trigger.kind === 'startup') {
+        if (opts.wakeStart) continue
         this.due.set(a.id, { at: now + STARTUP_DELAY_MS, via: 'event' })
         continue
       }

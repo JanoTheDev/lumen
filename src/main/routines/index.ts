@@ -72,7 +72,7 @@ import { AutomationScheduler, type RunEnd } from './engine'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
-import { WakeTasks } from './schtasks'
+import { automationIdFromArgv, WakeTasks } from './schtasks'
 import { RoutineStore } from './store'
 import { describeTrigger, isTimeTrigger } from './triggers'
 import { AutomationWatchers } from './watchers'
@@ -594,7 +594,11 @@ export function installRoutines(file = join(dirname(configPath()), 'automations.
   const list = store.load()
   knownIds = new Set(list.map((a) => a.id))
   // A one-off a wake task started Lumen for is not "missed": runWake runs it below.
-  engine.start(list, { wakeIds: waitingAutomationRequests() })
+  // Started by a wake task (hidden, nobody logged in just now): no "when I log in" runs.
+  engine.start(list, {
+    wakeIds: waitingAutomationRequests(),
+    wakeStart: automationIdFromArgv(process.argv) !== null
+  })
   watchers.sync(engine.all())
   void wake.reconcile(engine.all()).then(() => engine.replan())
   onConfigPatched(() => watchers.sync(engine.all()))
