@@ -58,6 +58,23 @@ pub fn vk_for(name: &str) -> Option<u16> {
         "pgdn" => Some(0x22),
         "apps" | "menu" | "contextmenu" => Some(0x5D),
         "+" => Some(0xBB),
+        // pyautogui names the model uses with `execute` hotkeys.
+        "prtsc" | "prtscr" | "prntscrn" | "print" => Some(0x2C),
+        "browserback" => Some(0xA6),
+        "browserforward" => Some(0xA7),
+        "browserrefresh" => Some(0xA8),
+        "browserstop" => Some(0xA9),
+        "browsersearch" => Some(0xAA),
+        "browserfavorites" => Some(0xAB),
+        "browserhome" => Some(0xAC),
+        "playpause" => Some(0xB3),
+        "nexttrack" => Some(0xB0),
+        "prevtrack" => Some(0xB1),
+        "add" => Some(0x6B),
+        "subtract" => Some(0x6D),
+        "multiply" => Some(0x6A),
+        "divide" => Some(0x6F),
+        "decimal" => Some(0x6E),
         other => accel::key_vk(other),
     }
 }

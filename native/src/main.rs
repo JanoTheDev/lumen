@@ -8,6 +8,8 @@ mod bench;
 mod capture;
 mod dpi;
 mod dwell;
+#[cfg(windows)]
+mod execute;
 mod geom;
 mod hotkey;
 mod input;

@@ -17,7 +17,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
 pub const CAPABILITIES: &[&str] =
-    &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell", "announce", "wake"];
+    &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell", "announce", "wake", "execute"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -164,6 +164,7 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("init", Lane::Inline, None, cmd_init);
 
     app.cmd("input", Lane::Input, None, |_, args, token| crate::input::cmd_input(args, token));
+    app.cmd("execute", Lane::Input, None, |_, args, token| crate::execute::cmd_execute(args, token));
 
     app.cmd("capture", Lane::Read, None, |_, args, _| crate::capture::cmd_capture(args));
     app.cmd("ocr", Lane::Read, None, |_, args, token| crate::ocr::cmd_ocr(args, token));
