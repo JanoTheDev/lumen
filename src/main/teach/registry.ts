@@ -3,10 +3,13 @@
 // id replaces the bundled one; a user folder with only lessons/ adds lessons to it. Loose user
 // lessons (made by "show me how" or migrated guides) live in ~/.ai-overlay/skills/user/lessons.
 // Matching reuses the prompt-side matcher (ai/skills.ts): process, then url, then title.
+// Community packs (T32, installed from a `.lumen` file) carry a marker and load as untrusted:
+// their lessons lose "do it for me" (packs are data only; Lumen never acts for them).
 import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import { z } from 'zod'
 import { matchSkill, type SkillPack, type SkillRegion } from '../ai/skills'
+import { packMarker, type PackTrust } from '../packs/install'
 import { parseCurriculum, type Curriculum } from './curriculum'
 import { parseLesson, type Lesson } from './lesson'
 
@@ -16,6 +19,8 @@ export interface Skill extends SkillPack {
   version: string
   bridge?: string
   source: SkillSource
+  /** Installed from a community pack file (T32). */
+  trust?: PackTrust
   lessons: Lesson[]
   /** curriculum.json (T28): units → lesson ids. */
   curriculum?: Curriculum
@@ -157,7 +162,9 @@ export class SkillRegistry {
 
   private loadPack(dir: string, source: SkillSource): void {
     const manifestFile = join(dir, 'skill.json')
-    const lessons = this.loadLessons(join(dir, 'lessons'))
+    const trust = source === 'user' ? packMarker(dir)?.trust : undefined
+    const loaded = this.loadLessons(join(dir, 'lessons'))
+    const lessons = trust ? loaded.map(withoutDoIt) : loaded
     if (!existsSync(manifestFile)) {
       // Lessons-only user folder: add to (and override in) the pack with that id.
       const base = this.skills.get(dir.split(/[\\/]/).pop()!)
@@ -185,6 +192,7 @@ export class SkillRegistry {
       ...(meta.bridge ? { bridge: meta.bridge } : {}),
       regions: loadRegions(dir),
       source,
+      ...(trust ? { trust } : {}),
       lessons: all,
       ...(curriculum ? { curriculum } : {})
     })
@@ -270,6 +278,19 @@ function appDisplayName(id: string): string {
   if (named) return named
   const words = id.replace(/-/g, ' ')
   return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/** The lesson with no "do it for me" actions (community packs). */
+function withoutDoIt(lesson: Lesson): Lesson {
+  return {
+    ...lesson,
+    steps: lesson.steps.map((s) => {
+      if (!s.doItForMe) return s
+      const copy = { ...s }
+      delete copy.doItForMe
+      return copy
+    })
+  }
 }
 
 /** Later lessons replace earlier ones with the same id; order is kept. */

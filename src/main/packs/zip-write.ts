@@ -1,5 +1,5 @@
-// A small zip writer (deflate, no zip64) for packing the Blender add-on folder into the file
-// Blender's "Install from Disk" takes. Entries keep forward-slash paths under `prefix/`.
+// A small zip writer (deflate, no zip64): the Blender add-on zip and exported `.lumen` packs.
+// Entries keep forward-slash paths under `prefix/`.
 import { readdirSync, readFileSync, statSync } from 'fs'
 import { join, relative } from 'path'
 import { crc32, deflateRawSync } from 'zlib'

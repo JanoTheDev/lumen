@@ -21,7 +21,7 @@ import { connectObs, obsAuth, type WsLike } from '../../src/main/teach/bridges/o
 import { OBS_REQUESTS, obsBridge } from '../../src/main/teach/bridges/obs'
 import { BridgeSecrets } from '../../src/main/teach/bridges/secrets'
 import type { AppBridge } from '../../src/main/teach/bridges/types'
-import { folderEntries, zip } from '../../src/main/teach/bridges/zip'
+import { folderEntries, zip } from '../../src/main/packs/zip-write'
 
 const ROOT = join(__dirname, '..', '..')
 const bridgeKeys = JSON.parse(

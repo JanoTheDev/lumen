@@ -15,7 +15,7 @@ import { makeBridgePort } from './port'
 import { obsBridge, type ObsBridge } from './obs'
 import { BridgeSecrets } from './secrets'
 import type { AppBridge } from './types'
-import { folderEntries, zip } from './zip'
+import { folderEntries, zip } from '../../packs/zip-write'
 
 export const BRIDGE_IDS: readonly BridgeId[] = ['blender', 'obs']
 

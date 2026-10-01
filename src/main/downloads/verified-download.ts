@@ -23,6 +23,18 @@ export const MODEL_HOSTS: readonly string[] = [
   'release-assets.githubusercontent.com'
 ]
 
+/**
+ * Hosts `.lumen` packs come from (07 T32 / 11 T06): raw files, release assets and repo zips
+ * on GitHub. Packs have no pinned hash; src/main/packs/fetch.ts caps the size instead.
+ */
+export const PACK_HOSTS: readonly string[] = [
+  'github.com',
+  'raw.githubusercontent.com',
+  'codeload.github.com',
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com'
+]
+
 export interface DownloadOptions {
   url: string
   sha256: string
