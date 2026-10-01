@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { overlayHeightSchema, textSchema } from '@shared/ipc'
+import { textSchema } from '@shared/ipc'
 import { safeParse } from './validate'
 import * as answer from '../windows/answer'
 
@@ -11,9 +11,4 @@ export function registerAnswerIpc(): void {
     answer.showText(text)
   })
   ipcMain.on('answer:hide', () => answer.hide())
-  ipcMain.on('answer:resize', (_e, raw: unknown) => {
-    const h = safeParse('answer:resize', overlayHeightSchema, raw)
-    if (h === undefined) return
-    answer.resize(h)
-  })
 }

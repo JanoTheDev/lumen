@@ -37,12 +37,6 @@ export function General({ cfg, patch }: SectionProps): JSX.Element {
 
       <Card title="On screen">
         <Switch
-          checked={cfg.statusBubble.enabled}
-          onChange={(enabled) => patch({ statusBubble: { enabled } })}
-          label="Show the status bubble"
-          hint="A small label at the bottom of the screen: listening, thinking, step 2 of 5."
-        />
-        <Switch
           checked={cfg.guideAutoDismissOnMove}
           onChange={(guideAutoDismissOnMove) => patch({ guideAutoDismissOnMove })}
           label="Clear guide highlights when the mouse moves"

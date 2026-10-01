@@ -32,7 +32,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'general',
     label: 'General',
     icon: icons.settings,
-    keywords: 'hotkey shortcut push to talk tap hands-free history status bubble guide highlights'
+    keywords: 'hotkey shortcut push to talk tap hands-free history guide highlights'
   },
   {
     id: 'voice',

@@ -11,13 +11,6 @@ const assistant = vi.hoisted(() => ({
   close: vi.fn()
 }))
 vi.mock('../src/main/windows/assistant', () => assistant)
-vi.mock('../src/main/windows/ui-mode', () => ({ uiV2: () => true }))
-vi.mock('../src/main/windows/factory', () => ({ createWindow: vi.fn(), loadRenderer: vi.fn() }))
-vi.mock('../src/main/windows/registry', () => ({
-  live: () => null,
-  registerWindow: vi.fn(),
-  sendTo: vi.fn()
-}))
 
 import { send, showText } from '../src/main/windows/answer'
 
@@ -27,7 +20,7 @@ beforeEach(() => {
   assistant.state.mockImplementation(() => state)
 })
 
-describe('answer window (ui v2)', () => {
+describe('answer card', () => {
   it('does not carry the pin over to a different answer', () => {
     state.answer = { markdown: 'old', pinned: true }
     showText('new')

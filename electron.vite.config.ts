@@ -22,9 +22,7 @@ export default defineConfig({
       rollupOptions: {
         input: {
           highlight: resolve('src/renderer/highlight.html'),
-          answeroverlay: resolve('src/renderer/answeroverlay.html'),
           settings: resolve('src/renderer/settings.html'),
-          status: resolve('src/renderer/status.html'),
           dwellring: resolve('src/renderer/dwellring.html'),
           assistant: resolve('src/renderer/assistant.html'),
           screen: resolve('src/renderer/screen.html'),

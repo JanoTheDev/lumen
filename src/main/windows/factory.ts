@@ -10,9 +10,7 @@ import { is } from '@electron-toolkit/utils'
 
 export type RendererEntry =
   | 'highlight'
-  | 'answeroverlay'
   | 'settings'
-  | 'status'
   | 'dwellring'
   | 'assistant'
   | 'screen'
