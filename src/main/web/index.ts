@@ -22,6 +22,7 @@ import type { PagePorts } from './page'
 import { paidWebSearch, SEARCH_USD } from './search'
 import type { Complete } from './summarize'
 import { handleWebTurn, type WebDeps } from './turn'
+import { activeStyleBlock } from '../ai/style-runtime'
 
 export { setNoteSaver, type NoteSaver, type WebNote } from './notes'
 export { clearWebContext } from './context'
@@ -101,7 +102,8 @@ function styleLines(): string[] {
   return [
     answerStyle(cfg) === 'plain' ? PLAIN_STYLE_LINE : '',
     readingLevelPrompt(),
-    replyLanguageLine(cfg.voice.language)
+    replyLanguageLine(cfg.voice.language),
+    activeStyleBlock()
   ].filter(Boolean)
 }
 

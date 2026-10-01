@@ -13,7 +13,7 @@ import { createStyleMaker, type StyleMaker } from './style-make'
 import { applyStyleCommand, matchStyleCommand } from './style-voice'
 
 export function activeStyle(): ActiveStyle | null {
-  return loadConfig().ai.style ?? null
+  return loadConfig().ai?.style ?? null
 }
 
 /** The fenced reply-style block for the user turn; '' when no style is on. */

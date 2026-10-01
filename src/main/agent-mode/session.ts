@@ -14,6 +14,7 @@ import { loadConfig } from '../config'
 import { log, type LogTag } from '../logger'
 import type { QueryContext } from '../query/context'
 import { replyLanguageLine } from '../speech/language'
+import { activeStyleBlock } from '../ai/style-runtime'
 import { withCancelArmed } from '../speech/wake/arm'
 import * as assistant from '../windows/assistant'
 import { setStatus } from '../windows/status'
@@ -166,7 +167,9 @@ function taskContext(ctx: QueryContext, prompt: string): TaskContext {
     window: ctx.activeWindow,
     app: ctx.foreground.process,
     ...(skill?.text ? { skill } : {}),
-    language: replyLanguageLine(loadConfig().voice.language),
+    language: [replyLanguageLine(loadConfig().voice.language), activeStyleBlock()]
+      .filter(Boolean)
+      .join('\n'),
     now: new Date(),
     ...(files.length ? { files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind })) } : {})
   }
