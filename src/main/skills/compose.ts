@@ -173,7 +173,9 @@ export function draftFromCompose(
   const known = new Set<string>(SKILL_TOOL_NAMES)
   let tools = style ? [] : [...new Set(out.tools.filter((t) => known.has(t)))]
   if (!input) tools = tools.filter((t) => !INPUT_TOOL_NAMES.has(t))
-  if (tools.length && !tools.includes('finish')) tools.push('finish')
+  // A list the clamp emptied stays a list: no field at all would mean every tool.
+  if ((tools.length || (!style && out.tools.length)) && !tools.includes('finish'))
+    tools.push('finish')
 
   let steps: SkillDraft['steps']
   const stepsText = style ? '' : out.steps_json.trim()

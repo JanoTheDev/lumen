@@ -109,6 +109,20 @@ describe('model-written skills (compose)', () => {
     expect(composeTurn({ description: 'brief', kind: 'style' })).toMatch(/reply-style skill/)
   })
 
+  it('a tools list the clamp empties never becomes "any tool"', () => {
+    const { draft } = draftFromCompose(output({ needs_input: false, tools: ['act'] }), {
+      description: 'x'
+    })
+    expect(draft.tools).toEqual(['finish'])
+    const other = draftFromCompose(output({ tools: ['spawn_task', 'create_file'] }), {
+      description: 'x'
+    })
+    expect(other.draft.tools).toEqual(['finish'])
+    expect(
+      draftFromCompose(output({ tools: [] }), { description: 'x' }).draft.tools
+    ).toBeUndefined()
+  })
+
   it('names the configured connectors for the writer and keeps only those', () => {
     const req = {
       description: 'file my issues',
