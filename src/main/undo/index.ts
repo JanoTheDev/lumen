@@ -2,7 +2,8 @@
 // each action and commits the record once the action ran; "undo that" plans the reversals from
 // the window in front, runs them through the executor (policy, audit, cancel) as one batch in
 // the input lane (the user's own input: it never waits, and never interleaves with an agent
-// batch) and says what could not be undone. File tools call keepFileForUndo() before they change a file.
+// batch) and says what could not be undone. File tools prepare a file record (a copy) before
+// they change a file and commit it once the change succeeded; a rename or move is one record.
 import { homedir } from 'os'
 import { join } from 'path'
 import type { Action } from '@shared/types'
@@ -15,7 +16,7 @@ import { elementIndex } from '../query/uia-list'
 import { currentContext } from '../query/context'
 import { UndoTrash } from './files'
 import { planUndo, undoReport, UndoStack, type PlannedUndo } from './plan'
-import { fileRecord, reversalFor, type UndoRecord } from './records'
+import { fileRecord, moveRecord, reversalFor, type UndoRecord } from './records'
 
 const FOREGROUND_TIMEOUT_MS = 800
 /** "undo that" means Lumen's last action only this soon after it; later it is the app's Ctrl+Z. */
@@ -82,25 +83,57 @@ export async function recordUndo(
   }
 }
 
+export interface PreparedFileUndo {
+  /** The change succeeded: the record joins the undo stack. */
+  commit(): void
+  /** The change did not happen: the kept copy is dropped, nothing is recorded. */
+  discard(): void
+}
+
+const NOTHING: PreparedFileUndo = { commit: () => {}, discard: () => {} }
+
 /**
- * For file tools: keep a copy of `path` before changing, moving or deleting it (or note that
- * it is new). Returns false when no copy could be kept: the caller should ask before going on.
+ * For file tools: keep a copy of `path` before changing or deleting it (or note that it is
+ * new). The record is added only on commit(), once the change succeeded. Returns null when no
+ * copy could be kept: the caller should leave the file alone.
  */
+export function prepareFileUndo(
+  path: string,
+  verb: 'changed' | 'deleted' | 'created' | 'moved',
+  taskId: string
+): PreparedFileUndo | null {
+  const t = trash
+  if (!undoEnabled() || !t) return NOTHING
+  const id = nextId()
+  try {
+    const backup = verb === 'created' ? null : t.backup(path, id)
+    return {
+      commit: () => stack.add(fileRecord({ id, at: Date.now(), taskId }, path, backup, verb)),
+      discard: () => {
+        if (backup) t.drop(id)
+      }
+    }
+  } catch (e) {
+    log('fail', `undo copy of a file failed: ${(e as Error).message}`)
+    return null
+  }
+}
+
+/** prepareFileUndo, committed at once. False when no copy could be kept. */
 export function keepFileForUndo(
   path: string,
   verb: 'changed' | 'deleted' | 'created' | 'moved',
   taskId: string
 ): boolean {
-  if (!undoEnabled() || !trash) return true
-  const id = nextId()
-  try {
-    const backup = verb === 'created' ? null : trash.backup(path, id)
-    stack.add(fileRecord({ id, at: Date.now(), taskId }, path, backup, verb))
-    return true
-  } catch (e) {
-    log('fail', `undo copy of a file failed: ${(e as Error).message}`)
-    return false
-  }
+  const p = prepareFileUndo(path, verb, taskId)
+  p?.commit()
+  return !!p
+}
+
+/** After a rename or move succeeded: one record whose undo moves the file back. */
+export function recordFileMove(from: string, to: string, taskId: string): void {
+  if (!undoEnabled() || !trash) return
+  stack.add(moveRecord({ id: nextId(), at: Date.now(), taskId }, from, to))
 }
 
 /** Lumen acted within `ms` (and undo is on): "undo that" is about Lumen's action. */
@@ -119,7 +152,8 @@ async function runOne(p: PlannedUndo, deps: UndoDeps): Promise<string | null> {
   if (r?.kind === 'restore-file') {
     if (!trash) return 'the undo copies are not available'
     try {
-      trash.restore(r.path, r.backup, p.record.id)
+      if (r.movedTo) trash.moveBack(r.path, r.movedTo)
+      else trash.restore(r.path, r.backup, p.record.id)
       return null
     } catch (e) {
       return (e as Error).message

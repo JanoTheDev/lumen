@@ -1,9 +1,10 @@
 // File tools for background tasks and automations, limited to the folders the user granted
 // (agent.background.readFolders): read_document reads PDF / Word / Excel / PowerPoint / text
 // like a dropped file; rename_file and move_file never overwrite (a free "name (2).ext" is
-// used), keep an undo record, and go through the policy gate with the task's origin. Paths are
-// checked lexically first (no network or device paths), then with links resolved.
-import { existsSync, promises as fsp, realpathSync, statSync } from 'fs'
+// used, and the move itself refuses a taken name), keep one undo record once the move worked,
+// and go through the policy gate with the task's origin. Paths are checked lexically first
+// (no network or device paths), then with links resolved.
+import { constants, existsSync, promises as fsp, realpathSync, statSync } from 'fs'
 import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import { z } from 'zod'
 import type { ToolContent, ToolDef } from '../ai/providers/types'
@@ -55,12 +56,14 @@ export interface GrantedPorts {
   isDir(p: string): boolean
   check(path: string): Promise<CheckResult>
   load(f: SharedFile): Promise<ToolContent[]>
-  rename(from: string, to: string): Promise<void>
+  /** Moves the file; never replaces one at `to` (rejects with EEXIST). */
+  move(from: string, to: string): Promise<void>
   gate(
     action: EvalAction,
     ctx: GateCtx
   ): Promise<{ ok: boolean; reason: string; finish(r: 'ok' | 'error'): void }>
-  keepForUndo(path: string, verb: 'moved' | 'created', taskId: string): Promise<boolean>
+  /** One undo record for a move that succeeded ("undo that" moves it back). */
+  recordMove(from: string, to: string, taskId: string): Promise<void>
   audit(action: Record<string, unknown>, result: 'ok' | 'error' | 'denied', reason?: string): void
 }
 
@@ -131,36 +134,62 @@ export function destination(
   return freePath(dir, safeStem(wanted, ext, 'file'), ext, exists)
 }
 
+/** A taken name is retried with the next free one this many times (parallel tasks). */
+const MOVE_TRIES = 5
+
 async function relocate(
   kind: 'rename_file' | 'move_file',
   from: string,
-  to: string,
+  pick: () => string | null,
   p: GrantedPorts,
   ctx: GateCtx
 ): Promise<ToolOutcome> {
+  let to = pick()
+  if (!to) return fail('There are too many files with that name there.')
   const g = await p.gate({ type: 'move_file', description: `${basename(from)} → ${to}` }, ctx)
   if (!g.ok) return fail(`E_DENIED: ${g.reason}`)
-  if (!(await p.keepForUndo(from, 'moved', ctx.taskId))) {
-    g.finish('error')
-    return fail('No undo copy could be kept, so the file was left alone.')
+  for (let tries = 1; ; tries++) {
+    try {
+      await p.move(from, to)
+      break
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      const next = code === 'EEXIST' && tries < MOVE_TRIES ? pick() : null
+      if (next) {
+        to = next
+        continue
+      }
+      g.finish('error')
+      return fail(
+        code === 'EXDEV'
+          ? 'The folders are on different drives; moving between drives is not supported.'
+          : code === 'EEXIST'
+            ? 'A file with that name appeared meanwhile; nothing was changed.'
+            : `${kind === 'rename_file' ? 'Renaming' : 'Moving'} failed.`
+      )
+    }
+  }
+  await p.recordMove(from, to, ctx.taskId).catch(() => {})
+  g.finish('ok')
+  return { content: text(`${kind === 'rename_file' ? 'Renamed' : 'Moved'} to ${to}`) }
+}
+
+/** Moves a file without ever replacing one at `to` (fs.rename replaces on Windows). */
+export async function moveNoReplace(from: string, to: string): Promise<void> {
+  try {
+    await fsp.link(from, to)
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code === 'EEXIST' || code === 'ENOENT' || code === 'EXDEV') throw e
+    // No hard links here (FAT, some network drives): an exclusive copy.
+    await fsp.copyFile(from, to, constants.COPYFILE_EXCL)
   }
   try {
-    if (p.exists(to)) throw Object.assign(new Error('exists'), { code: 'EEXIST' })
-    await p.rename(from, to)
-    await p.keepForUndo(to, 'created', ctx.taskId)
-    g.finish('ok')
+    await fsp.unlink(from)
   } catch (e) {
-    g.finish('error')
-    const code = (e as NodeJS.ErrnoException).code
-    return fail(
-      code === 'EXDEV'
-        ? 'The folders are on different drives; moving between drives is not supported.'
-        : code === 'EEXIST'
-          ? 'A file with that name appeared meanwhile; nothing was changed.'
-          : `${kind === 'rename_file' ? 'Renaming' : 'Moving'} failed.`
-    )
+    await fsp.unlink(to).catch(() => {})
+    throw e
   }
-  return { content: text(`${kind === 'rename_file' ? 'Renamed' : 'Moved'} to ${to}`) }
 }
 
 async function renameFile(
@@ -182,9 +211,8 @@ async function renameFile(
   const same = join(dirname(g.path), safeStem(wanted, ext, 'file') + ext)
   if (same.toLowerCase() === g.path.toLowerCase())
     return { content: text('It already has that name.') }
-  const to = destination(dirname(g.path), wanted, ext, p.exists)
-  if (!to) return fail('There are too many files with that name.')
-  return relocate('rename_file', g.path, to, p, ctx)
+  const pick = (): string | null => destination(dirname(g.path), wanted, ext, p.exists)
+  return relocate('rename_file', g.path, pick, p, ctx)
 }
 
 async function moveFile(
@@ -201,9 +229,8 @@ async function moveFile(
   if (dirname(g.path).toLowerCase() === dir.path.toLowerCase())
     return { content: text('The file is already in that folder.') }
   const ext = extname(g.path)
-  const to = destination(dir.path, basename(g.path, ext), ext, p.exists)
-  if (!to) return fail('There are too many files with that name there.')
-  return relocate('move_file', g.path, to, p, ctx)
+  const pick = (): string | null => destination(dir.path, basename(g.path, ext), ext, p.exists)
+  return relocate('move_file', g.path, pick, p, ctx)
 }
 
 /** read_document / rename_file / move_file for one background task. */
@@ -258,14 +285,14 @@ export function realGrantedPorts(
     },
     check: async (path) => (await import('./store')).checkDroppedPath(path),
     load: async (f) => (await import('./content')).loadContent(f, { pdf: true }),
-    rename: (from, to) => fsp.rename(from, to),
+    move: moveNoReplace,
     gate: async (action, ctx) => {
       const { gate } = await import('../actions/policy')
       const g = await gate(action, ctx)
       return { ok: g.ok, reason: g.decision.reason, finish: (r) => g.finish(r) }
     },
-    keepForUndo: async (path, verb, taskId) =>
-      (await import('../undo')).keepFileForUndo(path, verb, taskId),
+    recordMove: async (from, to, taskId) =>
+      (await import('../undo')).recordFileMove(from, to, taskId),
     audit
   }
 }

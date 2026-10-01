@@ -1,7 +1,18 @@
 // File undo (11 T16): before Lumen overwrites, moves or deletes a file it copies it into
 // ~/.ai-overlay/undo-trash/<id>/; "undo that" copies it back. A file Lumen created is moved
 // into the trash on undo (never deleted outright). Copies older than a day are pruned.
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'fs'
+import {
+  constants,
+  copyFileSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync
+} from 'fs'
 import { basename, dirname, join } from 'path'
 
 const DAY_MS = 86_400_000
@@ -40,6 +51,18 @@ export class UndoTrash {
     renameSync(path, join(slot, basename(path)))
   }
 
+  /** A file Lumen renamed or moved goes back from `movedTo` to `path`, never over a file. */
+  moveBack(path: string, movedTo: string): void {
+    if (!existsSync(movedTo)) throw new Error('the file is no longer where I put it')
+    if (existsSync(path)) throw new Error('another file now has its old name')
+    moveNoReplaceSync(movedTo, path)
+  }
+
+  /** Drops the copy kept under `id` (the change it was kept for did not happen). */
+  drop(id: string): void {
+    rmSync(join(this.dir, id), { recursive: true, force: true })
+  }
+
   /** Drops copies older than `maxAgeMs`. */
   prune(now = Date.now(), maxAgeMs = DAY_MS): number {
     if (!existsSync(this.dir)) return 0
@@ -56,5 +79,26 @@ export class UndoTrash {
       }
     }
     return n
+  }
+}
+
+/**
+ * Moves a file without ever replacing one at `to` (fs.rename replaces on Windows): a hard
+ * link (EEXIST when taken) then the old name is removed; where links are not supported, an
+ * exclusive copy then the old name is removed.
+ */
+export function moveNoReplaceSync(from: string, to: string): void {
+  try {
+    linkSync(from, to)
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code
+    if (code === 'EEXIST' || code === 'ENOENT' || code === 'EXDEV') throw e
+    copyFileSync(from, to, constants.COPYFILE_EXCL)
+  }
+  try {
+    unlinkSync(from)
+  } catch (e) {
+    unlinkSync(to)
+    throw e
   }
 }

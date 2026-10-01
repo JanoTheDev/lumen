@@ -12,8 +12,11 @@ export type Reversal =
   /** Toggle back, or expand ↔ collapse. */
   | { kind: 'uia'; elementId: string; action: UiaAction }
   | { kind: 'scroll'; direction: ScrollDirection; amount: number }
-  /** Copy a file back from Lumen's undo trash (or delete a file Lumen created). */
-  | { kind: 'restore-file'; path: string; backup: string | null }
+  /**
+   * Copy a file back from Lumen's undo trash (or delete a file Lumen created). With `movedTo`:
+   * the file Lumen renamed or moved from `path` to `movedTo` goes back (never over a file).
+   */
+  | { kind: 'restore-file'; path: string; backup: string | null; movedTo?: string }
   /** Nothing to do: the action changed nothing (a mouse move, focusing a window). */
   | { kind: 'noop' }
 
@@ -381,5 +384,25 @@ export function fileRecord(
     taskId: ctx.taskId,
     what: `${verb} the file ${base}`,
     reversal: { kind: 'restore-file', path, backup }
+  }
+}
+
+/** A file Lumen renamed or moved: one record, so "undo that" puts it back where it was. */
+export function moveRecord(
+  ctx: Pick<RecordCtx, 'id' | 'at' | 'taskId'>,
+  from: string,
+  to: string
+): UndoRecord {
+  const name = (p: string): string => p.split(/[\\/]/).pop() ?? p
+  const dir = (p: string): string => p.slice(0, p.length - name(p).length).toLowerCase()
+  const renamed = dir(from) === dir(to)
+  return {
+    id: ctx.id,
+    at: ctx.at,
+    taskId: ctx.taskId,
+    what: renamed
+      ? `renamed the file ${name(from)} to ${name(to)}`
+      : `moved the file ${name(from)}`,
+    reversal: { kind: 'restore-file', path: from, backup: null, movedTo: to }
   }
 }

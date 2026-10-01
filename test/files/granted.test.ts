@@ -36,7 +36,8 @@ function setup(files: string[], over: Partial<GrantedPorts> = {}): Setup {
       kind: 'pdf'
     }),
     load: async (f) => [{ type: 'text', text: `<file name="${f.name}">` }],
-    rename: async (from, to) => {
+    move: async (from, to) => {
+      if (disk.has(to.toLowerCase())) throw Object.assign(new Error('taken'), { code: 'EEXIST' })
       disk.delete(from.toLowerCase())
       disk.add(to.toLowerCase())
     },
@@ -44,9 +45,8 @@ function setup(files: string[], over: Partial<GrantedPorts> = {}): Setup {
       actions.push(a)
       return { ok: true, reason: '', finish: () => {} }
     },
-    keepForUndo: async (path, verb) => {
-      undo.push([verb, path])
-      return true
+    recordMove: async (from, to) => {
+      undo.push([from, to])
     },
     audit: vi.fn(),
     ...over
@@ -82,10 +82,7 @@ describe('rename_file', () => {
     expect(out.isError).toBeUndefined()
     expect(disk.has(join(DL, 'Attention Is All You Need.pdf').toLowerCase())).toBe(true)
     expect(actions[0].type).toBe('move_file')
-    expect(undo).toEqual([
-      ['moved', src],
-      ['created', join(DL, 'Attention Is All You Need.pdf')]
-    ])
+    expect(undo).toEqual([[src, join(DL, 'Attention Is All You Need.pdf')]])
   })
 
   it('never overwrites: picks a free name', async () => {
@@ -133,5 +130,39 @@ describe('read_document', () => {
     expect(out.content[0]).toMatchObject({ text: '<file name="paper.pdf">' })
     expect(ports.audit).toHaveBeenCalledWith({ type: 'read_document', path: src }, 'ok')
     expect((await h.read_document({ path: 'C:\\x.pdf' }, ctx)).isError).toBe(true)
+  })
+})
+
+describe('undo records only after the move (review M4)', () => {
+  it('a move that fails leaves no undo record', async () => {
+    const src = join(DL, 'a.pdf')
+    const { h, undo, disk } = setup([src], {
+      move: async () => {
+        throw Object.assign(new Error('other drive'), { code: 'EXDEV' })
+      }
+    })
+    const out = await h.rename_file({ path: src, newName: 'b' }, ctx)
+    expect(out.isError).toBe(true)
+    expect(undo).toEqual([])
+    expect(disk.has(src.toLowerCase())).toBe(true)
+  })
+
+  it('a name taken meanwhile is retried with the next free one', async () => {
+    const src = join(DL, 'a.pdf')
+    const s = setup([src])
+    let first = true
+    s.ports.move = async (from, to) => {
+      // Another task takes "b.pdf" between the free-name check and the move.
+      if (first) {
+        first = false
+        s.disk.add(to.toLowerCase())
+        throw Object.assign(new Error('taken'), { code: 'EEXIST' })
+      }
+      s.disk.delete(from.toLowerCase())
+      s.disk.add(to.toLowerCase())
+    }
+    const out = await s.h.rename_file({ path: src, newName: 'b' }, ctx)
+    expect(out.isError).toBeUndefined()
+    expect(s.undo).toEqual([[src, join(DL, 'b (2).pdf')]])
   })
 })
