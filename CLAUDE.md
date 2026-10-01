@@ -7,7 +7,9 @@ Guidance for Claude Code (claude.ai/code) when working in this repo.
 ```bash
 npm run dev          # Electron app + Vite dev server
 npm run build        # typecheck + production bundle
-npm run build:win    # Windows NSIS installer
+npm run build:native # cargo build --release of native/ (cargo on PATH or ~/.cargo/bin)
+npm run build:win    # build:native + build + NSIS installer + portable exe + verify:package
+npm run verify:package  # dist/ checks: asar contents, no keys, native files, sidecar ready, size budgets, SHA256SUMS.txt
 npm run lint         # ESLint
 npm run format       # Prettier
 npm run test         # Vitest (skips test/live/**)
@@ -28,7 +30,7 @@ cp .env.example .env    # set ANTHROPIC_API_KEY and/or OPENAI_API_KEY
 npm run dev
 ```
 
-API keys are read at runtime from `.env` in the working directory, then `<userData>/.env`. They are never bundled at build time and never stored in config.json.
+API keys are read at runtime from `.env` in the working directory, then `<userData>/.env` (`%APPDATA%/Lumen`), then the DPAPI vault `~/.ai-overlay/keys.dat` (`src/main/keys/vault.ts`: `getKey`/`hasKey`, `keys.changed` bus event; startup logs only each provider's source). They are never bundled at build time and never stored in config.json.
 
 The Python `keyboard` lib may need Admin on Windows to suppress the global hotkey. Without it the app still runs but the hotkey may not fire.
 
@@ -83,6 +85,12 @@ Rust crate `lumen-native`, protocol v2 only (`--protocol 2`). Build with `cargo 
 ### Agent selection (`src/main/agent/impl.ts`)
 
 `agentImpl`: `python` | `native` | `auto` (default). Paths: dev `native/target/release/lumen-native.exe` (then `fastrel`) and `agent/.venv/Scripts/python.exe agent/main.py`; packaged `resources/native/lumen-native.exe` and `resources/agent/lumen-agent.exe` (falls back to the bundled venv). `auto` runs native when the exe exists and its `ready.capabilities` include `REQUIRED_NATIVE_CAPABILITIES` (incl. `execute`), otherwise Python. Native failing to start under `auto`, or crashing 3 times within 60 s under any setting, switches the session to Python (`agent-impl-fallback` event, logged). `agent:info` (invoke) returns the running impl, version, protocol and fallback reason for Settings.
+
+### Packaging (`electron-builder.yml`, `scripts/`, `build/`)
+
+Windows x64 only, unsigned (no code signing by decision): NSIS one-click per-user installer (no Admin, `%LOCALAPPDATA%/Programs/lumen`) and a portable exe. appId `io.github.janothedev.lumen` = `src/main/app-id.ts`; productName Lumen (userData `%APPDATA%/Lumen`). The asar holds `out/`, `resources/`, `skills/` and prod node_modules (renderer-only deps are devDependencies; TS sources, typings and ESM copies are filtered); `sherpa-onnx-*` and `resources/` are asarUnpacked. extraResources: `native/lumen-native.exe`, `native/nvdaControllerClient.dll`, `third_party/`. No Python agent and no libvosk in the installer: the native sidecar covers every command, and Vosk is only the wake fallback when sherpa-onnx cannot load. Fuses: no RunAsNode, no NODE_OPTIONS / --inspect, asar integrity, only-load-from-asar. Only the en-US Chromium locale ships. `build/installer.nsh`: uninstall removes the HKCU Run entry and asks before deleting `~/.ai-overlay` and `%APPDATA%/Lumen` (never during an update). Budgets in `scripts/verify-package.mjs`: installer ≤ 95 MB, installed ≤ 330 MB, app.asar ≤ 15 MB.
+
+Runtime: `diagnostics/` tees console output to `%APPDATA%/Lumen/logs/main.log` (redacted, 5 × 5 MB), keeps crash dumps local, reloads a crashed renderer (max 3 a minute), and `diag:export` zips logs, dumps, redacted config and versions. `first-run/` serves `firstrun:list|run|fix|complete` (keys, microphone, agent, hotkey, ocr, wake-model, elevation), start at login (`system.startAtLogin`, installed build only; `--hidden` keeps setup closed) and portable detection (`PORTABLE_EXECUTABLE_DIR`). Models download through `downloads/verified-download.ts` (https and a host allowlist on every redirect, pinned SHA-256, staged on the same volume, System32 `tar.exe`).
 
 ### Coordinates
 

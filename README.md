@@ -118,9 +118,26 @@ The main process decides, the renderers draw, the agent touches the OS. Shared t
 
 ---
 
-## Quick start
+## Install
 
-Requirements: Windows 10 22H2+ or 11, Node.js 22, Python 3.11+, and one API key (Anthropic or OpenAI).
+Requirements: Windows 10 22H2+ or Windows 11 (x64), a microphone, and an Anthropic or OpenAI API key. No Python, no Admin rights.
+
+1. Download `Lumen-Setup-<version>.exe` from [Releases](https://github.com/JanoTheDev/lumen/releases) (or `Lumen-<version>-portable.exe` to run without installing). Check it against `SHA256SUMS.txt` from the same release if you like: `Get-FileHash .\Lumen-Setup-<version>.exe`.
+2. Run it. The builds are not code-signed, so Windows SmartScreen says "Windows protected your PC": click **More info**, then **Run anyway**. Lumen installs for your user only, in `%LOCALAPPDATA%\Programs\lumen`, and opens the setup.
+3. Paste your API key when asked. It is encrypted with Windows (DPAPI) and stored in `%USERPROFILE%\.ai-overlay\keys.dat`, never in the config file.
+4. Hold **Ctrl+Shift+Space**, speak, release.
+
+Speech recognition and wake-word models (about 100 MB and 18 MB) download on first use and are checked against pinned SHA-256 hashes.
+
+Settings, keys and models live in `%USERPROFILE%\.ai-overlay`; logs in `%APPDATA%\Lumen\logs` (Settings → About → Open logs folder, or Export diagnostics to save a zip without keys). Uninstall from Windows Settings → Apps; it asks whether to remove your settings, keys and models too.
+
+The portable build never writes start-at-login entries and keeps the same settings folder.
+
+---
+
+## Run from source
+
+Requirements: Windows 10 22H2+ or 11, Node.js 22, Rust (for the native helper) or Python 3.11+, and one API key (Anthropic or OpenAI).
 
 ```bash
 git clone https://github.com/JanoTheDev/lumen.git
@@ -134,7 +151,7 @@ copy .env.example .env      # add ANTHROPIC_API_KEY or OPENAI_API_KEY
 npm run dev
 ```
 
-Hold **Ctrl+Shift+Space**, speak, release. If the hotkey doesn't fire, try running the terminal as Administrator.
+Hold **Ctrl+Shift+Space**, speak, release. To use the native helper in dev, build it once: `npm run build:native` (needs Rust).
 
 Default models: Claude Sonnet 5.5 for answers and planning, Claude Haiku 4.5 for quick checks; with only an OpenAI key, gpt-5-mini and gpt-5-nano. Override per role in Settings → Models.
 
@@ -145,6 +162,7 @@ Default models: Claude Sonnet 5.5 for answers and planning, Claude Haiku 4.5 for
 ```bash
 npm run dev          # app + Vite dev server
 npm run build        # typecheck + bundle
+npm run build:win    # native helper + NSIS installer + portable exe in dist/, then package checks
 npm run lint         # ESLint
 npm test             # Vitest
 npm run test:live    # tests that call real APIs (needs a key)
@@ -160,16 +178,16 @@ CI runs typecheck, lint, Vitest and pytest on Windows for every push.
 - Requests go straight from your PC to the AI provider you configured. Nothing is proxied.
 - Wake word, OCR, UI Automation and dwell run locally.
 - Screenshots are sent with a request and never written to disk.
-- API keys stay in `.env` and are never written to the config file.
+- API keys come from `.env` (development) or the app's encrypted key store (Windows DPAPI) and are never written to the config file or logs.
 - No telemetry or analytics.
 
 ---
 
 ## Troubleshooting
 
-**Hotkey doesn't fire:** run the terminal as Administrator; the keyboard hook can need it.
+**Hotkey doesn't fire:** another app may own the shortcut; pick a different one in Settings → General. Lumen does not need Administrator rights.
 
-**"No API key found":** add `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` to `.env` and restart.
+**"No API key found":** paste a key in Settings → Models (or, from source, add `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` to `.env` and restart).
 
 **Wake word silent:** Settings → Voice → install the offline model (~40 MB, one time), then enable the wake word.
 
