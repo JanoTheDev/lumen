@@ -13,6 +13,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { bus } from './bus'
 import { loadConfig, lastConfigWarning } from './config'
+import { shutdownConnectors } from './connectors'
 import { log } from './logger'
 import { AgentBridge } from './agent/bridge'
 import { getAgent, setAgent } from './agent/instance'
@@ -46,6 +47,7 @@ import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
 import { registerSkillsIpc } from './ipc/skills'
 import { registerBridgesIpc } from './ipc/bridges'
+import { registerConnectorsIpc } from './ipc/connectors'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
@@ -111,6 +113,7 @@ function registerIpc(): void {
   registerTeachIpc()
   registerSkillsIpc()
   registerBridgesIpc()
+  registerConnectorsIpc()
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()
@@ -200,6 +203,7 @@ app.on('before-quit', (event) => {
 app.on('will-quit', () => {
   resetEscape()
   getAgent()?.stop()
+  void shutdownConnectors()
 })
 
 app.on('window-all-closed', () => {

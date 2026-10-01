@@ -1,6 +1,13 @@
 // IPC channel names and payload types (CONTRACTS C5). Zod-free so the sandboxed preload can
 // import it; the matching validators live in ./ipc.ts and run in main.
 import type { ConfigPatch } from './config'
+import type {
+  ConnectorInput,
+  ConnectorResult,
+  ConnectorTestResult,
+  ConnectorToolInfo,
+  ConnectorView
+} from './connectors'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { BackgroundTask } from './types'
 import type {
@@ -181,6 +188,14 @@ export interface InvokeChannels {
     result: { ok: boolean; persisted: boolean }
   }
   'bridges:obs-clear': { args: []; result: { ok: boolean } }
+  /** Connectors (08 T19): MCP servers. Secrets are write-only (only `hasBearer` comes back). */
+  'connectors:list': { args: []; result: ConnectorView[] }
+  'connectors:add': { args: [req: ConnectorInput]; result: ConnectorResult }
+  'connectors:update': { args: [req: ConnectorInput]; result: ConnectorResult }
+  'connectors:remove': { args: [id: string]; result: ConnectorResult }
+  /** Connects now and reports the tool count or the error. */
+  'connectors:test': { args: [id: string]; result: ConnectorTestResult }
+  'connectors:tools': { args: [id: string]; result: ConnectorToolInfo[] | { error: string } }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -893,7 +908,13 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'bridges:test',
   'bridges:blender-addon',
   'bridges:obs-set',
-  'bridges:obs-clear'
+  'bridges:obs-clear',
+  'connectors:list',
+  'connectors:add',
+  'connectors:update',
+  'connectors:remove',
+  'connectors:test',
+  'connectors:tools'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
