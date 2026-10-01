@@ -463,7 +463,11 @@ export const configV2Schema = z.object({
     cleanup: z.enum(['light', 'off']),
     autoDetect: z.boolean(),
     terminal: z.enum(['type-no-enter', 'block']),
-    dictionary: z.array(shortText(60)).max(500)
+    dictionary: z.array(shortText(60)).max(500),
+    /** Keep a local history of dictations (04 T44); off = nothing stored. */
+    history: z.boolean().optional(),
+    /** Show the dictation stats card in Home (04 T46). */
+    showStats: z.boolean().optional()
   }),
   ui: z.object({
     /** Opens the Home flyout from anywhere; "" = no shortcut. Optional so patches never reset it. */
@@ -573,7 +577,9 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     cleanup: 'light',
     autoDetect: true,
     terminal: 'type-no-enter',
-    dictionary: []
+    dictionary: [],
+    history: true,
+    showStats: false
   },
   ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
