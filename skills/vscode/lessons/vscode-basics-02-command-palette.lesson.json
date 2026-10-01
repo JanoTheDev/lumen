@@ -1,0 +1,120 @@
+{
+  "id": "vscode-basics-02-command-palette",
+  "app": "vscode",
+  "title": "Run any command from the Command Palette",
+  "summary": "Open the Command Palette, find a command by name, and use Quick Open.",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": [],
+  "appVersion": ">=1.90",
+  "tags": ["navigation", "commands"],
+  "steps": [
+    {
+      "id": "focus-vscode",
+      "say": "Click inside the VS Code window so it is in front.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "Visual Studio Code$" },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": ["The title bar should say Visual Studio Code.", "Press Alt Tab to switch to it."],
+      "why": "Keyboard shortcuts go to the window that is in front."
+    },
+    {
+      "id": "open-palette",
+      "say": "Press Control Shift P to open the Command Palette.",
+      "target": { "shortcut": "Ctrl+Shift+P" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Shift+P" },
+            { "type": "keypress", "combo": "F1" },
+            {
+              "type": "vision",
+              "prompt": "Is a search box open at the top center of VS Code, starting with a greater-than sign?"
+            }
+          ]
+        }
+      },
+      "hints": ["F1 opens the same box.", "Or open the View menu and choose Command Palette."],
+      "why": "The Command Palette lists every command, so you never need to hunt through menus.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Shift+P" }] }
+    },
+    {
+      "id": "run-theme",
+      "say": "Type color theme, then press Enter on Preferences: Color Theme.",
+      "target": { "region": "command-center" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": { "name": "Preferences: Color Theme" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a list of color themes such as Dark Modern and Light Modern showing at the top of VS Code?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You only need part of the name; the list filters as you type.",
+        "Use the arrow keys to move through matches before pressing Enter."
+      ],
+      "why": "Searching by name is faster than remembering where a command lives.",
+      "doItForMe": {
+        "actions": [
+          { "t": "type", "text": "Preferences: Color Theme" },
+          { "t": "keys", "combo": "Enter" }
+        ]
+      }
+    },
+    {
+      "id": "preview-theme",
+      "say": "Move up and down the list to preview themes. Press Enter to keep one, or Escape to cancel.",
+      "target": { "region": "command-center" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "The window changes color as you move through the list.",
+        "Escape puts the old theme back."
+      ],
+      "why": "Previews let you try a setting before committing to it."
+    },
+    {
+      "id": "quick-open",
+      "say": "Now press Control P. This box finds files by name instead of commands.",
+      "target": { "shortcut": "Ctrl+P" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+P" },
+            {
+              "type": "vision",
+              "prompt": "Is a search box open at the top center listing recently opened files?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Type a greater-than sign in this box to switch it back to commands.",
+        "Press Escape to close the box when you are done."
+      ],
+      "why": "Quick Open is the fastest way to jump between files in a big project.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+P" }] }
+    }
+  ]
+}

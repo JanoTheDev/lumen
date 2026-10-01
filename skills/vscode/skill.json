@@ -1,0 +1,16 @@
+{
+  "id": "vscode",
+  "name": "Visual Studio Code",
+  "version": "1.0.0",
+  "description": "Find your way around VS Code: folders, the Command Palette, search, the terminal, extensions and Git commits.",
+  "match": {
+    "process": ["Code.exe"],
+    "title": ["Visual Studio Code$"]
+  },
+  "uiaQuality": "good",
+  "appVersion": ">=1.90",
+  "appVersionTested": "VS Code 1.140 (September 2026)",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Electron app. Chromium exposes the workbench to UI Automation once accessibility is active; VS Code detects screen readers automatically, and editor.accessibilitySupport set to on forces the optimized mode. Activity Bar items carry their shortcut in the accessible name, such as Explorer (Ctrl+Shift+E), so checks match on name prefixes where possible. Default keybindings shown are for Windows with a US layout."
+}

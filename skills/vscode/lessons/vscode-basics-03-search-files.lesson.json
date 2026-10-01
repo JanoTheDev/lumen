@@ -1,0 +1,136 @@
+{
+  "id": "vscode-basics-03-search-files",
+  "app": "vscode",
+  "title": "Search across every file",
+  "summary": "Use the Search view to find a word in the whole folder and open a match.",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": ["vscode-basics-01-open-folder"],
+  "appVersion": ">=1.90",
+  "tags": ["search", "navigation"],
+  "steps": [
+    {
+      "id": "check-folder",
+      "say": "Check that a folder is open. The Explorer on the left should list files. Say next when it does.",
+      "target": { "region": "side-bar" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": " - .+ - Visual Studio Code$" },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "If the Explorer says no folder is open, do the lesson Open a project folder first.",
+        "Press Control Shift E to show the Explorer."
+      ],
+      "why": "Search looks through the open folder, so it needs one."
+    },
+    {
+      "id": "open-search",
+      "say": "Press Control Shift F to open Search in the side bar.",
+      "target": { "shortcut": "Ctrl+Shift+F" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Shift+F" },
+            {
+              "type": "uia-event",
+              "event": "focused",
+              "match": { "name": "Search", "role": "Edit" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Search view open in the left side bar with an empty search box?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Search is the magnifying glass icon, second in the Activity Bar at the far left.",
+        "Or open the View menu and choose Search."
+      ],
+      "why": "The Search view finds text in every file at once, not only the open one.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Shift+F" }] }
+    },
+    {
+      "id": "type-query",
+      "say": "Type a word that appears in your files, such as the name of a function or a heading.",
+      "target": { "element": { "name": "Search", "role": "Edit" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": { "name": "Search", "value": { "regex": "\\S" } }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Search view list results grouped under file names?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Results appear as you type, grouped by file.",
+        "The small buttons in the box turn on match case, whole word and regular expressions."
+      ],
+      "why": "Seeing every match helps you understand where something is used."
+    },
+    {
+      "id": "open-result",
+      "say": "Click one of the result lines to jump to it in the editor.",
+      "target": { "region": "side-bar" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "^(?!Welcome)[^-]+ - .+ - Visual Studio Code$" },
+            {
+              "type": "vision",
+              "prompt": "Is a file open in the editor with the searched word highlighted?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Each indented line under a file name is one match.",
+        "Press F4 to jump to the next match without the mouse."
+      ],
+      "why": "Results link straight to the exact line, which saves scrolling."
+    },
+    {
+      "id": "back-to-explorer",
+      "say": "Press Control Shift E to go back to the Explorer.",
+      "target": { "shortcut": "Ctrl+Shift+E" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Shift+E" },
+            {
+              "type": "vision",
+              "prompt": "Does the left side bar show the Explorer file tree again?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Explorer is the top icon in the Activity Bar.",
+        "Clicking the active Activity Bar icon again hides the side bar."
+      ],
+      "why": "Switching side bar views by keyboard keeps your hands off the mouse.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Shift+E" }] }
+    }
+  ]
+}

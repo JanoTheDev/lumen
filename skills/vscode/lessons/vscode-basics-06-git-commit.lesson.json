@@ -1,0 +1,146 @@
+{
+  "id": "vscode-basics-06-git-commit",
+  "app": "vscode",
+  "title": "Commit a change with Source Control",
+  "summary": "Stage a changed file, write a message and commit it with Git.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["vscode-basics-01-open-folder"],
+  "appVersion": ">=1.90",
+  "tags": ["git", "source-control"],
+  "steps": [
+    {
+      "id": "check-repo",
+      "say": "Look at the bottom left of the Status Bar. Say next if it shows a branch name such as main.",
+      "target": { "region": "status-bar" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "No branch name means the folder is not a Git repository yet.",
+        "In that case the Source Control view offers an Initialize Repository button."
+      ],
+      "why": "Commits need the folder to be a Git repository."
+    },
+    {
+      "id": "make-change",
+      "say": "Open any file, change one line, and press Control S to save.",
+      "target": { "region": "editor" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+S" },
+            {
+              "type": "vision",
+              "prompt": "Does the Source Control icon in the Activity Bar show a number badge?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Adding a blank line is enough for practice.",
+        "A white dot on the tab means the file is not saved yet."
+      ],
+      "why": "Git only sees changes that are saved to disk."
+    },
+    {
+      "id": "open-scm",
+      "say": "Press Control Shift G to open Source Control.",
+      "target": { "shortcut": "Ctrl+Shift+G" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Shift+G" },
+            {
+              "type": "vision",
+              "prompt": "Is the Source Control view open, listing a changed file under Changes?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Source Control is the branching icon in the Activity Bar, often with a number on it.",
+        "Or open the View menu and choose Source Control."
+      ],
+      "why": "This view lists every file that differs from the last commit.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Shift+G" }] }
+    },
+    {
+      "id": "stage",
+      "say": "Hover over your changed file and click the plus icon called Stage Changes.",
+      "target": { "element": { "name": "Stage Changes", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Stage Changes" } },
+            {
+              "type": "vision",
+              "prompt": "Is the changed file now listed under a Staged Changes heading?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The icon appears only while the mouse is over the file row.",
+        "Right click the file and choose Stage Changes as another route."
+      ],
+      "why": "Staging picks exactly which changes go into the next commit."
+    },
+    {
+      "id": "message",
+      "say": "Click the Message box at the top of the view and type a short description of your change.",
+      "target": { "element": { "role": "Edit", "name": "Source Control Input" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": { "role": "Edit", "value": { "regex": "\\S" } }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there text typed in the message box above the Commit button?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Write what changed, such as Add a blank line to the readme.",
+        "Keep it to one line for now."
+      ],
+      "why": "A clear message tells your future self why the change was made."
+    },
+    {
+      "id": "commit",
+      "say": "Press Control Enter, or click Commit, to save the snapshot.",
+      "target": { "element": { "name": "Commit", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Enter" },
+            { "type": "uia-event", "event": "invoked", "match": { "name": "Commit" } },
+            {
+              "type": "vision",
+              "prompt": "Is the Staged Changes list now empty, with the message box cleared?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "If VS Code offers to stage all changes, read the list before agreeing.",
+        "The commit stays on this computer until you click Sync Changes or Push."
+      ],
+      "why": "Each commit is a point in history you can return to.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Enter" }] }
+    }
+  ]
+}

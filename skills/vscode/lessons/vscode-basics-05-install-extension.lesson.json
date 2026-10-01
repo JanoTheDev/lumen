@@ -1,0 +1,135 @@
+{
+  "id": "vscode-basics-05-install-extension",
+  "app": "vscode",
+  "title": "Install an extension",
+  "summary": "Find an extension in the Marketplace, install it and see where it lives.",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": [],
+  "appVersion": ">=1.90",
+  "tags": ["extensions"],
+  "steps": [
+    {
+      "id": "focus-vscode",
+      "say": "Click inside the VS Code window so it is in front.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "Visual Studio Code$" },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "The title bar should end with Visual Studio Code.",
+        "Press Alt Tab to switch to it."
+      ],
+      "why": "The Extensions shortcut only reaches the window in front."
+    },
+    {
+      "id": "open-extensions",
+      "say": "Press Control Shift X to open the Extensions view.",
+      "target": { "shortcut": "Ctrl+Shift+X" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+Shift+X" },
+            {
+              "type": "vision",
+              "prompt": "Is the Extensions view open in the side bar with a Search Extensions in Marketplace box?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Extensions is the icon made of four squares in the Activity Bar.",
+        "Or open the View menu and choose Extensions."
+      ],
+      "why": "The Extensions view searches the Marketplace and manages what is installed.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+Shift+X" }] }
+    },
+    {
+      "id": "search",
+      "say": "Type Code Spell Checker in the search box at the top of the Extensions view.",
+      "target": { "element": { "name": "Search Extensions in Marketplace", "role": "Edit" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": { "value": { "regex": "(?:[Ss]pell)" } }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Extensions list show Code Spell Checker as a result?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Check the publisher name and download count to pick the genuine extension.",
+        "Any extension you like is fine; spell checking is a harmless one to practise with."
+      ],
+      "why": "Searching by name finds extensions without leaving VS Code.",
+      "doItForMe": { "actions": [{ "t": "type", "text": "Code Spell Checker" }] }
+    },
+    {
+      "id": "install",
+      "say": "Click the blue Install button next to Code Spell Checker.",
+      "target": { "element": { "name": "Install", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": { "name": "Install", "role": "Button" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the Install button for Code Spell Checker changed to a gear icon or Uninstall, showing it is installed?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Install sits on the right of the result, or at the top of its details page.",
+        "VS Code may ask whether you trust the publisher; read the name before agreeing."
+      ],
+      "why": "Installed extensions start working right away in every folder."
+    },
+    {
+      "id": "see-installed",
+      "say": "Clear the search box. The Installed section now lists the new extension.",
+      "target": { "region": "side-bar" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does an Installed section in the Extensions view list Code Spell Checker?"
+            },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "Press Escape or delete the text to clear the box.",
+        "Right click an installed extension to disable or uninstall it later."
+      ],
+      "why": "Knowing where extensions are listed lets you turn them off if one causes trouble."
+    }
+  ]
+}

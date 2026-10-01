@@ -1,0 +1,113 @@
+{
+  "id": "vscode-basics-01-open-folder",
+  "app": "vscode",
+  "title": "Open a project folder",
+  "summary": "Open a folder, trust it, and open a file from the Explorer.",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": [],
+  "appVersion": ">=1.90",
+  "tags": ["files", "explorer"],
+  "steps": [
+    {
+      "id": "focus-vscode",
+      "say": "Make sure VS Code is the window in front. Say next when it is.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "Visual Studio Code$" },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "Click anywhere on the VS Code window to bring it forward.",
+        "Press Alt Tab until VS Code is selected."
+      ],
+      "why": "Shortcuts only reach the window that is in front."
+    },
+    {
+      "id": "open-folder-dialog",
+      "say": "Press Control K, let go, then press Control O to choose a folder.",
+      "target": { "shortcut": "Ctrl+K Ctrl+O" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "uia-event", "event": "window-opened", "match": { "name": "Open Folder" } },
+            { "type": "keypress", "combo": "Ctrl+K Ctrl+O" }
+          ]
+        }
+      },
+      "hints": [
+        "Hold Control, tap K, release both, then hold Control and tap O.",
+        "Or open the File menu at the top left and choose Open Folder."
+      ],
+      "why": "Opening a folder lets search, Git and extensions see the whole project.",
+      "doItForMe": {
+        "actions": [
+          { "t": "keys", "combo": "Ctrl+K" },
+          { "t": "keys", "combo": "Ctrl+O" }
+        ]
+      }
+    },
+    {
+      "id": "pick-folder",
+      "say": "Pick a folder with a few files in it, then click Select Folder.",
+      "target": { "element": { "name": "Select Folder", "role": "Button" } },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": " - .+ - Visual Studio Code$" },
+            {
+              "type": "vision",
+              "prompt": "Does the Explorer side bar now show a folder name with a list of files under it?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Select the folder itself; you do not need to go inside it.",
+        "Any folder works for practice, such as Documents."
+      ],
+      "why": "VS Code treats the chosen folder as the project root."
+    },
+    {
+      "id": "trust",
+      "say": "If VS Code asks whether you trust the authors, choose Yes only for your own files.",
+      "target": { "text": "Yes, I trust the authors" },
+      "expect": { "type": "user-action", "check": "manual" },
+      "hints": [
+        "If no question appears, the folder is already trusted; say next.",
+        "Choosing No opens Restricted Mode, which is safer for downloaded code."
+      ],
+      "why": "Trust decides whether tasks and extensions may run code from this folder."
+    },
+    {
+      "id": "open-file",
+      "say": "In the Explorer on the left, double click a file to open it in the editor.",
+      "target": { "region": "side-bar" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "^(?!Welcome)[^-]+ - .+ - Visual Studio Code$" },
+            { "type": "vision", "prompt": "Is a file now open as a tab in the editor area?" }
+          ]
+        }
+      },
+      "hints": [
+        "A single click opens a preview that the next file replaces; a double click keeps it.",
+        "Press Control P and type part of a file name to open it from the keyboard."
+      ],
+      "why": "Files you open stay as tabs so you can switch between them."
+    }
+  ]
+}

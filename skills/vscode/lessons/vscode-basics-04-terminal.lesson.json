@@ -1,0 +1,108 @@
+{
+  "id": "vscode-basics-04-terminal",
+  "app": "vscode",
+  "title": "Use the integrated terminal",
+  "summary": "Open the terminal, run a safe command, and hide the panel again.",
+  "level": "beginner",
+  "minutes": 3,
+  "prereqs": ["vscode-basics-01-open-folder"],
+  "appVersion": ">=1.90",
+  "tags": ["terminal"],
+  "steps": [
+    {
+      "id": "focus-vscode",
+      "say": "Click inside the VS Code window so it is in front.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "window-title", "regex": "Visual Studio Code$" },
+            { "type": "manual" }
+          ]
+        }
+      },
+      "hints": [
+        "The title bar should end with Visual Studio Code.",
+        "Press Alt Tab to switch to it."
+      ],
+      "why": "The terminal shortcut only works when VS Code has focus."
+    },
+    {
+      "id": "open-terminal",
+      "say": "Press Control and the backtick key to open the terminal. Backtick is left of the 1 key.",
+      "target": { "shortcut": "Ctrl+`" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+`" },
+            { "type": "uia-event", "event": "focused", "match": { "name": "Terminal" } },
+            {
+              "type": "vision",
+              "prompt": "Is a terminal panel with a command prompt now open under the editor?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "On some keyboards the backtick key is elsewhere; open the Terminal menu and choose New Terminal instead.",
+        "Or open the Command Palette and run View: Toggle Terminal."
+      ],
+      "why": "The integrated terminal starts in your project folder, so commands act on it.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+`" }] }
+    },
+    {
+      "id": "run-command",
+      "say": "Type dir and press Enter to list the files in this folder.",
+      "target": { "region": "panel" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Enter" },
+            {
+              "type": "vision",
+              "prompt": "Does the terminal show a list of file and folder names after a dir command?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click inside the terminal first if typing does nothing.",
+        "dir only reads; it does not change any files."
+      ],
+      "why": "Listing files is a safe first command and shows the terminal is in the right folder.",
+      "doItForMe": {
+        "actions": [
+          { "t": "type", "text": "dir" },
+          { "t": "keys", "combo": "Enter" }
+        ]
+      }
+    },
+    {
+      "id": "hide-terminal",
+      "say": "Press Control backtick again to hide the panel. The terminal keeps running in the background.",
+      "target": { "shortcut": "Ctrl+`" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Ctrl+`" },
+            { "type": "vision", "prompt": "Is the terminal panel under the editor now hidden?" }
+          ]
+        }
+      },
+      "hints": [
+        "The same key opens and closes it.",
+        "The trash can icon in the panel ends a terminal for good."
+      ],
+      "why": "Hiding the panel gives the editor more room without losing the terminal.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Ctrl+`" }] }
+    }
+  ]
+}

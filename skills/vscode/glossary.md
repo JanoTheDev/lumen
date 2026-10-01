@@ -1,0 +1,33 @@
+# VS Code glossary
+
+- **Workbench** — the whole VS Code window and its parts.
+- **Activity Bar** — the thin strip of icons at the far left for switching views.
+- **Primary Side Bar** — the panel next to the Activity Bar that shows the current view.
+- **Secondary Side Bar** — an optional panel on the opposite side, holding Chat by default.
+- **Explorer** — the view with the file and folder tree of the open folder.
+- **Editor** — the main area where files open as tabs.
+- **Editor group** — one column or row of tabs when the editor is split.
+- **Preview tab** — a tab shown in italics that the next single-clicked file replaces.
+- **Panel** — the area under the editor with Problems, Output, Debug Console and Terminal.
+- **Status Bar** — the strip at the bottom with branch, errors, cursor position and language.
+- **Command Palette** — a search box that runs any command by name.
+- **Quick Open** — a search box that opens files by name.
+- **Command Center** — the search box in the middle of the title bar.
+- **Workspace** — the folder or folders open in the window.
+- **Workspace Trust** — the question of whether to run code and tasks from a folder; untrusted folders open in Restricted Mode.
+- **Integrated terminal** — a command line inside VS Code that starts in the workspace folder.
+- **Extension** — an add-on that adds a language, debugger, theme or tool.
+- **Marketplace** — the online catalogue extensions are installed from.
+- **Source Control view** — the view that lists Git changes and lets you commit.
+- **Stage** — mark a changed file to include in the next commit.
+- **Commit** — a saved snapshot of staged changes with a message, stored locally.
+- **Push / Sync** — send local commits to a remote repository such as GitHub.
+- **Branch** — a separate line of work in Git; the current one shows in the Status Bar.
+- **IntelliSense** — code completion, hints and parameter info while typing.
+- **Problems** — the list of errors and warnings found in your files.
+- **Settings editor** — the searchable list of options, with User and Workspace scopes.
+- **Keybinding** — a keyboard shortcut assigned to a command.
+- **Multi-cursor** — several cursors editing at once.
+- **Zen Mode** — a distraction-free layout showing only the editor.
+- **Accessible View** — a plain-text view of hovers, chat and notifications for screen readers.
+- **Screen Reader Optimized** — the mode where the editor is exposed for screen readers.

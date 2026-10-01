@@ -1,0 +1,63 @@
+{
+  "window": "main",
+  "layout": "default",
+  "notes": "Default workbench on a 1920x1080 window with the Primary Side Bar on the left, the Panel open below the editor, and the Secondary Side Bar open on the right. When the Secondary Side Bar is closed the editor extends to the right edge.",
+  "regions": {
+    "title-bar": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.03,
+      "desc": "Title bar with the menu on the left"
+    },
+    "command-center": {
+      "x": 0.35,
+      "y": 0.0,
+      "w": 0.3,
+      "h": 0.03,
+      "desc": "Search box in the middle of the title bar"
+    },
+    "activity-bar": {
+      "x": 0.0,
+      "y": 0.03,
+      "w": 0.025,
+      "h": 0.945,
+      "desc": "Icon strip at the far left"
+    },
+    "side-bar": {
+      "x": 0.025,
+      "y": 0.03,
+      "w": 0.15,
+      "h": 0.945,
+      "desc": "Primary Side Bar, left of the editor"
+    },
+    "editor": {
+      "x": 0.175,
+      "y": 0.03,
+      "w": 0.6,
+      "h": 0.62,
+      "desc": "Editor area with file tabs on top"
+    },
+    "secondary-side-bar": {
+      "x": 0.775,
+      "y": 0.03,
+      "w": 0.225,
+      "h": 0.945,
+      "desc": "Secondary Side Bar with Chat, right edge"
+    },
+    "panel": {
+      "x": 0.175,
+      "y": 0.65,
+      "w": 0.6,
+      "h": 0.325,
+      "desc": "Panel under the editor: Problems, Output, Terminal"
+    },
+    "status-bar": {
+      "x": 0.0,
+      "y": 0.975,
+      "w": 1.0,
+      "h": 0.025,
+      "desc": "Status bar along the bottom edge"
+    }
+  }
+}
