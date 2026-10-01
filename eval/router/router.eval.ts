@@ -5,7 +5,8 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { config as loadEnv } from 'dotenv'
 import { describe, it, expect } from 'vitest'
-import { routeWithLlm, type Route } from '../../src/main/query/router'
+import type { Route } from '../../src/main/query/router'
+import { routeOnly } from '../../src/main/query/eval-hooks'
 import { onUsage } from '../../src/main/ai/providers'
 import { usageCost } from '../../src/main/ai/pricing'
 
@@ -51,13 +52,15 @@ describe.skipIf(!hasKey)('router eval (live)', () => {
     const worker = async (): Promise<void> => {
       while (next < todo.length) {
         const c = todo[next++]
-        const t0 = Date.now()
-        const route = await routeWithLlm({
-          utterance: c.utterance,
-          activeWindow: c.foreground,
-          guideActive: c.guideActive
-        })
-        results.push({ c, route, ms: Date.now() - t0 })
+        const r = await routeOnly(
+          c.utterance,
+          { foreground: c.foreground, guideActive: c.guideActive },
+          { deterministic: true }
+        )
+        // A router case the prefilter swallows counts as a miss.
+        results.push(
+          r.stage === 'router' ? { c, route: r.route, ms: r.ms } : { c, route: null, ms: 0 }
+        )
       }
     }
     await Promise.all(Array.from({ length: concurrency }, worker))
