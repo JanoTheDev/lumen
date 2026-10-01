@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AssistantView } from '@shared/channels'
 import type { AssistantPhase } from '@shared/events'
-import { IconButton, LiveRegion, announce, icons, type IconComponent } from '../ui'
+import { Button, IconButton, LiveRegion, announce, icons, type IconComponent } from '../ui'
 import { animateSpring, fadeOut, prefersReducedMotion } from '../ui/motion'
 import { send, useIpc } from '../lib/ipc'
 import { Confirm } from './Confirm'
@@ -235,6 +235,22 @@ export function AssistantApp(): JSX.Element {
                       {v.model && <p className="as-answer__meta">{v.model}</p>}
                     </div>
                   ) : null}
+                </Fade>
+
+                <Fade show={!!v.notice}>
+                  {v.notice && (
+                    <div className="as-row as-notice" role="status">
+                      <span className="as-notice__text">{v.notice.text}</span>
+                      {v.notice.action === 'unmute' && (
+                        <Button
+                          icon={icons.volume}
+                          onClick={() => send('assistant:command', { type: 'unmute' })}
+                        >
+                          Unmute
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </Fade>
 
                 <Fade show={!!v.confirm}>

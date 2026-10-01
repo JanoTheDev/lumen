@@ -1,7 +1,8 @@
-// Plays spoken replies in the voice renderer (the one that owns the microphone, so echo
-// cancellation can hear it). Windows voices go through speechSynthesis, which exposes the
-// installed OneCore voices in Electron; cloud audio plays as a gapless-enough element queue.
+// Plays spoken replies in the voice renderer (the one that owns the microphone). Audio from
+// main (Windows voices rendered to WAV, cloud MP3) goes through the WebAudio player, where
+// echo cancellation hears it. Plain text (`say`) is the fallback through speechSynthesis.
 import type { TtsMessage } from '@shared/channels'
+import { TtsPlayer } from './player'
 
 /** Installed voices, waiting briefly for Chromium to load the list. */
 export function windowsVoices(): Promise<SpeechSynthesisVoice[]> {
@@ -30,33 +31,42 @@ export function pickVoice(
   )
 }
 
-let audioQueue: HTMLAudioElement[] = []
-let playing: HTMLAudioElement | null = null
+const player = new TtsPlayer()
+let synthesizing = 0
+const listeners = new Set<(state: SpeakingState) => void>()
 
-function playNext(): void {
-  if (playing) return
-  const next = audioQueue.shift()
-  if (!next) return
-  playing = next
-  const done = (): void => {
-    if (playing !== next) return
-    playing = null
-    playNext()
-  }
-  next.onended = done
-  next.onerror = done
-  next.play().catch(done)
+/**
+ * What is playing: `player` = WebAudio (echo cancelled), `synthesis` = speechSynthesis (the
+ * fallback; plays outside Chromium's audio path, so the mic hears it), null = quiet.
+ */
+export type SpeakingState = 'player' | 'synthesis' | null
+
+export function speakingState(): SpeakingState {
+  if (player.speaking) return 'player'
+  return synthesizing > 0 ? 'synthesis' : null
 }
 
-function stopAll(): void {
+/** Follows speakingState(); returns the unsubscribe function. */
+export function onSpeakingChange(cb: (state: SpeakingState) => void): () => void {
+  listeners.add(cb)
+  return () => listeners.delete(cb)
+}
+
+let lastState: SpeakingState = null
+function notify(): void {
+  const now = speakingState()
+  if (now === lastState) return
+  lastState = now
+  for (const cb of listeners) cb(now)
+}
+player.onSpeakingChange(notify)
+
+/** Silences everything now (barge-in, stop, new turn). */
+export function stopSpeaking(): void {
+  player.stop()
   speechSynthesis.cancel()
-  audioQueue = []
-  if (playing) {
-    playing.onended = null
-    playing.onerror = null
-    playing.pause()
-    playing = null
-  }
+  synthesizing = 0
+  notify()
 }
 
 async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void> {
@@ -67,21 +77,39 @@ async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void
     u.lang = voice.lang
   }
   u.rate = Math.max(0.5, Math.min(2, msg.rate))
+  let counted = false
+  u.onstart = () => {
+    counted = true
+    synthesizing++
+    notify()
+  }
+  const done = (): void => {
+    if (!counted) return
+    counted = false
+    synthesizing = Math.max(0, synthesizing - 1)
+    notify()
+  }
+  u.onend = done
+  u.onerror = done
   speechSynthesis.speak(u)
+}
+
+function base64ToBytes(b64: string): ArrayBuffer {
+  const bin = atob(b64)
+  const out = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out.buffer
 }
 
 /** Starts listening for main's playback messages; returns the unsubscribe function. */
 export function startSpeaker(): () => void {
   const off = window.lumen.on('voice:tts', (msg) => {
-    if (msg.op === 'stop') stopAll()
+    if (msg.op === 'stop') stopSpeaking()
     else if (msg.op === 'say') sayWindows(msg).catch(() => {})
-    else {
-      audioQueue.push(new Audio(`data:${msg.mime};base64,${msg.data}`))
-      playNext()
-    }
+    else void player.enqueue(base64ToBytes(msg.data))
   })
   return () => {
     off()
-    stopAll()
+    stopSpeaking()
   }
 }

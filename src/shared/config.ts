@@ -235,6 +235,10 @@ export const configV2Schema = z.object({
     ttsVoice: shortText(40),
     ttsRate: z.number().min(0.25).max(4),
     bargeIn: z.boolean(),
+    /** Output muted when an answer would be spoken: also copy the answer to the clipboard. */
+    copyWhenMuted: z.boolean().default(false),
+    /** Speak answers even while a screen reader runs (off: answers go to the screen reader). */
+    ttsWithScreenReader: z.boolean().default(false),
     /** Microphone deviceId from enumerateDevices; '' = the system default. */
     micDeviceId: z.string().max(200).optional()
   }),
@@ -344,6 +348,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     ttsVoice: 'alloy',
     ttsRate: 1,
     bargeIn: false,
+    copyWhenMuted: false,
+    ttsWithScreenReader: false,
     micDeviceId: ''
   },
   a11y: {

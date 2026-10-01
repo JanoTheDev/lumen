@@ -78,7 +78,7 @@ function patch(next: Partial<AssistantView>): void {
 }
 
 function hasContent(): boolean {
-  return !!(view.answer || view.confirm)
+  return !!(view.answer || view.confirm || view.notice)
 }
 
 /** Bottom-centre of the work area of the display under the cursor. */
@@ -216,10 +216,32 @@ export function consumeDenied(): boolean {
   return d
 }
 
+/** A one-line notice under the answer (e.g. "Sound is muted" with an Unmute button). */
+export function setNotice(notice: AssistantView['notice']): void {
+  if (!notice && !view.notice) return
+  if (!notice) {
+    view = { ...view, notice: undefined }
+    if (view.visible) emit()
+    return
+  }
+  patch({ notice })
+}
+
+export function copyText(text: string): void {
+  clipboard.writeText(text)
+}
+
 export interface CommandDeps {
   cancel: () => void
   /** Speaks the answer again; without it Repeat only re-shows it. */
   speak?: (text: string) => void
+}
+
+let unmuteHandler: () => void = () => {}
+
+/** What the notice's Unmute button does (set by speech/tts). */
+export function setUnmuteHandler(fn: () => void): void {
+  unmuteHandler = fn
 }
 
 let deps: CommandDeps = { cancel: () => {} }
@@ -244,6 +266,9 @@ export function command(cmd: AssistantCommand): void {
         deps.speak?.(view.answer.markdown)
         patch({})
       }
+      break
+    case 'unmute':
+      unmuteHandler()
       break
     case 'cancel':
       deps.cancel()

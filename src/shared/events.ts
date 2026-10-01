@@ -25,6 +25,8 @@ export interface AssistantState {
     countdownMs?: number
   }
   error?: { message: string; hint?: string }
+  /** A short notice with an optional action button (muted output → Unmute). */
+  notice?: { text: string; action?: 'unmute' }
   model?: string
 }
 

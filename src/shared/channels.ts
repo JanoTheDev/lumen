@@ -86,6 +86,8 @@ export interface SendChannels {
   'voice:ended': []
   /** 100 ms of 16 kHz mono Int16 mic audio for the wake-word spotter. */
   'voice:wake-pcm': [pcm: ArrayBuffer]
+  /** The user talked over a spoken answer (playback already stopped): start listening. */
+  'voice:barge-in': []
   'assistant:command': [cmd: AssistantCommand]
   /** Card size in CSS px, for dwell suppression over the bar. */
   'assistant:resize': [size: { w: number; h: number }]
@@ -188,7 +190,7 @@ export interface KeySetResult {
 }
 
 export type AssistantCommand = {
-  type: 'repeat' | 'pin' | 'close' | 'copy' | 'cancel' | 'confirm' | 'deny'
+  type: 'repeat' | 'pin' | 'close' | 'copy' | 'cancel' | 'confirm' | 'deny' | 'unmute'
   turnId?: string
 }
 
@@ -448,6 +450,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'settings:window-maximize',
   'voice:ended',
   'voice:wake-pcm',
+  'voice:barge-in',
   'assistant:command',
   'assistant:resize',
   'assistant:interactive',

@@ -30,7 +30,7 @@ import { replaySavedGuide, saveLastAsGuide, startGuide } from './guides/session'
 import { cancelAll } from './query/cancel'
 import { interceptLocal } from './query/local'
 import { runQuery } from './query/pipeline'
-import { speakAnswer } from './speech/tts'
+import { setAnswerAnnouncer, speakAnswer, warmTts } from './speech/tts'
 import { prepareStt, transcribe } from './speech/stt'
 import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pipeline'
 import { isOwnRendererUrl } from './windows/factory'
@@ -60,7 +60,7 @@ import { registerUsageIpc } from './ipc/usage'
 import { registerAgentIpc } from './ipc/agent'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
-import { installA11y } from './a11y'
+import { announce, installA11y } from './a11y'
 import { loadVault } from './keys/vault'
 import { registerKeysIpc } from './keys/ipc'
 
@@ -152,6 +152,8 @@ app.whenReady().then(() => {
   startAgent(agent)
   registerIpc()
   installA11y()
+  setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
+  warmTts()
   prepareStt()
   // A conversation left open when the app last closed is summarized now (memory on only).
   startMemory()

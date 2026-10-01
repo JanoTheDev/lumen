@@ -16,7 +16,7 @@ import * as hud from '../windows/hud'
 
 const commandSchema = z
   .object({
-    type: z.enum(['repeat', 'pin', 'close', 'copy', 'cancel', 'confirm', 'deny']),
+    type: z.enum(['repeat', 'pin', 'close', 'copy', 'cancel', 'confirm', 'deny', 'unmute']),
     turnId: z.string().max(64).optional()
   })
   .strict()

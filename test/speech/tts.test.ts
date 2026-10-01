@@ -49,3 +49,16 @@ describe('TurnSpeech', () => {
     expect(t.hasSpoken('b')).toBe(false)
   })
 })
+
+describe('TurnSpeech.silenceCurrent', () => {
+  it('silences only the running turn', () => {
+    const t = new TurnSpeech()
+    t.silenceCurrent()
+    expect(t.isSilenced('a')).toBe(false)
+    t.start('a')
+    t.silenceCurrent()
+    expect(t.isSilenced('a')).toBe(true)
+    t.start('b')
+    expect(t.isSilenced('b')).toBe(false)
+  })
+})
