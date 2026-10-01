@@ -2,7 +2,7 @@
 // confirm UI, IPC for the grants list and the audit viewer, and "what did you just do".
 // Background tasks (08 Phase 5): persisted task list and the tasks:* IPC.
 // Skill making by voice (11 T09-T11) hooks in here: it follows agent runs.
-import { ipcMain } from 'electron'
+import { ipcMain, powerMonitor } from 'electron'
 import { dirname, join } from 'path'
 import { auditQuerySchema, grantScopeSchema } from '@shared/ipc'
 import { configPath, loadConfig } from '../config'
@@ -12,8 +12,10 @@ import { onBroadcast } from '../windows/registry'
 import { installAudit, lastTaskSummary, listAudit, setAuditStoreTypedText } from '../audit/log'
 import { setConfirmUi } from './confirm'
 import { grants, installGrants } from './grants'
-import { installBackground } from './background'
+import { installBackground, notice } from './background'
+import { PRESENT_MS } from './background/presence'
 import { registerTasksIpc } from '../ipc/tasks'
+import { installTranscripts, interceptTaskChat } from './transcript-wire'
 import { installSkillCreation, interceptSkillCreation, recordedSkill } from '../skills/creation'
 import { setSkillRecordingSink, startSkillRecording } from '../teach'
 
@@ -25,13 +27,21 @@ export function installAgentMode(): void {
   installAudit(join(root, 'audit'), audit.retentionDays)
   onBroadcast('settings:changed', () => setAuditStoreTypedText(loadConfig().audit.storeTypedText))
   installBackground(join(root, 'tasks'))
+  installTranscripts(join(root, 'tasks', 'transcripts'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
     confirm: () => assistant.command({ type: 'confirm' }),
     dismiss: () => assistant.dropConfirm()
   })
   // Skills made by voice (11 T09-T11): from the last run, "when I say …", the step recorder.
-  installSkillCreation(startSkillRecording)
+  // Offers ("save this as a skill?"), needs-update notices and the agent's create_skill /
+  // update_skill confirm card.
+  installSkillCreation(startSkillRecording, {
+    canSpeakUp: () =>
+      !loadConfig().agent.background.quiet && powerMonitor.getSystemIdleTime() * 1000 < PRESENT_MS,
+    notice,
+    confirm: (summary, risk) => assistant.requestConfirm({ summary, risk })
+  })
   setSkillRecordingSink(recordedSkill)
 }
 
@@ -59,6 +69,8 @@ const WHAT_DID_YOU_DO_RE =
 export function interceptAgentMode(prompt: string): unknown | undefined {
   const skill = interceptSkillCreation(prompt)
   if (skill !== undefined) return skill
+  const chat = interceptTaskChat(prompt)
+  if (chat !== undefined) return chat
   const words = prompt
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, ' ')
