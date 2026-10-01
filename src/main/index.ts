@@ -163,6 +163,11 @@ app.whenReady().then(() => {
     bus.emit({ type: 'voice.cancelled' })
   })
 
+  // The wake spotter runs in main and the dwell ring/palette are windows: apply them now
+  // instead of waiting for the agent (no agent is set yet, so nothing is sent to it).
+  applyListenerState(loadConfig())
+  applyDwellState(loadConfig())
+
   // Hotkey, listener and dwell state are re-sent after every agent (re)start.
   const agent = new AgentBridge({ initState: () => applyAgentState(loadConfig()) })
   setAgent(agent)
