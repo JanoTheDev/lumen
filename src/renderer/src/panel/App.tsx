@@ -3,6 +3,8 @@ import { LiveRegion } from '../ui'
 import { Gallery } from '../ui/Gallery'
 import { useIpc } from '../lib/ipc'
 import { SettingsPage } from './settings/SettingsPage'
+import { Home } from './home/Home'
+import './home/home.css'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
 
@@ -30,6 +32,8 @@ export function App(): JSX.Element {
       <LiveRegion />
       {route.name === 'gallery' && import.meta.env.DEV ? (
         <Gallery />
+      ) : route.name === 'home' ? (
+        <Home />
       ) : (
         <SettingsPage section={section} onNavigate={(id) => go(`#/settings/${id}`)} />
       )}
