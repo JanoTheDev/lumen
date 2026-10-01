@@ -18,8 +18,8 @@ const ENV: Record<KeyProvider, string> = {
 type Stored = Partial<Record<KeyProvider, string>>
 
 let vault: Stored = {}
-/** Providers whose key came from .env / the environment at startup. */
-const fromEnv = new Set<KeyProvider>()
+/** Keys that came from .env / the environment at startup; restored when a pasted key is cleared. */
+let envKeys: Stored = {}
 
 const vaultPath = (): string => join(dirname(configPath()), 'keys.dat')
 
@@ -61,12 +61,12 @@ function writeVault(): boolean {
 
 /** Call once after app ready (DPAPI needs it). Env keys are left alone. */
 export function loadVault(): void {
-  fromEnv.clear()
-  for (const p of KEY_PROVIDERS) if (process.env[ENV[p]]) fromEnv.add(p)
+  envKeys = {}
+  for (const p of KEY_PROVIDERS) if (process.env[ENV[p]]) envKeys[p] = process.env[ENV[p]]
   vault = readVault()
   for (const p of KEY_PROVIDERS) {
     const key = vault[p]
-    if (key && !fromEnv.has(p)) process.env[ENV[p]] = key
+    if (key && !envKeys[p]) process.env[ENV[p]] = key
   }
   const sources = keyStatus().map((k) => `${k.provider} ${k.set ? k.source : 'none'}`)
   log('step', `api keys: ${sources.join(', ')}`)
@@ -88,7 +88,7 @@ export function keyStatus(): KeyStatus[] {
     return {
       provider,
       set: true,
-      source: fromEnv.has(provider) ? 'env' : 'vault',
+      source: key === envKeys[provider] ? 'env' : 'vault',
       last4: key.slice(-4)
     }
   })
@@ -98,7 +98,6 @@ export function keyStatus(): KeyStatus[] {
 export function setKey(provider: KeyProvider, key: string): KeySetResult {
   vault[provider] = key
   process.env[ENV[provider]] = key
-  fromEnv.delete(provider)
   const persisted = writeVault()
   bus.emit({ type: 'keys.changed', provider })
   return { ok: true, persisted }
@@ -106,7 +105,10 @@ export function setKey(provider: KeyProvider, key: string): KeySetResult {
 
 export function clearKey(provider: KeyProvider): boolean {
   delete vault[provider]
-  if (!fromEnv.has(provider)) delete process.env[ENV[provider]]
+  // A .env key the pasted one had replaced applies again.
+  const envKey = envKeys[provider]
+  if (envKey) process.env[ENV[provider]] = envKey
+  else delete process.env[ENV[provider]]
   const saved = writeVault()
   bus.emit({ type: 'keys.changed', provider })
   return saved

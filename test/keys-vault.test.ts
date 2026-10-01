@@ -73,6 +73,16 @@ describe('key vault', () => {
     expect(existsSync(join(tmp.dir, 'keys.dat'))).toBe(false)
   })
 
+  it('clearing a pasted key restores the .env key it replaced', async () => {
+    process.env.OPENAI_API_KEY = 'from-env-key-123456789012'
+    loadVault()
+    await invokeHandler('keys:set', { provider: 'openai', key: KEY })
+    expect(keyStatus().find((s) => s.provider === 'openai')?.source).toBe('vault')
+    await invokeHandler('keys:clear', 'openai')
+    expect(process.env.OPENAI_API_KEY).toBe('from-env-key-123456789012')
+    expect(keyStatus().find((s) => s.provider === 'openai')?.source).toBe('env')
+  })
+
   it('keeps the key in memory when encryption is unavailable', async () => {
     electronMock.safeStorage.isEncryptionAvailable.mockReturnValueOnce(false)
     const res = await invokeHandler('keys:set', { provider: 'anthropic', key: KEY })
