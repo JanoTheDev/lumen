@@ -5,7 +5,8 @@
 //!   modifiers the async key state says are up before each key-down is handled
 //!   (modifiers are never suppressed, so their async state is reliable; it is only
 //!   used to clear, since it also counts injected keys). A held trigger whose up was
-//!   lost is released when its next down comes later than any auto-repeat could.
+//!   lost is released when its next down comes later than any auto-repeat could
+//!   (`stale_after`: the keyboard delay, or Filter Keys' slower repeat, plus a margin).
 //! - Trigger down with the exact modifier set: suppress, emit `<down>` once
 //!   (autorepeat ignored). The matching trigger up is suppressed too.
 //! - `<up>` fires on trigger up or on release of any modifier in the combo.
@@ -17,8 +18,25 @@
 use super::accel::{Hotkey, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN, modifier_bit};
 
 pub const TAP_WINDOW_MS: u32 = 400;
-/// Auto-repeat of a held key comes far faster (the longest repeat delay is 1 s).
+/// Auto-repeat of a held key comes far faster (the longest keyboard repeat delay is 1 s).
+/// The floor of `stale_after`.
 pub const STALE_TRIGGER_MS: u32 = 1500;
+/// Slack above the slowest repeat gap before a held key counts as stale.
+pub const STALE_MARGIN_MS: u32 = 500;
+
+/// Longest gap between a key's down and its next auto-repeat: the keyboard delay
+/// (SPI_GETKEYBOARDDELAY 0..3 = 250..1000 ms), or with Filter Keys on its repeat delay and
+/// repeat rate (FILTERKEYS iDelayMSec / iRepeatMSec, up to several seconds).
+pub fn repeat_gap_ms(keyboard_delay: u32, filter_keys: Option<(u32, u32)>) -> u32 {
+    let keyboard = (keyboard_delay.min(3) + 1) * 250;
+    let (delay, rate) = filter_keys.unwrap_or((0, 0));
+    keyboard.max(delay).max(rate)
+}
+
+/// Gap after which a repeated down of a held key means its up was lost.
+pub fn stale_after(repeat_gap_ms: u32) -> u32 {
+    STALE_TRIGGER_MS.max(repeat_gap_ms.saturating_add(STALE_MARGIN_MS))
+}
 /// Generic VK per modifier bit, for the async key state.
 const MOD_VKS: [(u8, &[u16]); 4] =
     [(MOD_CTRL, &[0x11]), (MOD_ALT, &[0x12]), (MOD_SHIFT, &[0x10]), (MOD_WIN, &[0x5B, 0x5C])];
@@ -70,6 +88,8 @@ pub struct Fsm {
     swallow_up: Option<u16>,
     /// Hook time of the active trigger's last down.
     active_at: u32,
+    /// `stale_after` for the current repeat settings (0 = STALE_TRIGGER_MS).
+    stale_ms: u32,
     /// Modifier pressed with nothing else since: (bit, down time).
     tap_pending: Option<(u8, u32)>,
     /// Last completed tap: (bit, up time, count).
@@ -112,6 +132,11 @@ impl Fsm {
         self.mods
     }
 
+    /// The system's slowest auto-repeat gap (see `repeat_gap_ms`).
+    pub fn set_repeat_gap(&mut self, ms: u32) {
+        self.stale_ms = stale_after(ms);
+    }
+
     /// Before a key-down: drops modifiers `is_down` (async key state) says are up and
     /// releases a held trigger whose up was lost. Returns `<up>` emits for released combos.
     pub fn resync(&mut self, ev: KeyEvent, is_down: &dyn Fn(u16) -> bool) -> Vec<Output> {
@@ -133,7 +158,7 @@ impl Fsm {
         }
         if let Some(i) = self.active
             && self.config.bindings[i].hotkey.vk == ev.vk
-            && ev.time.wrapping_sub(self.active_at) > STALE_TRIGGER_MS
+            && ev.time.wrapping_sub(self.active_at) > self.stale_ms.max(STALE_TRIGGER_MS)
         {
             self.active = None;
             self.swallow_up = None;
@@ -388,6 +413,30 @@ mod tests {
         assert_eq!(emits(&f.step(ev(SPACE, true, 9000)).1), ["hotkey-down"]);
         // Ctrl lost while held: the combo ends.
         assert_eq!(emits(&f.resync(ev(0x41, true, 9100), &|_| false)), ["hotkey-up"]);
+    }
+
+    #[test]
+    fn slow_filter_keys_repeat_is_not_a_lost_up() {
+        assert_eq!(repeat_gap_ms(1, None), 500);
+        assert_eq!(repeat_gap_ms(9, None), 1000);
+        assert_eq!(repeat_gap_ms(0, Some((2000, 1000))), 2000);
+        assert_eq!(repeat_gap_ms(0, Some((500, 3000))), 3000);
+        assert_eq!(stale_after(500), STALE_TRIGGER_MS);
+        assert_eq!(stale_after(2000), 2500);
+        assert_eq!(stale_after(u32::MAX), u32::MAX);
+
+        let mut f = fsm("Ctrl+Space");
+        f.set_repeat_gap(repeat_gap_ms(3, Some((2000, 2000))));
+        f.step(ev(VK_LCONTROL, true, 0));
+        assert_eq!(emits(&f.step(ev(SPACE, true, 0)).1), ["hotkey-down"]);
+        let down = |_: u16| true;
+        // Filter Keys repeats every 2 s: still the same press.
+        assert!(f.resync(ev(SPACE, true, 2000), &down).is_empty());
+        assert_eq!(f.step(ev(SPACE, true, 2000)), (true, vec![]));
+        assert!(f.resync(ev(SPACE, true, 4000), &down).is_empty());
+        f.step(ev(SPACE, true, 4000));
+        // Far later than any repeat: the up was lost.
+        assert_eq!(emits(&f.resync(ev(SPACE, true, 7000), &down)), ["hotkey-up"]);
     }
 
     fn tap(f: &mut Fsm, vk: u16, t: u32) -> Vec<Output> {

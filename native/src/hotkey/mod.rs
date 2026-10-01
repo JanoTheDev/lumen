@@ -250,15 +250,21 @@ thread_local! {
 struct HookCtx {
     fsm: Fsm,
     switch: SwitchFsm,
-    /// The push-to-talk button as a one-button switch (suppressed, repeat-free, up always seen).
+    /// The push-to-talk button as a one-button switch (suppressed; a down while held means
+    /// its up was lost, so it reports release then press).
     ptt: SwitchFsm,
     combos: bool,
     /// Last reported key-down, to skip its auto-repeat.
     combo_vk: Option<u16>,
     user_activity: bool,
     pinger: activity::Pinger,
+    /// Hook time the repeat settings were last read (None = read on the next key-down).
+    repeat_read_at: Option<u32>,
     out: Option<Out>,
 }
+
+/// How often the hook re-reads the keyboard repeat settings while keys are pressed.
+const REPEAT_REFRESH_MS: u32 = 5000;
 
 impl HookCtx {
     fn configure(&mut self, config: HookConfig) {
@@ -277,6 +283,18 @@ impl HookCtx {
         self.combo_vk = None;
         self.user_activity = config.user_activity;
         self.pinger.reset();
+        self.repeat_read_at = None;
+    }
+
+    /// Keeps the lost-up thresholds in step with the keyboard delay and Filter Keys.
+    fn refresh_repeat_gap(&mut self, time: u32) {
+        if self.repeat_read_at.is_some_and(|t| time.wrapping_sub(t) < REPEAT_REFRESH_MS) {
+            return;
+        }
+        self.repeat_read_at = Some(time);
+        let gap = system_repeat_gap_ms();
+        self.fsm.set_repeat_gap(gap);
+        self.switch.set_repeat_gap(gap);
     }
 
     /// A physical key or mouse event: a throttled `user-activity` ping while subscribed.
@@ -293,9 +311,12 @@ impl HookCtx {
     fn key(&mut self, ev: fsm::KeyEvent, is_down: &dyn Fn(u16) -> bool) -> bool {
         let Some(out) = self.out.clone() else { return false };
         self.user_ping();
+        if ev.down {
+            self.refresh_repeat_gap(ev.time);
+        }
         deliver(&out, self.fsm.resync(ev, is_down));
-        let (suppress, report) = self.switch.key(ev.vk, ev.down, self.fsm.mods());
-        if let Some((index, down)) = report {
+        let (suppress, reports) = self.switch.key(ev.vk, ev.down, self.fsm.mods(), ev.time);
+        for (index, down) in reports {
             emit_switch(&out, index, down);
         }
         if suppress {
@@ -321,18 +342,49 @@ impl HookCtx {
     /// One physical mouse button event; returns whether to suppress it.
     fn button(&mut self, button: u8, down: bool) -> bool {
         let Some(out) = self.out.clone() else { return false };
-        let (suppress, report) = self.switch.mouse(button, down);
-        if let Some((index, down)) = report {
+        let (suppress, reports) = self.switch.mouse(button, down);
+        for (index, down) in reports {
             emit_switch(&out, index, down);
         }
         if suppress {
             return true;
         }
-        let (suppress, report) = self.ptt.mouse(button, down);
-        if let Some((_, down)) = report {
+        let (suppress, reports) = self.ptt.mouse(button, down);
+        for (_, down) in reports {
             emit_ptt(&out, down);
         }
         suppress
+    }
+}
+
+/// The slowest auto-repeat gap the keyboard settings allow (`fsm::repeat_gap_ms`).
+fn system_repeat_gap_ms() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::Accessibility::FILTERKEYS;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            FKF_FILTERKEYSON, SPI_GETFILTERKEYS, SPI_GETKEYBOARDDELAY, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS,
+            SystemParametersInfoW,
+        };
+        let none = SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0);
+        let mut delay = 3u32;
+        let mut fk = FILTERKEYS { cbSize: std::mem::size_of::<FILTERKEYS>() as u32, ..Default::default() };
+        // SAFETY: out-params are a u32 (SPI_GETKEYBOARDDELAY) and a sized FILTERKEYS.
+        let filter = unsafe {
+            if SystemParametersInfoW(SPI_GETKEYBOARDDELAY, 0, Some(&mut delay as *mut _ as *mut _), none)
+                .is_err()
+            {
+                delay = 3;
+            }
+            SystemParametersInfoW(SPI_GETFILTERKEYS, fk.cbSize, Some(&mut fk as *mut _ as *mut _), none)
+                .is_ok()
+                && fk.dwFlags & FKF_FILTERKEYSON != 0
+        };
+        fsm::repeat_gap_ms(delay, filter.then_some((fk.iDelayMSec, fk.iRepeatMSec)))
+    }
+    #[cfg(not(windows))]
+    {
+        fsm::repeat_gap_ms(3, None)
     }
 }
 
@@ -614,9 +666,9 @@ mod tests {
     fn ptt_button_is_a_one_button_switch() {
         let mut f = SwitchFsm::default();
         f.configure(Switches { keys: vec![], mouse: vec![3] });
-        assert_eq!(f.mouse(3, true), (true, Some((0, true))));
-        assert_eq!(f.mouse(3, true), (true, None), "repeat swallowed");
-        assert_eq!(f.mouse(0, true), (false, None), "left click untouched");
+        assert_eq!(f.mouse(3, true), (true, vec![(0, true)]));
+        assert_eq!(f.mouse(3, true), (true, vec![(0, false), (0, true)]), "a lost up ends the old press");
+        assert_eq!(f.mouse(0, true), (false, vec![]), "left click untouched");
         // Turning it off while held reports the release.
         assert_eq!(f.configure(Switches::default()), vec![(0, false)]);
     }
