@@ -3,7 +3,7 @@
 > A voice-first AI companion for Windows that sees your screen, points at things, teaches you software and can operate your PC for you.
 > Built for people who can't use a mouse or keyboard comfortably, and for anyone learning complex software.
 
-![status](https://img.shields.io/badge/status-active%20development-blue) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4) ![electron](https://img.shields.io/badge/Electron-39-47848F) ![rust](https://img.shields.io/badge/native%20helper-Rust-B7410E) ![license](https://img.shields.io/badge/license-AGPL--3.0-A42E2B)
+![status](https://img.shields.io/badge/status-pre--release-orange) ![platform](https://img.shields.io/badge/platform-Windows%2010%2F11%20x64-0078D4) ![electron](https://img.shields.io/badge/Electron-39-47848F) ![rust](https://img.shields.io/badge/native%20helper-Rust-B7410E) ![license](https://img.shields.io/badge/license-AGPL--3.0-A42E2B)
 
 Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, and it answers, points at the right button, walks you through a lesson, types for you, or does the whole task while you watch. One AI key is all it needs; speech, wake word, OCR and dwell run locally.
 
@@ -229,49 +229,87 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 ---
 
-## Roadmap
+## Status and roadmap
 
-**Done**
+_Last updated: October 2026._
+
+**Where things stand:** every feature listed above is built, has automated tests (about 360 test files and 4,300 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
+
+### Done
+
+**Core**
 
 - [x] Security: sandboxed windows, validated settings and IPC, risk-rated safety gate, local audit log, redaction
-- [x] Rust native helper, no Python needed; one-click per-user installer, portable build, auto-update
+- [x] Rust native helper (no Python), one-click per-user installer, portable build, auto-update
+- [x] Assistant bar, screen layer, cursor buddy, Home flyout, tray, first-run setup, rebuilt Settings, eight themes
+- [x] Any provider: Anthropic, OpenAI, Gemini free tier, OpenAI-compatible services, Ollama and LM Studio, local-only mode, a model per job
+- [x] Memory you can see and edit, private mode, usage and cost per day
+
+**Pointing and doing**
+
 - [x] Accurate pointing: UI Automation, numbered marks, OCR, zoom-in second look
 - [x] AI intent router, agent mode with plan, countdown, ghost cursor and caps
-- [x] Background tasks, routines and opt-in proactive reminders
-- [x] MCP connectors with per-tool permissions
-- [x] Claude Code by voice, with optional autopilot
-- [x] File drop on the assistant bar (PDF, Word, text, images)
-- [x] Local speech recognition, Windows voices, barge-in, conversation mode, seven reply languages
-- [x] Dictation anywhere: corrections, formatting, per-app styles, voice edits, snippets, history and notes
+- [x] Works in any app: how-to lookups, on-screen grounding, learned per-app notes
+- [x] Gmail and Outlook (new and classic): read, summarize, reply, write, search, attach
+- [x] Background tasks with a live task chat (steer, answer, pause, stop)
+- [x] Automations: time, app, folder, idle, login and network triggers, optional wake when closed
+- [x] Undo, what changed, focus mode, shortcut coach, comfort, error rescue
+- [x] Files in and out: drop or point at a file; create Word, Excel, CSV, PDF, Markdown and HTML
+
+**Voice**
+
+- [x] Local speech recognition, offline wake word, Windows voices, barge-in, conversation mode, seven reply languages
+- [x] Dictation anywhere: corrections, formatting, per-app styles, voice edits, snippets, coding mode, history and notes
 - [x] Read the web with me: summarize pages, news briefs from free feeds, open sources by voice
-- [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning
+
+**Accessibility**
+
+- [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning, on-screen keyboard
 - [x] Point and say ("click this", "move this there")
 - [x] Screen reader output (NVDA, JAWS, Narrator), community labels, simple mode, text scale, reduced motion, high contrast
-- [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress
-- [x] Blender and OBS app helpers for exact lesson checks
-- [x] Lessons from tutorial transcripts, web pages and subtitle files
 - [x] Face-gesture input (webcam, local, opt-in)
-- [x] Sharing packs and lessons as `.lumen` files
-- [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording or "save that as a skill"
-- [x] Smart helpers: focus mode, undo, shortcut coach, comfort, error rescue, what changed, reading level, learning journal
-- [x] Assistant bar, screen layer, cursor buddy, Home, first-run setup, rebuilt Settings, memory
-- [x] Any provider: Anthropic, OpenAI, Gemini free tier, OpenAI-compatible services, Ollama and LM Studio (local only mode)
-- [x] Works in any app: how-to lookups plus on-screen grounding, learned per-app notes
-- [x] Gmail and Outlook (new and classic): read, summarize, reply, write, search, attach
-- [x] Model-written skills, voice edits, reply styles, Claude Code plugin import
-- [x] Integrations catalog with sign-in
-- [x] Automations: time, app, folder, idle and network triggers, optional wake when closed
-- [x] Task chat for background, agent and Claude Code tasks
-- [x] Create and convert files (Word, Excel, CSV, PDF), point at a file to analyze it
-- [x] Coding skills for Claude Code sessions
 
-**Next**
+**Teaching and skills**
 
+- [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress, learning journal
+- [x] Blender and OBS app helpers for exact lesson checks
+- [x] Lessons from tutorial transcripts, web pages and subtitle files; sharing as `.lumen` files
+- [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording, by description, or "save that as a skill"
+- [x] Reply styles, Claude Code plugin import
+
+**Integrations**
+
+- [x] MCP connectors with per-tool permissions, integrations catalog with browser sign-in
+- [x] Claude Code by voice with optional autopilot, coding skills per project
+
+### In progress
+
+- [ ] **Rich answers:** answer cards with images, prices and ratings for research questions ("find hotels in Nice for next weekend"), follow-ups like "the cheapest one", and "book the second one" as a supervised agent task
+- [ ] **Better web research:** read result pages as text instead of screenshots, faster answers with sources
+
+### Next
+
+- [ ] Hand-test pass on real hardware: every surface at 100–200 % scaling, light / dark / high contrast, two monitors, NVDA and keyboard only, motion smoothness
+- [ ] Pointing accuracy test set from real apps (Gmail, Outlook, Word, Excel, Slack, VS Code, browsers)
+- [ ] Lesson-check accuracy measurements
+- [ ] Community skills and packs index ("Browse community skills", no account needed)
+- [ ] Record a lesson run as a video with a transcript
 - [ ] Offline spoken-language detection
 - [ ] Head-pointer mouse movement for face gestures
-- [ ] Browser research through the page itself, not screenshots
-- [ ] Optional streaming cloud voices (paid, opt-in)
-- [ ] winget package
+- [ ] First public release
+
+### Maybe later
+
+- Optional paid streaming voices and transcription (OpenAI, Deepgram, ElevenLabs), always opt-in
+- DaVinci Resolve app helper (needs a Studio licence to test)
+- Driving the browser directly instead of through the screen
+- Named assistants / personas
+- Latency overlay for developers
+
+### Not planned for now
+
+- Code signing and the "uiAccess" build that works over admin windows (paid certificate required)
+- winget package (waits for signing)
 
 ---
 
