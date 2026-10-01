@@ -70,6 +70,8 @@ export interface ChallengeStatusView {
 type Reply = { mode: 'answer'; text: string }
 const answer = (text: string): Reply => ({ mode: 'answer', text })
 
+const STOPPED = { ok: false, text: 'The challenge was stopped.' } as const
+
 export class ChallengeRunner {
   private data: ChallengeData
   private timer: unknown = null
@@ -175,7 +177,11 @@ export class ChallengeRunner {
     this.deps.showLine('Checking your work…')
     try {
       const image = await this.deps.capture()
-      if (!image) return { ok: false, text: 'I could not see the screen.' }
+      if (!this.stillActive(c)) return STOPPED
+      if (!image) {
+        this.deps.showLine(`Challenge: ${c.title}`)
+        return { ok: false, text: 'I could not see the screen.' }
+      }
       const state = await this.deps.appState(c.app).catch(() => null)
       const reply = await this.deps
         .judge(this.prompts.check, checkTurn(c, state, this.deps.readingLevel(c.app)), image)
@@ -183,6 +189,8 @@ export class ChallengeRunner {
           this.deps.log(`challenge: check failed (${e.message})`)
           return null
         })
+      // "Give up" while the check ran: the stopped challenge does not come back.
+      if (!this.stillActive(c)) return STOPPED
       if (!reply) {
         this.deps.showLine(`Challenge: ${c.title}`)
         return { ok: false, text: 'I could not check it this time. Try “check my work” again.' }
@@ -220,6 +228,10 @@ export class ChallengeRunner {
     } finally {
       this.busy = false
     }
+  }
+
+  private stillActive(c: { id: string }): boolean {
+    return this.data.active?.id === c.id
   }
 
   stop(): boolean {

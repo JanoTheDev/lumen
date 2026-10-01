@@ -168,6 +168,31 @@ describe('ChallengeRunner', () => {
     expect(r.status()).toMatchObject({ streak: 1, passed: 1 })
   })
 
+  it('no screen: the bar line goes back to the challenge (review teach #3)', async () => {
+    const { r, deps } = setup({ capture: async () => null })
+    await r.start()
+    vi.mocked(deps.showLine).mockClear()
+    expect(await r.check()).toMatchObject({ ok: false })
+    expect(vi.mocked(deps.showLine).mock.calls.at(-1)?.[0]).toMatch(/^Challenge: Coffee mug/)
+  })
+
+  it('"give up" during a check keeps the challenge stopped (review teach #4)', async () => {
+    let release: () => void = () => {}
+    const { r, saved } = setup({
+      judge: () =>
+        new Promise((res) => {
+          release = () => res({ items: [{ n: 1, met: false, note: '' }], feedback: 'No.' })
+        })
+    })
+    await r.start()
+    const pending = r.check()
+    await new Promise((res) => setTimeout(res, 0))
+    expect(r.stop()).toBe(true)
+    release()
+    expect(await pending).toEqual({ ok: false, text: 'The challenge was stopped.' })
+    expect(saved().active).toBeUndefined()
+  })
+
   it('a miss keeps the challenge on to try again', async () => {
     const { r, saved } = setup({
       judge: async () => ({ items: [{ n: 1, met: true, note: '' }], feedback: 'Add a handle.' })
