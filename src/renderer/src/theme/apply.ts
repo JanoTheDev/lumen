@@ -95,20 +95,6 @@ export function resolveTheme(cfg: ThemeConfig, env: ThemeEnv): ResolvedTheme {
   }
 }
 
-// Old windows read --ai-*; keep them fed from the same palette until they are replaced.
-function legacyAliases(p: BuiltPalette['palette']): Record<string, string> {
-  return {
-    '--ai-accent': p.accent,
-    '--ai-background': p.bg,
-    '--ai-foreground': p.fg,
-    '--ai-muted': p.fgMuted,
-    '--ai-surface': p.surface,
-    '--ai-border': p.borderSubtle,
-    '--ai-success': p.success,
-    '--ai-error': p.danger
-  }
-}
-
 /** Writes the resolved theme to :root (or `root`). */
 export function applyResolved(
   t: ResolvedTheme,
@@ -117,8 +103,7 @@ export function applyResolved(
 ): void {
   const vars: Record<string, string> = {
     ...STATIC_TOKENS,
-    ...SPRING_VARS,
-    ...legacyAliases(t.palette)
+    ...SPRING_VARS
   }
   for (const [key, cssVar] of Object.entries(COLOR_VARS)) {
     vars[cssVar] = t.palette[key as keyof typeof COLOR_VARS]
