@@ -10,5 +10,4 @@ export function registerAnswerIpc(): void {
     // TTS is started inside the query pipeline to minimise perceived delay.
     answer.showText(text)
   })
-  ipcMain.on('answer:hide', () => answer.hide())
 }

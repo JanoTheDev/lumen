@@ -36,7 +36,6 @@ export interface InvokeChannels {
     args: [patch: ConfigPatch | Record<string, unknown>]
     result: Record<string, unknown>
   }
-  'screen:hide': { args: []; result: void }
   'guides:list': { args: []; result: SavedGuide[] }
   'guides:save-last': { args: [name?: string]; result: SavedGuide | { error: string } }
   'guides:replay': { args: [id: string]; result: SavedGuide | { error: string } }
@@ -123,8 +122,6 @@ export interface SendChannels {
   'assistant:cancel': []
   'assistant:open-link': [url: string]
   'answer:show': [text: string]
-  'answer:hide': []
-  'answer:resize': [height: number]
   'settings:open': []
   'settings:window-close': []
   'settings:window-minimize': []
@@ -240,12 +237,6 @@ export interface DwellRingData {
   target?: Rect
   /** A risky target waits for a second dwell. */
   warn?: boolean
-}
-
-export interface StatusMessage {
-  kind: string
-  text: string
-  step?: { index: number; total: number }
 }
 
 /** Which speech-to-text engine answers and how the offline model download is going. */
@@ -600,8 +591,6 @@ export interface EventChannels {
   /** The wake engine changed (applied settings, model installed, fallback). */
   'wake:status': [status: WakeStatus]
   'voice:stt-model-progress': [progress: WakeModelProgress]
-  'status:set': [message: StatusMessage]
-  'status:hide': []
   'voice:start': [opts: { mode: VoiceStartMode }]
   'voice:stop': []
   /** The open dictation recording becomes hands-free (ends on silence). */
@@ -635,7 +624,6 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'voice:wake-state',
   'settings:get',
   'settings:patch',
-  'screen:hide',
   'guides:list',
   'guides:save-last',
   'guides:replay',
@@ -692,8 +680,6 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'assistant:cancel',
   'assistant:open-link',
   'answer:show',
-  'answer:hide',
-  'answer:resize',
   'settings:open',
   'settings:window-close',
   'settings:window-minimize',
@@ -738,8 +724,6 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'wake:model-progress',
   'wake:status',
   'voice:stt-model-progress',
-  'status:set',
-  'status:hide',
   'voice:start',
   'voice:stop',
   'voice:hands-free',

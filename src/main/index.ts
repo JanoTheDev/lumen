@@ -45,7 +45,6 @@ import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
 import { registerBridgesIpc } from './ipc/bridges'
-import { registerHighlightIpc } from './ipc/highlight'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
@@ -104,7 +103,6 @@ function createWindows(): void {
 function registerIpc(): void {
   registerHudIpc({ armEscape: () => holdEscape('hud'), disarmEscape: () => releaseEscape('hud') })
   registerAnswerIpc()
-  registerHighlightIpc()
   registerWakeIpc()
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })

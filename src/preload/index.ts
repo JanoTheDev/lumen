@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { EVENT_CHANNELS, INVOKE_CHANNELS, SEND_CHANNELS, type LumenApi } from '@shared/channels'
-import { createLegacyApi } from '@shared/legacy-api'
 
 const invokeAllowed = new Set<string>(INVOKE_CHANNELS)
 const sendAllowed = new Set<string>(SEND_CHANNELS)
@@ -28,4 +27,3 @@ const lumen: LumenApi = {
 }
 
 contextBridge.exposeInMainWorld('lumen', lumen)
-contextBridge.exposeInMainWorld('api', createLegacyApi(lumen))

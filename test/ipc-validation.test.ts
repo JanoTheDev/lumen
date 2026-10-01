@@ -10,7 +10,6 @@ import {
   actionsSchema,
   audioSchema,
   guideIdSchema,
-  overlayHeightSchema,
   parsePayload,
   promptSchema,
   MAX_AUDIO_BYTES
@@ -89,12 +88,6 @@ describe('ipc payloads', () => {
     expect(guideIdSchema.safeParse('../config').success).toBe(false)
     expect(guideIdSchema.safeParse('C:\\x').success).toBe(false)
     expect(guideIdSchema.safeParse('compose-email-abc12').success).toBe(true)
-  })
-  it('clamps overlay height', () => {
-    expect(parsePayload('r', overlayHeightSchema, 5000)).toBe(800)
-    expect(parsePayload('r', overlayHeightSchema, 10)).toBe(60)
-    expect(overlayHeightSchema.safeParse(NaN).success).toBe(false)
-    expect(overlayHeightSchema.safeParse(Infinity).success).toBe(false)
   })
   it('caps audio size', () => {
     expect(audioSchema.safeParse(new ArrayBuffer(10)).success).toBe(true)

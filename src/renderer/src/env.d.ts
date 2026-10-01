@@ -2,13 +2,10 @@
 
 import type { JSX as ReactJSX } from 'react'
 import type { LumenApi } from '@shared/channels'
-import type { LegacyApi } from '@shared/legacy-api'
 
 declare global {
   interface Window {
     lumen: LumenApi
-    /** @deprecated use window.lumen */
-    api: LegacyApi
   }
 
   namespace JSX {

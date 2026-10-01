@@ -13,7 +13,3 @@ export function send<C extends EventChannel>(channel: C, ...args: EventChannels[
   if (channel === 'answer:text') showText(args[0] as string)
   else assistant.send(channel, ...args)
 }
-
-export function hide(): void {
-  assistant.close()
-}

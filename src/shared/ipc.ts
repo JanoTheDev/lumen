@@ -41,10 +41,6 @@ export const dwellPickSchema = z.enum([
 ])
 /** Scan keyboard key id: c:<char>, s:<n> or a named key. */
 export const keyboardKeySchema = z.string().regex(/^(c:.|s:\d|[a-z]{2,10})$/u)
-export const overlayHeightSchema = z
-  .number()
-  .finite()
-  .transform((h) => Math.max(60, Math.min(800, Math.round(h))))
 export const audioSchema = z
   .instanceof(ArrayBuffer)
   .refine((b) => b.byteLength <= MAX_AUDIO_BYTES, 'audio too large')

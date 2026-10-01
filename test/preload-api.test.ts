@@ -26,31 +26,26 @@ vi.mock('electron', async () => {
   }
 })
 
-type Api = Record<string, (...a: unknown[]) => unknown>
-let api: Api
+interface Lumen {
+  invoke: (c: string, ...a: unknown[]) => Promise<unknown>
+  send: (c: string, ...a: unknown[]) => void
+  on: (c: string, cb: (...a: unknown[]) => void) => () => void
+}
+let lumen: Lumen
 
 beforeAll(async () => {
   await import('../src/preload/index')
-  api = ipc.exposed.api as Api
+  lumen = ipc.exposed.lumen as Lumen
 })
 
-describe('preload api subscriptions', () => {
-  it('every on* returns an unsubscribe function', () => {
-    const onKeys = Object.keys(api).filter((k) => /^on[A-Z]/.test(k))
-    expect(onKeys.length).toBeGreaterThan(10)
-    for (const k of onKeys) {
-      const unsub = api[k](() => {})
-      expect(typeof unsub, k).toBe('function')
-      ;(unsub as () => void)()
-    }
-    for (const ch of ipc.emitter!.eventNames()) {
-      expect(ipc.emitter!.listenerCount(ch), String(ch)).toBe(0)
-    }
+describe('preload window.lumen', () => {
+  it('exposes only window.lumen', () => {
+    expect(Object.keys(ipc.exposed)).toEqual(['lumen'])
   })
 
   it('passes payload without the event and stops after unsubscribe', () => {
     const cb = vi.fn()
-    const unsub = api.onRunQuery(cb) as () => void
+    const unsub = lumen.on('assistant:run-query', cb)
     ipc.emitter!.emit('assistant:run-query', { sender: null }, 'open gmail')
     expect(cb).toHaveBeenCalledWith('open gmail')
     unsub()
@@ -60,26 +55,22 @@ describe('preload api subscriptions', () => {
 
   it('repeated subscribe/unsubscribe does not leak listeners', () => {
     for (let i = 0; i < 5; i++) {
-      const unsub = api.onWakeModelProgress(() => {}) as () => void
+      const unsub = lumen.on('wake:model-progress', () => {})
       unsub()
     }
     expect(ipc.emitter!.listenerCount('wake:model-progress')).toBe(0)
   })
 
-  it('openLink sends on the assistant channel', () => {
-    api.openLink('https://example.com')
+  it('send forwards allowed channels', () => {
+    lumen.send('assistant:open-link', 'https://example.com')
     expect(ipc.send).toHaveBeenCalledWith('assistant:open-link', 'https://example.com')
   })
 
-  it('window.lumen rejects channels outside the table', async () => {
-    const lumen = ipc.exposed.lumen as {
-      invoke: (c: string, ...a: unknown[]) => Promise<unknown>
-      send: (c: string, ...a: unknown[]) => void
-      on: (c: string, cb: () => void) => () => void
-    }
+  it('rejects channels outside the table', async () => {
     await expect(lumen.invoke('execute-shell', 'calc')).rejects.toThrow(/unknown channel/)
     expect(() => lumen.send('close-hud')).toThrow(/unknown channel/)
     expect(() => lumen.on('status-set', () => {})).toThrow(/unknown channel/)
+    expect(() => lumen.on('status:set', () => {})).toThrow(/unknown channel/)
     lumen.send('assistant:cancel')
     expect(ipc.send).toHaveBeenCalledWith('assistant:cancel')
   })
