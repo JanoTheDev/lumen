@@ -28,6 +28,7 @@ import {
 import { LANGUAGE_OPTIONS, dictionaryFromText, languageHint } from './voice-language'
 import { MicTest } from './MicTest'
 import { DictationSettings } from './Dictation'
+import { DictationFeedback } from './DictationFeedback'
 import { useMicDevices } from './use-mic-devices'
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
@@ -80,6 +81,12 @@ function Microphone({ cfg, patch }: SectionProps): JSX.Element {
         onChange={(conversation) => patch({ voice: { conversation } })}
         label="Double-tap for a conversation"
         hint="Double-tap the shortcut and keep talking: Lumen listens again after each answer. Double-tap again, press Escape or say “stop” to end. Ends by itself after 5 minutes without a request."
+      />
+      <Switch
+        checked={cfg.voice.whisperMode}
+        onChange={(whisperMode) => patch({ voice: { whisperMode } })}
+        label="Whisper mode"
+        hint="For speaking quietly: Lumen turns your voice up and listens for softer speech. Or dictate “whisper mode on” / “whisper mode off”."
       />
     </Card>
   )
@@ -428,6 +435,7 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       <DictationSettings cfg={cfg} patch={patch} />
+      <DictationFeedback cfg={cfg} patch={patch} />
 
       <SilenceDetection cfg={cfg} patch={patch} />
 
