@@ -113,7 +113,7 @@ describe('skill network patterns', () => {
 })
 
 describe('presence rule', () => {
-  it('speaks only while the user is around and not in focus mode', () => {
+  it('speaks only while the user is around and not in quiet mode', () => {
     expect(noticeVerdict({ idleMs: 1000, quiet: false, midTurn: false })).toBe('now')
     expect(noticeVerdict({ idleMs: 1000, quiet: false, midTurn: true })).toBe('after-turn')
     expect(noticeVerdict({ idleMs: PRESENT_MS, quiet: false, midTurn: false })).toBe('list-only')

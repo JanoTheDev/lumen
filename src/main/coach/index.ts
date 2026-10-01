@@ -18,7 +18,7 @@ import { executeActions } from '../actions/executor'
 import { announce } from '../a11y'
 import { getProvider } from '../ai/providers'
 import { decodeGray } from '../ai/frames'
-import { onConfigPatched } from '../ipc/settings'
+import { onConfigPatched, patchConfig } from '../ipc/settings'
 import { flattenElements } from '../query/uia-list'
 import { skillRegistry } from '../teach'
 import { requestConfirm } from '../windows/assistant'
@@ -403,6 +403,16 @@ export function interceptHelpers(prompt: string): unknown | undefined {
       saveSoon()
       if (cmd.on && !cfg.shortcutCoach) saveConfig({ helpers: { shortcutCoach: true } })
       return answer(cmd.on ? 'Shortcut tips are on.' : 'OK, no more shortcut tips.')
+    case 'quiet-mode': {
+      const background = { ...loadConfig().agent.background, quiet: cmd.on }
+      return patchConfig({ agent: { background } }).then(() =>
+        answer(
+          cmd.on
+            ? 'Quiet mode is on. Finished background tasks wait in the Tasks list.'
+            : 'Quiet mode is off. I’ll tell you when a background task finishes.'
+        )
+      )
+    }
   }
 }
 

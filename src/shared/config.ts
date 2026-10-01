@@ -388,7 +388,7 @@ export const configV2Schema = z.object({
         maxWallMin: z.number().int().min(1).max(120),
         /** Folders read_file may read (besides a skill's own grants). */
         readFolders: z.array(z.string().max(260)).max(20),
-        /** Focus mode: finished tasks wait in the list, nothing is spoken. */
+        /** Quiet mode: finished tasks wait in the list, nothing is spoken. */
         quiet: z.boolean()
       })
       .default({

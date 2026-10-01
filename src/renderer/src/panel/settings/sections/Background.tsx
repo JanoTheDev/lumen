@@ -156,8 +156,8 @@ export function Background({ cfg, patch }: SectionProps): JSX.Element {
         <Switch
           checked={bg.quiet}
           onChange={(quiet) => setBg({ quiet })}
-          label="Quiet"
-          hint="Finished tasks wait in the Tasks list; nothing is spoken."
+          label="Quiet mode"
+          hint="Finished tasks wait in the Tasks list; nothing is spoken. Say “quiet mode on” or “quiet mode off”. Focus mode (Smart helpers) is different: it dims the screen."
         />
         {bg.readFolders.length > 0 && (
           <>

@@ -64,6 +64,17 @@ describe('helper voice commands', () => {
     expect(p('turn on shortcut tips')).toEqual({ kind: 'shortcut-tips', on: true })
   })
 
+  it('quiet mode is its own command, never focus mode or "be quiet"', () => {
+    expect(p('quiet mode on')).toEqual({ kind: 'quiet-mode', on: true })
+    expect(p('turn on do not disturb')).toEqual({ kind: 'quiet-mode', on: true })
+    expect(p("don't disturb me")).toEqual({ kind: 'quiet-mode', on: true })
+    expect(p('turn off quiet mode')).toEqual({ kind: 'quiet-mode', on: false })
+    expect(p('quiet mode off')).toEqual({ kind: 'quiet-mode', on: false })
+    expect(p('focus mode on')).toEqual({ kind: 'focus-on' })
+    expect(p('quiet')).toBeNull()
+    expect(p('be quiet')).toBeNull()
+  })
+
   it('leaves everything else to the model', () => {
     expect(p('open notepad')).toBeNull()
     expect(p('what changed in the latest version of blender and how do I use it now')).toBeNull()

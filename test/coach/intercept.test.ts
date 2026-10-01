@@ -9,7 +9,7 @@ const saveConfig = vi.fn((p: { helpers?: Partial<HelpersConfig> }) => {
   helpers = { ...helpers, ...p.helpers }
 })
 vi.mock('../../src/main/config', () => ({
-  loadConfig: () => ({ helpers }),
+  loadConfig: () => ({ helpers, agent: { background: { max: 2, quiet: false } } }),
   saveConfig: (p: { helpers?: Partial<HelpersConfig> }) => saveConfig(p)
 }))
 vi.mock('../../src/main/agent/instance', () => ({ getAgent: () => null }))
@@ -17,7 +17,11 @@ vi.mock('../../src/main/a11y', () => ({ announce: vi.fn() }))
 vi.mock('../../src/main/teach', () => ({ skillRegistry: () => null }))
 vi.mock('../../src/main/windows/assistant', () => ({ requestConfirm: vi.fn(async () => false) }))
 vi.mock('../../src/main/actions/executor', () => ({ executeActions: vi.fn() }))
-vi.mock('../../src/main/ipc/settings', () => ({ onConfigPatched: vi.fn() }))
+const patchConfig = vi.fn(async (p: unknown) => p)
+vi.mock('../../src/main/ipc/settings', () => ({
+  onConfigPatched: vi.fn(),
+  patchConfig: (p: unknown) => patchConfig(p)
+}))
 const focusOn = vi.fn(async () => 'Focus mode on.')
 vi.mock('../../src/main/focus', () => ({
   focusOn: (o: unknown) => focusOn(o),
@@ -76,5 +80,14 @@ describe('interceptHelpers', () => {
       text: 'Shortcut tips are on.'
     })
     expect(helpers.shortcutCoach).toBe(true)
+  })
+
+  it('"quiet mode on" sets agent.background.quiet and keeps the other limits', async () => {
+    expect(await interceptHelpers('quiet mode on')).toMatchObject({
+      text: expect.stringContaining('Quiet mode is on')
+    })
+    expect(patchConfig).toHaveBeenCalledWith({
+      agent: { background: { max: 2, quiet: true } }
+    })
   })
 })

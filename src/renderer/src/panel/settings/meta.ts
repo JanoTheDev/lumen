@@ -95,7 +95,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Background & routines',
     icon: icons.repeat,
     keywords:
-      'background tasks routines schedule every day weekday limits cost calls quiet proactive reminders when i open'
+      'background tasks routines schedule every day weekday limits cost calls quiet mode do not disturb proactive reminders when i open'
   },
   {
     id: 'helpers',

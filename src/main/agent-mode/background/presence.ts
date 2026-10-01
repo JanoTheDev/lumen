@@ -1,5 +1,5 @@
 // When a background task may speak up (skills-and-background-agents.md §2): only while the user
-// is around (own input in the last 2 minutes), not in focus mode, and not in the middle of a
+// is around (own input in the last 2 minutes), not in quiet mode, and not in the middle of a
 // turn of their own (then the notice waits for the turn to end).
 
 export const PRESENT_MS = 2 * 60_000
@@ -7,7 +7,7 @@ export const PRESENT_MS = 2 * 60_000
 export interface PresenceState {
   /** Time since the user's last keyboard or mouse input. */
   idleMs: number
-  /** Focus mode / do not disturb (config agent.background.quiet). */
+  /** Quiet mode / do not disturb (config agent.background.quiet); not focus mode (dimming). */
   quiet: boolean
   /** A query, dictation or confirm of the user's is in progress. */
   midTurn: boolean

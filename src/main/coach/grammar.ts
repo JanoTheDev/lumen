@@ -1,5 +1,5 @@
 // Whole-utterance voice commands for the helpers (11 Phase C), pure: focus mode, undo, "what
-// changed?", reading level, the journal, error rescue and shortcut tips. Matched on the
+// changed?", reading level, the journal, error rescue, shortcut tips and quiet mode. Matched on the
 // normalized utterance; anything longer or looser goes on to the model.
 import type { ReadingLevel } from '@shared/config'
 
@@ -17,6 +17,8 @@ export type HelperCommand =
   /** "yes" / "yes please" / "explain it": only claimed while an error offer is open. */
   | { kind: 'accept-offer' }
   | { kind: 'shortcut-tips'; on: boolean }
+  /** Quiet mode (config agent.background.quiet): finished background tasks are not spoken. */
+  | { kind: 'quiet-mode'; on: boolean }
 
 const NUMBERS: Record<string, number> = {
   one: 1,
@@ -145,6 +147,16 @@ const RULES: Rule[] = [
   [
     /^(?:turn on|start|enable) (?:the )?shortcut (?:tips|coach|hints)$|^shortcut (?:tips|coach) on$/,
     () => ({ kind: 'shortcut-tips', on: true })
+  ],
+
+  // ---- quiet mode (not focus mode, which dims the screen) ----
+  [
+    /^(?:turn on |start |switch on |enable )(?:quiet mode|do not disturb)$|^(?:quiet mode|do not disturb)(?: on)?$|^(?:do not|don't) disturb me$/,
+    () => ({ kind: 'quiet-mode', on: true })
+  ],
+  [
+    /^(?:turn off |stop |end |exit |switch off |disable )(?:quiet mode|do not disturb)$|^(?:quiet mode|do not disturb) off$/,
+    () => ({ kind: 'quiet-mode', on: false })
   ]
 ]
 
