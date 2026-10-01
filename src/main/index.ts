@@ -30,6 +30,8 @@ import { assertSafeUrl, isSafeUrl } from './actions/safety'
 import { replaySavedGuide, saveLastAsGuide, startGuide } from './guides/session'
 import { cancelAll } from './query/cancel'
 import { interceptLocal } from './query/local'
+import { installHelpers, interceptHelpers } from './coach'
+import { registerHelpersIpc } from './coach/ipc'
 import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
 import { runQuery } from './query/pipeline'
 import { setAnswerAnnouncer, speakAnswer, warmTts } from './speech/tts'
@@ -112,6 +114,7 @@ function registerIpc(): void {
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerTeachIpc()
   registerSkillsIpc()
+  registerHelpersIpc()
   registerBridgesIpc()
   registerConnectorsIpc()
   registerMemoryIpc()
@@ -129,7 +132,8 @@ function registerIpc(): void {
     }
   })
   registerQueryIpc({
-    intercept: (prompt) => interceptAgentMode(prompt) ?? interceptLocal(prompt),
+    intercept: (prompt) =>
+      interceptAgentMode(prompt) ?? interceptHelpers(prompt) ?? interceptLocal(prompt),
     preempt: (prompt, opts, scope) =>
       opts.lowDetail ? Promise.resolve(false) : maybeAutoDictate(prompt, scope.signal),
     runQuery: (prompt, opts, scope) =>
@@ -178,6 +182,7 @@ app.whenReady().then(() => {
   installA11y()
   installLessonOutput()
   installTeach()
+  installHelpers()
   installSkills()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
   installLiveFeedback(announce)
