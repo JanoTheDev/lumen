@@ -1,4 +1,9 @@
-import { BrowserWindow, type BrowserWindowConstructorOptions, type WebPreferences } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  type BrowserWindowConstructorOptions,
+  type WebPreferences
+} from 'electron'
 import { join, resolve, sep } from 'path'
 import { fileURLToPath } from 'url'
 import { is } from '@electron-toolkit/utils'
@@ -18,11 +23,26 @@ export function securePrefs(): WebPreferences {
     sandbox: true,
     contextIsolation: true,
     nodeIntegration: false,
-    webSecurity: true
+    webSecurity: true,
+    // Overlays are never focused; without this their animations stall in the background.
+    backgroundThrottling: false
   }
 }
 
+let gpuLogged = false
+
+/** Logs the GPU feature status once so jank reports can be checked against it. */
+function logGpuStatus(): void {
+  if (gpuLogged) return
+  gpuLogged = true
+  const s = app.getGPUFeatureStatus()
+  console.log(
+    `[gpu] gpu_compositing=${s.gpu_compositing} webgl=${s.webgl} rasterization=${s.rasterization}`
+  )
+}
+
 export function createWindow(opts: BrowserWindowConstructorOptions): BrowserWindow {
+  logGpuStatus()
   return new BrowserWindow({ ...opts, webPreferences: securePrefs() })
 }
 
