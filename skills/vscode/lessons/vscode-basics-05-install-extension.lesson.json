@@ -76,7 +76,7 @@
       },
       "hints": [
         "Check the publisher name and download count to pick the genuine extension.",
-        "Any extension you like is fine; spell checking is a harmless one to practise with."
+        "Any extension you like is fine; spell checking is a harmless one to practice with."
       ],
       "why": "Searching by name finds extensions without leaving VS Code.",
       "doItForMe": { "actions": [{ "t": "type", "text": "Code Spell Checker" }] }
@@ -127,7 +127,7 @@
       },
       "hints": [
         "Press Escape or delete the text to clear the box.",
-        "Right click an installed extension to disable or uninstall it later."
+        "Right-click an installed extension to disable or uninstall it later."
       ],
       "why": "Knowing where extensions are listed lets you turn them off if one causes trouble."
     }

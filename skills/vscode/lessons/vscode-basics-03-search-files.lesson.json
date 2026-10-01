@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-folder",
-      "say": "Check that a folder is open. The Explorer on the left should list files. Say next when it does.",
+      "say": "Check that a folder is open. The Explorer on the left should list files. Say done when it does.",
       "target": { "region": "side-bar" },
       "expect": {
         "type": "user-action",

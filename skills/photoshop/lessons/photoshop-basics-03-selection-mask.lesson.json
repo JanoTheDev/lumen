@@ -99,7 +99,7 @@
     },
     {
       "id": "paint-mask",
-      "say": "Press B, press X until white is the front color, and paint over any missing edges of the subject.",
+      "say": "Press B, then press X until white is the foreground color. Paint over any missing edges of the subject.",
       "target": {
         "region": "canvas"
       },

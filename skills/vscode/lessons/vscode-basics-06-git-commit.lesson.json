@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-repo",
-      "say": "Look at the bottom left of the Status Bar. Say next if it shows a branch name such as main.",
+      "say": "Look at the bottom left of the Status Bar. Say done if it shows a branch name such as main.",
       "target": { "region": "status-bar" },
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
@@ -39,7 +39,7 @@
       },
       "hints": [
         "Adding a blank line is enough for practice.",
-        "A white dot on the tab means the file is not saved yet."
+        "A dot on the tab means the file is not saved yet."
       ],
       "why": "Git only sees changes that are saved to disk."
     },
@@ -86,7 +86,7 @@
       },
       "hints": [
         "The icon appears only while the mouse is over the file row.",
-        "Right click the file and choose Stage Changes as another route."
+        "Right-click the file and choose Stage Changes as another route."
       ],
       "why": "Staging picks exactly which changes go into the next commit."
     },

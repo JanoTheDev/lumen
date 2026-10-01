@@ -134,7 +134,7 @@
     },
     {
       "id": "choose-file",
-      "say": "Pick a folder, type a file name in the field at the bottom, then click the save button at the bottom right.",
+      "say": "Pick a folder, type a file name at the bottom, then click the save button at the bottom right.",
       "target": { "text": "Save As Image" },
       "expect": {
         "type": "user-action",

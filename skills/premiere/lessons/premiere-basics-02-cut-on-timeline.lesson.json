@@ -178,7 +178,7 @@
       },
       "hints": [
         "Plain Delete leaves an empty gap. Holding Shift closes it.",
-        "You can also right click the clip and choose Ripple Delete."
+        "You can also right-click the clip and choose Ripple Delete."
       ],
       "why": "Ripple delete keeps the edit tight with no black gaps.",
       "doItForMe": {

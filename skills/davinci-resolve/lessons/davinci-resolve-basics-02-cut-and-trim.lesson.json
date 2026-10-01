@@ -170,7 +170,7 @@
         }
       },
       "hints": [
-        "A selected clip gets a coloured outline. Click once, without dragging.",
+        "A selected clip gets a colored outline. Click once, without dragging.",
         "If both sides highlight, click an empty area first and then click only one piece."
       ],
       "why": "Resolve only deletes what is selected, so pick the part you do not want."
@@ -199,7 +199,7 @@
       },
       "hints": [
         "Plain Backspace leaves an empty gap. Add Shift to slide the later clips over.",
-        "You can also right click the clip and choose Ripple Delete."
+        "You can also right-click the clip and choose Ripple Delete."
       ],
       "why": "Ripple delete keeps your edit tight, with no black gaps between clips.",
       "doItForMe": {
@@ -237,7 +237,7 @@
         "The Trim button is next to the arrow in the toolbar above the timeline.",
         "Click the timeline first if the key does nothing, then press T again."
       ],
-      "why": "Trim mode lets you change where clips start and end while keeping neighbours in place.",
+      "why": "Trim mode lets you change where clips start and end while keeping neighbors in place.",
       "doItForMe": {
         "actions": [
           {

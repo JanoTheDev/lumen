@@ -86,7 +86,7 @@
       },
       "hints": [
         "Click the clip first so the Timeline has focus, then press G.",
-        "You can also right click the clip and choose Audio Gain."
+        "You can also right-click the clip and choose Audio Gain."
       ],
       "why": "Audio Gain changes loudness by a number you type, which is precise and repeatable.",
       "doItForMe": {

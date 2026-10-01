@@ -159,7 +159,7 @@
     },
     {
       "id": "create-timeline",
-      "say": "Right click a selected clip, point to Timelines, then choose Create New Timeline Using Selected Clips.",
+      "say": "Right-click a selected clip, point to Timelines, then choose Create New Timeline Using Selected Clips.",
       "target": {
         "region": "edit-media-pool"
       },
@@ -171,7 +171,7 @@
         }
       },
       "hints": [
-        "Right click directly on one of the highlighted thumbnails so the menu shows clip options.",
+        "Right-click directly on one of the highlighted thumbnails so the menu shows clip options.",
         "Another way is to drag the selected clips down into the empty timeline area."
       ],
       "why": "A timeline is where you arrange clips into the order of your video."

@@ -126,7 +126,7 @@
       },
       "hints": [
         "Drop it anywhere on the canvas, inside or outside a frame.",
-        "Alt drag the original button on the canvas also makes a copy."
+        "Holding Alt while you drag the original button also makes a copy."
       ],
       "why": "Each copy is an instance that follows the main component."
     },

@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-not-recording",
-      "say": "Make sure the Controls panel says Start Recording, not Stop Recording. Say next when it does.",
+      "say": "Make sure the Controls panel says Start Recording, not Stop Recording. Say done when it does.",
       "target": { "region": "controls-dock" },
       "expect": {
         "type": "user-action",
@@ -31,7 +31,7 @@
         "If it says Stop Recording, click it first.",
         "Recording settings are locked while a recording is running."
       ],
-      "why": "OBS greys out output settings during a recording."
+      "why": "OBS grays out output settings during a recording."
     },
     {
       "id": "open-settings",

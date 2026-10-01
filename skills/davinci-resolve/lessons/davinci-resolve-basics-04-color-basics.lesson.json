@@ -104,7 +104,7 @@
       },
       "hints": [
         "Look at the node editor at the top right. A second numbered box appears after you press it.",
-        "You can also right click in the node editor and choose Add Node, then Add Serial."
+        "You can also right-click in the node editor and choose Add Node, then Add Serial."
       ],
       "why": "Keeping each change in its own node lets you switch it off or redo it later.",
       "doItForMe": {
@@ -135,7 +135,7 @@
       },
       "hints": [
         "Lift is the first of the four wheels at the bottom left. The dial is the horizontal strip under it.",
-        "Small moves are enough. Double click the wheel name to reset it."
+        "Small moves are enough. Double-click the wheel name to reset it."
       ],
       "why": "Lift controls the shadows, which gives the picture depth."
     },

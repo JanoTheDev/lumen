@@ -32,7 +32,7 @@
         }
       },
       "hints": ["Hold the Windows key and tap E.", "Click the folder icon on the taskbar instead."],
-      "why": "File Explorer is where you organise everything you save.",
+      "why": "File Explorer is where you organize everything you save.",
       "doItForMe": {
         "actions": [
           {
@@ -71,7 +71,7 @@
         "Documents has a page icon. It may be under Home or This PC.",
         "Click the address bar, type Documents, and press Enter."
       ],
-      "why": "Documents is a safe place to practice that is backed up with your other files."
+      "why": "Documents is a safe place to practice, away from system files."
     },
     {
       "id": "new-folder",

@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-normal-mode",
-      "say": "Make sure the preview is one single picture, not split in two. Say next when it is.",
+      "say": "Make sure the preview is one single picture, not split in two. Say done when it is.",
       "target": { "region": "preview" },
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
@@ -36,7 +36,7 @@
       },
       "hints": [
         "Scenes is the panel at the far left of the bottom row.",
-        "You can also right click empty space in the Scenes panel and choose Add."
+        "You can also right-click empty space in the Scenes panel and choose Add."
       ],
       "why": "Each scene is a separate layout you can jump to.",
       "doItForMe": { "actions": [{ "t": "click", "region": "scenes-add-button" }] }

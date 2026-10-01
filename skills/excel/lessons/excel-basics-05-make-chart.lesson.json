@@ -32,7 +32,7 @@
       },
       "hints": [
         "Any two columns, one of labels and one of numbers, will work.",
-        "Go back to the first lesson to create the sample data."
+        "The first two lessons create this sample data."
       ],
       "why": "A chart needs labels and numbers to plot."
     },

@@ -147,7 +147,7 @@
       },
       "hints": [
         "Inspector is the last button at the right end of the toolbar under the menu bar.",
-        "Double clicking the title clip in the timeline also opens it in the Inspector."
+        "Double-clicking the title clip in the timeline also opens it in the Inspector."
       ],
       "why": "The Inspector is where you change the words, font, size and color."
     },

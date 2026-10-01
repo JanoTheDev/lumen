@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "focus-vscode",
-      "say": "Make sure VS Code is the window in front. Say next when it is.",
+      "say": "Make sure VS Code is the window in front. Say done when it is.",
       "target": null,
       "expect": {
         "type": "user-action",
@@ -84,14 +84,14 @@
       "target": { "text": "Yes, I trust the authors" },
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
-        "If no question appears, the folder is already trusted; say next.",
+        "If no question appears, the folder is already trusted; say done.",
         "Choosing No opens Restricted Mode, which is safer for downloaded code."
       ],
       "why": "Trust decides whether tasks and extensions may run code from this folder."
     },
     {
       "id": "open-file",
-      "say": "In the Explorer on the left, double click a file to open it in the editor.",
+      "say": "In the Explorer on the left, double-click a file to open it in the editor.",
       "target": { "region": "side-bar" },
       "expect": {
         "type": "user-action",
@@ -104,7 +104,7 @@
         }
       },
       "hints": [
-        "A single click opens a preview that the next file replaces; a double click keeps it.",
+        "A single click opens a preview that the next file replaces; a double-click keeps it.",
         "Press Control P and type part of a file name to open it from the keyboard."
       ],
       "why": "Files you open stay as tabs so you can switch between them."

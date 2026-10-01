@@ -189,7 +189,7 @@
       },
       "hints": [
         "Keep the chain icon beside Width and Height joined so the photo does not stretch.",
-        "Check that the unit menu next to the sizes says px."
+        "Check that the unit menu next to the sizes shows px, which means pixels."
       ],
       "why": "A smaller pixel size makes the file lighter for email and the web."
     }

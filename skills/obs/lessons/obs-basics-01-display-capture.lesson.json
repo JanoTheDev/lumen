@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "find-sources-dock",
-      "say": "Look at the bottom row of OBS. The second panel from the left is Sources. Say next when you see it.",
+      "say": "Find the Sources panel, second from the left in the bottom row of OBS. Say done when you see it.",
       "target": { "region": "sources-dock" },
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
@@ -39,7 +39,7 @@
       },
       "hints": [
         "The plus sign is a small icon under the list of sources, at its left edge.",
-        "You can also right click empty space inside the Sources panel and choose Add."
+        "You can also right-click empty space inside the Sources panel and choose Add."
       ],
       "why": "The plus button lists every kind of source OBS can capture.",
       "doItForMe": { "actions": [{ "t": "click", "region": "sources-add-button" }] }

@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-preview",
-      "say": "Check the preview shows what you want to record. Say next when it looks right.",
+      "say": "Check the preview shows what you want to record. Say done when it looks right.",
       "target": { "region": "preview" },
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
@@ -58,7 +58,7 @@
       "expect": { "type": "user-action", "check": "manual" },
       "hints": [
         "The red dot and timer at the bottom show a recording is in progress.",
-        "Say next when a few seconds have passed."
+        "Say done when a few seconds have passed."
       ],
       "why": "A short test clip checks picture and sound before a real session."
     },

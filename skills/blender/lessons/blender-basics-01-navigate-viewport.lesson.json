@@ -34,7 +34,7 @@
     },
     {
       "id": "orbit",
-      "say": "With your mouse over the 3D viewport, hold the middle mouse button and drag to orbit around the scene.",
+      "say": "Hold the middle mouse button over the 3D viewport and drag to orbit around the scene.",
       "target": { "region": "3d-viewport" },
       "expect": {
         "type": "user-action",

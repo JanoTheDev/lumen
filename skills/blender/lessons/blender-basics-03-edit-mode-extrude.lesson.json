@@ -168,7 +168,7 @@
         }
       },
       "hints": [
-        "The face follows the mouse until you click. Right click cancels the move.",
+        "The face follows the mouse until you click. Right-click cancels the move.",
         "For an exact height, press E, type 1, and press Enter. Control Z undoes the extrude."
       ],
       "why": "Extrude adds new geometry, so you can grow shapes out of a simple cube.",

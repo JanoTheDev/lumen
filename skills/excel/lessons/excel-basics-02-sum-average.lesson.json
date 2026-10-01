@@ -341,7 +341,7 @@
       },
       "hints": [
         "The cell shows the result, the formula bar shows how it was calculated.",
-        "Press Control and the backtick key to show every formula in the sheet, and again to hide them."
+        "Press Control and the key left of 1 to show every formula in the sheet. Press it again to hide them."
       ],
       "why": "Knowing where formulas live helps you check and fix them."
     },

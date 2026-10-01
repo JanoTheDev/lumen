@@ -172,7 +172,7 @@
         "You should now be in A2, right under Month.",
         "Click cell A2 first if the selection moved somewhere else."
       ],
-      "why": "Excel recognises month names and can continue them for you.",
+      "why": "Excel recognizes month names and can continue them for you.",
       "doItForMe": {
         "actions": [
           {
@@ -264,7 +264,7 @@
       },
       "hints": [
         "The pointer turns into a thin black plus sign over the square. Hold the mouse button while dragging.",
-        "Select A2 to A7, then on the Home tab choose Fill and then Series, and click OK."
+        "Select A2 to A7, then on the Home tab choose Fill, then Series, pick AutoFill, and click OK."
       ],
       "why": "Autofill continues a pattern so you don't type every entry.",
       "timeoutSec": 120

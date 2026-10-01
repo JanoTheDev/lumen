@@ -196,7 +196,7 @@
       },
       "hints": [
         "Rendering time depends on the length of the video and your computer.",
-        "Right click the finished job and choose Open File Location to find the file."
+        "Open File Explorer and go to the folder you chose under Location."
       ],
       "why": "Checking the finished file confirms the export worked before you upload it.",
       "timeoutSec": 600

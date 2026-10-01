@@ -11,7 +11,7 @@
   "steps": [
     {
       "id": "check-object-mode",
-      "say": "Check the top left of the 3D viewport. It should say Object Mode. If it says Edit Mode, press Tab.",
+      "say": "Make sure the top left of the 3D viewport says Object Mode. Press Tab if it says Edit Mode.",
       "target": {
         "region": "viewport-header"
       },
@@ -280,7 +280,7 @@
       },
       "hints": [
         "Type zero, a period, then five. The header shows the scale while you type.",
-        "Right click or press Escape to cancel, then try again. Control Z undoes a confirmed scale."
+        "Right-click or press Escape to cancel, then try again. Control Z undoes a confirmed scale."
       ],
       "why": "Scaling with a typed value keeps the proportions exact.",
       "doItForMe": {

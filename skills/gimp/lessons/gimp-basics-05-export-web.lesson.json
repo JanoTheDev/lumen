@@ -70,7 +70,7 @@
         "It is in the File menu, called Export As.",
         "Click on the image first so GIMP has focus, then press the keys."
       ],
-      "why": "Export is how GIMP makes JPG or PNG files; Save only writes XCF.",
+      "why": "Export makes JPG or PNG files. Save only writes GIMP's own XCF format.",
       "doItForMe": {
         "actions": [
           {

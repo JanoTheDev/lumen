@@ -38,7 +38,7 @@
     },
     {
       "id": "material-tab",
-      "say": "In the Properties editor at the bottom right, click the Material tab. It is the red checkered sphere near the bottom of the icon column.",
+      "say": "In the Properties editor at the bottom right, click the Material tab, the red checkered sphere.",
       "target": { "region": "properties-tabs" },
       "expect": {
         "type": "user-action",
@@ -59,7 +59,7 @@
       },
       "hints": [
         "Hover over the icons in the narrow column on the left edge of the Properties editor. A tooltip names each tab.",
-        "The Material tab is usually the last icon in the column."
+        "The Material tab is right below the green triangle of the Data tab."
       ],
       "why": "All surface settings for the selected object live in the Material tab."
     },
@@ -102,7 +102,7 @@
         }
       },
       "hints": [
-        "Base Color is one of the first settings under Principled BSDF. The bar is light grey.",
+        "Base Color is one of the first settings under Principled BSDF. The bar is light gray.",
         "Scroll down inside the Properties editor if the Surface panel is out of view."
       ],
       "why": "Base Color is the main color of the surface."
@@ -123,14 +123,14 @@
             },
             {
               "type": "vision",
-              "prompt": "Is the bar next to Base Color now a clear color instead of light grey?"
+              "prompt": "Is the bar next to Base Color now a clear color instead of light gray?"
             }
           ]
         }
       },
       "hints": [
         "The slider beside the wheel sets brightness. Drag it up if the color looks black.",
-        "You can also type a hex code, such as FF0000 for red, in the Hex field of the picker."
+        "You can also type a color code in the Hex field of the picker."
       ],
       "why": "The color is stored in the material, so every object using it changes together."
     },

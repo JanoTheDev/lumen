@@ -31,7 +31,7 @@
     },
     {
       "id": "open-terminal",
-      "say": "Press Control and the backtick key to open the terminal. Backtick is left of the 1 key.",
+      "say": "Press Control and the backtick key, left of the 1 key, to open the terminal.",
       "target": { "shortcut": "Ctrl+`" },
       "expect": {
         "type": "user-action",
@@ -85,7 +85,7 @@
     },
     {
       "id": "hide-terminal",
-      "say": "Press Control backtick again to hide the panel. The terminal keeps running in the background.",
+      "say": "Press Control and backtick again to hide the panel. The terminal keeps running.",
       "target": { "shortcut": "Ctrl+`" },
       "expect": {
         "type": "user-action",

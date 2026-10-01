@@ -106,7 +106,7 @@
       },
       "hints": [
         "Create is the blue button in the lower right corner of the Import screen.",
-        "If Create is greyed out, give the project a name first."
+        "If Create is grayed out, give the project a name first."
       ],
       "why": "Creating the project opens the editing workspace with your clips ready."
     },
