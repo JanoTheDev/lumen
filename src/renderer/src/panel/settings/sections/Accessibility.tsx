@@ -1,4 +1,5 @@
-import { Card, NumberField, SegmentedControl, Slider, Switch } from '../../../ui'
+import { profileSummary } from '@shared/profiles'
+import { Button, Card, NumberField, SegmentedControl, Slider, Switch } from '../../../ui'
 import type { SectionProps } from '../meta'
 
 const TRISTATE = [
@@ -8,8 +9,21 @@ const TRISTATE = [
 ] as const
 
 export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
+  const summary = profileSummary(cfg)
   return (
     <>
+      <Card
+        title="Profile"
+        description="Ready-made settings for how you use your PC. Pick several if they fit."
+      >
+        <p>{summary || 'Standard settings, no profile picked.'}</p>
+        <div className="panel-row">
+          <Button onClick={() => window.lumen.send('panel:open', 'onboarding')}>
+            Choose profiles
+          </Button>
+        </div>
+      </Card>
+
       <Card title="Seeing" description="Size, motion and contrast for every Lumen window.">
         <Slider
           label="Interface size"
