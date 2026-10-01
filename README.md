@@ -69,7 +69,7 @@ Also available now:
 **Pointing and actions**
 
 - [ ] Element-accurate pointing via UI Automation, numbered marks and a zoom-in second look
-- [ ] Observe → act → verify loop that never retypes text it already entered
+- [x] Observe → act → verify loop that never retypes text it already entered
 - [ ] Agent mode with permissions, a visible ghost cursor and confirm-before-risky-actions
 
 **Voice**
