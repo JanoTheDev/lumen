@@ -14,6 +14,9 @@ import { getAgent } from '../agent/instance'
 import { announce, wantFocusEvents } from '../a11y'
 import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
 import { verifyExpectation } from '../ai/verify'
+import { WHY_PROMPT, whyTurn } from '../ai/prompts/lesson'
+import { getProvider } from '../ai/providers'
+import { skillContext } from '../ai/skills'
 import { matchPlayGuide } from '../guides/voice-nav'
 import { setTeachHandler } from '../query/pipeline'
 import { flattenElements } from '../query/uia-list'
@@ -313,6 +316,49 @@ async function runAction(
   }
 }
 
+// ---- Why? ----
+
+const WHY_TIMEOUT_MS = 8000
+const WHY_NOTES_TOKENS = 600
+
+async function explainWhy(
+  lesson: Lesson,
+  step: Lesson['steps'][number],
+  skill: Skill | null,
+  signal?: AbortSignal
+): Promise<string | null> {
+  const { llm, model, effort } = getProvider('fast')
+  const i = lesson.steps.indexOf(step)
+  const timeout = AbortSignal.timeout(WHY_TIMEOUT_MS)
+  const res = await llm.complete(
+    {
+      model,
+      system: [{ text: WHY_PROMPT, cacheable: true }],
+      messages: [
+        {
+          role: 'user',
+          content: whyTurn({
+            app: skill?.name ?? lesson.app,
+            lessonTitle: lesson.title,
+            step: step.say,
+            previous: lesson.steps[i - 1]?.say,
+            next: lesson.steps[i + 1]?.say,
+            appNotes:
+              skill && hasMatchRules(skill)
+                ? skillContext(skill, step.say, WHY_NOTES_TOKENS)
+                : undefined
+          })
+        }
+      ],
+      maxTokens: 120,
+      effort
+    },
+    signal ? AbortSignal.any([signal, timeout]) : timeout
+  )
+  log('plan', `lesson why for ${lesson.id}/${step.id} (${res.model})`)
+  return res.text.trim() || null
+}
+
 // ---- Ports ----
 
 function realPorts(): Ports {
@@ -380,6 +426,13 @@ function realPorts(): Ports {
     // The announcer routes to the screen reader, TTS or captions only, per the user's settings.
     speak: { say: (text) => announce(text, { kind: 'step', priority: 'assertive' }) },
     announce: { announce: () => {} },
+    explain: {
+      why: (lesson, step, skill, signal) =>
+        explainWhy(lesson, step, skill, signal).catch((e: Error) => {
+          log('fail', `lesson why failed (${e.message})`)
+          return null
+        })
+    },
     events: {
       stepStarted: (lessonId, step) => bus.emit({ type: 'lesson.step-started', lessonId, step }),
       stepCompleted: (lessonId, step) =>

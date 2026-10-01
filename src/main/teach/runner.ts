@@ -3,7 +3,15 @@
 import { PausableTimer, realClock, type Clock } from '../a11y/timings'
 import { startCheck, newBudget, type CheckHandle } from './checks'
 import { accepts, reduce } from './engine'
-import { buildScene, describeDoIt, doItActions, successScene } from './hints'
+import {
+  buildScene,
+  describeDoIt,
+  doItActions,
+  fallbackWhy,
+  firstSentences,
+  stepState,
+  successScene
+} from './hints'
 import type { LessonContext } from './context'
 import type { Lesson } from './lesson'
 import type { CheckResult, Ports, ResolvedTarget } from './ports'
@@ -49,6 +57,8 @@ export class LessonRunner {
   /** Latest scene request; an older target lookup that finishes late draws nothing. */
   private sceneSeq = 0
   private listeners = new Set<(s: LessonState) => void>()
+  /** Model answers to "why?", per lesson step, for the session. */
+  private whyCache = new Map<string, string>()
 
   constructor(
     private readonly ports: Ports,
@@ -176,6 +186,9 @@ export class LessonRunner {
       case 'exec':
         void this.exec(fx.step)
         return
+      case 'explain':
+        void this.explain(fx.step)
+        return
       case 'event': {
         const id = this.s.lesson?.id ?? ''
         if (fx.name === 'step-started') ports.events.stepStarted(id, fx.step)
@@ -252,6 +265,28 @@ export class LessonRunner {
     if (token === this.token && this.s.index === step)
       this.dispatch({ type: 'check', step, result: res, forced: true })
     return res
+  }
+
+  /** Says why a step matters: the cached or model answer (≤ 2 sentences), else a fallback. */
+  private async explain(step: number): Promise<void> {
+    const lesson = this.s.lesson
+    const st = lesson?.steps[step]
+    if (!lesson || !st) return
+    const key = `${lesson.id}/${st.id}`
+    let text = this.whyCache.get(key)
+    if (!text) {
+      const answer = await this.ports.explain
+        .why(lesson, st, this.skill, this.stepAbort.signal)
+        .catch(() => null)
+      text = answer?.trim() ? firstSentences(answer, 2) : undefined
+      if (text) this.whyCache.set(key, text)
+    }
+    // Dropped when the lesson moved on while the model answered.
+    if (this.s.lesson !== lesson || this.s.index !== step || !this.running()) return
+    const say = text ?? fallbackWhy(lesson)
+    this.ports.speak.say(say, { interruptible: true })
+    this.ports.announce.announce(say, 'polite')
+    if (this.s.phase === 'step.waiting') this.ports.screen.emitState(stepState(lesson, step, say))
   }
 
   private async exec(step: number): Promise<void> {

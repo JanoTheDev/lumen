@@ -208,3 +208,40 @@ describe('LessonRunner scene and state output (hint ladder)', () => {
     expect(t.scenes.slice(before).every((s) => s?.buddy?.label === 'Ctrl+S')).toBe(true)
   })
 })
+
+describe('LessonRunner "why?" (T20)', () => {
+  it('says the step why without touching the check', async () => {
+    const why = vi.fn(async () => 'never')
+    const t = setup({ explain: { why } })
+    t.runner.start(LESSON, { autoStart: true })
+    await flush()
+    t.runner.command('why')
+    expect(t.said.at(-1)).toBe('Menus hold the commands.')
+    expect(t.states.at(-1)?.statusText).toBe('Menus hold the commands.')
+    expect(why).not.toHaveBeenCalled()
+    expect(t.runner.state.phase).toBe('step.waiting')
+  })
+
+  it('asks the model when the step has no why, keeps two sentences and caches it', async () => {
+    const why = vi.fn(async () => 'Saving writes the file. It keeps your work safe. And more.')
+    const t = setup({ explain: { why } })
+    t.runner.start(LESSON, { autoStart: true, stepIndex: 2 })
+    await flush()
+    t.runner.command('why')
+    await flush()
+    expect(t.said.at(-1)).toBe('Saving writes the file. It keeps your work safe.')
+    t.runner.command('why')
+    await flush()
+    expect(why).toHaveBeenCalledTimes(1)
+    expect(t.runner.state.phase).toBe('step.waiting')
+  })
+
+  it('falls back to a plain sentence when no model answers', async () => {
+    const t = setup({ explain: { why: async () => null } })
+    t.runner.start(LESSON, { autoStart: true, stepIndex: 2 })
+    await flush()
+    t.runner.command('why')
+    await flush()
+    expect(t.said.at(-1)).toBe('This step is part of Three steps.')
+  })
+})

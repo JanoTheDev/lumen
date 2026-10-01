@@ -335,15 +335,15 @@ function onCommand(s: LessonState, c: LessonCommand): Transition {
         ]
       }
     case 'why':
+      // Checks and timers keep running; the reason also shows in the bar.
       return {
         state: s,
-        effects: [
-          {
-            type: 'say',
-            text: step.why ?? `This step is part of ${s.lesson!.title}.`,
-            interruptible: true
-          }
-        ]
+        effects: step.why
+          ? [
+              { type: 'say', text: step.why, interruptible: true },
+              { type: 'assistant', state: stepState(s.lesson!, s.index, step.why) }
+            ]
+          : [{ type: 'explain', step: s.index }]
       }
     case 'pause':
       return pause(s, 'user')

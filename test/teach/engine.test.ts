@@ -206,6 +206,18 @@ describe('lesson reducer', () => {
     expect(says(r.effects)).toEqual(['Open the File menu.'])
     const w = drive([{ type: 'command', command: 'why' }], base)
     expect(says(w.effects)).toEqual(['Menus hold the commands.'])
+    expect(w.state).toEqual(base)
+    // No why in the lesson: the runner asks the model.
+    const last = drive(
+      [
+        { type: 'command', command: 'skip' },
+        { type: 'command', command: 'skip' }
+      ],
+      base
+    )
+    expect(drive([{ type: 'command', command: 'why' }], last.state).effects).toEqual([
+      { type: 'explain', step: 2 }
+    ])
   })
 
   it('slower doubles the gaps between hints', () => {

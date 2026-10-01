@@ -104,6 +104,8 @@ export type LessonEffect =
   | { type: 'cancelTimer'; id: TimerId }
   | { type: 'persist' }
   | { type: 'exec'; step: number }
+  /** Ask the model why the step matters (no `why` in the lesson), then say it. */
+  | { type: 'explain'; step: number }
   | { type: 'event'; name: 'step-started' | 'step-completed'; step: number }
   | { type: 'event'; name: 'done'; step: number; completed: boolean }
   | { type: 'log'; msg: string }

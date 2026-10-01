@@ -59,3 +59,27 @@ export function lessonTurn(i: LessonTurnInput): string {
   blocks.push(`<question>${i.question}</question>`)
   return blocks.join('\n')
 }
+
+// ---- "Why?" during a lesson (07 T20) ----
+
+export const WHY_PROMPT = `The user is following a step-by-step lesson in an app and asked why the current step matters. Answer in at most two short spoken sentences: what the step achieves and how it helps the task. Plain words, no markdown, no lists, never "simply", "just" or "obviously".
+
+${UNTRUSTED_CONTENT_RULE}`
+
+export interface WhyTurnInput {
+  app: string
+  lessonTitle: string
+  step: string
+  /** The steps before and after, for context. */
+  previous?: string
+  next?: string
+  appNotes?: string
+}
+
+export function whyTurn(i: WhyTurnInput): string {
+  const lines = [`app: ${i.app}`, `lesson: ${i.lessonTitle}`]
+  if (i.previous) lines.push(`previous step: ${i.previous}`)
+  if (i.next) lines.push(`next step: ${i.next}`)
+  const notes = i.appNotes ? `\n<app_notes>\n${i.appNotes}\n</app_notes>` : ''
+  return `<context>\n${lines.join('\n')}\n</context>${notes}\n<step>${i.step}</step>`
+}

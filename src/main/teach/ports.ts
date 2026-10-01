@@ -3,7 +3,14 @@
 // the verifier, TTS and the bus. The defaults do nothing, so everything runs in tests.
 import type { AssistantState, ScreenScene } from '@shared/events'
 import type { ElementNode, Point, Rect } from '@shared/types'
-import type { DoAction, ElementMatch, LessonTarget, UiaEventKind } from './lesson'
+import type {
+  DoAction,
+  ElementMatch,
+  Lesson,
+  LessonStep,
+  LessonTarget,
+  UiaEventKind
+} from './lesson'
 import type { Skill } from './registry'
 
 export type CheckResult = 'pass' | 'fail' | 'unknown'
@@ -106,6 +113,17 @@ export interface BridgePort {
   ): Promise<CheckResult>
 }
 
+/** "Why?" for a step without a `why` of its own (07 T20). */
+export interface ExplainPort {
+  /** A short spoken reason; null when no model answers. */
+  why(
+    lesson: Lesson,
+    step: LessonStep,
+    skill: Skill | null,
+    signal?: AbortSignal
+  ): Promise<string | null>
+}
+
 export interface LessonEvents {
   stepStarted(lessonId: string, step: number): void
   stepCompleted(lessonId: string, step: number): void
@@ -123,6 +141,7 @@ export interface Ports {
   speak: SpeakPort
   announce: AnnouncePort
   bridge: BridgePort
+  explain: ExplainPort
   events: LessonEvents
   log(tag: string, msg: string): void
 }
@@ -147,6 +166,7 @@ export function noopPorts(over: Partial<Ports> = {}): Ports {
     speak: { say: off },
     announce: { announce: off },
     bridge: { query: async () => 'unknown' },
+    explain: { why: async () => null },
     events: { stepStarted: off, stepCompleted: off, done: off },
     log: off,
     ...over

@@ -120,6 +120,21 @@ export function stepState(
 
 export const OFFER_ACTION_ID = 'lesson-do-it'
 
+/** At most `n` sentences of `text`, one line (model "why" answers). */
+export function firstSentences(text: string, n = 2): string {
+  const t = text.replace(/\s+/g, ' ').trim()
+  const parts = t.match(/[^.!?]+[.!?]+["')\]]*|[^.!?]+$/g) ?? [t]
+  return parts
+    .slice(0, n)
+    .map((p) => p.trim())
+    .join(' ')
+}
+
+/** Said when no reason is known. */
+export function fallbackWhy(lesson: Lesson): string {
+  return `This step is part of ${lesson.title}.`
+}
+
 /** What "do it for me" runs: the step's own actions, else one derived from its target. */
 export function doItActions(step: LessonStep): DoAction[] | null {
   if (step.doItForMe?.actions.length) return step.doItForMe.actions
