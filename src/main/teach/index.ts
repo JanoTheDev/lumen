@@ -525,12 +525,16 @@ export function saveGeneratedLesson(name?: string): Lesson | null {
 }
 
 /**
- * Starts a lesson from the picker: the running one stays, the one left part-way resumes on
- * its step, the onboarding mini lesson starts at once, anything else from its intro.
+ * Starts a lesson from the picker: the running one stays (a paused one resumes), the one left
+ * part-way resumes on its step, the onboarding mini lesson starts at once, anything else from
+ * its intro.
  */
 export function startOrResume(id: string): boolean {
   if (!runner) return false
-  if (runner.running() && runner.state.lesson?.id === id) return true
+  if (runner.running() && runner.state.lesson?.id === id) {
+    if (runner.state.phase === 'paused') runner.command('resume')
+    return true
+  }
   if (id === PRACTICE_LESSON_ID) {
     offer = null
     runner.start(PRACTICE_LESSON, {
