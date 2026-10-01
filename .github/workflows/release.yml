@@ -1,0 +1,79 @@
+name: release
+
+# Pushing a tag v<version> (matching package.json) builds the Windows installer and portable exe
+# and attaches them to a draft GitHub Release. Publishing the draft is done by hand.
+# Builds are unsigned: electron-updater checks the sha512 in latest.yml over HTTPS.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Tag matches package.json
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - run: npm ci
+
+      - run: npm test
+
+      # cargo build of native/, typecheck + bundle, NSIS + portable (--publish never), verify:package.
+      - run: npm run build:win
+
+      - name: Updater config is bundled
+        shell: bash
+        run: |
+          test -f dist/win-unpacked/resources/app-update.yml
+          cat dist/win-unpacked/resources/app-update.yml
+
+      - name: Draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          files=(
+            "dist/Lumen-Setup-$VERSION.exe"
+            "dist/Lumen-Setup-$VERSION.exe.blockmap"
+            "dist/Lumen-$VERSION-portable.exe"
+            "dist/latest.yml"
+            "dist/SHA256SUMS.txt"
+          )
+          for f in "${files[@]}"; do test -f "$f" || { echo "missing $f" >&2; exit 1; }; done
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            prerelease=()
+            case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --draft --verify-tag --generate-notes --title "Lumen $VERSION" "${prerelease[@]}"
+          fi
