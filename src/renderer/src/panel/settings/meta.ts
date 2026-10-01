@@ -16,6 +16,7 @@ export type SectionId =
   | 'models'
   | 'memory'
   | 'lessons'
+  | 'bridges'
   | 'privacy'
   | 'about'
 
@@ -70,6 +71,12 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Lessons',
     icon: icons.book,
     keywords: 'lessons guides library saved replay learn teach tutorial show me how'
+  },
+  {
+    id: 'bridges',
+    label: 'App helpers',
+    icon: icons.toggle,
+    keywords: 'app helpers bridges blender obs add-on addon websocket password lesson checks'
   },
   {
     id: 'privacy',

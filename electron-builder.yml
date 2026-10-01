@@ -32,6 +32,10 @@ extraResources:
     to: native/nvdaControllerClient.dll
   - from: build/third_party/
     to: third_party/
+  # Blender add-on source; Settings → App helpers zips it for "Install from Disk".
+  - from: bridges/blender/lumen_bridge/
+    to: bridges/blender/lumen_bridge/
+    filter: ['**/*', '!__pycache__/**']
   - from: native/vendor/nvda/license.txt
     to: third_party/nvda/license.txt
   - from: native/vendor/nvda/SOURCE.txt

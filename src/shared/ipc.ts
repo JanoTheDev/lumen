@@ -20,6 +20,15 @@ export const lessonCommandSchema = z.enum(LESSON_COMMANDS)
 
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])
+/** App bridges (07 T23–T26). */
+export const bridgeIdSchema = z.enum(['blender', 'obs'])
+/** OBS WebSocket settings; an empty password clears it. */
+export const obsBridgeSchema = z
+  .object({
+    password: z.string().max(200).optional(),
+    port: z.number().int().min(1024).max(65535).optional()
+  })
+  .strict()
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([
   'left',

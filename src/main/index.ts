@@ -50,6 +50,7 @@ import { uiV2 } from './windows/ui-mode'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
+import { registerBridgesIpc } from './ipc/bridges'
 import { registerHighlightIpc } from './ipc/highlight'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
@@ -120,6 +121,7 @@ function registerIpc(): void {
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerTeachIpc()
+  registerBridgesIpc()
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()

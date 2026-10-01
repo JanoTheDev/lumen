@@ -26,11 +26,44 @@ export function combineAll(results: CheckResult[]): CheckResult {
   return results.includes('fail') ? 'fail' : 'unknown'
 }
 
+/** Starts `start` only once `gate` resolves true; until then it answers unknown. */
+function deferred(gate: Promise<boolean>, start: () => CheckHandle): CheckHandle {
+  const r = settleable()
+  let h: CheckHandle | null = null
+  let cancelled = false
+  void gate.then((go) => {
+    if (!go || cancelled) return
+    h = start()
+    void h.result.then(r.settle)
+  })
+  return {
+    result: r.promise,
+    evaluate: () => (h ? h.evaluate() : Promise.resolve('unknown' as const)),
+    cancel: () => {
+      cancelled = true
+      h?.cancel()
+      r.settle('unknown')
+    }
+  }
+}
+
 function group(
   spec: Extract<CheckSpec, { type: 'anyOf' | 'allOf' }>,
   ctx: CheckContext
 ): CheckHandle {
-  const children = spec.checks.map((c) => startCheck(c, ctx))
+  // anyOf with a bridge: vision (costly) only runs when that bridge does not answer.
+  const viaBridge = spec.type === 'anyOf' ? spec.checks.find((c) => c.type === 'bridge') : undefined
+  let bridgeAbsent: Promise<boolean> | null = null
+  if (viaBridge?.type === 'bridge' && spec.checks.some((c) => c.type === 'vision'))
+    bridgeAbsent = ctx.ports.bridge
+      .query(viaBridge.app, viaBridge.expect)
+      .then((res) => res === 'unknown')
+      .catch(() => true)
+  const children = spec.checks.map((c) =>
+    bridgeAbsent && c.type === 'vision'
+      ? deferred(bridgeAbsent, () => startCheck(c, ctx))
+      : startCheck(c, ctx)
+  )
   const passed = new Set<number>()
   const r = settleable()
   const all = spec.type === 'allOf'

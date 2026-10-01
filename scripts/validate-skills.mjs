@@ -215,8 +215,24 @@ function loadSchemas(skillsDir) {
   return {
     skill: load('skill.schema.json'),
     regions: load('regions.schema.json'),
-    lesson: load('lesson.schema.json')
+    lesson: load('lesson.schema.json'),
+    bridgeKeys: load('bridge-keys.json')
   }
+}
+
+/** Problems with a bridge check's `expect` keys (skills/schema/bridge-keys.json). */
+export function bridgeExpectProblems(check, bridgeKeys) {
+  const spec = bridgeKeys[check.app]
+  if (!spec) return [`no bridge for app "${check.app}"`]
+  const keys = Object.keys(check.expect ?? {})
+  if (spec.requests) {
+    const allowed = spec.requests[check.expect?.request]
+    if (!allowed) return [`expect.request must be one of ${Object.keys(spec.requests).join(', ')}`]
+    return keys
+      .filter((k) => k !== 'request' && !allowed.includes(k))
+      .map((k) => `unknown ${check.app} ${check.expect.request} key "${k}"`)
+  }
+  return keys.filter((k) => !spec.keys.includes(k)).map((k) => `unknown ${check.app} key "${k}"`)
 }
 
 function collectChecks(check, out = []) {
@@ -239,7 +255,7 @@ function validateRegionsGeometry(regions, file, errors) {
 }
 
 function validateLesson(lesson, ctx) {
-  const { file, packId, regionKeys, errors } = ctx
+  const { file, packId, regionKeys, errors, bridgeKeys } = ctx
   const push = (path, message) => errors.push({ file, path, message })
 
   const expectedName = `${lesson.id}.lesson.json`
@@ -280,6 +296,8 @@ function validateLesson(lesson, ctx) {
       if (expect.check === 'vision' && !expect.prompt)
         push(`${sp}.expect.prompt`, 'a vision check needs a specific yes/no prompt')
       for (const c of collectChecks(expect.check)) {
+        if (c.type === 'bridge' && bridgeKeys)
+          bridgeExpectProblems(c, bridgeKeys).forEach((m) => push(`${sp}.expect.check`, m))
         if (c.type === 'window-title' || (c.type === 'uia-event' && c.match?.value?.regex)) {
           const source = c.type === 'window-title' ? c.regex : c.match.value.regex
           try {
@@ -370,7 +388,7 @@ function validatePack(packDir, schemas, errors, lessonIndex) {
     if (lesson === undefined) continue
     validateSchema(lesson, schemas.lesson).forEach((e) => errors.push({ file: lf, ...e }))
     if (typeof lesson !== 'object' || lesson === null) continue
-    validateLesson(lesson, { file: lf, packId, regionKeys, errors })
+    validateLesson(lesson, { file: lf, packId, regionKeys, errors, bridgeKeys: schemas.bridgeKeys })
     if (typeof lesson.id === 'string') {
       if (lessonIndex.has(lesson.id))
         errors.push({

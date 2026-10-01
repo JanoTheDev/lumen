@@ -1,0 +1,20 @@
+schema_version = "1.0.0"
+
+id = "lumen_bridge"
+version = "1.0.0"
+name = "Lumen Bridge"
+tagline = "Lets the Lumen assistant check lesson steps"
+maintainer = "JanoTheDev"
+type = "add-on"
+website = "https://github.com/JanoTheDev/lumen"
+tags = ["User Interface"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+platforms = ["windows-x64"]
+
+[permissions]
+network = "Answers read-only state questions from Lumen on 127.0.0.1 only"
+files = "Reads the access token Lumen writes to its settings folder"

@@ -1,0 +1,42 @@
+{
+  "$comment": "Keys a lesson's bridge check may use in `expect`, per app (src/main/teach/bridges/expect.ts explains the forms). OBS keys depend on `request`. davinci-resolve has no bridge yet (07 T25), so its checks answer unknown.",
+  "blender": {
+    "keys": [
+      "mode",
+      "workspace",
+      "active_object",
+      "active_object_type",
+      "object_count",
+      "render_engine",
+      "scene_frame",
+      "file_path",
+      "file_path_changed",
+      "is_dirty",
+      "mesh_select_mode",
+      "selected_face_count",
+      "properties_context",
+      "viewport_shading",
+      "last_operator",
+      "active_material_base_color_changed"
+    ]
+  },
+  "obs": {
+    "requests": {
+      "GetRecordStatus": ["outputActive", "outputPaused"],
+      "GetRecordDirectory": ["recordDirectory", "recordDirectoryChanged"],
+      "GetCurrentProgramScene": ["sceneName", "sceneNameChanged"],
+      "GetSceneList": ["sceneName", "hasScene"],
+      "GetInputList": ["hasInputKind", "hasInput"]
+    }
+  },
+  "davinci-resolve": {
+    "keys": [
+      "page",
+      "mediaPoolClipCount",
+      "timelineClipCount",
+      "titleCount",
+      "renderJobCount",
+      "renderStatus"
+    ]
+  }
+}

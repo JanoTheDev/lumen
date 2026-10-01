@@ -3,6 +3,7 @@ import { NavList, Toast, icons } from '../../ui'
 import { filterSections, SECTIONS, type SectionId, type SectionProps } from './meta'
 import { useConfig } from './useConfig'
 import { About } from './sections/About'
+import { Bridges } from './sections/Bridges'
 import { Accessibility } from './sections/Accessibility'
 import { General } from './sections/General'
 import { Lessons } from './sections/Lessons'
@@ -20,6 +21,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   models: Models,
   memory: Memory,
   lessons: Lessons,
+  bridges: Bridges,
   privacy: Privacy,
   about: About
 }

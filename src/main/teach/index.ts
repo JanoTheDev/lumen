@@ -43,6 +43,7 @@ import { ProgressStore, resumeOffer, type ResumeOffer } from './progress'
 import { SkillRegistry, hasMatchRules, type Skill } from './registry'
 import { LessonRunner } from './runner'
 import { lessonKeysAllowed, lessonUrlAllowed } from './safety'
+import { bridgePort, installBridgeOffer } from './bridges'
 import { lessonList, progressView } from './picker'
 import { PRACTICE_LESSON, PRACTICE_LESSON_ID } from './practice-lesson'
 import { makeShowMeHow } from './show-me'
@@ -460,6 +461,7 @@ function realPorts(): Ports {
     // The announcer routes to the screen reader, TTS or captions only, per the user's settings.
     speak: { say: (text) => announce(text, { kind: 'step', priority: 'assertive' }) },
     announce: { announce: () => {} },
+    bridge: bridgePort,
     explain: {
       why: (lesson, step, skill, signal) =>
         explainWhy(lesson, step, skill, signal).catch((e: Error) => {
@@ -778,6 +780,7 @@ export function installTeach(): void {
   bus.on('voice.cancelled', () => runner?.hold('voice', false))
   app.on('before-quit', () => store?.flush())
   watchFocus()
+  installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
 
   // Passive resume offer once the bar can show it; nothing starts by itself.
   offer = resumeOffer(store.get(), Date.now(), (id) => {

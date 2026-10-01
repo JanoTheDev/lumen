@@ -95,6 +95,17 @@ export interface InvokeChannels {
     args: [name?: string]
     result: { id: string; title: string } | { error: string }
   }
+  /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
+  'bridges:status': { args: []; result: BridgeStatus[] }
+  'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
+  /** Writes the Blender add-on zip and shows it in Explorer. */
+  'bridges:blender-addon': { args: []; result: { ok: boolean; path?: string; error?: string } }
+  /** OBS WebSocket password / port; stored encrypted, never shown again. */
+  'bridges:obs-set': {
+    args: [req: { password?: string; port?: number }]
+    result: { ok: boolean; persisted: boolean }
+  }
+  'bridges:obs-clear': { args: []; result: { ok: boolean } }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -251,6 +262,21 @@ export interface KeySetResult {
   /** False when Windows encryption is unavailable and the key lives in memory only. */
   persisted: boolean
   error?: string
+}
+
+export type BridgeId = 'blender' | 'obs'
+
+export interface BridgeStatus {
+  id: BridgeId
+  name: string
+  /** absent: app closed or bridge off; needs-setup: a password is needed; error: rejected. */
+  state: 'connected' | 'absent' | 'needs-setup' | 'error'
+  detail?: string
+  /** Add-on version (Blender) or app version (OBS). */
+  version?: string
+  port?: number
+  /** OBS: a password is saved. */
+  hasPassword?: boolean
 }
 
 export type AssistantCommand = {
@@ -575,7 +601,12 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:command',
   'teach:progress',
   'teach:delete',
-  'teach:save-last'
+  'teach:save-last',
+  'bridges:status',
+  'bridges:test',
+  'bridges:blender-addon',
+  'bridges:obs-set',
+  'bridges:obs-clear'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
