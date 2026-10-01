@@ -27,6 +27,7 @@ import {
 } from './voice-options'
 import { LANGUAGE_OPTIONS, dictionaryFromText, languageHint } from './voice-language'
 import { MicTest } from './MicTest'
+import { DictationSettings } from './Dictation'
 import { useMicDevices } from './use-mic-devices'
 
 const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
@@ -425,6 +426,8 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
           hint="Spellings dictation always uses. Lumen adds a name here when you correct it the same way twice; remove it to undo."
         />
       </Card>
+
+      <DictationSettings cfg={cfg} patch={patch} />
 
       <SilenceDetection cfg={cfg} patch={patch} />
 

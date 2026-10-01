@@ -35,6 +35,13 @@ import type {
 
 type Confidence = 'high' | 'medium' | 'low'
 
+/** A voice snippet (04 T38): saved text typed when its phrase is said. */
+export interface DictationSnippet {
+  id: string
+  trigger: string
+  text: string
+}
+
 export interface ClaudeResult {
   ok: boolean
   error?: string
@@ -249,6 +256,12 @@ export interface InvokeChannels {
   'dictation:history-insert': { args: [id: string]; result: { ok: boolean; notice?: string } }
   'dictation:stats': { args: []; result: DictationStatsView }
   'dictation:stats-reset': { args: []; result: { ok: boolean } }
+  /** Voice snippets (04 T38), Settings → Voice. Save replaces the whole list. */
+  'dictation:snippets': { args: []; result: DictationSnippet[] }
+  'dictation:snippets-save': {
+    args: [snippets: (Omit<DictationSnippet, 'id'> & { id?: string })[]]
+    result: { ok: boolean; snippets?: DictationSnippet[]; error?: string }
+  }
   'notes:list': { args: []; result: Note[] }
   'notes:add': { args: [text: string]; result: { ok: boolean; note?: Note } }
   'notes:update': { args: [id: string, text: string]; result: { ok: boolean } }
@@ -1132,6 +1145,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'dictation:history-insert',
   'dictation:stats',
   'dictation:stats-reset',
+  'dictation:snippets',
+  'dictation:snippets-save',
   'notes:list',
   'notes:add',
   'notes:update',

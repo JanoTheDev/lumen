@@ -16,6 +16,18 @@ export const entryIdSchema = z
   .string()
   .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
 export const noteTextSchema = z.string().trim().min(1).max(10_000)
+/** Voice snippets (04 T38): the whole list, as Settings saves it. */
+export const snippetsSaveSchema = z
+  .array(
+    z
+      .object({
+        id: z.string().max(64).optional(),
+        trigger: z.string().trim().min(2).max(80),
+        text: z.string().min(1).max(5000)
+      })
+      .strict()
+  )
+  .max(200)
 export const guideIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
 /** Lesson ids (07): kebab-case, app id first. */
 export const lessonIdSchema = z

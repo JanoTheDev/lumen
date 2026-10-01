@@ -10,6 +10,7 @@ import { installLocalModel } from '../speech/stt/local-model'
 import { onWakePcm, wakeFeedWanted } from '../speech/wake'
 import { handleBargeIn } from '../speech/wake/handlers'
 import { registerDictationLogIpc } from './dictation-log'
+import { registerSnippetsIpc } from './dictation-snippets'
 
 const transcribeOptsSchema = z.object({ dictation: z.boolean().optional() }).strict().optional()
 
@@ -26,6 +27,7 @@ export interface VoiceIpcDeps {
 
 export function registerVoiceIpc(deps: VoiceIpcDeps): void {
   registerDictationLogIpc()
+  registerSnippetsIpc()
   ipcMain.handle('voice:speak', async (_e, raw: unknown) => {
     const text = safeParse('voice:speak', textSchema, raw)
     if (text === undefined) return INVALID
