@@ -65,6 +65,26 @@ export interface CoachStatus {
   answered: { id: string; answer: 'yes' | 'no' }[]
 }
 
+/** Settings, Smart helpers: apps with community labels (11 T13). */
+export interface LabelAppInfo {
+  app: string
+  appName: string
+  count: number
+  /** Made or checked by a person. */
+  human: number
+}
+
+export interface LabelEntryView {
+  key: string
+  role: string
+  label: string
+  description?: string
+  source: 'ai' | 'human'
+  confidence: number
+  /** mine = made on this PC; shared = came in a `.lumen` file. */
+  origin?: 'mine' | 'shared'
+}
+
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
 export interface InvokeChannels {
   'assistant:query': {
@@ -199,6 +219,18 @@ export interface InvokeChannels {
   /** Shortcut coach (11 T17) and fatigue answers (11 T18) kept on this PC. */
   'helpers:coach-status': { args: []; result: CoachStatus }
   'helpers:coach-reset': { args: []; result: { ok: boolean } }
+  /** Community labels (11 T13): apps, one app's labels, fix / delete, save as labels.json. */
+  'labels:apps': { args: []; result: LabelAppInfo[] }
+  'labels:entries': { args: [app: string]; result: LabelEntryView[] }
+  'labels:edit': {
+    args: [edit: { app: string; key: string; label: string | null }]
+    result: { ok: boolean }
+  }
+  'labels:remove-app': { args: [app: string]; result: { ok: boolean } }
+  'labels:save-json': {
+    args: [app: string]
+    result: { ok: boolean; path?: string; error?: string }
+  }
   /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
   'teach:list': { args: [appId?: string]; result: LessonListItem[] }
   /** Starts a lesson; the lesson left part-way resumes on its step. */
@@ -984,6 +1016,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'helpers:journal-clear',
   'helpers:coach-status',
   'helpers:coach-reset',
+  'labels:apps',
+  'labels:entries',
+  'labels:edit',
+  'labels:remove-app',
+  'labels:save-json',
   'teach:list',
   'teach:start',
   'teach:command',

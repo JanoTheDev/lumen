@@ -71,6 +71,8 @@ export interface A11yIo {
   recentMarks(): { table: MarksTable; at: number } | null
   /** Last snapshot nodes seen by anyone (05's turn or "show numbers"), for "click <name>". */
   cachedNodes(): ElementNode[]
+  /** Unnamed controls get their saved community labels (11 T13) for "click <name>". */
+  labelNodes?(nodes: ElementNode[]): ElementNode[]
   foregroundTitle(): Promise<string>
   cursorLogical(): Point
   logicalToPhys(p: Point): Point
@@ -306,7 +308,8 @@ export class A11yCommands {
    */
   private prepare(cmd: Command): unknown | null | undefined {
     if (cmd.id === 'pointer.click-name') {
-      const node = findByName(this.knownNodes(), String(cmd.args.text))
+      const known = this.knownNodes()
+      const node = findByName(this.io.labelNodes?.(known) ?? known, String(cmd.args.text))
       if (!node) return null
       cmd.args.elementId = node.id
       return undefined

@@ -1,7 +1,7 @@
 // Wires 06's local voice commands into the app: the real A11yIo (agent commands, coords,
 // config, windows, announce) and the router's local grammar hook. index.ts calls installA11y().
 import { screen, shell } from 'electron'
-import type { Point, Rect } from '@shared/types'
+import type { ElementNode, Point, Rect } from '@shared/types'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { log } from '../logger'
@@ -56,6 +56,19 @@ let lessonRunning: () => boolean = () => false
 let a11y: A11yCommands | null = null
 let narrator: FocusNarrator | null = null
 let switchCtl: SwitchControl | null = null
+
+/** Community labels (11 T13): names for unnamed controls, set by labels/. */
+export interface UnnamedLabeler {
+  name(el: { name?: string; role?: string; automationId?: string }): string | null
+  nodes(nodes: ElementNode[]): ElementNode[]
+  /** Spoken label of the unnamed control at a physical point, else null. */
+  at(p: Point): Promise<string | null>
+}
+let unnamedLabeler: UnnamedLabeler | null = null
+
+export function setUnnamedLabeler(l: UnnamedLabeler | null): void {
+  unnamedLabeler = l
+}
 
 /** One short message to the user through the announce policy (screen reader, TTS or visual). */
 export function announce(text: string, opts?: AnnounceOptions): void {
@@ -172,6 +185,8 @@ async function ocrText(where: 'cursor' | 'window'): Promise<string> {
 /** "What's under my cursor": 05 explainTarget at the pointer on any monitor, UIA name as fallback. */
 async function explainCursor(): Promise<string> {
   const phys = logicalToPhys(screen.getCursorScreenPoint())
+  const known = await unnamedLabeler?.at(phys).catch(() => null)
+  if (known) return known
   const r = await explainTarget({ kind: 'pointer', x: Math.round(phys.x), y: Math.round(phys.y) })
   if (r.source === 'model' || r.element) return r.spoken
   const at = await readText('point')
@@ -238,6 +253,7 @@ function createIo(): A11yIo {
       const ctx = currentContext()
       return ctx?.uia ? flattenElements(ctx.uia.root).map((f) => f.node) : []
     },
+    labelNodes: (nodes) => unnamedLabeler?.nodes(nodes) ?? nodes,
     foregroundTitle: async () => {
       const agent = getAgent()
       if (!agent) return ''
@@ -330,7 +346,8 @@ function installFocusNarration(): void {
     announce: (text) => announce(text, { kind: 'focus' }),
     subscribe: (on) => wantFocusEvents('narration', on),
     setTimeout: (fn, ms) => setTimeout(fn, ms),
-    clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>)
+    clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+    nameFor: (el) => unnamedLabeler?.name(el) ?? null
   })
   onBroadcast('settings:changed', () => narrator?.sync())
   const agent = getAgent()

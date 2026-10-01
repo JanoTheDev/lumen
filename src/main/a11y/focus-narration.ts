@@ -17,6 +17,8 @@ export interface FocusNarratorDeps {
   /** Turns the agent's focus-changed events on or off. */
   subscribe(on: boolean): void
   setTimeout(fn: () => void, ms: number): unknown
+  /** A saved community label for an unnamed control (11 T13), else null. */
+  nameFor?(el: { name?: string; role?: string; automationId?: string }): string | null
   clearTimeout(handle: unknown): void
 }
 
@@ -92,7 +94,9 @@ export class FocusNarrator {
 
   onFocusChanged(data: unknown): void {
     if (!this.active) return
-    const el = (data as { element?: FocusElement } | null)?.element
+    const raw = (data as { element?: FocusElement } | null)?.element
+    const label = raw && this.deps.nameFor?.(raw as { name?: string; role?: string })
+    const el = label ? { ...raw, name: label } : raw
     const text = describeFocus(el)
     if (!text) return
     this.latest = text

@@ -6,6 +6,7 @@ import type { CoachStatus } from '@shared/channels'
 import type { HelpersConfig, ReadingLevel } from '@shared/config'
 import { Button, Card, Kbd, Markdown, NumberField, SegmentedControl, Switch } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { Labels } from './Labels'
 import { Pointing } from './Pointing'
 
 const LEVELS: { value: ReadingLevel; label: string }[] = [
@@ -253,6 +254,8 @@ export function Helpers({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       <Pointing h={h} set={set} />
+
+      <Labels h={h} set={set} />
     </>
   )
 }

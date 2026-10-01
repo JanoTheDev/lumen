@@ -66,6 +66,18 @@ export const auditQuerySchema = z
     taskId: z.string().max(64).optional()
   })
   .strict()
+/** Community labels (11 T13): an app id and a label edit (null label deletes it). */
+export const labelAppSchema = z
+  .string()
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  .max(60)
+export const labelEditSchema = z
+  .object({
+    app: labelAppSchema,
+    key: z.string().min(5).max(260),
+    label: z.string().max(60).nullable()
+  })
+  .strict()
 /** helpers:journal-read day (11 T23). */
 export const journalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 /** Background task ids (08 T29) and a typed answer to a task's question. */
