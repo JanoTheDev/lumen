@@ -24,7 +24,8 @@ export default defineConfig({
           assistant: resolve('src/renderer/assistant.html'),
           screen: resolve('src/renderer/screen.html'),
           panel: resolve('src/renderer/panel.html'),
-          a11y: resolve('src/renderer/a11y.html')
+          a11y: resolve('src/renderer/a11y.html'),
+          face: resolve('src/renderer/face.html')
         }
       }
     }

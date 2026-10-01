@@ -67,6 +67,7 @@ import { registerClaudeCodeIpc } from './ipc/claude-code'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
+import { installFace } from './face'
 import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
 import { installRoutines, interceptRoutines, registerRoutinesIpc } from './routines'
@@ -208,6 +209,7 @@ app.whenReady().then(() => {
   installHelpers()
   installDeictic()
   installLabels()
+  installFace()
   installSkills()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
   installLiveFeedback(announce)

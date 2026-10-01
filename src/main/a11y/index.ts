@@ -80,6 +80,11 @@ export function voiceCommands(): A11yCommands | null {
   return a11y
 }
 
+/** Switch scanning (null before installA11y); face gestures (11 T25) press the switch here. */
+export function switchControl(): SwitchControl | null {
+  return switchCtl
+}
+
 function createAnnouncer(): Announcer {
   return new Announcer({
     now: () => Date.now(),
