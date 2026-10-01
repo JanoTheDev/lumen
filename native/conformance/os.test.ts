@@ -168,7 +168,7 @@ describe('hotkey (injected)', () => {
     try {
       await a.ok('set_hotkey', { combo: 'Shift+F23' })
       const from = a.frames.length
-      await a.ok('input', { steps: [{ t: 'keys', combo: 'shift+f23' }] })
+      await a.ok('input', { steps: [{ t: 'keys', combo: 'shift+f23' }], allowTerminal: true })
       const down = await a.waitFor((f) => f.event === 'hotkey-down', 5000, from)
       const up = await a.waitFor((f) => f.event === 'hotkey-up', 5000, from)
       expect(down.data).toEqual({})

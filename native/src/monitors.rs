@@ -132,8 +132,7 @@ mod win {
 }
 
 #[cfg(windows)]
-#[allow(unused_imports)]
-pub use win::{enumerate, from_point, from_window};
+pub use win::{enumerate, from_window};
 
 #[cfg(not(windows))]
 pub fn enumerate() -> Vec<MonitorInfo> {

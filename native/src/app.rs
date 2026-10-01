@@ -14,7 +14,7 @@ use crate::proto::{AgentError, Args, CmdResult, arg};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input"];
+pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -150,6 +150,9 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("init", Lane::Inline, None, cmd_init);
 
     app.cmd("input", Lane::Input, None, |_, args, token| crate::input::cmd_input(args, token));
+
+    app.cmd("capture", Lane::Read, None, |_, args, _| crate::capture::cmd_capture(args));
+    app.cmd("monitors", Lane::Read, None, |_, _, _| crate::capture::cmd_monitors());
 
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")

@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 mod app;
+mod capture;
 mod dpi;
 mod geom;
 mod hotkey;
@@ -51,6 +52,12 @@ fn main() {
     let app = App::new(router.clone(), opts, log);
     out.emit("ready", app.ready_data());
     app::register_core(&app);
+    #[cfg(windows)]
+    std::thread::spawn(|| {
+        worker_init();
+        let devices: Vec<String> = monitors::enumerate().into_iter().map(|m| m.device).collect();
+        capture::dxgi::warm(&devices);
+    });
     if let Some(accel) = app.opts.hotkey.clone()
         && let Err(e) = app.hotkeys.apply(hotkey::Update { assistant: Some(&accel), ..Default::default() })
     {

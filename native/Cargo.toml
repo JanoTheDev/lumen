@@ -21,6 +21,9 @@ serde_json = { version = "1", features = ["preserve_order"] }
 crossbeam-channel = "0.5"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "registry"] }
+fast_image_resize = "6"
+base64 = "0.22"
+jpeg-encoder = { version = "0.7", features = ["simd"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.62"
@@ -32,6 +35,10 @@ features = [
   "Win32_UI_HiDpi",
   "Win32_Graphics_Gdi",
   "Win32_Graphics_Dwm",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_WindowsAndMessaging",
   "Win32_System_LibraryLoader",
@@ -42,6 +49,10 @@ proptest = "1"
 
 [build-dependencies]
 embed-resource = "3"
+
+# Image and JPEG code is unusably slow unoptimised; keep dev builds quick to iterate.
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 opt-level = 3
@@ -55,3 +66,10 @@ unsafe_op_in_unsafe_fn = "warn"
 
 [lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Optimised build without fat LTO for local benchmarking and conformance runs.
+[profile.fastrel]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+incremental = true
