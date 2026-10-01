@@ -18,7 +18,7 @@ import {
   type FSWatcher
 } from 'fs'
 import { tmpdir } from 'os'
-import { dirname, isAbsolute, join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
 import { z } from 'zod'
 import type {
   Automation,
@@ -41,7 +41,7 @@ import {
   startBackgroundTask,
   userBusy
 } from '../agent-mode/background'
-import { expandRoot, isRemoteOrDevicePath } from '../agent-mode/background/files'
+import { expandRoot } from '../agent-mode/background/files'
 import { taskTitle } from '../agent-mode/background/manager'
 import { PRESENT_MS } from '../agent-mode/background/presence'
 import { enabledSkill } from '../agent-mode/skill-tools'
@@ -69,6 +69,7 @@ import {
   preapprovalQuestion
 } from './draft'
 import { AutomationScheduler, type RunEnd } from './engine'
+import { folderAllowed, resolveFolderWith } from './folders'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
@@ -167,6 +168,8 @@ const sameFolder = (a: string, b: string): boolean =>
     .toLowerCase()
 
 function granted(folder: string): boolean {
+  // Never watch or share a network, device or Lumen data path, whatever the config says.
+  if (!folderAllowed(folder, dataDirs())) return false
   return loadConfig().agent.background.readFolders.some((f) => {
     const root = expandRoot(f)
     return !!root && sameFolder(root, folder)
@@ -196,21 +199,23 @@ const KNOWN_FOLDERS: Record<string, Parameters<typeof app.getPath>[0]> = {
   videos: 'videos'
 }
 
-export function resolveFolder(name: string): string | null {
-  const n = name
-    .trim()
-    .replace(/^(?:my|the) /i, '')
-    .replace(/ folder$/i, '')
-  const known = KNOWN_FOLDERS[n.toLowerCase()]
+const dataDirs = (): string[] => {
+  const dirs = [dirname(configPath())]
   try {
-    if (known) return app.getPath(known)
-    const p = expandRoot(n)
-    if (!p || !isAbsolute(p) || isRemoteOrDevicePath(p)) return null
-    if (!existsSync(p) || !statSync(p).isDirectory()) return null
-    return realpathSync.native(p)
+    dirs.push(app.getPath('userData'))
   } catch {
-    return null
+    /* no app (tests) */
   }
+  return dirs
+}
+
+export function resolveFolder(name: string): string | null {
+  return resolveFolderWith(name, {
+    known: (n) => (KNOWN_FOLDERS[n] ? app.getPath(KNOWN_FOLDERS[n]) : null),
+    isDir: (p) => existsSync(p) && statSync(p).isDirectory(),
+    real: (p) => realpathSync.native(p),
+    dataDirs
+  })
 }
 
 const parseOpts = (): ParseOpts => ({ now: Date.now(), resolveFolder })
@@ -390,9 +395,16 @@ async function save(
   d: Pick<AutomationDraft, 'name' | 'trigger' | 'action'>,
   shapes: ActionShape[]
 ): Promise<Automation | string> {
-  if (d.trigger.kind === 'file' && !(await shareFolder(d.trigger.folder)))
-    return 'I could not share that folder; remove one in Settings, Automations first.'
-  const a = engine.add({ name: d.name, trigger: d.trigger, action: d.action, preApproved: shapes })
+  let trigger = d.trigger
+  if (trigger.kind === 'file') {
+    // Settings sends a path: the same checks as a spoken folder name.
+    const folder = resolveFolder(trigger.folder)
+    if (!folder) return 'That folder cannot be watched. Pick a local folder.'
+    trigger = { ...trigger, folder }
+    if (!(await shareFolder(folder)))
+      return 'I could not share that folder; remove one in Settings, Automations first.'
+  }
+  const a = engine.add({ name: d.name, trigger, action: d.action, preApproved: shapes })
   return a ?? 'You have too many automations; remove one in Settings first.'
 }
 
