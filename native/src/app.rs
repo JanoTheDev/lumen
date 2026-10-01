@@ -14,7 +14,7 @@ use crate::proto::{AgentError, Args, CmdResult, arg};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture"];
+pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture", "uia"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -155,8 +155,19 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("monitors", Lane::Read, None, |_, _, _| crate::capture::cmd_monitors());
 
     app.cmd("active_window", Lane::Read, None, |_, _, _| {
-        Ok(crate::window::info(crate::window::foreground()))
+        let hwnd = crate::window::foreground();
+        crate::uia::warm_up(hwnd);
+        Ok(crate::window::info(hwnd))
     });
+    let uia_timeout = Some(crate::uia::SNAPSHOT_TIMEOUT_MS);
+    app.cmd("uia_snapshot", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_snapshot(args, token));
+    app.cmd("uia_find", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_find(args, token));
+    app.cmd("uia_act", Lane::Input, None, |_, args, token| crate::uia::cmd_act(args, token));
+    app.cmd("focus_info", Lane::Read, Some(crate::uia::FOCUS_INFO_TIMEOUT_MS), |_, _, token| {
+        crate::uia::cmd_focus_info(token)
+    });
+    let out = app.router.out().clone();
+    app.add_subscribable("focus-changed", move |on| crate::uia::events::set_enabled(&out, on));
     app.cmd("focus_window", Lane::Input, None, |_, args, token| {
         let hwnd = match (arg::opt_i64(args, "hwnd")?, arg::opt_str(args, "process")?) {
             (Some(h), _) => h as isize,

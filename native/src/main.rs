@@ -12,6 +12,8 @@ mod logging;
 mod monitors;
 mod proto;
 mod stdio;
+#[cfg(windows)]
+mod uia;
 mod window;
 
 use std::io::BufRead;
@@ -24,7 +26,7 @@ const READ_WORKERS: usize = 3;
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(10);
 
 /// Lane workers join the COM multithreaded apartment so UIA/WinRT objects can move between them.
-fn worker_init() {
+pub(crate) fn com_init() {
     #[cfg(windows)]
     // SAFETY: called once at thread start; the apartment lives as long as the thread.
     unsafe {
@@ -48,13 +50,13 @@ fn main() {
     tracing::info!("lumen-native {} dpi awareness={awareness}", app::VERSION);
 
     let (out, writer) = proto::writer::start(sink);
-    let router = Router::new(out.clone(), READ_WORKERS, worker_init);
+    let router = Router::new(out.clone(), READ_WORKERS, com_init);
     let app = App::new(router.clone(), opts, log);
     out.emit("ready", app.ready_data());
     app::register_core(&app);
     #[cfg(windows)]
     std::thread::spawn(|| {
-        worker_init();
+        com_init();
         let devices: Vec<String> = monitors::enumerate().into_iter().map(|m| m.device).collect();
         capture::dxgi::warm(&devices);
     });
