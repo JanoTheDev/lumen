@@ -54,6 +54,8 @@ import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
 import { registerVoiceIpc } from './ipc/voice'
 import { registerWakeIpc } from './ipc/wake'
+import { registerMemoryIpc } from './ipc/memory'
+import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 
 // No Lumen window may open popups or navigate away from its own renderer.
@@ -95,6 +97,7 @@ function registerIpc(): void {
   registerWakeIpc()
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
+  registerMemoryIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
     cancel: () => {
@@ -136,12 +139,23 @@ app.whenReady().then(() => {
   startAgent(agent)
   registerIpc()
   prepareStt()
+  // A conversation left open when the app last closed is summarized now (memory on only).
+  startMemory()
   // Dictation left over from a crash is offered once the answer card can show it.
   setTimeout(offerRecovery, 2500)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) hud.create()
   })
+})
+
+// The open conversation is summarized before quitting (bounded wait; nothing when memory is off).
+let memoryFlushed = false
+app.on('before-quit', (event) => {
+  if (memoryFlushed) return
+  event.preventDefault()
+  memoryFlushed = true
+  flushOnQuit().finally(() => app.quit())
 })
 
 app.on('will-quit', () => {

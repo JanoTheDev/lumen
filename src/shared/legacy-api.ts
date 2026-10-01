@@ -4,6 +4,7 @@ import type {
   EventChannel,
   EventChannels,
   LumenApi,
+  MemoryFactOp,
   SendChannel,
   SendChannels,
   WakeModelProgress
@@ -67,7 +68,16 @@ export function createLegacyApi(lumen: LumenApi) {
     onRunQuery: (cb: (text: string) => void) => on('assistant:run-query', cb),
     onDwellProgress: (
       cb: (data: { x: number; y: number; progress: number; active: boolean }) => void
-    ) => on('screen:dwell', cb)
+    ) => on('screen:dwell', cb),
+    memoryGet: () => lumen.invoke('memory:get'),
+    memoryFact: (op: MemoryFactOp) => lumen.invoke('memory:fact', op),
+    memoryReview: (id: string, accept: boolean) => lumen.invoke('memory:review', { id, accept }),
+    memoryEpisodes: (query?: string) => lumen.invoke('memory:episodes', query),
+    memoryDeleteEpisode: (id: string) => lumen.invoke('memory:episode-delete', id),
+    memoryExport: () => lumen.invoke('memory:export'),
+    memoryDeleteAll: (confirm: string) => lumen.invoke('memory:delete-all', confirm),
+    memoryOpenFolder: () => send('memory:open-folder'),
+    onMemoryChanged: (cb: (summary: { pending: number }) => void) => on('memory:changed', cb)
   }
 }
 

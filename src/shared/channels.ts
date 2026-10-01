@@ -46,6 +46,14 @@ export interface InvokeChannels {
   'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
   'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
   'home:info': { args: []; result: HomeInfo }
+  'memory:get': { args: []; result: MemoryOverview }
+  'memory:fact': { args: [op: MemoryFactOp]; result: MemoryResult }
+  'memory:review': { args: [req: { id: string; accept: boolean }]; result: MemoryResult }
+  'memory:episodes': { args: [query?: string]; result: MemoryEpisodeView[] }
+  'memory:episode-delete': { args: [id: string]; result: MemoryResult }
+  'memory:export': { args: []; result: MemoryResult & { path?: string } }
+  /** Deletes the whole memory folder; `confirm` must be the word DELETE typed by the user. */
+  'memory:delete-all': { args: [confirm: string]; result: MemoryResult }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -75,6 +83,7 @@ export interface SendChannels {
   /** Closes the panel window (or flyout) that sent it. */
   'panel:close': []
   'home:run': [text: string]
+  'memory:open-folder': []
 }
 
 export interface StatusMessage {
@@ -123,6 +132,71 @@ export interface AssistantView extends AssistantState {
   /** Auto-close for answers and errors; 0 = never. */
   autoCloseMs: number
   costUsd?: number
+}
+
+export type MemoryLayerName = 'profile' | 'app' | 'working'
+
+export interface MemoryFactView {
+  section: string
+  text: string
+  /** YYYY-MM-DD */
+  date?: string
+  source: 'said' | 'inferred'
+}
+
+export interface MemoryProposalView {
+  id: string
+  layer: MemoryLayerName
+  appId?: string
+  fact: string
+  confidence: number
+  createdAt: string
+}
+
+/** Everything the Settings → Memory page shows, in one call. */
+export interface MemoryOverview {
+  enabled: boolean
+  autoLearn: 'auto' | 'ask' | 'off'
+  privateMode: boolean
+  retentionDays: number
+  /** Folder the markdown files live in. */
+  dir: string
+  profile: MemoryFactView[]
+  working: MemoryFactView[]
+  apps: { id: string; facts: MemoryFactView[] }[]
+  /** Facts waiting for the user's yes/no (the review chip). */
+  pending: MemoryProposalView[]
+  episodeCount: number
+}
+
+export interface MemoryEpisodeView {
+  id: string
+  /** ISO timestamp of the session end. */
+  date: string
+  title: string
+  summary: string
+  apps: string[]
+  outcome: 'done' | 'partial' | 'failed' | 'info'
+  openThreads: string[]
+  refs: { kind: 'url' | 'file' | 'lesson' | 'skill'; value: string }[]
+}
+
+/** Profile editor operations; `app` is required for the app layer. */
+export type MemoryFactOp =
+  | { op: 'add'; layer: MemoryLayerName; app?: string; text: string; section?: string }
+  | {
+      op: 'update'
+      layer: MemoryLayerName
+      app?: string
+      old: string
+      text: string
+      section?: string
+    }
+  | { op: 'remove'; layer: MemoryLayerName; app?: string; text: string }
+
+export interface MemoryResult {
+  ok: boolean
+  error?: string
 }
 
 export interface HomeInfo {
@@ -182,6 +256,8 @@ export interface EventChannels {
   'voice:stop': []
   /** The open dictation recording becomes hands-free (ends on silence). */
   'voice:hands-free': []
+  /** Memory changed (voice command, session end, settings); `pending` drives the review chip. */
+  'memory:changed': [summary: { pending: number }]
   'voice:tts': [msg: TtsMessage]
 }
 
@@ -211,7 +287,14 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'keys:set',
   'keys:clear',
   'keys:test',
-  'home:info'
+  'home:info',
+  'memory:get',
+  'memory:fact',
+  'memory:review',
+  'memory:episodes',
+  'memory:episode-delete',
+  'memory:export',
+  'memory:delete-all'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
@@ -234,7 +317,8 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'screen:capture-end',
   'panel:open',
   'panel:close',
-  'home:run'
+  'home:run',
+  'memory:open-folder'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
@@ -261,7 +345,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'voice:start',
   'voice:stop',
   'voice:hands-free',
-  'voice:tts'
+  'voice:tts',
+  'memory:changed'
 ]
 
 /** Typed surface exposed to renderers as `window.lumen`. */
