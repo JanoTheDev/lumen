@@ -16,6 +16,7 @@ export interface A11yIpcDeps {
   dwellPick: (pick: DwellPaletteButton) => void
   keyboardState: () => ScanKeyboardState
   keyboardKey: (id: string) => void
+  toggleKeyboard: () => void
 }
 
 export function registerA11yIpc(deps: A11yIpcDeps): void {
@@ -24,7 +25,8 @@ export function registerA11yIpc(deps: A11yIpcDeps): void {
   ipcMain.on('a11y:sheet-close', () => deps.closeSheet())
   ipcMain.on('a11y:dwell-pick', (_e, raw: unknown) => {
     const pick = safeParse('a11y:dwell-pick', dwellPickSchema, raw)
-    if (pick) deps.dwellPick(pick)
+    if (pick === 'keyboard') deps.toggleKeyboard()
+    else if (pick) deps.dwellPick(pick)
   })
   ipcMain.handle('a11y:keyboard-state', () => deps.keyboardState())
   ipcMain.on('a11y:keyboard-key', (_e, raw: unknown) => {

@@ -5,12 +5,15 @@ import { useEffect, useState } from 'react'
 import type { DwellPaletteButton, DwellPaletteState } from '@shared/channels'
 import { invoke, send, useIpc } from '../lib/ipc'
 
-const BUTTONS: { id: DwellPaletteButton; label: string; glyph: string }[] = [
+type PaletteButton = DwellPaletteButton | 'keyboard'
+
+const BUTTONS: { id: PaletteButton; label: string; glyph: string }[] = [
   { id: 'left', label: 'Left click', glyph: 'L' },
   { id: 'right', label: 'Right click', glyph: 'R' },
   { id: 'double', label: 'Double click', glyph: '2×' },
   { id: 'drag', label: 'Drag', glyph: '⤡' },
   { id: 'scroll', label: 'Scroll', glyph: '↕' },
+  { id: 'keyboard', label: 'Keyboard', glyph: '⌨' },
   { id: 'pause', label: 'Pause dwell', glyph: '❚❚' }
 ]
 
@@ -23,7 +26,8 @@ const INITIAL: DwellPaletteState = {
   scrolling: false
 }
 
-function pressed(state: DwellPaletteState, id: DwellPaletteButton): boolean {
+function pressed(state: DwellPaletteState, id: PaletteButton): boolean | undefined {
+  if (id === 'keyboard') return undefined
   return id === 'pause' ? state.paused : !state.paused && state.next === id
 }
 

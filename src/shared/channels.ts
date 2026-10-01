@@ -104,8 +104,8 @@ export interface SendChannels {
   'memory:open-folder': []
   /** Command sheet: close its window. */
   'a11y:sheet-close': []
-  /** Dwell palette button (dwelled on or clicked). */
-  'a11y:dwell-pick': [pick: DwellPaletteButton]
+  /** Dwell palette button (dwelled on or clicked); `keyboard` shows or hides the scan keyboard. */
+  'a11y:dwell-pick': [pick: DwellPaletteButton | 'keyboard']
   /** Scan keyboard key clicked or dwelled on (ScanKeyboardKey id). */
   'a11y:keyboard-key': [id: string]
 }

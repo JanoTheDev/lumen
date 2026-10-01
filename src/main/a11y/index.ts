@@ -295,6 +295,7 @@ export function installA11y(): void {
     dwellState: () => dwell.state(),
     dwellPick: (pick) => dwell.choose(pick),
     keyboardState: () => sw.keyboardState(),
-    keyboardKey: (id) => sw.keyboardKey(id)
+    keyboardKey: (id) => sw.keyboardKey(id),
+    toggleKeyboard: () => sw.toggleKeyboard()
   })
 }
