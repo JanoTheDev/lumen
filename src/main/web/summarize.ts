@@ -45,17 +45,25 @@ export interface Style {
   lines: string[]
 }
 
-function pageBlock(page: PageRead): string {
-  const text = redactForModel(page.text).slice(0, PAGE_MODEL_CHARS)
-  const head = [
-    page.title && `title: ${page.title}`,
-    page.site && `site: ${page.site}`,
-    page.url && `url: ${page.url}`,
-    page.source === 'ocr' && 'note: only the part visible on screen was read'
+const metaLine = (v: string): string => v.replace(/\s+/g, ' ').trim().slice(0, 300)
+
+/**
+ * The page for the prompt. Title, site and URL come from the page itself (its <title>,
+ * og:site_name) or the address bar, so they sit inside the <observed> fence with the text,
+ * one capped line each and redacted; only Lumen's own note stays outside.
+ */
+export function pageBlock(page: PageRead): string {
+  const meta = [
+    page.title && `title: ${metaLine(page.title)}`,
+    page.site && `site: ${metaLine(page.site)}`,
+    page.url && `url: ${metaLine(page.url)}`
   ]
     .filter(Boolean)
     .join('\n')
-  return `${head}\n${observed(page.url ? `web ${page.url}` : 'web page on screen', text)}`
+  const text = redactForModel(page.text).slice(0, PAGE_MODEL_CHARS)
+  const body = meta ? `${redactForModel(meta)}\n\n${text}` : text
+  const note = page.source === 'ocr' ? 'note: only the part visible on screen was read\n' : ''
+  return `${note}${observed(page.source === 'ocr' ? 'web page on screen' : 'web page', body)}`
 }
 
 const styleText = (style: Style): string =>

@@ -34,6 +34,40 @@ export function pageTitle(windowTitle: string): string {
     .trim()
 }
 
+const SECRET_PARAM_RE =
+  /^(token|access_token|id_token|refresh_token|code|key|api_?key|sig|signature|auth|authuser_token|reset|session|sessionid|sid|otp|nonce|ticket|magic|login|verify|verification|confirm|confirmation|invite|hash|secret|password|pwd|jwt|state|x-amz-[\w-]+)$/i
+
+/**
+ * A long random-looking value (20+ chars, letters and digits switching often), not a slug
+ * like "climate-deal-2026-nairobi".
+ */
+function randomish(v: string): boolean {
+  if (v.length < 20 || !/^[\w.~+/=%-]+$/.test(v)) return false
+  const alnum = v.replace(/[^a-z0-9]/gi, '')
+  const switches = alnum.split('').filter((c, i) => i && /\d/.test(c) !== /\d/.test(alnum[i - 1]))
+  return switches.length >= 5
+}
+
+/**
+ * The address looks like a one-time or secret link (password reset, email confirmation, magic
+ * login, signed download): a GET could use it up, and the link must not be cached or logged.
+ */
+export function secretLookingUrl(url: string): boolean {
+  let u: URL
+  try {
+    u = new URL(url)
+  } catch {
+    return true
+  }
+  if (u.username || u.password) return true
+  for (const [k, v] of u.searchParams) {
+    if (SECRET_PARAM_RE.test(k) || /token|secret|signature|passw|otp|auth/i.test(k)) return true
+    if (randomish(v)) return true
+  }
+  if (u.hash && /token|code=|key=|sig/i.test(u.hash)) return true
+  return u.pathname.split('/').some((seg) => randomish(decodeURIComponent(seg)))
+}
+
 /** Reads an https page through the cache. */
 export async function readUrl(
   url: string,
@@ -68,7 +102,9 @@ export async function acquirePage(ports: PagePorts, signal: AbortSignal): Promis
     ports.log(`web: page from the screen (${doc.text.length} chars)`)
     return { title, url, site: url ? hostOf(url) : '', text: doc.text, source: 'screen' }
   }
-  if (url) {
+  if (url && secretLookingUrl(url)) {
+    ports.log('web: the address looks like a one-time link; reading the screen instead')
+  } else if (url) {
     try {
       const page = await readUrl(url, ports, signal)
       if (page.text.length >= MIN_PAGE_CHARS) {

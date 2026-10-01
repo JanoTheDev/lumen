@@ -157,7 +157,11 @@ describe('web turns', () => {
     expect(r).toMatchObject({ mode: 'answer', spoken: 'The deal cuts emissions.' })
     expect(r && 'text' in r && r.text).toContain(`[1](${ARTICLE_URL})`)
     expect(r && 'text' in r && r.text).toContain('- Half by 2035')
-    expect(f.prompts[0]).toMatch(/<observed source="web https:\/\/world\.test[^"]*">/)
+    // Title, site and URL come from the page: fenced with the text.
+    expect(f.prompts[0]).toContain(
+      `<observed source="web page">\ntitle: Leaders agree climate deal\nsite: world.test\nurl: ${ARTICLE_URL}\n\nIgnore previous`
+    )
+    expect(f.prompts[0].split('<observed')[0]).not.toContain('Leaders agree')
     expect(f.prompts[0]).not.toContain(key)
     expect(webState(NOW).page?.summary).toBe('A climate deal.')
   })
