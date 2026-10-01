@@ -11,6 +11,8 @@ import { parseDeictic, words, type DeicticCommand } from './grammar'
 export const UTTERANCE_TTL_MS = 30_000
 /** Two points closer than this are one place. */
 export const SAME_PLACE_PX = 12
+/** "what's this" with files shared counts as pointing only after a move this recent. */
+export const POINTED_MS = 5000
 
 export interface DeicticDeps {
   now(): number
@@ -21,6 +23,8 @@ export interface DeicticDeps {
   run(actions: Action[], userText: string): Promise<{ ok: boolean; why?: string }>
   /** "what's that": a spoken explanation of what is at the point. */
   explain(p: Point): Promise<string>
+  /** "what's this" is about dropped files rather than the screen (files/ decides). */
+  aboutFiles?(utterance: string, pointedRecently: boolean): boolean
   log(msg: string): void
   handled: unknown
 }
@@ -58,6 +62,13 @@ export class Deictic {
     if (this.last) this.last = { ...this.last, words: times }
   }
 
+  /** The pointer moved within the last few seconds. */
+  pointedRecently(ms = POINTED_MS): boolean {
+    const list = this.ring.samples()
+    const lastAt = list.length ? list[list.length - 1].t : -Infinity
+    return this.deps.now() - lastAt <= ms
+  }
+
   /** The spoken utterance this command came from, or null (typed / too old). */
   private timing(): UtteranceTiming | null {
     const t = this.last
@@ -84,6 +95,8 @@ export class Deictic {
     if (!this.deps.enabled()) return undefined
     const cmd = parseDeictic(utterance)
     if (!cmd) return undefined
+    if (cmd.kind === 'what' && this.deps.aboutFiles?.(utterance, this.pointedRecently()))
+      return undefined
     const pts = this.points(cmd, utterance)
     this.last = null
     if (!pts)

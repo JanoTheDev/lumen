@@ -14,6 +14,7 @@ import { mouseEvents } from '../agent/subscriptions'
 import { LOCAL_HANDLED } from '../a11y/dispatch'
 import { explainTarget } from '../ai/describe'
 import { onConfigPatched } from '../ipc/settings'
+import { sharedFiles } from '../files/store'
 import { Deictic } from './core'
 
 let deictic: Deictic | null = null
@@ -49,6 +50,11 @@ export function installDeictic(): void {
       return { ok: false, why: r.denied ? `I can't do that: ${r.denied.reason}` : undefined }
     },
     explain,
+    // Fresh drops always win; older shared files win unless the user just pointed somewhere.
+    aboutFiles: (_utterance, pointed) => {
+      const files = sharedFiles()
+      return files.some((f) => f.fresh) || (files.length > 0 && !pointed)
+    },
     log: (msg) => log('plan', msg),
     handled: LOCAL_HANDLED
   })

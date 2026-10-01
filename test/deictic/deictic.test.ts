@@ -144,6 +144,14 @@ describe('Deictic', () => {
     })
   })
 
+  it('leaves "what is this" about dropped files to the assistant', () => {
+    const { d } = setup({ aboutFiles: (_u, pointed) => !pointed })
+    expect(d.intercept("what's this")).toBeUndefined()
+    d.onPointer({ x: 1, y: 1 })
+    expect(d.intercept("what's this")).toBeDefined()
+    expect(d.intercept('click this')).toBeDefined()
+  })
+
   it('does nothing while off', () => {
     const { d } = setup({ enabled: () => false })
     expect(d.intercept('click this')).toBeUndefined()
