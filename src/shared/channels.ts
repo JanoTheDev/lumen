@@ -544,16 +544,6 @@ export interface LessonListItem {
   needs?: string[]
   /** A spaced-repetition review is due (07 T29). */
   reviewDue?: boolean
-}
-
-/** One app's learning progress (07 T27). */
-export interface LearningApp {
-  appId: string
-  appName: string
-  /** 0-1: mean mastery of the skills (lesson tags) its lessons teach. */
-  mastery: number
-  completed: number
-  total: number
   /** From a community pack the user installed (07 T32): untrusted, no "do it for me". */
   community?: boolean
 }
@@ -584,8 +574,8 @@ export interface LessonDraftEdit {
   title: string
   /** The steps to keep, in order, with their (edited) say lines. */
   steps: { id: string; say: string }[]
-  /** The next unlocked lesson; null when all are done. */
-  next: { lessonId: string; title: string } | null
+}
+
 /** An installed community pack (07 T32). */
 export interface CommunityPackInfo {
   id: string
@@ -603,6 +593,16 @@ export type PackInstallResult =
   | { ok: true; installed: { id: string; name: string; updated: boolean }[] }
   | { ok: false; error: string; problems?: string[] }
 
+/** One app's learning progress (07 T27). */
+export interface LearningApp {
+  appId: string
+  appName: string
+  /** 0-1: mean mastery of the skills (lesson tags) its lessons teach. */
+  mastery: number
+  completed: number
+  total: number
+  /** The next unlocked lesson; null when all are done. */
+  next: { lessonId: string; title: string } | null
 }
 
 export interface LessonProgressView {
@@ -772,16 +772,6 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:review',
   'teach:delete',
   'teach:save-last',
-  'bridges:status',
-  'bridges:test',
-  'bridges:blender-addon',
-  'bridges:obs-set',
-  'bridges:obs-clear'
-]
-
-export const SEND_CHANNELS: readonly SendChannel[] = [
-  'assistant:show',
-  'assistant:close',
   'teach:record',
   'teach:record-status',
   'teach:draft-save',
@@ -792,6 +782,16 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'teach:pack-install-url',
   'teach:pack-remove',
   'teach:pack-export',
+  'bridges:status',
+  'bridges:test',
+  'bridges:blender-addon',
+  'bridges:obs-set',
+  'bridges:obs-clear'
+]
+
+export const SEND_CHANNELS: readonly SendChannel[] = [
+  'assistant:show',
+  'assistant:close',
   'assistant:cancel',
   'assistant:open-link',
   'answer:show',
