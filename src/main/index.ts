@@ -51,6 +51,9 @@ import { recordDictation } from './speech/dictation/history'
 import { dictationHandler, installDictationExtras } from './speech/dictation-extras'
 import { addNote } from './speech/dictation/notes'
 import { setNoteSaver } from './web'
+import { howtoForeground } from './howto'
+import { makeHowtoFallback } from './howto/fallback'
+import { setHowtoFallback } from './query/present'
 import { isOwnRendererUrl } from './windows/factory'
 import { installPermissionHandlers } from './windows/permissions'
 import { applyUiScaleOnLoad } from './windows/registry'
@@ -205,6 +208,8 @@ app.whenReady().then(() => {
     addNote({ text: n.text, source: { title: n.title, url: n.url }, via: 'web' })
     return true
   })
+  // A locate / guide target that is not on screen: look up how to get there (05 T36).
+  setHowtoFallback(makeHowtoFallback(howtoForeground))
   createWindows()
   applyAutostart(loadConfig().system.startAtLogin)
   onConfigPatched((next) => applyAutostart(next.system.startAtLogin))

@@ -13,7 +13,7 @@ vi.mock('../../src/main/windows/status', () => ({ setStatus: vi.fn() }))
 
 import type { MonitorInfo } from '@shared/types'
 import { frameGeometryOf, setScreenAdapter } from '../../src/main/actions/coords'
-import { present } from '../../src/main/query/present'
+import { present, setHowtoFallback } from '../../src/main/query/present'
 import type { GroundingContext } from '../../src/main/query/resolve-target'
 import { display, screenAdapterFor } from '../helpers/displays'
 
@@ -101,6 +101,52 @@ describe('present', () => {
       ctx
     )
     expect(showText).toHaveBeenCalledWith('It is in the sidebar, scrolled away.')
+  })
+
+  it('locate: a target not on screen asks the how-to fallback and highlights its next name', async () => {
+    const fallback = vi.fn(async () => ({
+      text: "It's not on screen right now. In Mail: 1. Open Settings",
+      item: { label: 'Start here: Settings', bbox: { x: 1000, y: 60, w: 100, h: 20 } }
+    }))
+    setHowtoFallback(fallback)
+    try {
+      await present(
+        { mode: 'locate', items: [{ label: 'x', target: { kind: 'element', id: 'gone' } }] },
+        'where is the signature setting',
+        vi.fn(),
+        ctx
+      )
+    } finally {
+      setHowtoFallback(null)
+    }
+    expect(fallback).toHaveBeenCalledWith(
+      'where is the signature setting',
+      expect.anything(),
+      undefined
+    )
+    expect(showText).toHaveBeenCalledWith("It's not on screen right now. In Mail: 1. Open Settings")
+    expect(send).toHaveBeenCalledWith('screen:locate', [
+      expect.objectContaining({ label: 'Start here: Settings' })
+    ])
+  })
+
+  it('locate: a fallback with nothing keeps the model reason', async () => {
+    setHowtoFallback(async () => null)
+    try {
+      await present(
+        {
+          mode: 'locate',
+          items: [{ label: 'x', target: { kind: 'element', id: 'gone' } }],
+          notFoundReason: 'Scrolled away.'
+        },
+        'q',
+        vi.fn(),
+        ctx
+      )
+    } finally {
+      setHowtoFallback(null)
+    }
+    expect(showText).toHaveBeenCalledWith('Scrolled away.')
   })
 
   it('guide: text targets resolve through OCR and the pointer starts on step 1', async () => {

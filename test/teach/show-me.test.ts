@@ -92,6 +92,33 @@ describe('makeShowMeHow', () => {
     expect(user).toContain('e1 button "Settings"')
   })
 
+  it('an app without a pack gets looked-up steps as fenced app notes', async () => {
+    let user = ''
+    const howto = vi.fn(async () => ({
+      app: 'Notepad',
+      version: '11.0',
+      goal: 'how do I open settings',
+      steps: [{ text: 'Select Settings (the gear)', ui: ['Settings'] }],
+      sources: [{ title: 'Notepad help', url: 'https://learn.microsoft.com/x' }],
+      from: 'docs' as const,
+      searches: 0,
+      costUsd: 0
+    }))
+    const run = makeShowMeHow({
+      registry: () => null,
+      start: () => {},
+      howto,
+      complete: async (req) => {
+        user = req.user
+        return GEN
+      }
+    })
+    await run('how do I open settings', ctx(), new AbortController().signal)
+    expect(howto).toHaveBeenCalledWith('how do I open settings', expect.anything())
+    expect(user).toContain('<app_notes>\n<observed source="how-to">')
+    expect(user).toContain('look for on screen: Settings')
+  })
+
   it('returns null (guide fallback) when nothing usable comes back or the turn was cancelled', async () => {
     const start = vi.fn()
     const none = makeShowMeHow({ registry: () => null, start, complete: async () => null })

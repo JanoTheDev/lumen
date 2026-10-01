@@ -16,6 +16,39 @@ import {
 
 export type GuideStartFn = (task: string, steps: GuideStep[]) => void
 
+/**
+ * When a locate / guide target is not on screen (05 T36): how-to steps for the request, and the
+ * next UI name of them that is on screen, if any. Set at startup; null = no fallback.
+ */
+export type HowtoFallback = (
+  prompt: string,
+  ctx: GroundingContext,
+  signal?: AbortSignal
+) => Promise<{ text: string; item?: LocateItem & { bbox: Rect } } | null>
+
+let howtoFallback: HowtoFallback | null = null
+
+export function setHowtoFallback(fn: HowtoFallback | null): void {
+  howtoFallback = fn
+}
+
+/** The fallback's reply: the next UI name highlighted, else the steps as an answer. */
+async function tryHowto(prompt: string, ctx: GroundingContext): Promise<boolean> {
+  if (!howtoFallback) return false
+  const r = await howtoFallback(prompt, ctx, ctx.signal).catch((e: Error) => {
+    if (ctx.signal?.aborted) throw e
+    log('fail', `how-to fallback: ${e.message}`)
+    return null
+  })
+  if (!r || ctx.signal?.aborted) return false
+  answer.showText(r.text)
+  if (r.item) {
+    highlight.send('screen:locate', [r.item])
+    highlight.show()
+  }
+  return true
+}
+
 /** The target of a reply item: its own, else the legacy image-px bbox as a rect. */
 function targetOf(item: { target?: Target; bbox?: Rect }): Target | null {
   if (item.target) return item.target
@@ -73,6 +106,8 @@ async function show(
       if (bbox) screenItems.push({ ...item, bbox })
     })
     if (screenItems.length === 0) {
+      if (await tryHowto(prompt, ctx)) return
+      if (aborted()) return
       // Nothing found on screen — show the description as an answer
       const desc =
         result.notFoundReason || result.items[0]?.description || 'Not visible on this page'
@@ -91,6 +126,7 @@ async function show(
     })
     if (!bboxSteps.length) {
       highlight.clear()
+      await tryHowto(prompt, ctx)
       return
     }
     onGuide(prompt, bboxSteps)

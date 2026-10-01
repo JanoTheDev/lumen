@@ -11,6 +11,9 @@ import { readingLevelAppId, readingLevelLineFor } from '../coach/reading-level'
 import type { QueryContext } from '../query/context'
 import { elementIndex, serializeElements } from '../query/uia-list'
 import { appIdFor, generateLesson, genLessonSchema, type GenerateCall } from './generate'
+import { observed } from '../agent-mode/prompts'
+import type { HowtoResult } from '../howto'
+import { howtoText } from '../howto/tool'
 import type { Lesson } from './lesson'
 import type { Skill, SkillRegistry } from './registry'
 
@@ -46,6 +49,25 @@ export interface ShowMeDeps {
   registry: () => SkillRegistry | null
   start: (lesson: Lesson, skill: Skill | null) => void
   complete?: GenerateCall
+  /** How-to steps for an app without a pack (05 T36); their UI names become lesson targets. */
+  howto?: (question: string, signal: AbortSignal) => Promise<HowtoResult>
+}
+
+/** Looked-up steps as app notes for the generator (fenced: web text is data). */
+async function howtoNotes(
+  deps: ShowMeDeps,
+  question: string,
+  signal: AbortSignal
+): Promise<string | undefined> {
+  if (!deps.howto) return undefined
+  const r = await deps.howto(question, signal).catch((e: Error) => {
+    if (signal.aborted) throw e
+    log('fail', `show me how: lookup failed (${e.message})`)
+    return null
+  })
+  if (!r?.steps.length) return undefined
+  log('plan', `show me how: ${r.steps.length} looked-up steps (${r.from})`)
+  return `${observed('how-to', howtoText(r))}\nUse these UI names as step targets when they are on screen.`
 }
 
 /** The reply for a started lesson: handled (no answer card), with a line for history. */
@@ -69,6 +91,8 @@ export function makeShowMeHow(deps: ShowMeDeps) {
     const elements = frame ? serializeElements(ctx.uia, frame.geometry) : null
     const quality = ctx.uiaQuality ?? pack?.uiaQuality
     const appId = appIdFor(pack, ctx.foreground.process)
+    const looked = pack ? undefined : await howtoNotes(deps, question, signal)
+    if (signal.aborted) return null
     const lesson = await generateLesson(
       {
         appId,
@@ -80,7 +104,7 @@ export function makeShowMeHow(deps: ShowMeDeps) {
           question,
           foreground: `${ctx.foreground.title}${ctx.foreground.process ? ` (${ctx.foreground.process})` : ''}`,
           app: pack?.name,
-          skillText: pack ? skillContext(pack, question) : undefined,
+          skillText: pack ? skillContext(pack, question) : looked,
           regions: pack ? regionsLine(pack) : undefined,
           elements: elements?.text,
           uiaQuality: quality,

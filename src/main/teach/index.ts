@@ -59,6 +59,7 @@ import { bridgePort, installBridgeOffer } from './bridges'
 import { lessonList, progressView } from './picker'
 import { PRACTICE_LESSON, PRACTICE_LESSON_ID } from './practice-lesson'
 import { makeShowMeHow } from './show-me'
+import { howtoForeground } from '../howto'
 import { appIdFor } from './generate'
 import { installPackSupport } from './packs'
 import { draftTextSchema, RECORD_PROMPT, recordTurn } from './record-prompt'
@@ -1140,7 +1141,9 @@ export function installTeach(): void {
   wireAgentEvents()
   setLessonContextProvider(() => runner?.context() ?? null)
   setLessonActiveProbe(() => !!runner?.running())
-  setTeachHandler(makeShowMeHow({ registry: () => registry, start: startGenerated }))
+  setTeachHandler(
+    makeShowMeHow({ registry: () => registry, start: startGenerated, howto: howtoForeground })
+  )
 
   bus.on('lesson.command', (e) => {
     if (runner?.running()) runner.command(e.command)
