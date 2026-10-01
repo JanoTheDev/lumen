@@ -131,6 +131,7 @@ export type LaunchAppInput = z.infer<typeof launchAppInput>
 export type WaitForInput = z.infer<typeof waitForInput>
 export type AskUserInput = z.infer<typeof askUserInput>
 export type FocusModeInput = z.infer<typeof focusModeInput>
+export type ReadFileInput = z.infer<typeof readFileInput>
 export type FinishInput = z.infer<typeof finishInput>
 
 export const TOOLS = {
@@ -200,7 +201,7 @@ export type ToolName = keyof typeof TOOLS
 /** Tools that drive the real mouse and keyboard (the input lane; never in background sets). */
 export const INPUT_TOOLS: readonly ToolName[] = ['act', 'keys', 'navigate', 'launch_app']
 
-/** The foreground agent: everything (read_file only when files were shared). */
+/** The foreground agent: everything (read_file is added when the task is about a dropped file). */
 export const FOREGROUND_TOOLS: readonly ToolName[] = [
   'observe',
   'act',

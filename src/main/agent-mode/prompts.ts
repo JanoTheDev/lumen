@@ -62,6 +62,8 @@ export interface TaskContext {
   /** Reply language line for non-English voice users ('' or absent for English). */
   language?: string
   now?: Date
+  /** Files the user dropped that this task is about (08 T21); read_file takes the id. */
+  files?: { id: string; name: string; kind: string }[]
 }
 
 function formatDate(now: Date): string {
@@ -86,6 +88,10 @@ function contextBlock(ctx: TaskContext): string {
   const lines = [`date: ${formatDate(ctx.now ?? new Date())}`]
   lines.push(`foreground: ${ctx.window || 'unknown'}${ctx.app ? ` (${ctx.app})` : ''}`)
   if (ctx.language) lines.push(ctx.language)
+  if (ctx.files?.length)
+    lines.push(
+      `files the user dropped (read_file with the id): ${ctx.files.map((f) => `${f.id} "${f.name.replace(/"/g, '')}" (${f.kind})`).join(', ')}`
+    )
   const skill = ctx.skill?.text
     ? `\n<app_guide app="${ctx.skill.name}">\n${ctx.skill.text}\n</app_guide>`
     : ''

@@ -4,6 +4,7 @@ import { EventEmitter } from 'events'
 const ipc = vi.hoisted(() => ({
   emitter: null as EventEmitter | null,
   send: vi.fn(),
+  invoke: vi.fn<(...a: unknown[]) => Promise<unknown>>(async () => ({ ok: true, files: [] })),
   exposed: {} as Record<string, unknown>
 }))
 
@@ -16,7 +17,10 @@ vi.mock('electron', async () => {
       on: (ch: string, h: (...a: unknown[]) => void) => emitter.on(ch, h),
       removeListener: (ch: string, h: (...a: unknown[]) => void) => emitter.removeListener(ch, h),
       send: ipc.send,
-      invoke: vi.fn()
+      invoke: ipc.invoke
+    },
+    webUtils: {
+      getPathForFile: (f: { path?: string }) => f.path ?? ''
     },
     contextBridge: {
       exposeInMainWorld: (key: string, value: unknown) => {
@@ -30,6 +34,7 @@ interface Lumen {
   invoke: (c: string, ...a: unknown[]) => Promise<unknown>
   send: (c: string, ...a: unknown[]) => void
   on: (c: string, cb: (...a: unknown[]) => void) => () => void
+  dropFile: (f: unknown) => Promise<unknown>
 }
 let lumen: Lumen
 
@@ -73,5 +78,17 @@ describe('preload window.lumen', () => {
     expect(() => lumen.on('status:set', () => {})).toThrow(/unknown channel/)
     lumen.send('assistant:cancel')
     expect(ipc.send).toHaveBeenCalledWith('assistant:cancel')
+  })
+
+  it('dropFile sends only the path of a real dropped file', async () => {
+    const path = 'C:/Users/me/a.pdf'
+    await expect(lumen.dropFile({ path })).resolves.toEqual({ ok: true, files: [] })
+    expect(ipc.invoke).toHaveBeenLastCalledWith('assistant:file-dropped', { path })
+    ipc.invoke.mockClear()
+    await expect(lumen.dropFile({})).resolves.toMatchObject({ ok: false })
+    expect(ipc.invoke).not.toHaveBeenCalled()
+    await expect(lumen.invoke('assistant:file-dropped', { path })).rejects.toThrow(
+      /unknown channel/
+    )
   })
 })

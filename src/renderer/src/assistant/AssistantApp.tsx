@@ -22,6 +22,7 @@ import { send, useIpc } from '../lib/ipc'
 import { BarLive, CaptionEditor, CaptionRow, FeedbackLine } from './Caption'
 import { ClaudeSession } from './ClaudeSession'
 import { Confirm } from './Confirm'
+import { FileChips } from './FileChips'
 import { MorphSurface } from './MorphSurface'
 import { errorHint, simpleRow, statusLine, type BarRow } from './model'
 import { AnswerText, CrossFadeText, Fade, LevelMeter, RollingNumber } from './parts'
@@ -401,6 +402,8 @@ export function AssistantApp(): JSX.Element {
                     <Button onClick={() => send('panel:open', 'settings/memory')}>Review</Button>
                   </p>
                 </Fade>
+
+                <FileChips refreshKey={`${view.visible}|${v.phase}`} />
 
                 {v.captionEdit ? (
                   <CaptionEditor key={v.captionEdit.mode} edit={v.captionEdit} />

@@ -1,5 +1,12 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import { EVENT_CHANNELS, INVOKE_CHANNELS, SEND_CHANNELS, type LumenApi } from '@shared/channels'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
+import {
+  EVENT_CHANNELS,
+  FILE_DROPPED_CHANNEL,
+  INVOKE_CHANNELS,
+  SEND_CHANNELS,
+  type FileDropResult,
+  type LumenApi
+} from '@shared/channels'
 
 const invokeAllowed = new Set<string>(INVOKE_CHANNELS)
 const sendAllowed = new Set<string>(SEND_CHANNELS)
@@ -23,6 +30,20 @@ const lumen: LumenApi = {
     return () => {
       ipcRenderer.removeListener(channel, handler)
     }
+  },
+  // Only a real File (a drop) has a path; page script cannot pass one of its own.
+  dropFile(file) {
+    let path = ''
+    try {
+      path = webUtils.getPathForFile(file)
+    } catch {
+      path = ''
+    }
+    if (!path) {
+      const r: FileDropResult = { ok: false, error: 'That is not a file on this PC.', files: [] }
+      return Promise.resolve(r)
+    }
+    return ipcRenderer.invoke(FILE_DROPPED_CHANNEL, { path })
   }
 }
 

@@ -51,6 +51,7 @@ import { mcpServerOf } from '../skills/permissions'
 import { memorySearchFor } from '../ai/memory/runtime'
 import { observed } from './prompts'
 import { CancelledError } from '../query/cancel'
+import { takeFilesFor } from '../files/attach'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -129,6 +130,8 @@ export function agentCommand(cmd: { type: 'go' } | { type: 'answer'; text: strin
 // ---- runner wiring ----
 
 function taskContext(ctx: QueryContext, prompt: string): TaskContext {
+  // Dropped files (08 T21): listed, and read_file offered, only when the task is about them.
+  const files = takeFilesFor(prompt)
   const skill = ctx.skill
     ? { name: ctx.skill.name, text: skillContext(ctx.skill, prompt) }
     : undefined
@@ -137,7 +140,8 @@ function taskContext(ctx: QueryContext, prompt: string): TaskContext {
     app: ctx.foreground.process,
     ...(skill?.text ? { skill } : {}),
     language: replyLanguageLine(loadConfig().voice.language),
-    now: new Date()
+    now: new Date(),
+    ...(files.length ? { files: files.map((f) => ({ id: f.id, name: f.name, kind: f.kind })) } : {})
   }
 }
 
@@ -354,7 +358,9 @@ async function run(
         {
           prompt,
           context,
-          tools: tools ?? FOREGROUND_TOOLS,
+          tools:
+            tools ??
+            (context.files?.length ? [...FOREGROUND_TOOLS, 'read_file'] : FOREGROUND_TOOLS),
           // Helper tasks in the background (T28): parallel research fan-out.
           extraTools: [
             MEMORY_SEARCH_TOOL,

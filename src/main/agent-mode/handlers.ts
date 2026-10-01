@@ -22,6 +22,8 @@ import { checksFor, verify, type Check, type Observation } from '../ai/verify'
 import { log } from '../logger'
 import * as screenLayer from '../windows/screen-layer'
 import { focusOff, focusOn } from '../focus'
+import { loadContent } from '../files/content'
+import { getFile } from '../files/store'
 import { appRegistry, findApp, launchEntry } from './apps'
 import { askUser, type AskIo } from './ask'
 import { performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
@@ -36,6 +38,7 @@ import type {
   LaunchAppInput,
   NavigateInput,
   ObserveInput,
+  ReadFileInput,
   WaitForInput
 } from './tools'
 import { waitFor, type WaitProbe } from './wait-for'
@@ -394,6 +397,17 @@ async function focusMode(input: FocusModeInput): Promise<ToolOutcome> {
   return { content: text(input.on ? await focusOn({ region }) : focusOff()) }
 }
 
+// ---- read_file (08 T21): only files dropped on the bar in this conversation ----
+
+export async function readDropped(input: ReadFileInput, env: TaskEnv): Promise<ToolOutcome> {
+  const f = getFile(input.fileId)
+  if (!f) return fail('E_DENIED: no file with that id was shared in this conversation.')
+  const content = await loadContent(f, { pdf: true })
+  for (const c of content) if (c.type === 'text') noteObserved(env, c.text)
+  log('plan', `read_file ${f.id} (${f.kind})`)
+  return { content }
+}
+
 /** The handlers for one task. */
 export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
   return {
@@ -405,6 +419,6 @@ export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
     wait_for: (i, c) => waitForTool(i as WaitForInput, c.signal),
     ask_user: (i, c) => ask(i as AskUserInput, env, c.signal, c.update),
     focus_mode: (i) => focusMode(i as FocusModeInput),
-    read_file: async () => fail('No files were shared in this conversation.')
+    read_file: (i) => readDropped(i as ReadFileInput, env)
   }
 }

@@ -29,6 +29,7 @@ import {
 } from './providers'
 import { noteAnswerModel, recordUsage } from './cost'
 import { installTurnMetrics } from './turn-metrics'
+import { attachmentsFor } from '../files/attach'
 
 export interface CallOptions {
   lowDetail?: boolean // use low-res image + fewer tokens (for follow_up row enumeration)
@@ -95,6 +96,13 @@ export async function callModel(
     : undefined
   const detail: 'low' | 'high' = opts.lowDetail ? 'low' : 'high'
   const { llm, model, effort } = getProvider('main')
+  // Files dropped on the bar (08 T21), only when this request is about them.
+  const files = withConversation ? await attachmentsFor(prompt, { pdf: llm.id !== 'local' }) : null
+  if (files)
+    log(
+      'plan',
+      `files: ${files.documents.length} pdf, ${files.images.length} image, ~${estimateTokens(files.text)} text tokens`
+    )
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
     model,
@@ -123,19 +131,23 @@ export async function callModel(
               readingLevelAppId(skill?.id, ctx?.foreground.process)
             ) || undefined,
           regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
-        })
+        }).concat(files?.text ? '\n\n' + files.text : '')
       }
     ],
-    images: screenshotBase64
-      ? [
-          { base64: screenshotBase64, detail },
-          ...extra.map((f) => ({
-            base64: f.data,
-            mediaType: f.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const),
-            detail
-          }))
-        ]
-      : [],
+    images: [
+      ...(screenshotBase64
+        ? [
+            { base64: screenshotBase64, detail },
+            ...extra.map((f) => ({
+              base64: f.data,
+              mediaType: f.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const),
+              detail
+            }))
+          ]
+        : []),
+      ...(files?.images ?? [])
+    ],
+    ...(files?.documents.length ? { documents: files.documents } : {}),
     maxTokens: opts.lowDetail ? 2048 : 4096,
     effort,
     schema: replySchema,

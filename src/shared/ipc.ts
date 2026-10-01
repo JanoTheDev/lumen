@@ -71,6 +71,8 @@ export const journalDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 /** Background task ids (08 T29) and a typed answer to a task's question. */
 export const bgTaskIdSchema = z.string().regex(/^bg_[a-z0-9]{4,40}$/)
 export const bgTaskAnswerSchema = z.tuple([bgTaskIdSchema, z.string().trim().min(1).max(500)])
+export const fileDropSchema = z.object({ path: z.string().min(3).max(1024) }).strict()
+export const fileIdSchema = z.string().regex(/^f_[a-z0-9]{4,40}$/)
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([
   'left',

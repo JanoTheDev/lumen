@@ -79,6 +79,9 @@ export interface InvokeChannels {
     args: [summary: string, confidence?: Confidence | string]
     result: { delayMs: number }
   }
+  /** Files dropped on the bar in this conversation (08 T21). */
+  'assistant:files': { args: []; result: DroppedFileView[] }
+  'assistant:file-remove': { args: [fileId: string]; result: FileDropResult }
   'voice:transcribe': {
     args: [audio: ArrayBuffer, opts?: { dictation?: boolean }]
     result: string
@@ -905,6 +908,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'assistant:query',
   'assistant:execute',
   'assistant:announce',
+  'assistant:files',
+  'assistant:file-remove',
   'voice:transcribe',
   'voice:dictate',
   'voice:speak',
@@ -1087,6 +1092,24 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'tasks:changed'
 ]
 
+/** A file dropped on the assistant bar (08 T21), as the bar shows it. */
+export interface DroppedFileView {
+  id: string
+  name: string
+  size: number
+  kind: 'pdf' | 'docx' | 'text' | 'image'
+}
+
+export type FileDropResult =
+  | { ok: true; files: DroppedFileView[] }
+  | { ok: false; error: string; files: DroppedFileView[] }
+
+/**
+ * Invoked by the preload's dropFile only (not in INVOKE_CHANNELS): the path comes from
+ * webUtils.getPathForFile, so page script cannot name an arbitrary path.
+ */
+export const FILE_DROPPED_CHANNEL = 'assistant:file-dropped'
+
 /** Typed surface exposed to renderers as `window.lumen`. */
 export interface LumenApi {
   invoke<C extends InvokeChannel>(
@@ -1095,4 +1118,6 @@ export interface LumenApi {
   ): Promise<InvokeChannels[C]['result']>
   send<C extends SendChannel>(channel: C, ...args: SendChannels[C]): void
   on<C extends EventChannel>(channel: C, cb: (...args: EventChannels[C]) => void): () => void
+  /** Shares a dropped file with Lumen for this conversation (assistant bar only). */
+  dropFile(file: File): Promise<FileDropResult>
 }
