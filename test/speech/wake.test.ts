@@ -12,12 +12,7 @@ import {
   wakeTuning
 } from '../../src/main/speech/wake/keywords'
 import { confirmsCancel } from '../../src/main/speech/wake/confirm'
-import {
-  armCancel,
-  cancelArmed,
-  onCancelArmed,
-  withCancelArmed
-} from '../../src/main/speech/wake/arm'
+import { armCancel, cancelArmed, withCancelArmed } from '../../src/main/speech/wake/arm'
 
 // Minimal sentencepiece ModelProto writer: field 1 = SentencePiece { 1: piece, 2: score }.
 function varint(n: number): number[] {
@@ -183,9 +178,7 @@ describe('confirmsCancel', () => {
 })
 
 describe('cancel arming', () => {
-  it('is ref-counted and notifies on edges only', async () => {
-    const seen: boolean[] = []
-    const off = onCancelArmed((a) => seen.push(a))
+  it('is ref-counted', async () => {
     const a = armCancel()
     const b = armCancel()
     expect(cancelArmed()).toBe(true)
@@ -202,7 +195,5 @@ describe('cancel arming', () => {
       })
     ).rejects.toThrow('x')
     expect(cancelArmed()).toBe(false)
-    expect(seen).toEqual([true, false, true, false, true, false])
-    off()
   })
 })

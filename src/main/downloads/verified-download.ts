@@ -20,8 +20,7 @@ export interface DownloadProgress {
 export const MODEL_HOSTS: readonly string[] = [
   'github.com',
   'objects.githubusercontent.com',
-  'release-assets.githubusercontent.com',
-  'alphacephei.com'
+  'release-assets.githubusercontent.com'
 ]
 
 export interface DownloadOptions {

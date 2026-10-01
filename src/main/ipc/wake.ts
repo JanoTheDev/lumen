@@ -1,18 +1,14 @@
 import { ipcMain } from 'electron'
-import { installModel } from '../wake-model'
 import { loadConfig } from '../config'
 import { loadSherpa } from '../speech/sherpa'
-import { applyWakeState, wakeStatus } from '../speech/wake'
+import { applyWakeState, ENGINE_UNAVAILABLE, wakeStatus } from '../speech/wake'
 import { installKwsModel } from '../speech/wake/kws-model'
 
-/** The wake model is the keyword spotter's; the Vosk model only where the native engine is missing. */
+/** Installs the keyword spotter model; fails when the engine itself cannot load here. */
 export async function installWakeModel(): Promise<void> {
-  if (loadSherpa()) {
-    await installKwsModel()
-    applyWakeState(loadConfig())
-  } else {
-    await installModel()
-  }
+  if (!loadSherpa()) throw new Error(ENGINE_UNAVAILABLE)
+  await installKwsModel()
+  applyWakeState(loadConfig())
 }
 
 export function registerWakeIpc(): void {

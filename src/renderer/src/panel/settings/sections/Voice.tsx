@@ -96,7 +96,6 @@ function useWakeStatus(): [WakeStatus | null, () => void] {
 
 const ENGINE_TEXT: Record<WakeStatus['engine'], string> = {
   kws: 'Listening with the offline keyword spotter.',
-  vosk: 'Using the backup engine; sensitivity has no effect on it.',
   off: 'Not listening.'
 }
 
@@ -123,6 +122,13 @@ function WakeEngine({
   )
 
   if (!status) return <p className="ui-hint">Checking the offline model…</p>
+  if (status.unavailable) {
+    return (
+      <p className="panel-warn" role="status">
+        <icons.alert /> Wake word unavailable. {status.unavailable}
+      </p>
+    )
+  }
   if (progress?.phase === 'downloading' || progress?.phase === 'extracting') {
     return (
       <ProgressBar

@@ -1,29 +1,22 @@
-// Wake word + voice-cancel engine. Default: sherpa-onnx keyword spotting here in main, fed by
-// the voice renderer's mic stream (the same stream recording uses: one mic open, echo
-// cancelled). Fallback: the agent's Vosk listener, when the spotter model is missing (and the
-// Vosk model is already there) or the native engine does not load.
+// Wake word + voice-cancel engine: sherpa-onnx keyword spotting here in main, fed by the voice
+// renderer's mic stream (the same stream recording uses: one mic open, echo cancelled). When
+// the engine cannot load, the wake word reports itself unavailable.
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
-import { getAgent } from '../../agent/instance'
 import { splitPhrases } from '../../agent/state'
 import type { WakeStatus } from '@shared/channels'
-import {
-  installModel as installVoskModel,
-  modelInstalled as voskInstalled,
-  modelRoot as voskModelRoot
-} from '../../wake-model'
 import * as hud from '../../windows/hud'
 import { broadcast } from '../../windows/registry'
 import { loadSherpa } from '../sherpa'
 import { localSttReady, transcribeLocal } from '../stt/local'
-import { cancelArmed, onCancelArmed } from './arm'
+import { cancelArmed } from './arm'
 import { confirmsCancel } from './confirm'
 import { handleVoiceCancel, handleWake } from './handlers'
 import { installKwsModel, KWS_MODEL, kwsModelDir, kwsModelInstalled } from './kws-model'
 import type { KeywordPhrases } from './keywords'
 import { Spotter } from './spotter'
 
-export type WakeEngine = 'kws' | 'vosk' | 'off'
+export type WakeEngine = 'kws' | 'off'
 
 type Phrases = KeywordPhrases
 
@@ -31,7 +24,8 @@ const REFRACTORY_MS = 2000
 // Audio after a cancel hit that goes into the confirming transcript ("stop" vs "stopwatch").
 const CONFIRM_TAIL_MS = 300
 const MAX_PCM_BYTES = 64_000
-const VOSK_SIZE_MB = 40
+
+export const ENGINE_UNAVAILABLE = 'The offline wake word engine could not load on this PC.'
 
 let engine: WakeEngine = 'off'
 let spotter: Spotter | null = null
@@ -41,15 +35,16 @@ let applySeq = 0
 let lastWakeAt = 0
 let confirming = false
 let unusable: string[] = []
+let spotterError: string | null = null
 
 /** Engine, model and phrase state for Settings. */
 export function wakeStatus(): WakeStatus {
-  const native = !!loadSherpa()
   return {
-    installed: native ? kwsModelInstalled() : voskInstalled(),
-    path: native ? kwsModelDir() : voskModelRoot(),
+    installed: kwsModelInstalled(),
+    path: kwsModelDir(),
     engine,
-    sizeMb: native ? KWS_MODEL.sizeMb : VOSK_SIZE_MB,
+    unavailable: loadSherpa() ? spotterError : ENGINE_UNAVAILABLE,
+    sizeMb: KWS_MODEL.sizeMb,
     unusable: [...unusable]
   }
 }
@@ -68,29 +63,7 @@ function phrasesOf(cfg: AppConfig): Phrases {
   }
 }
 
-function syncAgentArm(): void {
-  if (engine !== 'vosk') return
-  getAgent()
-    ?.request('wake_arm_cancel', { armed: cancelArmed() })
-    .catch(() => {})
-}
-
-onCancelArmed(() => syncAgentArm())
-
-function startVosk(p: Phrases): void {
-  const enable = (): void => {
-    getAgent()
-      ?.enableListener(p.wake, p.cancel)
-      .then(syncAgentArm)
-      .catch((e) => console.error('[listener] enable failed:', (e as Error).message))
-  }
-  if (voskInstalled()) return enable()
-  installVoskModel()
-    .then(enable)
-    .catch((e) => console.error('[listener] model install failed:', (e as Error).message))
-}
-
-function switchTo(next: WakeEngine, p?: Phrases): void {
+function switchTo(next: WakeEngine): void {
   if (next !== 'kws') {
     spotter = null
     spotterKey = ''
@@ -99,45 +72,44 @@ function switchTo(next: WakeEngine, p?: Phrases): void {
   if (next !== engine) log('step', `wake engine: ${next}`)
   engine = next
   hud.send('voice:wake-listen', next === 'kws')
-  if (next === 'vosk' && p) startVosk(p)
-  else
-    getAgent()
-      ?.disableListener()
-      .catch(() => {})
   broadcast('wake:status', wakeStatus())
 }
 
-/** Applies the wake/cancel settings; re-run after config changes and agent restarts. */
+/** Applies the wake/cancel settings; re-run after config changes. */
 export function applyWakeState(cfg: AppConfig): void {
   const seq = ++applySeq
   const p = phrasesOf(cfg)
+  spotterError = null
   if (!p.wake && !p.cancel.length) return switchTo('off')
 
   const lib = loadSherpa()
-  if (lib && kwsModelInstalled()) {
-    const key = JSON.stringify(p)
-    if (spotter && engine === 'kws' && key === spotterKey) return switchTo('kws')
-    try {
-      const next = new Spotter(lib, kwsModelDir(), p)
-      for (const phrase of next.unusable)
-        log('fail', `wake: "${phrase}" can't be spelled by the model`)
-      spotter = next
-      spotterKey = key
-      unusable = next.unusable
-      return switchTo('kws')
-    } catch (e) {
-      log('fail', `wake word spotter failed, using Vosk: ${(e as Error).message}`)
-    }
-  } else if (lib) {
+  if (!lib) {
+    log('fail', 'wake word unavailable: the sherpa-onnx engine did not load')
+    return switchTo('off')
+  }
+  if (!kwsModelInstalled()) {
     installKwsModel()
       .then(() => {
         if (seq === applySeq) applyWakeState(loadConfig())
       })
       .catch(() => {})
-    // The spotter is on its way (18 MB): only use Vosk meanwhile if it is already installed.
-    if (!voskInstalled()) return switchTo('off')
+    return switchTo('off')
   }
-  switchTo('vosk', p)
+  const key = JSON.stringify(p)
+  if (spotter && engine === 'kws' && key === spotterKey) return switchTo('kws')
+  try {
+    const next = new Spotter(lib, kwsModelDir(), p)
+    for (const phrase of next.unusable)
+      log('fail', `wake: "${phrase}" can't be spelled by the model`)
+    spotter = next
+    spotterKey = key
+    unusable = next.unusable
+    switchTo('kws')
+  } catch (e) {
+    spotterError = `The wake word spotter failed to start: ${(e as Error).message}`
+    log('fail', spotterError)
+    switchTo('off')
+  }
 }
 
 async function confirmCancel(phrase: string): Promise<void> {

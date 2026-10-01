@@ -443,11 +443,13 @@ export interface HomeInfo {
 
 /** Wake word / voice-cancel engine state for Settings. */
 export interface WakeStatus {
-  /** The model for this PC's engine (spotter, or Vosk without the native engine) is installed. */
+  /** The keyword spotter model is installed. */
   installed: boolean
   path: string
-  /** Running engine: keyword spotter, Vosk fallback, or nothing listening. */
-  engine: 'kws' | 'vosk' | 'off'
+  /** Running engine: keyword spotter, or nothing listening. */
+  engine: 'kws' | 'off'
+  /** Why the wake word cannot run on this PC (engine failed to load), or null. */
+  unavailable: string | null
   /** Download size of that model, MB. */
   sizeMb: number
   /** Wake/stop phrases the spotter can't spell (they are ignored). */

@@ -122,7 +122,7 @@ describe('verified download', () => {
       const zip = join(tmp.dir, 'model-1.zip')
       execFileSync(tarPath(), ['-a', '-cf', zip, '-C', src, 'model-1'])
       const body = readFileSync(zip)
-      const url = 'https://alphacephei.com/model-1.zip'
+      const url = 'https://github.com/model-1.zip'
       routes.set(url, { status: 200, body })
       const dest = join(tmp.dir, 'home', 'model')
       mkdirSync(dest, { recursive: true })
