@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Tech Wire</title>
+  <entry>
+    <title type="html">Climate deal agreed by leaders at Nairobi summit</title>
+    <link rel="alternate" type="text/html" href="https://tech.test/2026/10/climate-deal"/>
+    <link rel="replies" href="https://tech.test/2026/10/climate-deal#comments"/>
+    <updated>2026-10-01T09:30:00Z</updated>
+    <summary type="html">&lt;b&gt;Nairobi&lt;/b&gt; summit ends with a deal on emissions.</summary>
+  </entry>
+  <entry>
+    <title>New open-source laptop chip ships to developers</title>
+    <link href="https://tech.test/2026/10/chip"/>
+    <updated>2026-10-01T07:00:00Z</updated>
+    <content type="html">A RISC-V laptop chip is now shipping.</content>
+  </entry>
+</feed>

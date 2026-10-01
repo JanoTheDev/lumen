@@ -416,6 +416,44 @@ export const DICTATION_STYLE_DEFAULTS: Record<DictationAppKind, DictationStyle> 
 }
 const dictationStyle = z.enum(DICTATION_STYLES)
 
+/**
+ * Read the web with me (05 Phase W): news feeds (free publisher RSS / Atom, user-editable),
+ * interests that rank stories, and the opt-in paid web search (off by default; a per-search
+ * price applies on the user's own key).
+ */
+const newsFeedSchema = z.object({
+  name: z.string().min(1).max(60),
+  url: z
+    .string()
+    .max(500)
+    .regex(/^https:\/\/[^\s/]+\.[^\s]+$/, 'https feed address'),
+  topic: z.string().max(30)
+})
+
+const webSchema = z.object({
+  feeds: z.array(newsFeedSchema).max(40),
+  /** Topics that rank news higher ("climate", "formula 1"). */
+  interests: z.array(shortText(60)).max(30),
+  /** Paid provider web search for "news about X" and questions the feeds can't answer. */
+  paidSearch: z.boolean()
+})
+
+export type NewsFeedConfig = z.infer<typeof newsFeedSchema>
+export type WebConfig = z.infer<typeof webSchema>
+
+export const WEB_DEFAULTS: WebConfig = {
+  feeds: [
+    { name: 'BBC News', url: 'https://feeds.bbci.co.uk/news/world/rss.xml', topic: 'world' },
+    { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml', topic: 'world' },
+    { name: 'The Guardian', url: 'https://www.theguardian.com/world/rss', topic: 'world' },
+    { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', topic: 'tech' },
+    { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', topic: 'tech' },
+    { name: 'Hacker News', url: 'https://news.ycombinator.com/rss', topic: 'tech' }
+  ],
+  interests: [],
+  paidSearch: false
+}
+
 export const configV2Schema = z.object({
   version: z.literal(2),
   theme: v1.theme,
@@ -639,6 +677,7 @@ export const configV2Schema = z.object({
    */
   system: z.object({ startAtLogin: z.boolean(), autoUpdate: z.boolean() }),
   helpers: helpersSchema.default(HELPERS_DEFAULTS),
+  web: webSchema.default(WEB_DEFAULTS),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -751,7 +790,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   ui: { homeHotkey: 'Ctrl+Shift+H' },
   onboarding: { done: false },
   system: { startAtLogin: false, autoUpdate: true },
-  helpers: HELPERS_DEFAULTS
+  helpers: HELPERS_DEFAULTS,
+  web: WEB_DEFAULTS
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -840,7 +880,8 @@ const patchObject = z
     ui: s2.ui.partial().strict(),
     onboarding: s2.onboarding.partial().strict(),
     system: s2.system.partial().strict(),
-    helpers: helpersSchema.partial().strict()
+    helpers: helpersSchema.partial().strict(),
+    web: webSchema.partial().strict()
   })
   .partial()
   .strict()

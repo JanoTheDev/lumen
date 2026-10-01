@@ -40,6 +40,7 @@ import { startBackgroundTask } from '../agent-mode/background'
 import { enabledSkill } from '../agent-mode/skill-tools'
 import { matchTrigger } from '../skills'
 import { loadConfig } from '../config'
+import { webTurn } from '../web'
 import { log, startTimer } from '../logger'
 
 export interface PipelineDeps {
@@ -278,6 +279,17 @@ async function runTurn(
       return result
     }
   }
+  // Read the web with me (05 Phase W): "summarize this page", "top news", "open the second one".
+  const web = opts.lowDetail ? null : await webTurn(prompt, scope.signal)
+  if (web) {
+    scope.throwIfCancelled()
+    speakEarly(web, deps)
+    await present(web, prompt, deps.onGuide, undefined, scope.signal)
+    scope.throwIfCancelled()
+    lastMode = web.mode
+    addToHistory(historyExchange(prompt, web))
+    return web
+  }
   const bg = opts.lowDetail ? null : matchBackgroundIntent(prompt)
   // A skill's trigger phrase (11 T03/T04): runs as an agent task with the skill loaded, or as a
   // background task for `context: background` skills and "in the background, <phrase>".
@@ -392,16 +404,7 @@ async function runTurn(
     timer.split('follow-up done')
   }
 
-  // Start TTS synth early — parallel to renderer showing the answer card
-  const spoken = result.mode === 'answer' ? (result.spoken ?? result.text)?.trim() : ''
-  if (spoken) {
-    const cfgNow = loadConfig()
-    if (cfgNow.voice.tts === 'cloud') {
-      deps
-        .speak(spoken, cfgNow.voice.ttsVoice)
-        .catch((e) => console.warn('[tts] early synth failed:', (e as Error).message))
-    }
-  }
+  speakEarly(result, deps)
 
   await present(result, prompt, deps.onGuide, shown, scope.signal)
   scope.throwIfCancelled()
@@ -414,6 +417,18 @@ async function runTurn(
     recordTurn({ utterance: prompt, answer: spoken, mode, targets, app })
   }
   return result
+}
+
+/** Starts cloud TTS synth early, in parallel with the renderer showing the answer card. */
+function speakEarly(result: ModelResponse, deps: PipelineDeps): void {
+  const spoken = result.mode === 'answer' ? (result.spoken ?? result.text)?.trim() : ''
+  if (!spoken) return
+  const cfgNow = loadConfig()
+  if (cfgNow.voice.tts === 'cloud') {
+    deps
+      .speak(spoken, cfgNow.voice.ttsVoice)
+      .catch((e) => console.warn('[tts] early synth failed:', (e as Error).message))
+  }
 }
 
 /**
