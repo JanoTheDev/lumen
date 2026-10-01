@@ -9,7 +9,7 @@ use super::pagediff::{self, Gray};
 use super::textmatch::{self, ROW_BAND_LOGICAL};
 use super::{Action, Dir, bbox_center, failed};
 use crate::capture::{self, Which};
-use crate::geom::Rect;
+use crate::geom::{Rect, lerp};
 use crate::input::sendinput::{self as si, Button};
 use crate::input::{safety, vk_for};
 use crate::proto::router::CancelToken;
@@ -35,7 +35,7 @@ fn glide(x: i32, y: i32, duration: Duration, token: &CancelToken) -> Result<(), 
     for i in 1..=steps {
         token.check()?;
         let f = i as f64 / steps as f64;
-        si::move_to(sx + ((x - sx) as f64 * f).round() as i32, sy + ((y - sy) as f64 * f).round() as i32)?;
+        si::move_to(lerp(sx, x, f), lerp(sy, y, f))?;
         if i < steps {
             token.sleep(GLIDE_STEP)?;
         }

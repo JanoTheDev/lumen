@@ -185,9 +185,7 @@ pub fn run_step(step: &Step, token: &CancelToken) -> Result<(), AgentError> {
                 for i in 1..=DRAG_MOVES {
                     token.sleep(DRAG_TIME / DRAG_MOVES)?;
                     let f = i as f64 / DRAG_MOVES as f64;
-                    let x = from.0 as f64 + (to.0 - from.0) as f64 * f;
-                    let y = from.1 as f64 + (to.1 - from.1) as f64 * f;
-                    si::move_to(x.round() as i32, y.round() as i32)?;
+                    si::move_to(crate::geom::lerp(from.0, to.0, f), crate::geom::lerp(from.1, to.1, f))?;
                 }
                 Ok(())
             })();

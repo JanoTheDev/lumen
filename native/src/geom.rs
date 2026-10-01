@@ -13,6 +13,11 @@ pub struct Rect {
     pub h: i32,
 }
 
+/// `a + (b - a) * f` in f64, so far-apart coordinates cannot overflow i32. Pure.
+pub fn lerp(a: i32, b: i32, f: f64) -> i32 {
+    (a as f64 + (b as f64 - a as f64) * f).round() as i32
+}
+
 impl Rect {
     pub const fn new(x: i32, y: i32, w: i32, h: i32) -> Self {
         Rect { x, y, w, h }
@@ -90,5 +95,14 @@ mod tests {
         assert_eq!(Rect::from_json(&json!({"x":1,"y":2.9,"w":3,"h":4}), "r").unwrap(), Rect::new(1, 2, 3, 4));
         assert_eq!(Rect::from_json(&json!({"x":1}), "r").unwrap_err().code, "E_INVALID");
         assert_eq!(Rect::from_json(&json!([1, 2, 3, 4]), "r").unwrap_err().code, "E_INVALID");
+    }
+
+    #[test]
+    fn lerp_does_not_overflow() {
+        assert_eq!(lerp(i32::MIN, i32::MAX, 1.0), i32::MAX);
+        assert_eq!(lerp(i32::MAX, i32::MIN, 1.0), i32::MIN);
+        assert_eq!(lerp(i32::MAX, i32::MIN, 0.0), i32::MAX);
+        assert_eq!(lerp(10, 20, 0.5), 15);
+        assert_eq!(lerp(-10, 10, 0.25), -5);
     }
 }
