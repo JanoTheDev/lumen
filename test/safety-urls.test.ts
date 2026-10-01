@@ -6,6 +6,7 @@ import {
   evaluate,
   isSafeUrl,
   newTaskState,
+  siteOf,
   type PolicyCtx
 } from '../src/main/actions/safety'
 
@@ -67,14 +68,44 @@ describe('ordinary web addresses are allowed', () => {
     expect(assertLaunchableUrl('https://bücher.de/')).toBe('https://xn--bcher-kva.de/')
   })
 
-  // siteOf keeps the last two labels, so a grant for mail.example.co.uk covers every .co.uk
-  // site. See 10-quality/tasks.md Notes (needs a small public-suffix table in safety.ts).
-  it.fails('a new site on an agent task is grantable per registrable domain', () => {
+  it('a new site on an agent task is grantable per registrable domain', () => {
     const d = evaluate(
       { type: 'open_url', url: 'https://mail.example.co.uk/x' },
       { origin: 'agent', task: newTaskState() }
     )
     expect(d.risk).toBe('medium')
     expect(d.grantScope).toBe('domain:example.co.uk')
+  })
+})
+
+describe('siteOf keys grants on the registrable domain', () => {
+  it.each([
+    ['mail.google.com', 'google.com'],
+    ['www.github.com', 'github.com'],
+    ['GitHub.com.', 'github.com'],
+    ['mail.example.co.uk', 'example.co.uk'],
+    ['a.b.example.co.uk', 'example.co.uk'],
+    ['www.bbc.co.uk', 'bbc.co.uk'],
+    ['ox.ac.uk', 'ox.ac.uk'],
+    ['www.gov.uk', 'gov.uk'],
+    ['shop.example.com.au', 'example.com.au'],
+    ['news.yahoo.co.jp', 'yahoo.co.jp'],
+    ['loja.example.com.br', 'example.com.br'],
+    ['user.github.io', 'user.github.io'],
+    ['app.vercel.app', 'app.vercel.app'],
+    ['t.co', 't.co'],
+    ['localhost', 'localhost'],
+    ['192.168.1.20', '192.168.1.20'],
+    ['[::1]', '[::1]']
+  ])('%s -> %s', (host, site) => {
+    expect(siteOf(host)).toBe(site)
+  })
+
+  it('a grant for one .co.uk site does not cover another', () => {
+    const task = newTaskState()
+    task.visitedHosts.add(siteOf('mail.example.co.uk'))
+    const d = evaluate({ type: 'open_url', url: 'https://other.co.uk/' }, { origin: 'agent', task })
+    expect(d.risk).toBe('medium')
+    expect(d.grantScope).toBe('domain:other.co.uk')
   })
 })

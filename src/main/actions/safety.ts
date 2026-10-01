@@ -300,12 +300,72 @@ function isPrivateHost(host: string): boolean {
   return false
 }
 
-/** "mail.google.com" → "google.com": sites, not hosts, count as visited. */
+/** Multi-label public suffixes beyond the ccTLD heuristic below (shared hosting included). */
+const MULTI_PART_SUFFIXES = new Set([
+  'com.au',
+  'net.au',
+  'org.au',
+  'co.nz',
+  'co.jp',
+  'ne.jp',
+  'or.jp',
+  'com.br',
+  'com.cn',
+  'com.tr',
+  'co.in',
+  'co.za',
+  'com.mx',
+  'github.io',
+  'gitlab.io',
+  'herokuapp.com',
+  'vercel.app',
+  'netlify.app',
+  'pages.dev',
+  'workers.dev',
+  'web.app',
+  'firebaseapp.com',
+  'appspot.com',
+  'blogspot.com',
+  'azurewebsites.net',
+  'cloudfront.net',
+  'amazonaws.com'
+])
+/** Second-level labels that ccTLD registries hand out as suffixes (co.uk, gov.uk, ac.kr ...). */
+const CC_SECOND_LEVEL = new Set([
+  'ac',
+  'co',
+  'com',
+  'edu',
+  'gob',
+  'go',
+  'gov',
+  'ltd',
+  'mil',
+  'ne',
+  'net',
+  'nic',
+  'or',
+  'org',
+  'plc',
+  'sch'
+])
+
+function isPublicSuffix(sld: string, tld: string): boolean {
+  if (MULTI_PART_SUFFIXES.has(`${sld}.${tld}`)) return true
+  return tld.length === 2 && CC_SECOND_LEVEL.has(sld)
+}
+
+/**
+ * The registrable domain: "mail.google.com" → "google.com", "mail.example.co.uk" →
+ * "example.co.uk". Sites, not hosts, count as visited and key "always for this site" grants.
+ * IP addresses and single-label hosts are kept whole.
+ */
 export function siteOf(host: string): string {
-  const parts = host
-    .toLowerCase()
-    .replace(/^www\./, '')
-    .split('.')
+  const h = host.toLowerCase().replace(/\.$/, '')
+  if (h.includes(':') || h.startsWith('[') || /^\d+(\.\d+){3}$/.test(h)) return h
+  const parts = h.replace(/^www\./, '').split('.')
+  const n = parts.length
+  if (n > 2 && isPublicSuffix(parts[n - 2], parts[n - 1])) return parts.slice(-3).join('.')
   return parts.slice(-2).join('.')
 }
 
