@@ -1,7 +1,6 @@
 //! Agent protocol v2 (plans CONTRACTS C2): NDJSON framing, error codes.
 //!
-//! Requests may use either framing, like the Python agent: `{v:2, id, cmd, args}`
-//! or the flat v1 shape `{id, cmd, ...args}`. Responses and events are always v2.
+//! Requests are `{v:2, id, cmd, args}`; any other object is a protocol error.
 
 pub mod router;
 pub mod writer;
@@ -72,26 +71,24 @@ pub struct Request {
 const ERROR_ECHO_CHARS: usize = 200;
 
 /// Parses one stdin line. `None` for blank lines; `Err(echo)` when the line is
-/// not a JSON object (the caller emits `protocol-error {line: echo}`).
+/// not a v2 request object (the caller emits `protocol-error {line: echo}`).
 pub fn parse_line(line: &str) -> Option<Result<Request, String>> {
     let line = line.trim();
     if line.is_empty() {
         return None;
     }
+    let echo = || line.chars().take(ERROR_ECHO_CHARS).collect();
     let Ok(Value::Object(mut msg)) = serde_json::from_str::<Value>(line) else {
-        return Some(Err(line.chars().take(ERROR_ECHO_CHARS).collect()));
+        return Some(Err(echo()));
     };
+    if msg.get("v").and_then(Value::as_i64) != Some(2) {
+        return Some(Err(echo()));
+    }
     let id = msg.get("id").cloned().unwrap_or(json!(0));
     let cmd = msg.get("cmd").and_then(Value::as_str).map(str::to_owned);
-    let args = if msg.get("v").and_then(Value::as_i64) == Some(2) {
-        match msg.remove("args") {
-            Some(Value::Object(args)) => args,
-            _ => Args::new(),
-        }
-    } else {
-        msg.remove("id");
-        msg.remove("cmd");
-        msg
+    let args = match msg.remove("args") {
+        Some(Value::Object(args)) => args,
+        _ => Args::new(),
     };
     Some(Ok(Request { id, cmd, args }))
 }
@@ -178,10 +175,9 @@ mod tests {
     }
 
     #[test]
-    fn parses_v1_framing_as_flat_args() {
-        let r = parse_line(r#"{"id":1,"cmd":"set_hotkey","combo":"Ctrl+A"}"#).unwrap().unwrap();
-        assert_eq!(r.args.len(), 1);
-        assert_eq!(r.args.get("combo"), Some(&json!("Ctrl+A")));
+    fn rejects_v1_framing() {
+        let line = r#"{"id":1,"cmd":"set_hotkey","combo":"Ctrl+A"}"#;
+        assert_eq!(parse_line(line).unwrap().unwrap_err(), line);
     }
 
     #[test]
@@ -192,7 +188,7 @@ mod tests {
 
     #[test]
     fn missing_id_defaults_to_zero() {
-        let r = parse_line(r#"{"cmd":"ping"}"#).unwrap().unwrap();
+        let r = parse_line(r#"{"v":2,"cmd":"ping"}"#).unwrap().unwrap();
         assert_eq!(r.id, json!(0));
     }
 

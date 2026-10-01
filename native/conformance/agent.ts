@@ -1,12 +1,9 @@
-// Spawns the agent under test (Python or native) and speaks protocol v2 to it.
+// Spawns lumen-native and speaks protocol v2 to it.
 //
-// LUMEN_AGENT_CMD selects the implementation, e.g.
-//   agent/.venv/Scripts/python.exe agent/main.py --protocol 2 --debug
-//   native/target/release/lumen-native.exe --debug
-// Relative paths resolve against the repo root. Default: the native release build
-// if it exists, else the Python venv.
+// LUMEN_AGENT_CMD overrides the command, e.g.
+//   native/target/fastrel/lumen-native.exe --debug
+// Relative paths resolve against the repo root. Default: the native release build.
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process'
-import { existsSync } from 'fs'
 import { isAbsolute, join, resolve } from 'path'
 import { StringDecoder } from 'string_decoder'
 
@@ -35,17 +32,9 @@ export function agentCommand(): string[] {
   if (env) {
     const [exe, ...args] = splitCommand(env)
     const abs = isAbsolute(exe) || !/[\\/]/.test(exe) ? exe : join(REPO, exe)
-    return [abs, ...args.map((a) => (/^(agent|native)[\\/]/.test(a) ? join(REPO, a) : a))]
+    return [abs, ...args.map((a) => (/^native[\\/]/.test(a) ? join(REPO, a) : a))]
   }
-  const native = join(REPO, 'native', 'target', 'release', 'lumen-native.exe')
-  if (existsSync(native)) return [native, '--debug']
-  return [
-    join(REPO, 'agent', '.venv', 'Scripts', 'python.exe'),
-    join(REPO, 'agent', 'main.py'),
-    '--protocol',
-    '2',
-    '--debug'
-  ]
+  return [join(REPO, 'native', 'target', 'release', 'lumen-native.exe'), '--debug']
 }
 
 export class Agent {
@@ -63,7 +52,7 @@ export class Agent {
     const [exe, ...args] = agentCommand()
     this.proc = spawn(exe, [...args, ...extraArgs], {
       cwd: REPO,
-      env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+      env: process.env,
       windowsHide: true
     })
     this.proc.stdout.on('data', (chunk: Buffer) => this.onData(this.decoder.write(chunk)))
