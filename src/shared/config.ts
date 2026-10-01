@@ -107,6 +107,86 @@ export const DEFAULT_CONFIG_V1: ConfigV1 = {
 
 const v1 = configV1Schema.shape
 
+// ---- a11y (06) ----
+
+export const DWELL_CLICK_TYPES = ['left', 'right', 'double', 'drag'] as const
+export const PAUSE_CORNERS = [
+  'none',
+  'top-left',
+  'top-right',
+  'bottom-left',
+  'bottom-right'
+] as const
+
+const a11ySwitchSchema = z.object({
+  enabled: z.boolean(),
+  /** auto = 1-switch auto-scan; step = switch A moves, switch B selects. */
+  mode: z.enum(['auto', 'step']).default('auto'),
+  scanIntervalMs: z.number().int().min(300).max(10_000).default(1500),
+  /** Full passes over a group before auto-scan backs out. */
+  loops: z.number().int().min(1).max(10).default(3),
+  /** Key names used as switches (Space, Enter, F1-F12...): [select] or [next, select]. */
+  keys: z.array(z.string().max(20)).max(4).default(['Space'])
+})
+
+const a11yTimingsSchema = z.object({
+  /** Status bubble minimum on-screen time. */
+  statusHoldMs: z.number().int().min(4000).max(600_000).default(4000),
+  /** "I heard: …" caption; 0 = until the next utterance or dismissed. */
+  captionHoldMs: z.number().int().min(0).max(600_000).default(0),
+  /** Confirm countdown before an action runs by itself; 0 = wait forever. */
+  confirmCountdownMs: z.number().int().min(0).max(120_000).default(0)
+})
+
+const a11yDwellSchema = z.object({
+  clickType: z.enum(DWELL_CLICK_TYPES).default('left'),
+  /** Palette choice stays for every dwell instead of only the next one. */
+  sticky: z.boolean().default(false),
+  /** Extra clicks in place before the cursor must leave the radius (0 = one click). */
+  maxRepeats: z.number().int().min(0).max(10).default(0),
+  /** Jitter radius in logical px. */
+  radiusPx: z.number().min(4).max(80).default(12),
+  /** Cursor smoothing (EMA alpha); 0 = off. */
+  smoothing: z.number().min(0).max(0.9).default(0),
+  snapToElement: z.boolean().default(false),
+  /** Delete/Send/Buy… need a second dwell. */
+  safeTargets: z.boolean().default(true),
+  ringSize: z.enum(['s', 'm', 'l', 'xl']).default('m'),
+  /** Dwelling in this screen corner toggles pause. */
+  pauseCorner: z.enum(PAUSE_CORNERS).default('top-left'),
+  /** Click-type palette window. */
+  palette: z.boolean().default(false)
+})
+
+const a11yMarksSchema = z.object({
+  /** Numbers stay on screen after an action (motor-voice profile). */
+  keep: z.boolean().default(false),
+  badgeSize: z.enum(['s', 'm', 'l']).default('m')
+})
+
+export const A11Y_DEFAULTS = {
+  timings: { statusHoldMs: 4000, captionHoldMs: 0, confirmCountdownMs: 0 },
+  dwell: {
+    clickType: 'left',
+    sticky: false,
+    maxRepeats: 0,
+    radiusPx: 12,
+    smoothing: 0,
+    snapToElement: false,
+    safeTargets: true,
+    ringSize: 'm',
+    pauseCorner: 'top-left',
+    palette: false
+  },
+  marks: { keep: false, badgeSize: 'm' },
+  switch: { enabled: false, mode: 'auto', scanIntervalMs: 1500, loops: 3, keys: ['Space'] }
+} as const satisfies {
+  timings: z.infer<typeof a11yTimingsSchema>
+  dwell: z.infer<typeof a11yDwellSchema>
+  marks: z.infer<typeof a11yMarksSchema>
+  switch: z.infer<typeof a11ySwitchSchema>
+}
+
 export const configV2Schema = z.object({
   version: z.literal(2),
   agentImpl: z.enum(['auto', 'python', 'native']),
@@ -153,8 +233,20 @@ export const configV2Schema = z.object({
     reduceMotion: z.enum(['system', 'on', 'off']),
     contrast: z.enum(['system', 'on', 'off']),
     captions: z.boolean(),
-    switch: z.object({ enabled: z.boolean() }),
-    voiceCommands: z.boolean()
+    switch: a11ySwitchSchema,
+    voiceCommands: z.boolean(),
+    // 06 additions. Nested fields default so older configs and partial patches stay valid;
+    // a patch replaces a nested object as a whole (saveConfig merges one level deep).
+    timings: a11yTimingsSchema.default(A11Y_DEFAULTS.timings),
+    dwell: a11yDwellSchema.default(A11Y_DEFAULTS.dwell),
+    marks: a11yMarksSchema.default(A11Y_DEFAULTS.marks),
+    /** Speak the name/role of whatever gets keyboard focus (off when a screen reader runs). */
+    focusNarration: z.boolean().default(false),
+    /** Show "I heard: …" and wait for yes before actions: always, risky actions only, or off. */
+    confirmTranscript: z.enum(['always', 'risky', 'off']).default('risky'),
+    simpleMode: z.boolean().default(false),
+    /** Profiles picked in onboarding / Settings (06 profiles.md ids). */
+    profiles: z.array(z.string().max(30)).max(12).default([])
   }),
   buddy: z.object({
     enabled: z.boolean(),
@@ -233,8 +325,16 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     reduceMotion: 'system',
     contrast: 'system',
     captions: false,
-    switch: { enabled: false },
-    voiceCommands: false
+    switch: { ...A11Y_DEFAULTS.switch, keys: [...A11Y_DEFAULTS.switch.keys] },
+    // The local grammar is anchored and exact-match, so it is safe to run for everyone.
+    voiceCommands: true,
+    timings: { ...A11Y_DEFAULTS.timings },
+    dwell: { ...A11Y_DEFAULTS.dwell },
+    marks: { ...A11Y_DEFAULTS.marks },
+    focusNarration: false,
+    confirmTranscript: 'risky',
+    simpleMode: false,
+    profiles: []
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },
