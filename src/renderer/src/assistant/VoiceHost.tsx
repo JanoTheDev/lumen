@@ -27,6 +27,8 @@ const DICTATION_HANDS_FREE_MAX_MS = 3 * 60_000
 const DICTATION_SILENCE_MS = 2000
 const PROCESSING_TIMEOUT_MS = 60_000
 
+const NOTHING_HEARD = 'Didn’t catch that. Try again.'
+
 const lumen = (): Window['lumen'] => window.lumen
 
 function readVad(cfg: unknown): VadConfig | null {
@@ -118,7 +120,8 @@ export function VoiceHost(): null {
     if (shouldDropTranscript(text, info?.speechMs)) {
       if (text.trim())
         console.warn('[voice] dropping likely silence hallucination:', JSON.stringify(text))
-      closeBar()
+      // Say so instead of closing silently; the bar closes like after any voice error.
+      showErrorThenClose(NOTHING_HEARD)
       return
     }
     // Main's task queue serializes turns; every valid transcript is sent.
@@ -159,7 +162,11 @@ export function VoiceHost(): null {
       clearTimeout(wakeTimerRef.current)
       wakeTimerRef.current = null
     }
-    // Main shows it in the error row (role=alert) and announces it.
+    showErrorThenClose(message)
+  }
+
+  /** Main shows it in the error row (role=alert) and announces it; the bar closes after. */
+  const showErrorThenClose = (message: string): void => {
     lumen().send('assistant:error', message)
     if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
     errorTimerRef.current = setTimeout(() => {
