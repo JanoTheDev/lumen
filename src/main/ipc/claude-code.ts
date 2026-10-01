@@ -13,10 +13,22 @@ import {
   claudeSendSchema,
   claudeSettingsPatchSchema
 } from '@shared/claude-code'
+import {
+  codingSkillAttachSchema,
+  codingSkillDetachSchema,
+  codingSkillDocsSchema,
+  codingSkillEditSchema,
+  codingSkillImportSchema,
+  codingSkillNameSchema,
+  codingSkillPathSchema,
+  codingSkillSaveSchema,
+  codingSkillWriteSchema
+} from '@shared/coding-skills'
 import { INVALID, safeParse } from './validate'
 import { cliStatus } from '../claude-code/cli'
 import {
   allProjects,
+  codingSkills,
   copilotStore,
   getBridge,
   getCopilot,
@@ -27,6 +39,15 @@ import {
 import { samePath } from '../claude-code/projects'
 
 const installSchema = z.boolean()
+
+function fail(e: unknown): { ok: false; error: string } {
+  return { ok: false, error: (e as Error).message }
+}
+
+/** A project folder Lumen knows (Claude's or the user's), else undefined. */
+function knownProject(path: string): string | undefined {
+  return allProjects().find((p) => samePath(p.path, path))?.path
+}
 
 function isDir(p: string): boolean {
   try {
@@ -134,6 +155,8 @@ export function registerClaudeCodeIpc(): void {
     return { ok: getBridge()?.answer(req.answer, req.id) ?? false }
   })
 
+  registerCodingSkillsIpc()
+
   ipcMain.handle('claude:hooks-preview', (_e, raw: unknown) => {
     const install = safeParse('claude:hooks-preview', installSchema, raw)
     if (install === undefined) return INVALID
@@ -149,5 +172,134 @@ export function registerClaudeCodeIpc(): void {
     const req = safeParse('claude:hooks-apply', claudeHooksWriteSchema, { hash: rawHash })
     if (install === undefined || !req) return INVALID
     return hooksApply(install, req.hash)
+  })
+}
+
+/** Settings → Claude Code → Coding skills. */
+function registerCodingSkillsIpc(): void {
+  ipcMain.handle('claude:skills', () => codingSkills().overview())
+
+  ipcMain.handle('claude:skills-from-docs', async (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-from-docs', codingSkillDocsSchema, raw)
+    if (!req || (!req.url && !req.title)) return INVALID
+    const attachTo = req.project ? knownProject(req.project) : undefined
+    try {
+      const draft = await codingSkills().fromDocs({ url: req.url, title: req.title, attachTo })
+      return { ok: true, draft }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-import', async (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-import', codingSkillImportSchema, raw)
+    if (!req) return INVALID
+    const attachTo = req.project ? knownProject(req.project) : undefined
+    try {
+      return {
+        ok: true,
+        draft: await codingSkills().fromImport(req.from, req.pick, undefined, attachTo)
+      }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-write', async (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-write', codingSkillWriteSchema, raw)
+    if (!req) return INVALID
+    const attachTo = req.project ? knownProject(req.project) : undefined
+    try {
+      return {
+        ok: true,
+        draft: await codingSkills().fromText(req.title, req.text, undefined, attachTo)
+      }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-save', (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-save', codingSkillSaveSchema, raw)
+    if (!req) return INVALID
+    try {
+      codingSkills().save(req.id, req.skillMd)
+      return { ok: true }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-discard', () => ({ ok: codingSkills().discard() }))
+
+  ipcMain.handle('claude:skills-update', async (_e, raw: unknown) => {
+    const name = safeParse('claude:skills-update', codingSkillNameSchema, raw)
+    if (!name) return INVALID
+    try {
+      return { ok: true, draft: await codingSkills().update(name) }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-remove', (_e, raw: unknown) => {
+    const name = safeParse('claude:skills-remove', codingSkillNameSchema, raw)
+    if (!name) return INVALID
+    return { ok: codingSkills().remove(name) }
+  })
+
+  ipcMain.handle('claude:skills-read', (_e, raw: unknown) => {
+    const name = safeParse('claude:skills-read', codingSkillNameSchema, raw)
+    if (!name) return INVALID
+    const skillMd = codingSkills().library.skillMd(name)
+    return skillMd === null ? { ok: false } : { ok: true, skillMd }
+  })
+
+  ipcMain.handle('claude:skills-edit', (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-edit', codingSkillEditSchema, raw)
+    if (!req) return INVALID
+    try {
+      codingSkills().edit(req.name, req.skillMd)
+      return { ok: true }
+    } catch (e) {
+      return fail(e)
+    }
+  })
+
+  ipcMain.handle('claude:skills-project', (_e, raw: unknown) => {
+    const path = safeParse('claude:skills-project', codingSkillPathSchema, raw)
+    if (!path) return INVALID
+    const p = knownProject(path)
+    return p ? codingSkills().project(p) : { error: 'Unknown project.' }
+  })
+
+  ipcMain.handle('claude:skills-attach', (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-attach', codingSkillAttachSchema, raw)
+    if (!req) return INVALID
+    const p = knownProject(req.project)
+    if (!p) return { error: 'Unknown project.' }
+    codingSkills().attach(p, req.names)
+    return codingSkills().project(p)
+  })
+
+  ipcMain.handle('claude:skills-detach', (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-detach', codingSkillDetachSchema, raw)
+    if (!req) return INVALID
+    const p = knownProject(req.project)
+    if (!p) return { error: 'Unknown project.' }
+    codingSkills().detach(p, req.name)
+    return codingSkills().project(p)
+  })
+
+  ipcMain.handle('claude:skills-save-to-project', (_e, raw: unknown) => {
+    const req = safeParse('claude:skills-save-to-project', codingSkillDetachSchema, raw)
+    if (!req) return INVALID
+    const p = knownProject(req.project)
+    if (!p) return { ok: false, error: 'Unknown project.' }
+    try {
+      return { ok: true, path: codingSkills().library.saveToProject(p, req.name) }
+    } catch (e) {
+      return fail(e)
+    }
   })
 }

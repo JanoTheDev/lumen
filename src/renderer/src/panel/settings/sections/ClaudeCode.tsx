@@ -11,6 +11,7 @@ import type {
 } from '@shared/claude-code'
 import { Button, Card, Field, SegmentedControl, Select, Switch, announce, icons } from '../../../ui'
 import { invoke } from '../../../lib/ipc'
+import { CodingSkills } from './CodingSkills'
 
 const LEVELS: { value: AutopilotLevel; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -415,6 +416,8 @@ export function ClaudeCode(): JSX.Element {
           ))}
         </ul>
       </Card>
+
+      <CodingSkills projects={projects} />
 
       <Card title="Sessions" description="Claude Code sessions Lumen is running now.">
         {status.sessions.length === 0 && <p className="ui-hint">None running.</p>}
