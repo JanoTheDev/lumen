@@ -29,6 +29,7 @@ import { askUser, type AskIo } from './ask'
 import { nameAtTarget, performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
 import { withInputLane } from './input-lane'
 import { observed } from './prompts'
+import { OBSERVE_TEXT_MAX, readWindowText, windowTextResult, type TextPorts } from './read-text'
 import type { ToolHandler, ToolOutcome } from './runner'
 import type {
   ActInput,
@@ -57,6 +58,8 @@ const MAX_OBSERVED = 20_000
 const SETTLE_MS = 1500
 const SMALL_FRAME = 640
 const UIA_TIMEOUT_MS = 2000
+const TEXT_TIMEOUT_MS = 3500
+const OCR_TIMEOUT_MS = 8000
 
 const text = (t: string): ToolContent[] => [{ type: 'text', text: t }]
 const fail = (t: string, extra: Partial<ToolOutcome> = {}): ToolOutcome => ({
@@ -107,6 +110,11 @@ async function observe(
   signal: AbortSignal
 ): Promise<ToolOutcome> {
   const agent = requireAgent()
+  if (input.what === 'text') {
+    const r = await readWindowText(textPorts(agent, signal))
+    noteObserved(env, r.text.slice(0, OBSERVE_TEXT_MAX))
+    return { content: text(windowTextResult(r)) }
+  }
   if (input.what === 'window') {
     const w = await commands.activeWindow(agent, { signal })
     const line = `foreground: ${w.title} (${w.process})${w.isBrowser ? ' [browser]' : ''}`
@@ -130,6 +138,30 @@ async function observe(
   if (input.what === 'screen' && ctx.screenshot)
     content.push({ type: 'image', base64: ctx.screenshot, mediaType: 'image/jpeg' })
   return { content }
+}
+
+/** Document text through UIA, OCR of the window as the fallback (observe "text"). */
+function textPorts(agent: AgentBridge, signal: AbortSignal): TextPorts {
+  return {
+    documentText: async () => {
+      if (!agent.hasCapability('uia-text')) return null
+      return agent.request<{ text: string; name?: string }>(
+        'uia_text',
+        { scope: 'document', maxChars: OBSERVE_TEXT_MAX * 4 },
+        { signal, timeoutMs: TEXT_TIMEOUT_MS }
+      )
+    },
+    windowOcr: async () => {
+      const w = await commands.activeWindow(agent, { signal })
+      if (w.rect.w <= 0 || w.rect.h <= 0) return ''
+      const r = await commands.ocr(agent, { region: w.rect }, { signal, timeoutMs: OCR_TIMEOUT_MS })
+      return r.lines.map((l) => l.text).join('\n')
+    },
+    window: async () => {
+      const w = await commands.activeWindow(agent, { signal })
+      return { title: w.title, process: w.process }
+    }
+  }
 }
 
 // ---- act ----

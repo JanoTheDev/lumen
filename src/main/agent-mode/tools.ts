@@ -42,9 +42,9 @@ export const ACT_OPS = [
 
 export const observeInput = z.object({
   what: z
-    .enum(['screen', 'elements', 'window'])
+    .enum(['screen', 'elements', 'window', 'text'])
     .describe(
-      'screen: screenshot plus the element list; elements: the element list only (cheaper); window: the foreground window title and app only.'
+      'screen: screenshot plus the element list; elements: the element list only (cheaper); window: the foreground window title and app only; text: the readable text of the window in front (a long email, page or document), up to 8,000 characters, no screenshot.'
     )
 })
 
