@@ -29,7 +29,7 @@ vi.mock('../../src/main/ai/app-context', () => ({ isBrowser: () => true }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../../src/main/actions/executor'
-import { describeForConfirm, gate } from '../../src/main/actions/policy'
+import { auditReason, describeForConfirm, gate } from '../../src/main/actions/policy'
 import { newTaskState } from '../../src/main/actions/safety'
 import { setAgent } from '../../src/main/agent/instance'
 import type { AgentBridge } from '../../src/main/agent/bridge'
@@ -207,6 +207,54 @@ describe('policy gate', () => {
     const line = listAudit(today(), 't_mcp')[0]
     expect(line.action.args).toMatchObject({ summary: expect.stringContaining('attacker@') })
     expect(JSON.stringify(line)).not.toContain(key)
+  })
+
+  it('audit reasons keep no typed command and no secrets (review L6)', async () => {
+    fakeAgent({ title: 'Command Prompt', process: 'cmd.exe' })
+    fakeUi('no')
+    const g = await gate(
+      { type: 'type', text: 'del /s /q C:\\work' },
+      { origin: 'user-direct', taskId: 't_l6' }
+    )
+    expect(g.ok).toBe(false)
+    expect(g.decision.reason).toContain('del /s')
+    const line = listAudit(today(), 't_l6')[0]
+    expect(line.reason).toMatch(/\(\d+ chars\)/)
+    expect(line.reason).not.toContain('del /s')
+    const token = ['ghp', 'Z'.repeat(36)].join('_')
+    expect(auditReason(`blocked URL scheme: x?t=${token}`, { type: 'open_url' })).not.toContain(
+      token
+    )
+  })
+
+  describe('unattended confirms (background tasks, review L4)', () => {
+    const high = { type: 'mcp_tool', server: 'gmail', tool: 'send_email', args: { to: 'a' } }
+
+    it('nobody at the PC: no card, a no, audited', async () => {
+      fakeAgent()
+      const cards = fakeUi('yes')
+      const g = await gate(high, {
+        origin: 'mcp',
+        taskId: 't_away',
+        unattended: { timeoutMs: 1000, present: () => false }
+      })
+      expect(g.ok).toBe(false)
+      expect(cards).toEqual([])
+      expect(listAudit(today(), 't_away')[0]).toMatchObject({ result: 'denied' })
+    })
+
+    it('a card nobody answers counts as a no after the timeout and goes away', async () => {
+      fakeAgent()
+      const dismiss = vi.fn()
+      setConfirmUi({ ask: () => new Promise<boolean>(() => {}), confirm: () => {}, dismiss })
+      const g = await gate(high, {
+        origin: 'mcp',
+        taskId: 't_slow',
+        unattended: { timeoutMs: 20, present: () => true }
+      })
+      expect(g.ok).toBe(false)
+      expect(dismiss).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('stops the batch at the denied action', async () => {

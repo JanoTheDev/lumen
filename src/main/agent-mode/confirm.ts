@@ -21,6 +21,8 @@ export interface ConfirmUi {
   ask(card: ConfirmCard): Promise<boolean>
   /** Confirms the card that is showing (voice "always"). */
   confirm(): void
+  /** Takes the card down unanswered (a timed-out confirm of an unattended task). */
+  dismiss?(): void
 }
 
 let ui: ConfirmUi | null = null
@@ -59,27 +61,45 @@ export function confirmSummary(what: string, d: Decision): string {
   return parts.join(' ')
 }
 
-/** Asks the user about one decision. "always" stores the grant (medium only). */
+/**
+ * Asks the user about one decision. "always" stores the grant (medium only). `timeoutMs`: an
+ * unattended task's confirm counts as a no when nobody answers in time (the card goes away).
+ */
 export async function askUser(
   what: string,
   d: Decision,
-  countdownMs?: number
+  countdownMs?: number,
+  timeoutMs?: number
 ): Promise<ConfirmAnswer> {
   if (!ui || d.risk === 'blocked') return 'deny'
   const risk = d.risk
   const p = { scope: risk === 'medium' ? d.grantScope : undefined, always: false }
   pending = p
+  const shown = ui
+  let timer: NodeJS.Timeout | undefined
   try {
-    const ok = await ui.ask({
+    const asked = shown.ask({
       summary: confirmSummary(what, d),
       risk,
       countdownMs: risk === 'high' ? undefined : countdownMs,
       alwaysLabel: p.scope ? scopeLabel(p.scope) : undefined
     })
+    const ok = timeoutMs
+      ? await Promise.race([
+          asked,
+          new Promise<false>((resolve) => {
+            timer = setTimeout(() => {
+              shown.dismiss?.()
+              resolve(false)
+            }, timeoutMs)
+          })
+        ])
+      : await asked
     if (!ok) return 'deny'
     if (p.always && p.scope && grants().add(p.scope, risk)) return 'always'
     return 'once'
   } finally {
+    if (timer) clearTimeout(timer)
     if (pending === p) pending = null
   }
 }

@@ -34,13 +34,15 @@ import { readGranted, type ReadResult } from './files'
 import { MAX_CHILDREN, type SpawnTaskInput } from './tools'
 import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
-import { doneLine, noticeVerdict } from './presence'
+import { doneLine, noticeVerdict, PRESENT_MS } from './presence'
 import { runBackground } from './run'
 import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
 
 const TURN_MAX_TOKENS = 2048
 const FOREGROUND_ASK_MS = 60_000
+/** A connector confirm of a background task counts as a no after this (the cap keeps running). */
+const UNATTENDED_CONFIRM_MS = 120_000
 
 let store: TaskStore | null = null
 let routineShapes: (routineId: string) => ActionShape[] | null = () => null
@@ -412,7 +414,11 @@ async function runTask(
     // Connector tools; every call goes through the policy gate with origin "mcp". A skill run
     // gets only the servers every envelope lists.
     moreTools: async () => {
-      const set = await mcpToolSet({ taskId: id, prompt: userText })
+      const set = await mcpToolSet({
+        taskId: id,
+        prompt: userText,
+        unattended: { timeoutMs: UNATTENDED_CONFIRM_MS, present: () => idleMs() < PRESENT_MS }
+      })
       return { ...set, defs: envelopes.reduce((defs, e) => connectorDefsFor(defs, e), set.defs) }
     },
     ...(shapes ? { guard: routineGuard(shapes) } : {}),

@@ -330,8 +330,21 @@ const MS_SETTINGS_RE = /^ms-settings:[a-z0-9-]+(?:[?#][a-z0-9=&_-]*)?$/i
 const SENSITIVE_SETTINGS_RE =
   /^ms-settings:(privacy|security|windowsdefender|accounts|yourinfo|emailandaccounts|signinoptions|otherusers|workplace|family-group|sync|network|wifi|ethernet|vpn|proxy|airplanemode|windowsupdate|recovery|backup|developers|activation|defaultapps)/i
 
+/** IPv4 inside an IPv6 literal (::ffff:7f00:1, ::7f00:1, 64:ff9b::7f00:1) as a dotted quad. */
+function embeddedV4(h: string): string | null {
+  const m = /^(?:::ffff:|::|64:ff9b::)([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h)
+  if (!m) return null
+  const [hi, lo] = [parseInt(m[1], 16), parseInt(m[2], 16)]
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join('.')
+}
+
 function isPrivateHost(host: string): boolean {
-  const h = host.replace(/^\[|\]$/g, '').toLowerCase()
+  // "localhost." and "[::ffff:127.0.0.1]" are the same machine.
+  const bare = host
+    .replace(/^\[|\]$/g, '')
+    .toLowerCase()
+    .replace(/\.+$/, '')
+  const h = embeddedV4(bare) ?? bare
   if (h === 'localhost' || h.endsWith('.localhost') || h === '0.0.0.0') return true
   const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h)
   if (v4) {
@@ -716,7 +729,7 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
       out.push({
         risk: 'medium',
         reason: `opens ${a.appId ?? 'an app'}`,
-        scope: `app:${lower(a.appId)}`
+        scope: `app:${appSlug(a.appId)}`
       })
       break
     case 'mcp_tool':
@@ -733,6 +746,16 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
   // The model says the screen told it to: that is the page talking, not the user.
   if (a.rationale && CITES_OBSERVED_RE.test(a.rationale))
     out.push({ risk: 'high', reason: FROM_PAGE })
+}
+
+/** "Visual Studio Code" → "visual-studio-code": a grant scope has no spaces. */
+export function appSlug(name: string | undefined): string {
+  return (
+    lower(name)
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\p{L}\p{N}._-]/gu, '') || 'app'
+  )
 }
 
 export function confirmNeeded(risk: Risk, mode: ConfirmMode, granted: boolean): boolean {

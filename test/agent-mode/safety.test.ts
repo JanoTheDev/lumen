@@ -18,6 +18,7 @@ import {
   type WindowInfo
 } from '../../src/main/actions/safety'
 import { riskyName } from '../../src/main/actions/risk-names'
+import { validScope } from '../../src/main/agent-mode/grants'
 
 const agent: PolicyCtx = { origin: 'agent' }
 const user: PolicyCtx = { origin: 'user-direct' }
@@ -60,9 +61,19 @@ describe('evaluate: URL scheme table', () => {
     'http://172.20.0.1/',
     'http://169.254.169.254/latest/meta-data',
     'http://[::1]/',
-    'http://2130706433/'
+    'http://2130706433/',
+    // review L1: trailing dot and IPv4 inside IPv6
+    'http://localhost.:8080/admin',
+    'http://localhost../',
+    'http://[::ffff:127.0.0.1]/',
+    'http://[::ffff:c0a8:101]/',
+    'http://[64:ff9b::a00:5]/'
   ])('blocks the local address %s for the agent', (u) => {
     expect(url(u)).toBe('blocked')
+  })
+
+  it('a public IPv4 inside IPv6 is not local', () => {
+    expect(url('http://[::ffff:808:808]/')).not.toBe('blocked')
   })
 
   it('allows a local address the user named', () => {
@@ -480,6 +491,15 @@ describe('evaluate: input steps, apps and MCP', () => {
   it('launch_app is medium, grantable per app', () => {
     const d = evaluate({ type: 'launch_app', appId: 'Blender' }, agent)
     expect(d).toMatchObject({ risk: 'medium', grantScope: 'app:blender' })
+  })
+
+  it('launch_app grant scopes have no spaces, so "always" can be stored (review L9)', () => {
+    const d = evaluate({ type: 'launch_app', appId: 'Visual Studio Code' }, agent)
+    expect(d.grantScope).toBe('app:visual-studio-code')
+    expect(validScope(d.grantScope!)).toBe(true)
+    expect(
+      validScope(evaluate({ type: 'launch_app', appId: 'Blender 4.2' }, agent).grantScope!)
+    ).toBe(true)
   })
 
   it.each<[EvalAction, Risk]>([

@@ -27,7 +27,8 @@ export function installAgentMode(): void {
   installBackground(join(root, 'tasks'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
-    confirm: () => assistant.command({ type: 'confirm' })
+    confirm: () => assistant.command({ type: 'confirm' }),
+    dismiss: () => assistant.dropConfirm()
   })
   // Skills made by voice (11 T09-T11): from the last run, "when I say …", the step recorder.
   installSkillCreation(startSkillRecording)

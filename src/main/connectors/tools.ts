@@ -125,6 +125,8 @@ export interface McpTaskEnv {
   state?: TaskState
   /** Text read during the task (injection check); MCP results are appended. */
   observedText?: string
+  /** A background task or routine: confirms only while the user is around, with a timeout. */
+  unattended?: GateCtx['unattended']
 }
 
 export interface McpHandlerDeps {
@@ -187,7 +189,8 @@ export function createMcpToolHandlers(
           userText: env.prompt,
           observedText: env.observedText,
           ...(env.state ? { task: env.state } : {}),
-          ...(mode ? { confirmMode: mode } : {})
+          ...(mode ? { confirmMode: mode } : {}),
+          ...(env.unattended ? { unattended: env.unattended } : {})
         }
       )
       if (!g.ok) return fail(`E_DENIED: ${g.decision.reason}.`)

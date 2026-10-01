@@ -16,6 +16,7 @@ import {
   type WindowInfo
 } from './safety'
 import { describeActions } from '../a11y/captions'
+import { redactForLog } from './redact'
 import { getAgent } from '../agent/instance'
 import type { ActiveWindowInfo, FocusInfoResult } from '../agent/commands'
 import { askUser } from '../agent-mode/confirm'
@@ -41,6 +42,11 @@ export interface GateCtx {
   /** The user already said yes to this batch (transcript confirm, explain-before-do). */
   approved?: boolean
   confirmMode?: ConfirmMode
+  /**
+   * A background task or routine (nobody may be watching): a confirm is not shown while the
+   * user is away (a no, nothing spoken), and counts as a no after `timeoutMs`.
+   */
+  unattended?: { timeoutMs: number; present(): boolean }
 }
 
 export interface Gate {
@@ -180,7 +186,7 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
       decision: verdict,
       result,
       ms: Date.now() - t0,
-      ...(result === 'denied' ? { reason: decision.reason } : {})
+      ...(result === 'denied' ? { reason: auditReason(decision.reason, action) } : {})
     })
 
   let verdict: AuditDecision
@@ -194,8 +200,21 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
     verdict = decision.risk === 'medium' && decision.grantScope ? grantedOrAuto(decision) : 'auto'
   } else if (ctx.approved) {
     verdict = 'preapproved'
+  } else if (ctx.unattended && !ctx.unattended.present()) {
+    log('skip', `not confirmed (${decision.risk}), nobody at the PC: ${decision.reason}`)
+    audit('denied-by-user', 'denied')
+    return {
+      ok: false,
+      decision: { ...decision, reason: `${decision.reason} (nobody was there to confirm)` },
+      finish: () => {}
+    }
   } else {
-    const answer = await askUser(describeForConfirm(action), decision, cfg.agent.cancelWindowMs)
+    const answer = await askUser(
+      describeForConfirm(action),
+      decision,
+      cfg.agent.cancelWindowMs,
+      ctx.unattended?.timeoutMs
+    )
     if (answer === 'deny') {
       log('skip', `not confirmed (${decision.risk}): ${decision.reason}`)
       audit('denied-by-user', 'denied')
@@ -214,6 +233,19 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
       if (result === 'ok') noteExecuted(action, policyCtx)
     }
   }
+}
+
+const TYPING = new Set(['type', 'input', 'uia_act'])
+
+/**
+ * A denial reason as the audit log keeps it: secrets (also in URLs) redacted, and for typing
+ * the quoted text (a terminal command) replaced by its length. The card still shows it.
+ */
+export function auditReason(reason: string, a: EvalAction): string {
+  const r = TYPING.has(a.type)
+    ? reason.replace(/“[^”]*”/g, (m) => `(${m.length - 2} chars)`)
+    : reason
+  return redactForLog(r)
 }
 
 function grantedOrAuto(d: Decision): AuditDecision {
