@@ -213,7 +213,8 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
       describeForConfirm(action),
       decision,
       cfg.agent.cancelWindowMs,
-      ctx.unattended?.timeoutMs
+      ctx.unattended?.timeoutMs,
+      ctx.taskId
     )
     if (answer === 'deny') {
       log('skip', `not confirmed (${decision.risk}): ${decision.reason}`)

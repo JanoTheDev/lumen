@@ -15,6 +15,7 @@ const h = vi.hoisted(() => ({
   },
   fg: null as string | null,
   own: null as string | null,
+  owner: 't_task01',
   pending: false,
   card: undefined as undefined | { actionId: string; summary: string },
   command: vi.fn(),
@@ -54,8 +55,11 @@ vi.mock('../../src/main/agent-mode/background', () => ({
     answer: () => false
   })
 }))
+vi.mock('../../src/main/agent-mode/confirm', () => ({
+  ownedConfirmId: (owner: string) => (owner === h.owner ? h.own : null),
+  onConfirmOwnerChange: vi.fn()
+}))
 vi.mock('../../src/main/agent-mode/session', () => ({
-  agentConfirmId: () => h.own,
   agentTaskPaused: () => false,
   canPauseAgentTask: () => true,
   pauseAgentTask: () => true,
@@ -142,6 +146,10 @@ describe('answers bound to what the view showed', () => {
     expect(controlChat('t_task01', 'approve', 'B').ok).toBe(false)
     expect(h.command).not.toHaveBeenCalled()
     h.own = 'B'
+    h.owner = 't_other1' // tagged with another task's id
+    expect(controlChat('t_task01', 'approve', 'B').ok).toBe(false)
+    expect(h.command).not.toHaveBeenCalled()
+    h.owner = 't_task01'
     expect(controlChat('t_task01', 'deny', 'B').ok).toBe(true)
     expect(h.command).toHaveBeenCalledWith({ type: 'deny' })
   })

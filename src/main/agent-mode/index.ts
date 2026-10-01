@@ -10,7 +10,8 @@ import { INVALID, safeParse } from '../ipc/validate'
 import * as assistant from '../windows/assistant'
 import { onBroadcast } from '../windows/registry'
 import { installAudit, lastTaskSummary, listAudit, setAuditStoreTypedText } from '../audit/log'
-import { setConfirmUi } from './confirm'
+import { askOwned, setConfirmUi } from './confirm'
+import { runningAgentTaskId } from './session'
 import { grants, installGrants } from './grants'
 import { installBackground, notice } from './background'
 import { PRESENT_MS } from './background/presence'
@@ -31,7 +32,8 @@ export function installAgentMode(): void {
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
     confirm: () => assistant.command({ type: 'confirm' }),
-    dismiss: () => assistant.dropConfirm()
+    dismiss: () => assistant.dropConfirm(),
+    shownId: () => (assistant.confirmPending() ? assistant.state().confirm?.actionId : undefined)
   })
   // Skills made by voice (11 T09-T11): from the last run, "when I say …", the step recorder.
   // Offers ("save this as a skill?"), needs-update notices and the agent's create_skill /
@@ -40,7 +42,14 @@ export function installAgentMode(): void {
     canSpeakUp: () =>
       !loadConfig().agent.background.quiet && powerMonitor.getSystemIdleTime() * 1000 < PRESENT_MS,
     notice,
-    confirm: (summary, risk) => assistant.requestConfirm({ summary, risk })
+    // Only the foreground agent tools create_skill / update_skill ask here: the card is the
+    // running task's (its chat may answer it).
+    confirm: (summary, risk) => {
+      const owner = runningAgentTaskId()
+      return owner
+        ? askOwned(owner, { summary, risk })
+        : assistant.requestConfirm({ summary, risk })
+    }
   })
   setSkillRecordingSink(recordedSkill)
 }

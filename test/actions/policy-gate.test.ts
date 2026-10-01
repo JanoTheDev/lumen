@@ -36,6 +36,7 @@ import type { AgentBridge } from '../../src/main/agent/bridge'
 import {
   answerAlways,
   confirmAlways,
+  ownedConfirmId,
   setConfirmUi,
   type ConfirmCard
 } from '../../src/main/agent-mode/confirm'
@@ -255,6 +256,36 @@ describe('policy gate', () => {
       expect(g.ok).toBe(false)
       expect(dismiss).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('a confirm card is tagged with the task that asked (the task chat answers only its own)', async () => {
+    fakeAgent()
+    const high = { type: 'mcp_tool', server: 'gmail', tool: 'send_email', args: { to: 'a' } }
+    let shown: string | undefined
+    let answer: ((ok: boolean) => void) | null = null
+    setConfirmUi({
+      ask: () =>
+        new Promise<boolean>((r) => {
+          shown = 'card1'
+          answer = (ok) => {
+            shown = undefined
+            r(ok)
+          }
+        }),
+      confirm: () => answer?.(true),
+      shownId: () => shown
+    })
+    const g = gate(high, { origin: 'mcp', taskId: 't_owner' })
+    await vi.waitFor(() => expect(shown).toBe('card1'))
+    expect(ownedConfirmId('t_owner')).toBe('card1')
+    expect(ownedConfirmId('t_someone')).toBeNull()
+    // Another card replaced it on the bar: not this task's any more.
+    shown = 'card2'
+    expect(ownedConfirmId('t_owner')).toBeNull()
+    shown = 'card1'
+    answer!(true)
+    expect((await g).ok).toBe(true)
+    expect(ownedConfirmId('t_owner')).toBeNull()
   })
 
   it('stops the batch at the denied action', async () => {

@@ -110,8 +110,8 @@ vi.mock('../../src/main/connectors', () => ({
   })
 }))
 
+import { askUser, ownedConfirmId, setConfirmUi } from '../../src/main/agent-mode/confirm'
 import {
-  agentConfirmId,
   agentTaskPaused,
   interceptAgentUtterance,
   pauseAgentTask,
@@ -199,21 +199,38 @@ describe('foreground task pause / resume', () => {
 })
 
 describe('the task’s own confirm card', () => {
-  it('a card raised during the task’s tool call is the task’s; one from before is not', async () => {
-    h.card = { actionId: 'other', summary: 'Claude wants to run rm' }
+  it('only a card tagged with the task id is the task’s; one raised by others during its tool call is not', async () => {
+    let answer: ((ok: boolean) => void) | null = null
+    let n = 0
+    setConfirmUi({
+      ask: (card) => {
+        h.card = { actionId: `card${++n}`, summary: card.summary }
+        return new Promise<boolean>((r) => (answer = r))
+      },
+      confirm: () => answer?.(true),
+      shownId: () => h.card?.actionId
+    })
     h.script = [
       reply(call('act', { op: 'click', target: { kind: 'text', ref: 'Send' } })),
       reply(call('finish', { summary: 'Sent.' }))
     ]
     const seen: (string | null)[] = []
     h.onAct = async () => {
-      seen.push(agentConfirmId())
-      h.card = { actionId: 'mine', summary: 'Click Send' }
+      const id = runningAgentTaskId()!
+      // Another feature's card shows up while the task's tool call runs.
+      h.card = { actionId: 'foreign', summary: 'Claude wants to run rm' }
       await tick(300)
-      seen.push(agentConfirmId())
+      seen.push(ownedConfirmId(id))
+      // The policy gate asks for this task (tagged with its id).
+      const asked = askUser('Click Send', { risk: 'medium', needsConfirm: true } as never, 0, 0, id)
+      seen.push(ownedConfirmId(id), ownedConfirmId('another-task'))
+      answer!(true)
+      await asked
       h.card = null
+      seen.push(ownedConfirmId(id))
     }
     await runAgentTask('send it', ctx, new AbortController().signal, { skipPlan: true })
-    expect(seen).toEqual([null, 'mine'])
+    setConfirmUi(null)
+    expect(seen).toEqual([null, 'card1', null, null])
   })
 })

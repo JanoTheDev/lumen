@@ -121,7 +121,7 @@ export function skillGuard(
     const text = `${m.name}: ${callText(call, input)}`
     const ok = host.confirm
       ? await host.confirm(text, signal)
-      : (await askConfirm(text, CONFIRM_DECISION)) !== 'deny'
+      : (await askConfirm(text, CONFIRM_DECISION, undefined, undefined, env.taskId)) !== 'deny'
     if (ok) return null
     return {
       content: [

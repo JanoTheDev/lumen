@@ -23,6 +23,8 @@ export interface ConfirmUi {
   confirm(): void
   /** Takes the card down unanswered (a timed-out confirm of an unattended task). */
   dismiss?(): void
+  /** The id of the card showing now, if any (the task chat approves only its own). */
+  shownId?(): string | undefined
 }
 
 let ui: ConfirmUi | null = null
@@ -35,6 +37,54 @@ export function lastUserRequest(): string | undefined {
 }
 
 let pending: { scope?: string; always: boolean } | null = null
+
+/**
+ * The card a task asked for, tagged where it was created (the policy gate's taskId, a task's
+ * own "Keep going?"): the task chat approves or denies only cards its task owns.
+ */
+let owned: { owner: string; cardId: string } | null = null
+let ownerListener: ((owner: string) => void) | null = null
+
+/** Told when a task's own card goes up or away (the task chat header follows). */
+export function onConfirmOwnerChange(fn: ((owner: string) => void) | null): void {
+  ownerListener = fn
+}
+
+/** The id of the card showing now when `owner` asked for it, else null. */
+export function ownedConfirmId(owner: string): string | null {
+  if (!owned || owned.owner !== owner || !ui) return null
+  return ui.shownId?.() === owned.cardId ? owned.cardId : null
+}
+
+/** Shows `card` as `owner`'s (when given) until it is answered or replaced. */
+function showOwned(shown: ConfirmUi, card: ConfirmCard, owner?: string): Promise<boolean> {
+  const asked = shown.ask(card)
+  const cardId = owner ? shown.shownId?.() : undefined
+  if (!owner || !cardId) return asked
+  const mine = { owner, cardId }
+  owned = mine
+  ownerListener?.(owner)
+  const done = (): void => {
+    if (owned !== mine) return
+    owned = null
+    ownerListener?.(owner)
+  }
+  return asked.then(
+    (ok) => {
+      done()
+      return ok
+    },
+    (e: unknown) => {
+      done()
+      throw e
+    }
+  )
+}
+
+/** A plain yes / no card owned by a task (its "Keep going?"); false without a UI. */
+export function askOwned(owner: string, card: ConfirmCard): Promise<boolean> {
+  return ui ? showOwned(ui, card, owner) : Promise.resolve(false)
+}
 
 /** index.ts wires the assistant bar; without a UI every confirm is a no (fail closed). */
 export function setConfirmUi(next: ConfirmUi | null): void {
@@ -64,12 +114,14 @@ export function confirmSummary(what: string, d: Decision): string {
 /**
  * Asks the user about one decision. "always" stores the grant (medium only). `timeoutMs`: an
  * unattended task's confirm counts as a no when nobody answers in time (the card goes away).
+ * `owner`: the task that asks (its chat may answer this card, no other).
  */
 export async function askUser(
   what: string,
   d: Decision,
   countdownMs?: number,
-  timeoutMs?: number
+  timeoutMs?: number,
+  owner?: string
 ): Promise<ConfirmAnswer> {
   if (!ui || d.risk === 'blocked') return 'deny'
   const risk = d.risk
@@ -78,12 +130,16 @@ export async function askUser(
   const shown = ui
   let timer: NodeJS.Timeout | undefined
   try {
-    const asked = shown.ask({
-      summary: confirmSummary(what, d),
-      risk,
-      countdownMs: risk === 'high' ? undefined : countdownMs,
-      alwaysLabel: p.scope ? scopeLabel(p.scope) : undefined
-    })
+    const asked = showOwned(
+      shown,
+      {
+        summary: confirmSummary(what, d),
+        risk,
+        countdownMs: risk === 'high' ? undefined : countdownMs,
+        alwaysLabel: p.scope ? scopeLabel(p.scope) : undefined
+      },
+      owner
+    )
     const ok = timeoutMs
       ? await Promise.race([
           asked,

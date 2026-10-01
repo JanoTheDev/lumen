@@ -58,9 +58,9 @@ import { observed } from './prompts'
 import { CancelledError } from '../query/cancel'
 import { takeFilesFor } from '../files/attach'
 import { transcripts } from './transcript-hub'
+import { askOwned } from './confirm'
 
 const PAUSE_KEEP_MS = 10 * 60_000
-const CONFIRM_POLL_MS = 250
 const TURN_MAX_TOKENS = 2048
 const PLAN_MAX_TOKENS = 600
 
@@ -136,40 +136,6 @@ async function whilePaused(taskId: string, signal: AbortSignal): Promise<void> {
       h.wake = resolve
       signal.addEventListener('abort', () => resolve(), { once: true })
     })
-  }
-}
-
-// ---- the bar confirm that belongs to the running task (the task chat shows only that one) ----
-
-let ownConfirm: string | null = null
-
-/** The id of the bar's confirm card when the running task asked it, else null. */
-export function agentConfirmId(): string | null {
-  const c = assistant.confirmPending() ? assistant.state().confirm : undefined
-  return running && c && c.actionId === ownConfirm ? c.actionId : null
-}
-
-/**
- * A confirm card that shows up while one of the task's tool calls runs is the task's (the
- * policy gate asks through the bar). Checked a few times a second; the chat header follows.
- */
-async function watchingConfirms<T>(taskId: string, fn: () => Promise<T>): Promise<T> {
-  const before = assistant.confirmPending() ? assistant.state().confirm?.actionId : undefined
-  let seen: string | null = null
-  const tick = (): void => {
-    const c = assistant.confirmPending() ? assistant.state().confirm : undefined
-    const id = c && c.actionId !== before ? c.actionId : null
-    if (id === seen) return
-    seen = id
-    if (id) ownConfirm = id
-    transcripts().touch(taskId)
-  }
-  const t = setInterval(tick, CONFIRM_POLL_MS)
-  try {
-    return await fn()
-  } finally {
-    clearInterval(t)
-    if (seen) transcripts().touch(taskId)
   }
 }
 
@@ -372,7 +338,7 @@ function deps(
       const refused = guard ? await guard(name, input, ctx.signal) : null
       if (refused) return refused
       const note = trace?.before(name, input)
-      const out = await watchingConfirms(env.taskId, () => h(input, ctx))
+      const out = await h(input, ctx)
       if (note && !out.isError) trace?.after(note)
       return out
     }
@@ -400,13 +366,11 @@ function deps(
         signal.addEventListener('abort', onAbort, { once: true })
       }),
     askContinue: (reason) => {
-      const yes = assistant.requestConfirm({
+      // The task's own card: its chat may answer it (askOwned tags it with the task id).
+      return askOwned(env.taskId, {
         summary: `This task reached its limit of ${reason}. Keep going?`,
         risk: 'medium'
       })
-      ownConfirm = assistant.state().confirm?.actionId ?? null
-      transcripts().touch(env.taskId)
-      return yes
     },
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
@@ -536,7 +500,6 @@ async function run(
     running = null
     countdownAnswer = null
     hold = null
-    ownConfirm = null
   }
 }
 

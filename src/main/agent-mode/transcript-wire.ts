@@ -14,8 +14,8 @@ import * as panel from '../windows/settings'
 import { answerQuestion, askPending } from './ask'
 import { backgroundManager } from './background'
 import { isOpen } from './background/manager'
+import { onConfirmOwnerChange, ownedConfirmId } from './confirm'
 import {
-  agentConfirmId,
   agentTaskPaused,
   canPauseAgentTask,
   pauseAgentTask,
@@ -58,8 +58,8 @@ export function chatHeader(id: string): ChatHeader | null {
       const running = runningAgentTaskId() === id
       const r = hub.rec(id)
       const q = r.openQuestion()
-      // Only the task's own confirm card: another one on the bar is not this task's to approve.
-      const confirmId = running ? agentConfirmId() : null
+      // Only a card this task asked for (tagged where it was made), never another one on the bar.
+      const confirmId = running ? ownedConfirmId(id) : null
       const card = confirmId ? assistant.state().confirm : undefined
       return foregroundHeader(id, meta, {
         running,
@@ -230,7 +230,7 @@ export function controlChat(id: string, op: ChatControlOp, token?: string): Chat
         if (!running) return { ok: false }
         if (assistant.confirmPending()) {
           // Only the task's own card, and only the one the view showed.
-          const own = agentConfirmId()
+          const own = ownedConfirmId(id)
           if (!own || token !== own) return CHANGED
           assistant.command({ type: op === 'approve' ? 'confirm' : 'deny' })
           return { ok: true }
@@ -357,6 +357,8 @@ export function installTranscripts(dir: string): void {
   const store = new TranscriptStore(dir)
   hub.setStore(store)
   hub.setHeaderSource(chatHeader)
+  // A task's own confirm card went up or away: its chat header shows or drops it.
+  onConfirmOwnerChange((owner) => hub.touch(owner))
   hub.setHistorySource((id, rec) => {
     const v = getCopilot()?.get(id)
     if (!v?.sessionId) return
