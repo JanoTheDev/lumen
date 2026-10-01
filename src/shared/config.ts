@@ -249,7 +249,6 @@ export const configV2Schema = z.object({
     localModel: modelId.optional()
   }),
   hotkey: v1.hotkey,
-  hudAutoCloseMs: v1.hudAutoCloseMs,
   answerAutoCloseMs: v1.answerAutoCloseMs,
   wakeWord: v1.wakeWord.extend({
     /**
@@ -258,7 +257,6 @@ export const configV2Schema = z.object({
      */
     sensitivity: z.number().min(0).max(1).optional()
   }),
-  statusBubble: v1.statusBubble,
   voiceVocab: v1.voiceVocab,
   historyEnabled: v1.historyEnabled,
   historyExchanges: v1.historyExchanges,
@@ -356,8 +354,6 @@ export const configV2Schema = z.object({
     dictionary: z.array(shortText(60)).max(500)
   }),
   ui: z.object({
-    /** Retired switch for the old window set; still accepted in old files, ignored. */
-    v2: z.boolean().optional(),
     /** Opens the Home flyout from anywhere; "" = no shortcut. Optional so patches never reset it. */
     homeHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional()
   }),
@@ -382,10 +378,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   theme: DEFAULT_CONFIG_V1.theme,
   models: { provider: 'auto' },
   hotkey: DEFAULT_CONFIG_V1.hotkey,
-  hudAutoCloseMs: DEFAULT_CONFIG_V1.hudAutoCloseMs,
   answerAutoCloseMs: DEFAULT_CONFIG_V1.answerAutoCloseMs,
   wakeWord: { ...DEFAULT_CONFIG_V1.wakeWord, sensitivity: WAKE_SENSITIVITY_DEFAULT },
-  statusBubble: { ...DEFAULT_CONFIG_V1.statusBubble },
   voiceVocab: DEFAULT_CONFIG_V1.voiceVocab,
   historyEnabled: DEFAULT_CONFIG_V1.historyEnabled,
   historyExchanges: DEFAULT_CONFIG_V1.historyExchanges,
@@ -407,7 +401,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     micDeviceId: ''
   },
   a11y: {
-    announce: 'off',
+    announce: 'auto',
     uiScale: 1,
     reduceMotion: 'system',
     contrast: 'system',
@@ -460,6 +454,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
 const V2_KEYS = new Set(Object.keys(configV2Schema.shape))
+/** Fields of the old window set (HUD, status bubble): dropped on load, never kept in `legacy`. */
+const RETIRED_KEYS = new Set(['hudAutoCloseMs', 'statusBubble'])
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
@@ -469,6 +465,7 @@ export function migrateV1toV2(src: Record<string, unknown>): Record<string, unkn
   const out: Record<string, unknown> = { version: 2 }
   const legacy: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(src)) {
+    if (RETIRED_KEYS.has(key)) continue
     if (!V1_KEYS.has(key)) legacy[key] = value
     else if (!['version', 'models', 'uiScale', 'tts'].includes(key)) out[key] = value
   }
@@ -495,6 +492,7 @@ export function withV2Defaults(partial: Record<string, unknown>): Record<string,
   const legacy: Record<string, unknown> = isPlainObject(partial.legacy) ? { ...partial.legacy } : {}
   for (const [key, value] of Object.entries(partial)) {
     if (key === 'legacy' || key === 'version' || value === undefined) continue
+    if (RETIRED_KEYS.has(key)) continue
     if (!V2_KEYS.has(key)) {
       legacy[key] = value
       continue
@@ -515,10 +513,8 @@ const patchObject = z
     accent: s2.accent,
     models: s2.models.partial().strict(),
     hotkey: s2.hotkey,
-    hudAutoCloseMs: s2.hudAutoCloseMs,
     answerAutoCloseMs: s2.answerAutoCloseMs,
     wakeWord: s2.wakeWord.partial().strict(),
-    statusBubble: s2.statusBubble.partial().strict(),
     voiceVocab: s2.voiceVocab,
     historyEnabled: s2.historyEnabled,
     historyExchanges: s2.historyExchanges,

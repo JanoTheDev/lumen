@@ -105,10 +105,8 @@ describe('config', () => {
       verify: 'gpt-5-nano'
     })
     expect(cfg.hotkey).toBe('Alt+B')
-    expect(cfg.hudAutoCloseMs).toBe(3000)
     expect(cfg.answerAutoCloseMs).toBe(0)
     expect(cfg.wakeWord).toEqual({ enabled: true, phrase: 'hey computer', sensitivity: 0.5 })
-    expect(cfg.statusBubble.enabled).toBe(false)
     expect(cfg.voiceVocab).toBe('Kubernetes, Exness')
     expect(cfg.historyEnabled).toBe(false)
     expect(cfg.historyExchanges).toBe(8)
@@ -125,6 +123,8 @@ describe('config', () => {
     expect(cfg.legacy).toEqual({ someFutureKey: { a: 1 } })
     expect(cfg).not.toHaveProperty('uiScale')
     expect(cfg).not.toHaveProperty('tts')
+    expect(cfg).not.toHaveProperty('hudAutoCloseMs')
+    expect(cfg).not.toHaveProperty('statusBubble')
   })
 
   it('migrates a partial v1 config, filling defaults', () => {
@@ -151,7 +151,7 @@ describe('config', () => {
     const cfg = loadConfig()
     expect(cfg.theme).toBe('forest')
     expect(cfg.a11y.uiScale).toBe(1.2)
-    expect(cfg.hudAutoCloseMs).toBe(DEFAULT_CONFIG.hudAutoCloseMs)
+    expect(cfg.answerAutoCloseMs).toBe(DEFAULT_CONFIG.answerAutoCloseMs)
   })
 
   it('migrateV1toV2 is pure and maps tts enabled to cloud', () => {
@@ -330,6 +330,24 @@ describe('config', () => {
     expect(cfg.voice.micDeviceId).toBe('abc')
   })
 
+  it('loads and saves a v2 file with the retired hudAutoCloseMs and statusBubble', () => {
+    writeRaw({ ...DEFAULT_CONFIG, hudAutoCloseMs: 3000, statusBubble: { enabled: false } })
+    const cfg = loadConfig()
+    expect(lastConfigWarning()).toBeNull()
+    expect(cfg).not.toHaveProperty('hudAutoCloseMs')
+    expect(cfg).not.toHaveProperty('statusBubble')
+    expect(cfg.legacy).toBeUndefined()
+    expect(readdirSync(dir).some((f) => f.startsWith('config.invalid'))).toBe(false)
+    saveConfig({ hotkey: 'F9' })
+    expect(readDisk()).not.toHaveProperty('hudAutoCloseMs')
+    expect(readDisk()).not.toHaveProperty('statusBubble')
+    expect(configPatchSchema.safeParse({ statusBubble: { enabled: true } }).success).toBe(false)
+  })
+
+  it('announces through a detected screen reader by default', () => {
+    expect(DEFAULT_CONFIG.a11y.announce).toBe('auto')
+  })
+
   it('still loads a file with the retired ui.v2 switch', () => {
     const old = JSON.parse(JSON.stringify(DEFAULT_CONFIG))
     old.ui = { v2: false, homeHotkey: 'F8' }
@@ -337,6 +355,7 @@ describe('config', () => {
     const cfg = loadConfig()
     expect(lastConfigWarning()).toBeNull()
     expect(cfg.ui.homeHotkey).toBe('F8')
+    expect(cfg.ui).not.toHaveProperty('v2')
     expect(DEFAULT_CONFIG.ui).not.toHaveProperty('v2')
   })
 

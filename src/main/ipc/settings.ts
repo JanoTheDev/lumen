@@ -7,7 +7,6 @@ import { loadConfig, saveConfig, type AppConfig } from '../config'
 import { log } from '../logger'
 import { applyUiScale, broadcast } from '../windows/registry'
 import { effectiveScale, textScaleFactor } from '../a11y/text-scale'
-import { hideStatus } from '../windows/status'
 import * as settingsWin from '../windows/settings'
 
 export interface SettingsIpcDeps {
@@ -59,9 +58,6 @@ export async function patchConfig(raw: unknown): Promise<AppConfig | typeof INVA
   const dictationKey = (c: AppConfig): string =>
     JSON.stringify([c.hotkey, c.dictation.enabled, c.dictation.hotkey])
   if (dictationKey(prev) !== dictationKey(next)) await deps.applyDictationHotkey(next)
-  if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
-    hideStatus()
-  }
   // Only touch the agent when the relevant settings actually changed.
   const listenerChanged =
     JSON.stringify([prev.wakeWord, prev.cancelVoice]) !==
