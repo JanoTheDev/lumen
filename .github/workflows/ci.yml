@@ -50,8 +50,11 @@ jobs:
       - if: steps.crate.outputs.present == 'true'
         run: cargo clippy --manifest-path native/Cargo.toml --all-targets -- -D warnings
 
+  # Master only: bundle, size budgets, then an unpacked (unsigned, unpublished) electron-builder
+  # build checked by verify:package (asar contents, no keys, native files, sidecar handshake).
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [node]
     steps:
@@ -60,6 +63,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
       - run: npm ci
       - run: npx electron-vite build
       - run: npm run size:report
+      - run: npm run build:native
+      - run: npx electron-builder --win --dir --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - run: npm run verify:package
