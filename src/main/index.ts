@@ -107,7 +107,7 @@ function createWindows(): void {
   }
   homeWin.create()
   tray.create()
-  applyUiScaleOnLoad(loadConfig().a11y.uiScale)
+  applyUiScaleOnLoad()
   // First run, or setup never finished: open the setup flow.
   if (!loadConfig().onboarding.done && !startedHidden()) settingsWin.create('onboarding')
 }

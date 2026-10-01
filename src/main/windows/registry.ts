@@ -2,6 +2,8 @@
 // reach all of them without importing each module.
 import type { BrowserWindow, Rectangle } from 'electron'
 import type { EventChannel, EventChannels } from '@shared/channels'
+import { loadConfig } from '../config'
+import { effectiveScale } from '../a11y/text-scale'
 
 interface Entry {
   get: () => BrowserWindow | null
@@ -77,24 +79,17 @@ export function currentZoom(win: BrowserWindow | null): number {
   return w ? w.webContents.getZoomFactor() : 1
 }
 
-/** Applies the saved UI scale once each zoomed window finishes loading. */
-export function applyUiScaleOnLoad(scale: number): void {
+/**
+ * Applies the zoom (uiScale × Windows text size) whenever a zoomed window finishes loading.
+ * Read at load time so a text-size change made since start-up is not overwritten.
+ */
+export function applyUiScaleOnLoad(): void {
   for (const e of entries) {
     const w = e.zoom ? live(e.get()) : null
     if (!w) continue
-    w.webContents.once('did-finish-load', () => {
-      if (!w.isDestroyed()) w.webContents.setZoomFactor(clampScale(scale))
+    w.webContents.on('did-finish-load', () => {
+      if (!w.isDestroyed())
+        w.webContents.setZoomFactor(clampScale(effectiveScale(loadConfig().a11y.uiScale)))
     })
   }
-}
-
-/** True when a logical-px point is over one of Lumen's visible interactive windows. */
-export function isOverOwnWindow(pt: { x: number; y: number }): boolean {
-  return entries.some((e) => {
-    const w = e.interactive ? live(e.get()) : null
-    if (!w || !w.isVisible()) return false
-    const b = e.hitRect ? e.hitRect() : w.getBounds()
-    if (!b) return false
-    return pt.x >= b.x && pt.x <= b.x + b.width && pt.y >= b.y && pt.y <= b.y + b.height
-  })
 }
