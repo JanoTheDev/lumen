@@ -7,6 +7,7 @@ import type {
   ChatPhase,
   ChatSummary,
   ChatView,
+  SubJob,
   ToolStatus
 } from '@shared/task-chat'
 
@@ -53,7 +54,10 @@ export type ChatItem =
   | { type: 'entry'; entry: ChatEntry }
   | { type: 'tools'; key: number; entries: Extract<ChatEntry, { k: 'tool' }>[] }
 
-/** Consecutive tool rows: a long run folds into one group (it opens to show each step). */
+/**
+ * Consecutive tool rows: a long run folds into one group (it opens to show each step). A
+ * run_subagents row (with jobs) stays on its own: it is a group of its own.
+ */
 export function groupEntries(entries: readonly ChatEntry[], min = GROUP_MIN): ChatItem[] {
   const out: ChatItem[] = []
   let run: Extract<ChatEntry, { k: 'tool' }>[] = []
@@ -63,7 +67,7 @@ export function groupEntries(entries: readonly ChatEntry[], min = GROUP_MIN): Ch
     run = []
   }
   for (const e of entries) {
-    if (e.k === 'tool') run.push(e)
+    if (e.k === 'tool' && !e.jobs) run.push(e)
     else {
       flush()
       out.push({ type: 'entry', entry: e })
@@ -123,6 +127,33 @@ export function headerFacts(h: ChatHeader, now: number): string {
   if (h.costUsd >= 0.005) parts.push(`$${h.costUsd.toFixed(2)}`)
   parts.push(duration((h.endedAt ?? now) - h.startedAt))
   return parts.join(' · ')
+}
+
+export const JOB_STATUS_TEXT: Record<SubJob['status'], string> = {
+  queued: 'waiting',
+  running: 'working',
+  done: 'done',
+  failed: 'failed',
+  stopped: 'stopped'
+}
+
+/** "3 helpers · 2 working · 1 done · $0.02". */
+export function jobsLine(jobs: readonly SubJob[]): string {
+  const n = jobs.length
+  const parts = [`${n} ${n === 1 ? 'helper' : 'helpers'}`]
+  for (const s of ['running', 'queued', 'done', 'failed', 'stopped'] as const) {
+    const k = jobs.filter((j) => j.status === s).length
+    if (k) parts.push(`${k} ${JOB_STATUS_TEXT[s]}`)
+  }
+  const cost = jobs.reduce((a, j) => a + j.costUsd, 0)
+  if (cost >= 0.005) parts.push(`$${cost.toFixed(2)}`)
+  return parts.join(' · ')
+}
+
+/** "researcher · working · Read example.com". */
+export function jobLine(j: SubJob): string {
+  const now = j.status === 'running' && j.step ? ` · ${j.step}` : ''
+  return `${j.role} · ${JOB_STATUS_TEXT[j.status]}${now}`
 }
 
 /** "Clicked “Reply” · ok". */

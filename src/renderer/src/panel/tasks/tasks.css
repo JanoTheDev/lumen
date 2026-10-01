@@ -329,6 +329,15 @@ div.chat-tool,
   border-left: 2px solid var(--border-subtle);
 }
 
+.chat-jobs > summary {
+  gap: var(--space-2);
+}
+
+.chat-job__role {
+  font-weight: var(--weight-strong);
+  text-transform: capitalize;
+}
+
 /* cards */
 .chat-card {
   display: flex;

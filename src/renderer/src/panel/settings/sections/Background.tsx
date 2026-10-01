@@ -1,6 +1,6 @@
 // Settings → Automations (08 T22/T23/T29): automations (time, app, file, idle and network
 // triggers; Automations.tsx) and the limits every background task runs under.
-import { IconButton, NumberField, Card, Switch, icons } from '../../../ui'
+import { IconButton, NumberField, Card, SegmentedControl, Switch, icons } from '../../../ui'
 import type { SectionProps } from '../meta'
 import { Automations } from './Automations'
 
@@ -8,6 +8,9 @@ export function Background({ cfg, patch }: SectionProps): JSX.Element {
   const bg = cfg.agent.background
   const setBg = (p: Partial<typeof bg>): void =>
     void patch({ agent: { background: { ...bg, ...p } } })
+  const sub = cfg.agent.subagents
+  const setSub = (p: Partial<typeof sub>): void =>
+    void patch({ agent: { subagents: { ...sub, ...p } } })
 
   return (
     <>
@@ -71,6 +74,37 @@ export function Background({ cfg, patch }: SectionProps): JSX.Element {
             </ul>
           </>
         )}
+      </Card>
+      <Card
+        title="Helpers"
+        description="A task can hand focused jobs (research, reading files, checking facts) to helpers that work at the same time and report back briefly. Their cost counts toward the task's own limit."
+      >
+        <NumberField
+          label="Helpers at once"
+          value={sub.max}
+          min={1}
+          max={6}
+          onCommit={(max) => setSub({ max })}
+        />
+        <SegmentedControl
+          label="Helper model"
+          value={sub.model}
+          options={[
+            { value: 'fast', label: 'Fast' },
+            { value: 'main', label: 'Main' }
+          ]}
+          onChange={(model) => setSub({ model })}
+          hint="Fast is cheaper. A skill that names its own model uses that one."
+        />
+        <NumberField
+          label="Cost per helper"
+          value={sub.costCapUsd}
+          min={0.01}
+          max={1}
+          step={0.01}
+          unit="USD"
+          onCommit={(costCapUsd) => setSub({ costCapUsd })}
+        />
       </Card>
     </>
   )

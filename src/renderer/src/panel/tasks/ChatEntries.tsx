@@ -1,7 +1,14 @@
 // Task chat transcript (08 T43): message bubbles, collapsible tool rows, questions, results.
-import type { ChatEntry, ChatHeader } from '@shared/task-chat'
+import type { ChatEntry, ChatHeader, SubJob } from '@shared/task-chat'
 import { Button, Markdown, icons } from '../../ui'
-import { groupEntries, toolLine, TOOL_STATUS_TEXT } from './chat-view'
+import {
+  groupEntries,
+  JOB_STATUS_TEXT,
+  jobLine,
+  jobsLine,
+  toolLine,
+  TOOL_STATUS_TEXT
+} from './chat-view'
 
 type ToolEntry = Extract<ChatEntry, { k: 'tool' }>
 
@@ -24,7 +31,64 @@ function ToolIcon({ status }: { status: ToolEntry['status'] }): JSX.Element {
   )
 }
 
+const JOB_MARK: Record<SubJob['status'], ToolEntry['status']> = {
+  queued: 'running',
+  running: 'running',
+  done: 'ok',
+  failed: 'error',
+  stopped: 'denied'
+}
+
+/** run_subagents: one collapsible group, one row per helper job (role, task, status, result). */
+function JobsRow({ e, jobs }: { e: ToolEntry; jobs: SubJob[] }): JSX.Element {
+  const live = jobs.some((j) => j.status === 'running' || j.status === 'queued')
+  return (
+    <details className="chat-tools chat-jobs" open={live || undefined}>
+      <summary aria-label={`${e.label}: ${jobsLine(jobs)}`}>
+        <ToolIcon status={e.status} />
+        <span className="chat-tools__count">{e.label}</span>
+        <span className="chat-tools__last">{jobsLine(jobs)}</span>
+      </summary>
+      <ol className="chat-tools__list">
+        {jobs.map((j, i) => (
+          <li key={i}>
+            <details className="chat-tool chat-job">
+              <summary aria-label={`${jobLine(j)}: ${j.task}`}>
+                <ToolIcon status={JOB_MARK[j.status]} />
+                <span className="chat-tool__label">
+                  <span className="chat-job__role">{j.role}</span> {j.task}
+                </span>
+                <span className={`chat-tool__status is-${JOB_MARK[j.status]}`}>
+                  {JOB_STATUS_TEXT[j.status]}
+                  {j.costUsd >= 0.005 ? ` · $${j.costUsd.toFixed(2)}` : ''}
+                </span>
+              </summary>
+              <dl className="chat-tool__detail">
+                <dt>Job</dt>
+                <dd>{j.task}</dd>
+                {j.status === 'running' && j.step && (
+                  <>
+                    <dt>Now</dt>
+                    <dd>{j.step}</dd>
+                  </>
+                )}
+                {j.result && (
+                  <>
+                    <dt>Result</dt>
+                    <dd>{j.result}</dd>
+                  </>
+                )}
+              </dl>
+            </details>
+          </li>
+        ))}
+      </ol>
+    </details>
+  )
+}
+
 function ToolRow({ e }: { e: ToolEntry }): JSX.Element {
+  if (e.jobs?.length) return <JobsRow e={e} jobs={e.jobs} />
   const detail = e.args || e.result
   const line = (
     <>

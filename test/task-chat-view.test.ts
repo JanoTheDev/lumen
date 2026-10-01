@@ -12,6 +12,7 @@ import {
   duration,
   groupEntries,
   headerFacts,
+  jobsLine,
   rowChanged
 } from '../src/renderer/src/panel/tasks/chat-view'
 import { ChatEntries } from '../src/renderer/src/panel/tasks/ChatEntries'
@@ -138,5 +139,55 @@ describe('snapshot and early pushes', () => {
     }
     expect(rowChanged([row], header)).toBe(false)
     expect(rowChanged([row], { ...header, phase: 'done' })).toBe(true)
+  })
+})
+
+describe('sub-agent groups (08 T49)', () => {
+  const jobsRow: ChatEntry = {
+    n: 50,
+    at: 50,
+    k: 'tool',
+    name: 'run_subagents',
+    label: 'Asked 2 helpers',
+    status: 'running',
+    jobs: [
+      {
+        role: 'researcher',
+        task: 'price at shop a',
+        status: 'running',
+        costUsd: 0.004,
+        step: 'Read a.example'
+      },
+      {
+        role: 'checker',
+        task: 'check b',
+        status: 'done',
+        costUsd: 0.003,
+        result: 'Confirmed: 10 EUR'
+      }
+    ]
+  }
+
+  it('a run_subagents row never folds into a steps group', () => {
+    const items = groupEntries([tool(1), tool(2), jobsRow, tool(3), tool(4)], 2)
+    expect(items.map((i) => (i.type === 'tools' ? `g${i.entries.length}` : i.entry.n))).toEqual([
+      'g2',
+      50,
+      'g2'
+    ])
+  })
+
+  it('summarises the jobs and renders one row per job', () => {
+    expect(jobsLine(jobsRow.k === 'tool' ? (jobsRow.jobs ?? []) : [])).toBe(
+      '2 helpers · 1 working · 1 done · $0.01'
+    )
+    const html = renderToStaticMarkup(
+      createElement(ChatEntries, { entries: [jobsRow], header, dropped: 0, onChoice: () => {} })
+    )
+    expect(html).toContain('chat-jobs')
+    expect(html).toContain('price at shop a')
+    expect(html).toContain('Confirmed: 10 EUR')
+    expect(html).toContain('Read a.example')
+    expect(html.match(/chat-job"/g)?.length).toBe(2)
   })
 })
