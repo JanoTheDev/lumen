@@ -322,6 +322,21 @@ body,
   color: var(--fg-muted);
 }
 
+/* Reply style in use ("brief · ultra"): a small quiet pill beside the status. */
+.as-style-chip {
+  flex: none;
+  max-width: 12em;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--fg-muted);
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Memory review chip (05): calm, one line, its button on the right. */
 .as-chip {
   display: flex;

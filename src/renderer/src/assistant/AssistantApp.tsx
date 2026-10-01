@@ -429,6 +429,16 @@ export function AssistantApp(): JSX.Element {
                       <CrossFadeText text={statusLine(v)} shimmer={working} />
                     </span>
                     {listening && <LevelMeter active={listening} />}
+                    {settings.style && (
+                      <span
+                        className="as-style-chip"
+                        title={`Reply style: ${settings.style.name}${settings.style.level ? `, ${settings.style.level}` : ''}. Say “normal mode” to turn it off.`}
+                      >
+                        <span className="visually-hidden">Reply style </span>
+                        {settings.style.name.replace(/-/g, ' ')}
+                        {settings.style.level ? ` · ${settings.style.level}` : ''}
+                      </span>
+                    )}
                     {settings.privateMode && (
                       <span className="as-private" title="Private mode: nothing is remembered">
                         <icons.eyeOff />

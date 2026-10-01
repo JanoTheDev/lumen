@@ -1,5 +1,6 @@
 // Settings the bar reads itself (main sends only the AssistantView): simple mode, private
-// memory mode, the a11y shortcut hints shown in focused mode, and the memory review count.
+// memory mode, the a11y shortcut hints shown in focused mode, the reply style and the memory
+// review count.
 import { useEffect, useState } from 'react'
 import type { ConfigV2 } from '@shared/config'
 import { invoke, useIpc } from '../lib/ipc'
@@ -9,9 +10,17 @@ export interface BarSettings {
   privateMode: boolean
   memory: boolean
   keys: { repeat?: string; pin?: string; close?: string }
+  /** Reply style in use ("brief", level "ultra"), shown as a small chip. */
+  style: { name: string; level?: string } | null
 }
 
-const DEFAULTS: BarSettings = { simple: false, privateMode: false, memory: false, keys: {} }
+const DEFAULTS: BarSettings = {
+  simple: false,
+  privateMode: false,
+  memory: false,
+  keys: {},
+  style: null
+}
 
 export function barSettings(cfg: unknown): BarSettings {
   const c = cfg as Partial<ConfigV2> | null
@@ -25,7 +34,8 @@ export function barSettings(cfg: unknown): BarSettings {
       repeat: keys?.repeat || undefined,
       pin: keys?.pin || undefined,
       close: keys?.close || undefined
-    }
+    },
+    style: c.ai?.style ?? null
   }
 }
 
