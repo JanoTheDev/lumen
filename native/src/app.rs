@@ -15,7 +15,8 @@ use crate::proto::{AgentError, Args, CmdResult, arg};
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Capabilities whose v2 commands match plans CONTRACTS C2.
-pub const CAPABILITIES: &[&str] = &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell"];
+pub const CAPABILITIES: &[&str] =
+    &["hotkey", "dictation-hotkey", "input", "capture", "ocr", "uia", "dwell", "announce"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Opts {
@@ -220,6 +221,8 @@ pub fn register_core(app: &Arc<App>) {
             app.mouse.set_enabled(on);
         }
     });
+
+    app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
 
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")
