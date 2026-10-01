@@ -1,5 +1,6 @@
-// Settings → Voice: how dictation types (04 T34-T38): corrections, formatting, command mode,
-// a style per kind of app, and voice snippets.
+// Settings → Voice: how dictation types (04 T34-T42): corrections, formatting, command mode,
+// a style per kind of app, voice snippets, the dictionary (per app, spell-as, export /
+// import), names from the screen and coding mode.
 import { useCallback, useEffect, useState } from 'react'
 import type { DictationSnippet } from '@shared/channels'
 import {
@@ -10,7 +11,14 @@ import {
 } from '@shared/config'
 import { Button, Card, Select, Switch, TextField, announce, icons } from '../../../ui'
 import type { SectionProps } from '../meta'
-import { styleAppsFromText, styleAppsToText } from './dictation-text'
+import {
+  appDictionaryFromText,
+  appDictionaryToText,
+  spellAsFromText,
+  spellAsToText,
+  styleAppsFromText,
+  styleAppsToText
+} from './dictation-text'
 
 const KIND_LABELS: Record<DictationAppKind, string> = {
   email: 'Email',
@@ -125,6 +133,33 @@ function Snippets(): JSX.Element {
   )
 }
 
+function DictionaryFile(): JSX.Element {
+  const [message, setMessage] = useState('')
+  const run = async (which: 'export' | 'import'): Promise<void> => {
+    const r = await window.lumen.invoke(`dictation:dictionary-${which}`)
+    if ('error' in r && !('ok' in r)) return setMessage('That did not work.')
+    if (!r.ok) return setMessage(r.error === 'cancelled' ? '' : (r.error ?? 'That did not work.'))
+    const added = 'added' in r ? r.added : undefined
+    const text =
+      which === 'export'
+        ? 'Dictionary exported.'
+        : `Dictionary imported${added !== undefined ? `: ${added} new` : ''}.`
+    setMessage(text)
+    announce(text)
+  }
+  return (
+    <>
+      <div className="panel-row">
+        <Button icon={icons.download} onClick={() => void run('export')}>
+          Export dictionary…
+        </Button>
+        <Button onClick={() => void run('import')}>Import dictionary…</Button>
+      </div>
+      {message && <p className="ui-hint">{message}</p>}
+    </>
+  )
+}
+
 export function DictationSettings({ cfg, patch }: SectionProps): JSX.Element {
   const d = cfg.dictation
   const styles = { ...DICTATION_STYLE_DEFAULTS, ...d.styles }
@@ -179,6 +214,44 @@ export function DictationSettings({ cfg, patch }: SectionProps): JSX.Element {
           commitOnBlurOnly
           onCommit={(text) => patch({ dictation: { styleApps: styleAppsFromText(text) } })}
           hint="One per line, for example: basecamp = work, or signal.exe = personal. Kinds: email, work, personal, docs, code, other."
+        />
+      </Card>
+
+      <Card
+        title="Dictionary"
+        description="Spellings Lumen should know. Names you correct twice are added to the personal dictionary above by themselves."
+      >
+        <TextField
+          label="Spell as"
+          multiline
+          value={spellAsToText(d.spellAs)}
+          commitOnBlurOnly
+          onCommit={(text) => patch({ dictation: { spellAs: spellAsFromText(text) } })}
+          hint="One per line: what you say = how to write it, for example: cube control = kubectl."
+        />
+        <TextField
+          label="Words for one app"
+          multiline
+          value={appDictionaryToText(d.appDictionary)}
+          commitOnBlurOnly
+          onCommit={(text) => patch({ dictation: { appDictionary: appDictionaryFromText(text) } })}
+          hint="One app per line: figma: Auto layout, Frame. The app is a program (figma.exe) or a word in the window title."
+        />
+        <Switch
+          checked={d.screenNames}
+          onChange={(screenNames) => patch({ dictation: { screenNames } })}
+          label="Spell names the way they appear on screen"
+          hint="Reads the window you dictate into, on this PC only, so names in the email or chat you reply to come out right. Nothing is saved or sent. Off in private mode."
+        />
+        <DictionaryFile />
+      </Card>
+
+      <Card title="Coding" description="In code editors, terminals and Claude Code.">
+        <Switch
+          checked={d.codingMode}
+          onChange={(codingMode) => patch({ dictation: { codingMode } })}
+          label="Coding mode"
+          hint="“camel case user name” types userName (also snake, kebab, pascal and constant case), “open paren”, “dot” and “equals” type symbols, and “at file pipeline dot ts” types @pipeline.ts. Start with “to Claude, …” to send the dictation to your open Claude Code session."
         />
       </Card>
 

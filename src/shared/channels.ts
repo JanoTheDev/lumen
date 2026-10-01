@@ -262,6 +262,12 @@ export interface InvokeChannels {
     args: [snippets: (Omit<DictationSnippet, 'id'> & { id?: string })[]]
     result: { ok: boolean; snippets?: DictationSnippet[]; error?: string }
   }
+  /** Personal dictionary file (04 T39): save / merge a JSON export through a file dialog. */
+  'dictation:dictionary-export': { args: []; result: { ok: boolean; error?: string } }
+  'dictation:dictionary-import': {
+    args: []
+    result: { ok: boolean; added?: number; error?: string }
+  }
   'notes:list': { args: []; result: Note[] }
   'notes:add': { args: [text: string]; result: { ok: boolean; note?: Note } }
   'notes:update': { args: [id: string, text: string]; result: { ok: boolean } }
@@ -1147,6 +1153,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'dictation:stats-reset',
   'dictation:snippets',
   'dictation:snippets-save',
+  'dictation:dictionary-export',
+  'dictation:dictionary-import',
   'notes:list',
   'notes:add',
   'notes:update',
