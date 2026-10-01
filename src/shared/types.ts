@@ -1,4 +1,5 @@
 // Types shared by main, preload and renderer. Pure TS: no electron or node imports.
+import type { ClaudePhase } from './claude-code'
 
 export interface Point {
   x: number
@@ -288,4 +289,6 @@ export interface BackgroundTask {
   endedAt?: number
   /** Finished and not looked at yet (the tray badge counts these). */
   unseen?: boolean
+  /** A Claude Code session's stretch of work (08 T39): its session id and live phase. */
+  claude?: { id: string; projectName: string; phase: ClaudePhase }
 }

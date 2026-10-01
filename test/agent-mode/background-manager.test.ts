@@ -210,4 +210,38 @@ describe('taskTitle', () => {
     expect(long.length).toBeLessThanOrEqual(60)
     expect(long.endsWith('…')).toBe(true)
   })
+
+  it('runs a task with its own runner, outside the slots, and never runs it again', async () => {
+    const { m, runs } = setup(1)
+    const busy = m.start({ prompt: 'fill the slot', origin: 'voice' })
+    let ctl: TaskControl | null = null
+    let finish: (r: RunOutcome) => void = () => {}
+    const own = m.start({
+      prompt: 'claude session',
+      origin: 'voice',
+      claude: { id: 'cc_abcd', projectName: 'proj', phase: 'thinking' },
+      run: (c) =>
+        new Promise<RunOutcome>((resolve) => {
+          ctl = c
+          finish = resolve
+        })
+    })
+    expect(m.get(own.id)!.phase).toBe('running')
+    expect(m.get(own.id)!.claude?.id).toBe('cc_abcd')
+    expect(runs).toHaveLength(1)
+    // The own-runner task does not hold a slot: a queued task starts when the slot frees.
+    const queued = m.start({ prompt: 'waits for the slot', origin: 'voice' })
+    expect(m.get(queued.id)!.phase).toBe('queued')
+    runs[0].finish()
+    await tick()
+    expect(m.get(busy.id)!.phase).toBe('done')
+    expect(m.get(queued.id)!.phase).toBe('running')
+    ctl!.progress('Running npm test')
+    finish({ status: 'done', summary: 'All green' })
+    await tick()
+    expect(m.get(own.id)!.phase).toBe('done')
+    expect(m.get(own.id)!.result?.summary).toBe('All green')
+    expect(m.runAgain(own.id)).toBeNull()
+    expect(runs).toHaveLength(2)
+  })
 })

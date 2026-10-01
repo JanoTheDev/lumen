@@ -18,6 +18,12 @@ export interface StartInput {
   routineId?: string
   /** Skip the queue (a parent waits on it: queueing could deadlock the slots). */
   immediate?: boolean
+  /**
+   * The task's own runner in place of ManagerDeps.run (a Claude Code session). It brings its
+   * own caps, starts at once, takes no slot and cannot be run again.
+   */
+  run?: (ctl: TaskControl) => Promise<RunOutcome>
+  claude?: BackgroundTask['claude']
 }
 
 export interface TaskControl {
@@ -51,6 +57,7 @@ export interface ManagerDeps {
 
 interface Entry {
   task: BackgroundTask
+  run?: (ctl: TaskControl) => Promise<RunOutcome>
   ac?: AbortController
   answer?: (text: string) => void
   done: Promise<BackgroundTask>
@@ -100,6 +107,13 @@ export class BackgroundManager {
     return n
   }
 
+  /** Running tasks that hold a slot (own-runner tasks do not). */
+  private slotted(): number {
+    let n = 0
+    for (const e of this.entries.values()) if (!e.run && isActive(e.task)) n++
+    return n
+  }
+
   unseenCount(): number {
     let n = 0
     for (const e of this.entries.values()) if (e.task.unseen) n++
@@ -137,11 +151,13 @@ export class BackgroundManager {
       progress: [],
       counters: { modelCalls: 0, costUsd: 0, startedAt: this.deps.now() },
       ...(input.parentId ? { parentId: input.parentId } : {}),
-      ...(input.routineId ? { routineId: input.routineId } : {})
+      ...(input.routineId ? { routineId: input.routineId } : {}),
+      ...(input.claude ? { claude: input.claude } : {})
     }
-    this.newEntry(task)
+    const entry = this.newEntry(task)
+    if (input.run) entry.run = input.run
     this.changed(task.id)
-    if (input.immediate || this.running() < this.deps.max()) this.launch(task.id)
+    if (input.immediate || input.run || this.slotted() < this.deps.max()) this.launch(task.id)
     else this.queue.push(task.id)
     this.prune()
     return this.entries.get(task.id)!.task
@@ -187,7 +203,7 @@ export class BackgroundManager {
 
   runAgain(id: string): BackgroundTask | null {
     const t = this.get(id)
-    if (!t || isOpen(t)) return null
+    if (!t || isOpen(t) || t.claude || this.entries.get(id)?.run) return null
     return this.start({
       prompt: t.prompt,
       title: t.title,
@@ -277,8 +293,8 @@ export class BackgroundManager {
           })
         })
     }
-    void this.deps
-      .run(ctl)
+    const run = e.run ?? ((c: TaskControl) => this.deps.run(c))
+    void run(ctl)
       .then(
         (r) => {
           if (ac.signal.aborted) return this.end(id, { phase: 'cancelled' })
@@ -311,7 +327,7 @@ export class BackgroundManager {
   }
 
   private pump(): void {
-    while (this.queue.length && this.running() < this.deps.max()) {
+    while (this.queue.length && this.slotted() < this.deps.max()) {
       const next = this.queue.shift()!
       if (this.entries.get(next)?.task.phase === 'queued') this.launch(next)
     }
