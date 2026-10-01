@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 
-import { PageReader, chunkText, speakMs } from '../../src/main/a11y/reader'
+import { PageReader, chunkText, speakMs, voiceStartPausesReading } from '../../src/main/a11y/reader'
 import { A11yCommands, LOCAL_HANDLED } from '../../src/main/a11y/dispatch'
 import { fakeA11yIo, type FakeA11yOptions } from '../helpers/fake-a11y-io'
 
@@ -232,5 +232,16 @@ describe('describe and read commands (T13)', () => {
   it('simple mode uses the plain phrases', async () => {
     const f = await run(['read this'], { simple: true })
     expect(f.calls.feedback.at(-1)?.text).toBe('Nothing to read. Select some text first')
+  })
+})
+
+describe('voiceStartPausesReading (review a11y #2)', () => {
+  it('a conversation re-listen does not pause the reading', () => {
+    expect(voiceStartPausesReading({ handsFree: true }, true)).toBe(false)
+  })
+  it('the user starting to talk does', () => {
+    expect(voiceStartPausesReading({ handsFree: false }, true)).toBe(true)
+    expect(voiceStartPausesReading({ handsFree: true }, false)).toBe(true)
+    expect(voiceStartPausesReading({ handsFree: false }, false)).toBe(true)
   })
 })

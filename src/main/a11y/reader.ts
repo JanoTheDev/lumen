@@ -87,6 +87,18 @@ export interface ReaderDeps {
 
 export type ReaderState = 'idle' | 'reading' | 'paused'
 
+/**
+ * Whether a voice start pauses the reading. Conversation mode opens the mic again on its own
+ * after each turn (hands-free); that re-listen is not the user talking, so the reading goes
+ * on. A request the user then makes still ends it (query.started).
+ */
+export function voiceStartPausesReading(
+  e: { handsFree: boolean },
+  conversationActive: boolean
+): boolean {
+  return !(e.handsFree && conversationActive)
+}
+
 export class PageReader {
   private parts: string[] = []
   private index = 0

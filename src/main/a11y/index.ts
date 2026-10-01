@@ -18,6 +18,7 @@ import { onBroadcast } from '../windows/registry'
 import { currentContext } from '../query/context'
 import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
+import { conversationActive } from '../speech/hotkey'
 import { speakAnswer, stopSpeaking } from '../speech/tts'
 import * as assistant from '../windows/assistant'
 import * as commandSheet from '../windows/command-sheet'
@@ -38,6 +39,7 @@ import { installShortcuts } from './install-shortcuts'
 import { installSwitch, type SwitchControl } from './install-switch'
 import { installSystemEvents, refreshAtState } from './system-events'
 import { onTextScaleChange } from './text-scale'
+import { voiceStartPausesReading } from './reader'
 import { withInputLane } from '../agent-mode/input-lane'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
@@ -382,7 +384,9 @@ export function installA11y(): void {
     dwellController()?.reset()
   })
   // Talking to Lumen pauses a reading ("continue" goes on); a new request ends it.
-  bus.on('voice.started', () => commandsImpl.reader.pause())
+  bus.on('voice.started', (e) => {
+    if (voiceStartPausesReading(e, conversationActive())) commandsImpl.reader.pause()
+  })
   bus.on('query.started', () => commandsImpl.reader.stop())
   installCoexist({ announce: (text) => feedback(text, true) })
   installFocusNarration()
