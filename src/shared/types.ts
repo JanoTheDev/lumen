@@ -35,6 +35,8 @@ export interface ElementNode {
   monitorId: number
   enabled: boolean
   focused?: boolean
+  /** UIA IsPassword: a password field (its value is never read). */
+  password?: boolean
   patterns: ElementPattern[]
   children?: ElementNode[]
 }
@@ -102,6 +104,8 @@ export type Action =
       value?: string
       /** Name of the element (policy risk names, logs). */
       description?: string
+      /** The element is a password field (the policy never lets the agent fill one). */
+      password?: boolean
     }
   /** description: what the click lands on (the policy rates clicks by name). */
   | { type: 'input'; steps: InputStep[]; description?: string }

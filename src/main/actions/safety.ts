@@ -131,6 +131,8 @@ export interface WindowInfo {
   process?: string
   /** UIA class name of the focused element. */
   className?: string
+  /** Win32 class of the foreground window (ConsoleWindowClass, CASCADIA_HOSTING_WINDOW_CLASS). */
+  windowClass?: string
   /** The focused element is a password field (UIA IsPassword). */
   isPassword?: boolean
   /** false: the agent could not read the focused element (password / terminal unknown). */
@@ -182,6 +184,8 @@ export interface EvalAction {
   action?: string
   /** Name of the resolved target element. */
   elementName?: string
+  /** uia_act: the target element is a password field (UIA IsPassword). */
+  password?: boolean
   /** Why the model wants this (the injection check reads it). */
   rationale?: string
   /** launch_app: known-app registry id. */
@@ -275,6 +279,7 @@ export function isTerminal(w: WindowInfo | undefined): boolean {
   if (!w) return false
   if (TERMINAL_PROCESSES.has(lower(w.process))) return true
   if (w.className && TERMINAL_CLASSES.test(w.className)) return true
+  if (w.windowClass && TERMINAL_CLASSES.test(w.windowClass)) return true
   if (isIde(w) && TERMINAL_FOCUS_NAME_RE.test(w.focusName ?? '')) return true
   return isShellWindow(w.title)
 }
@@ -556,9 +561,15 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
 
 // ---- typing ----
 
-function typeFindings(text: string, ctx: PolicyCtx, out: Finding[], redactions: string[]): void {
+function typeFindings(
+  text: string,
+  ctx: PolicyCtx,
+  out: Finding[],
+  redactions: string[],
+  password = false
+): void {
   const w = ctx.activeWindow
-  if (w?.isPassword) {
+  if (w?.isPassword || password) {
     out.push(
       ctx.origin === 'user-direct'
         ? { risk: 'high', reason: 'types into a password field' }
@@ -685,7 +696,7 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
       clickFindings(nameOf(a), ctx, out, { spot: SPOT_KINDS.has(a.target?.kind ?? '') })
       break
     case 'uia_act':
-      if (a.action === 'set_value') typeFindings(a.value ?? '', ctx, out, redactions)
+      if (a.action === 'set_value') typeFindings(a.value ?? '', ctx, out, redactions, a.password)
       else if (a.action !== 'focus' && a.action !== 'scroll_into_view')
         clickFindings(nameOf(a), ctx, out)
       break

@@ -162,6 +162,21 @@ describe('policy gate', () => {
       expect(f.executed).toEqual([])
     })
 
+    it('reads the focused class and the window class (native agent fields)', async () => {
+      const f = fakeAgent({ title: 'app.ts - proj - Visual Studio Code', process: 'Code.exe' })
+      f.focus = {
+        uia: true,
+        role: 'edit',
+        name: '',
+        password: false,
+        className: 'xterm-helper-textarea',
+        windowClass: 'Chrome_WidgetWin_1'
+      }
+      const r = await executeActions([{ type: 'type', text: 'ls' }], { origin: 'agent' })
+      expect(r.denied?.reason).toContain('terminal')
+      expect(f.executed).toEqual([])
+    })
+
     it('asks before agent typing when the focus cannot be read', async () => {
       const f = fakeAgent()
       f.focus = null

@@ -299,6 +299,21 @@ describe('click names for the policy (mark / point targets, double-click)', () =
     expect(evaluate(a, ctx).risk).toBe('high')
   })
 
+  it('set_value on a password element carries the flag, and the policy blocks it', async () => {
+    const f = fake([
+      node({ id: 'e3', name: 'Password', role: 'edit', patterns: ['value'], password: true })
+    ])
+    await performAct(
+      { op: 'set_value', target: { kind: 'element', ref: 'e3' }, value: 'hunter2' },
+      f.ports,
+      fields(),
+      signal
+    )
+    const a = f.batches[0][0]
+    expect(a).toMatchObject({ type: 'uia_act', action: 'set_value', password: true })
+    expect(evaluate(a, { origin: 'agent', task: newTaskState() }).risk).toBe('blocked')
+  })
+
   it('unnamed spot clicks in an agent task are medium and not grantable', () => {
     const ctx = { origin: 'agent' as const, task: newTaskState() }
     const d = evaluate({ type: 'click_target', target: { kind: 'point' } }, ctx)

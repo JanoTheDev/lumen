@@ -305,7 +305,8 @@ async function typeText(
       elementId: el.id,
       action: 'set_value',
       value: text,
-      description: el.name
+      description: el.name,
+      ...(el.password ? { password: true } : {})
     })
   } else {
     const keys: Action[] = [

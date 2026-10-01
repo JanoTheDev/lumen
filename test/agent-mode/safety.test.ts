@@ -235,6 +235,19 @@ describe('evaluate: terminal detection', () => {
     expect(typing({ title: 'Notepad', focusKnown: false }, user)).toBe('low')
   })
 
+  it('the window class and the focused class from the agent count', () => {
+    expect(isTerminal({ process: 'x.exe', windowClass: 'ConsoleWindowClass' })).toBe(true)
+    expect(isTerminal({ process: 'Code.exe', className: 'xterm-helper-textarea' })).toBe(true)
+    // A known class that is not a terminal makes an IDE's focus clear (the editor).
+    expect(typing({ process: 'Code.exe', focusKnown: true, className: 'inputarea' })).toBe('low')
+  })
+
+  it('set_value on an element UIA marks as a password field is blocked for the agent', () => {
+    const a = { type: 'uia_act', action: 'set_value', value: 'x', password: true }
+    expect(risk(a)).toBe('blocked')
+    expect(risk(a, user)).toBe('high')
+  })
+
   it('a password field reported by focus_info blocks agent set_value too', () => {
     const d = evaluate(
       { type: 'uia_act', action: 'set_value', value: 'hunter2' },

@@ -92,7 +92,13 @@ export async function foregroundWindow(opts: { focus?: boolean } = {}): Promise<
       {},
       { timeoutMs: ACTIVE_WINDOW_MS }
     )
-    if (w?.title || w?.process) return { ...unknown, title: w.title, process: w.process }
+    if (w?.title || w?.process)
+      return {
+        ...unknown,
+        title: w.title,
+        process: w.process,
+        ...(w.className ? { windowClass: w.className } : {})
+      }
   } catch {
     /* older agent: title only */
   }
@@ -112,7 +118,8 @@ function focusWindow(f: FocusInfoResult): WindowInfo {
     ...(known
       ? { isPassword: f.password === true, focusName: f.name ?? '', focusRole: f.role ?? '' }
       : {}),
-    ...(f.className ? { className: f.className } : {})
+    ...(f.className ? { className: f.className } : {}),
+    ...(f.windowClass ? { windowClass: f.windowClass } : {})
   }
 }
 
