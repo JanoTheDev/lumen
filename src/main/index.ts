@@ -58,6 +58,7 @@ import { registerMemoryIpc } from './ipc/memory'
 import { registerUsageIpc } from './ipc/usage'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
+import { installA11y } from './a11y'
 
 // No Lumen window may open popups or navigate away from its own renderer.
 function hardenWebContents(): void {
@@ -140,6 +141,7 @@ app.whenReady().then(() => {
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
   registerIpc()
+  installA11y()
   prepareStt()
   // A conversation left open when the app last closed is summarized now (memory on only).
   startMemory()
