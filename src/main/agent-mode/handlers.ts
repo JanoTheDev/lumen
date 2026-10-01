@@ -277,7 +277,8 @@ async function navigate(
 
 const AUMID_RE = /^[\w.-]+_[\w]+![\w.-]+$|^[\w.-]+![\w.-]+$/
 
-async function launchApp(
+/** launch_app: a known app by Start menu name, through the policy gate (also skill steps). */
+export async function launchApp(
   input: LaunchAppInput,
   env: TaskEnv,
   signal: AbortSignal

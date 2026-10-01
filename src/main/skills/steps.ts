@@ -73,7 +73,11 @@ export const skillStepSchema = z.discriminatedUnion('do', [
   z
     .object({ do: z.literal('navigate'), url: z.string().trim().min(1).max(2000), ...common })
     .strict(),
-  z.object({ do: z.literal('wait'), for: waitCondSchema, ...common }).strict()
+  z.object({ do: z.literal('wait'), for: waitCondSchema, ...common }).strict(),
+  /** Starts an app from the known-app registry (Start menu name), never a path. */
+  z
+    .object({ do: z.literal('launch_app'), app: z.string().trim().min(1).max(100), ...common })
+    .strict()
 ])
 
 export const stepsFileSchema = z.object({
@@ -203,7 +207,8 @@ const center = (el: ElementNode): { x: number; y: number } => ({
 /** Rich text (documents): ValuePattern would drop formatting, so text is typed there. */
 const richText = (el: ElementNode): boolean => /^(document|pane|custom)$/i.test(el.role)
 
-/** The executor actions for one step on its resolved element (physical px). */
+/** The executor actions for one step on its resolved element (physical px). launch_app and
+ * wait have none: the runner starts apps through its own port. */
 export function stepActions(step: SkillStep, el: ElementNode | null): Action[] {
   const click = (button: 'left' | 'right', count = 1): Action[] =>
     el
@@ -266,6 +271,7 @@ export function stepActions(step: SkillStep, el: ElementNode | null): Action[] {
     case 'navigate':
       return [{ type: 'navigate_url', url: step.url }]
     case 'wait':
+    case 'launch_app':
       return []
   }
 }
@@ -301,6 +307,8 @@ export function describeSkillStep(s: SkillStep): string {
       return `Open ${s.url}`
     case 'wait':
       return `Wait for ${q(s.for.value)}`
+    case 'launch_app':
+      return `Start ${s.app}`
   }
 }
 

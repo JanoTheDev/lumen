@@ -95,7 +95,7 @@ const COMBO_RE = /^[\w+-]+$/
 
 /**
  * steps.json from the run, or null when a step cannot repeat without the model (a mark or
- * point target, a scroll, starting an app). Param values become {name} placeholders.
+ * point target, a scroll). Param values become {name} placeholders.
  */
 export function traceToSteps(t: AgentRunTrace, params: DraftParam[] = []): SkillStep[] | null {
   const out: SkillStep[] = []
@@ -114,6 +114,9 @@ export function traceToSteps(t: AgentRunTrace, params: DraftParam[] = []): Skill
         for: s.wait,
         ...(s.timeoutMs ? { timeoutMs: Math.min(15_000, Math.max(100, s.timeoutMs)) } : {})
       })
+    } else if (s.tool === 'launch_app') {
+      if (!s.app?.trim()) return null
+      out.push({ do: 'launch_app', app: s.app.trim().slice(0, 100) })
     } else if (s.tool === 'act') {
       if (s.positional) return null
       const target: ElementMatch | undefined =

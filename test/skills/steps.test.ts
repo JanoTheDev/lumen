@@ -39,12 +39,15 @@ describe('steps.json', () => {
           { do: 'invoke', target: { name: 'File', role: 'menuitem' } },
           { do: 'set_value', target: { automationId: 'fname' }, value: '{file}' },
           { do: 'keys', combo: 'ctrl+shift+e', expect: { kind: 'window_title', value: 'Export' } },
-          { do: 'wait', for: { kind: 'element', value: 'Export' }, timeoutMs: 3000 }
+          { do: 'wait', for: { kind: 'element', value: 'Export' }, timeoutMs: 3000 },
+          { do: 'launch_app', app: 'Blender' }
         ]
       })
     )
     expect(f.version).toBe(1)
-    expect(f.steps).toHaveLength(4)
+    expect(f.steps).toHaveLength(5)
+    expect(describeSkillStep(f.steps[4])).toBe('Start Blender')
+    expect(stepActions(f.steps[4], null)).toEqual([])
   })
 
   it('rejects bad files with a readable reason', () => {

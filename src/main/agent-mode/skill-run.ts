@@ -33,7 +33,7 @@ import {
 import { askUser as askConfirm } from './confirm'
 import { askUser, type AskIo } from './ask'
 import type { TaskEnv } from './handlers'
-import { waitProbe } from './handlers'
+import { launchApp, waitProbe } from './handlers'
 import { inputLane, withInputLane } from './input-lane'
 import type { ToolOutcome } from './runner'
 import { closeSteps, enterStep, newTask, withPlan } from './task'
@@ -270,14 +270,24 @@ export async function runStepsForeground(
           }
         },
         waitFor: (cond, ms, sig) => waitFor(cond, ms, waitProbe, sig),
+        launchApp: async (app, sig) => {
+          const r = await launchApp({ app }, env, sig)
+          const detail = r.content.map((c) => (c.type === 'text' ? c.text : '')).join(' ')
+          if (!r.isError) return { ok: true, detail }
+          return detail.startsWith('E_DENIED')
+            ? { ok: false, denied: detail, detail }
+            : { ok: false, detail }
+        },
         permit: async (step, sig) => {
           const tool = stepTool(step)
           const input: Record<string, unknown> =
             step.do === 'navigate'
               ? { url: step.url }
-              : step.do === 'keys'
-                ? { combo: step.combo }
-                : { op: step.do }
+              : step.do === 'launch_app'
+                ? { app: step.app }
+                : step.do === 'keys'
+                  ? { combo: step.combo }
+                  : { op: step.do }
           const refusal = await guard(tool, input, sig)
           return refusal ? (refusal.content[0] as { text: string }).text : null
         },

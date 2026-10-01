@@ -50,8 +50,14 @@ describe('save that as a skill (T09)', () => {
     expect(
       traceToSteps({ ...RUN, steps: [{ tool: 'act', op: 'click', positional: true }] })
     ).toBeNull()
-    expect(traceToSteps({ ...RUN, steps: [{ tool: 'launch_app', app: 'Outlook' }] })).toBeNull()
     expect(traceToSteps({ ...RUN, steps: [{ tool: 'act', op: 'scroll' }] })).toBeNull()
+  })
+
+  it('keeps starting an app as a launch_app step (known-app registry name)', () => {
+    expect(traceToSteps({ ...RUN, steps: [{ tool: 'launch_app', app: 'Outlook' }] })).toEqual([
+      { do: 'launch_app', app: 'Outlook' }
+    ])
+    expect(traceToSteps({ ...RUN, steps: [{ tool: 'launch_app', app: ' ' }] })).toBeNull()
   })
 
   it('builds a draft from the model words, with fallbacks', () => {

@@ -72,6 +72,34 @@ describe('runSkillSteps', () => {
     expect(progress).toHaveBeenCalledTimes(4)
   })
 
+  it('starts an app through the launch port, then checks its window', async () => {
+    const launchApp = vi.fn(async () => ({ ok: true, detail: 'Started Notepad.' }))
+    const p = ports({ launchApp })
+    const waitFor = vi.spyOn(p, 'waitFor')
+    const steps: SkillStep[] = [
+      { do: 'launch_app', app: 'Notepad', expect: { kind: 'window_title', value: 'Notepad' } },
+      { do: 'keys', combo: 'ctrl+n' }
+    ]
+    expect(await runSkillSteps(steps, p, signal())).toEqual({ status: 'done', ran: 2, actions: 2 })
+    expect(launchApp).toHaveBeenCalledWith('Notepad', expect.anything())
+    expect(waitFor).toHaveBeenCalledTimes(1)
+    expect(p.ran).toEqual([[{ type: 'hotkey', keys: ['ctrl', 'n'] }]])
+  })
+
+  it('an unknown app is drift, a refused one ends the run', async () => {
+    const step: SkillStep = { do: 'launch_app', app: 'Nope' }
+    const unknown = ports({ launchApp: async () => ({ ok: false, detail: 'not an app I know' }) })
+    expect(await runSkillSteps([step], unknown, signal())).toMatchObject({
+      status: 'drift',
+      reason: 'Start Nope: not an app I know'
+    })
+    const refused = ports({
+      launchApp: async () => ({ ok: false, denied: 'E_DENIED: no', detail: 'E_DENIED: no' })
+    })
+    expect(await runSkillSteps([step], refused, signal())).toMatchObject({ status: 'denied' })
+    expect(await runSkillSteps([step], ports(), signal())).toMatchObject({ status: 'drift' })
+  })
+
   it('waits for a target that appears late', async () => {
     let calls = 0
     const p = ports({

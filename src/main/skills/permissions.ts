@@ -168,5 +168,6 @@ export function stepTool(step: { do: string }): string {
   if (step.do === 'keys') return 'keys'
   if (step.do === 'navigate') return 'navigate'
   if (step.do === 'wait') return 'wait_for'
+  if (step.do === 'launch_app') return 'launch_app'
   return 'act'
 }

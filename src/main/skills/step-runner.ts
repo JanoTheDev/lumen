@@ -30,6 +30,11 @@ export interface StepPorts {
     timeoutMs: number,
     signal: AbortSignal
   ): Promise<{ ok: boolean; detail: string }>
+  /** Starts an app from the known-app registry (launch_app steps). */
+  launchApp?(
+    app: string,
+    signal: AbortSignal
+  ): Promise<{ ok: boolean; denied?: string; detail: string }>
   /** The skill's permission check for a step; a string is the refusal. */
   permit?(step: SkillStep, signal: AbortSignal): Promise<string | null>
   sleep(ms: number, signal: AbortSignal): Promise<void>
@@ -80,6 +85,20 @@ export async function runSkillSteps(
     if (step.do === 'wait') {
       const r = await ports.waitFor(step.for, step.timeoutMs ?? EXPECT_TIMEOUT_MS, signal)
       if (!r.ok) return drift(i, `${label}: not there (${r.detail})`)
+      continue
+    }
+
+    if (step.do === 'launch_app') {
+      if (!ports.launchApp) return drift(i, `${label}: apps cannot be started here`)
+      const r = await ports.launchApp(step.app, signal)
+      if (signal.aborted) throw signal.reason
+      if (r.denied) return { status: 'denied', at: i, reason: r.denied, ran: i, actions }
+      if (!r.ok) return drift(i, `${label}: ${r.detail}`)
+      actions++
+      if (step.expect) {
+        const v = await ports.waitFor(step.expect, step.timeoutMs ?? EXPECT_TIMEOUT_MS, signal)
+        if (!v.ok) return drift(i, `${label}: the check failed (${v.detail})`)
+      }
       continue
     }
 
