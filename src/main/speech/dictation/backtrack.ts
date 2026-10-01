@@ -1,8 +1,11 @@
 // Course correction in dictation: "send it Tuesday, actually Wednesday" → "send it Wednesday",
 // "meet at five no wait meet at six" → "meet at six", "… scratch that" drops the sentence.
-// Local and pure; runs on the transcript before cleanup. Strong cues always count; weak cues
-// ("actually", "I mean", …) only after a comma or dash with a word before them in the
-// sentence, because they are also ordinary words. When unsure, the text is left as it is.
+// Local and pure; runs on the transcript before cleanup. A cue only counts as its own clause:
+// strong cues ("no wait", "scratch that") after a comma, dash or sentence end, weak cues
+// ("actually", "I mean", …) after a comma or dash with a word before them in the sentence,
+// because they are also ordinary words ("delete that file", "no wait time"). Without an
+// anchor word a strong cue must also be set off after it ("…, scratch that, …"). When unsure,
+// the text is left as it is.
 
 export interface Cue {
   words: readonly string[]
@@ -11,13 +14,15 @@ export interface Cue {
   dropsSentence?: boolean
   /** Only with an anchor (too common as an apology). */
   anchorOnly?: boolean
+  /** Only as a sentence of its own (". Delete that."), since "…, delete that." is ordinary. */
+  ownSentence?: boolean
 }
 
 export const CUES: readonly Cue[] = [
   { words: ['no', 'wait'], strong: true },
   { words: ['scratch', 'that'], strong: true, dropsSentence: true },
   { words: ['strike', 'that'], strong: true, dropsSentence: true },
-  { words: ['delete', 'that'], strong: true, dropsSentence: true },
+  { words: ['delete', 'that'], strong: true, dropsSentence: true, ownSentence: true },
   { words: ['or', 'rather'], strong: false },
   { words: ['make', 'that'], strong: false },
   { words: ['i', 'mean'], strong: false },
@@ -37,6 +42,7 @@ const norm = (w: string): string =>
 const isDash = (w: string): boolean => /^[-–—]+$/.test(w)
 const endsSentence = (w: string): boolean => /[.!?]["')\]]*$/.test(w)
 const endsPause = (w: string): boolean => /[,;:\-–—]$/.test(w) || isDash(w)
+const isQuestion = (w: string): boolean => /\?["')\]]*$/.test(w)
 
 function cueAt(words: readonly string[], i: number): Cue | null {
   for (const c of CUES) {
@@ -44,6 +50,25 @@ function cueAt(words: readonly string[], i: number): Cue | null {
     if (c.words.every((cw, k) => norm(words[i + k]) === cw)) return c
   }
   return null
+}
+
+/**
+ * True when the cue at `i` stands as its own clause: never in a question ("Should I delete
+ * that?"), strong cues after a pause or sentence end, weak cues after a pause mid-sentence.
+ */
+function standsAlone(words: readonly string[], i: number, cue: Cue, inSentence: number): boolean {
+  if (isQuestion(words[i + cue.words.length - 1])) return false
+  if (i === 0) return false
+  const prev = words[i - 1]
+  if (cue.ownSentence) return endsSentence(prev) || /[-–—]$/.test(prev)
+  if (cue.strong) return endsPause(prev) || endsSentence(prev)
+  return inSentence >= 1 && endsPause(prev)
+}
+
+/** The cue is also followed by a pause ("…, scratch that, call Ann"). */
+function setOffAfter(words: readonly string[], i: number, cue: Cue): boolean {
+  const last = words[i + cue.words.length - 1]
+  return endsPause(last) || endsSentence(last)
 }
 
 /** Index of the first word of the sentence that holds word `i`. */
@@ -117,7 +142,7 @@ export function applyBacktrack(text: string): BacktrackResult {
     const start = sentenceStart(words, i)
     const before = words.slice(0, i)
     const inSentence = i - start
-    if (!cue.strong && (inSentence < 1 || !endsPause(words[i - 1]))) {
+    if (!standsAlone(words, i, cue, inSentence)) {
       i += cue.words.length
       continue
     }
@@ -125,6 +150,8 @@ export function applyBacktrack(text: string): BacktrackResult {
     const correction = words.slice(i + cue.words.length)
     // "It is, actually, fine": a weak cue set off by commas is a discourse word, not a fix.
     const parenthetical = !cue.strong && /,$/.test(words[i + cue.words.length - 1])
+    // Without an anchor a strong cue must be set off on both sides to throw words away.
+    const setOff = setOffAfter(words, i, cue)
     let next: string[] | null = null
     let resume = 0
     if (!correction.length) {
@@ -156,10 +183,10 @@ export function applyBacktrack(text: string): BacktrackResult {
             ]
           : [...trimTail(before.slice(0, similar)), ...correction]
       } else if (cue.dropsSentence) {
-        next = [...before.slice(0, start), ...correction]
+        if (setOff) next = [...before.slice(0, start), ...correction]
       } else if (!cue.anchorOnly && !parenthetical && inSentence >= 1) {
         // Only a one-word correction safely replaces the last word ("Tuesday, actually Wednesday").
-        if (cue.strong || oneWord)
+        if (cue.strong ? setOff : oneWord)
           next = [...trimTail(before.slice(0, before.length - 1)), ...correction]
       }
       if (next) resume = next.length - correction.length
@@ -175,13 +202,26 @@ export function applyBacktrack(text: string): BacktrackResult {
   return { text: words.join(' '), applied }
 }
 
-/** Token positions of every cue in a tokenized transcript (for the cleanup check). */
-export function cueSpans(tokens: readonly string[]): { at: number; len: number }[] {
+/**
+ * Token positions of the cues in a tokenized transcript that stand as their own clause in
+ * `raw` (for the cleanup check): the n-th cue among the tokens is the n-th cue among the words.
+ */
+export function cueSpans(tokens: readonly string[], raw: string): { at: number; len: number }[] {
+  const words = raw.trim().split(/\s+/).filter(Boolean)
+  const alone: boolean[] = []
+  for (let i = 0; i < words.length; i++) {
+    const c = cueAt(words, i)
+    if (!c) continue
+    alone.push(standsAlone(words, i, c, i - sentenceStart(words, i)))
+    i += c.words.length - 1
+  }
   const spans: { at: number; len: number }[] = []
+  let n = 0
   for (let i = 0; i < tokens.length; i++)
     for (const c of CUES)
       if (c.words.every((w, k) => tokens[i + k] === w)) {
-        spans.push({ at: i, len: c.words.length })
+        if (alone[n++]) spans.push({ at: i, len: c.words.length })
+        i += c.words.length - 1
         break
       }
   return spans

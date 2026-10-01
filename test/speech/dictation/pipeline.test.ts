@@ -140,7 +140,7 @@ describe('dictate', () => {
   })
 
   it('says nothing is left after "scratch that"', async () => {
-    const res = await dictate('send the file to Bob scratch that')
+    const res = await dictate('send the file to Bob, scratch that')
     expect(res.ok).toBe(true)
     expect(h.executed).toEqual([])
   })

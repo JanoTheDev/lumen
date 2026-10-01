@@ -60,7 +60,7 @@ export function tokenize(text: string): string[] {
 }
 
 export interface PreserveOptions {
-  /** A spoken self-correction may drop one span of ≤ 8 words that ends at a cue. */
+  /** A spoken self-correction may drop one span of ≤ 8 words that ends at a cue set off as its own clause. */
   allowRetraction?: boolean
 }
 
@@ -74,7 +74,7 @@ export function wordsPreserved(raw: string, cleaned: string, opts: PreserveOptio
   const b = tokenize(cleaned)
   if (tokensPreserved(a, b)) return true
   if (!opts.allowRetraction) return false
-  for (const cue of cueSpans(a)) {
+  for (const cue of cueSpans(a, raw)) {
     const end = cue.at + cue.len
     for (let s = Math.max(0, cue.at - ANCHOR_WINDOW); s <= cue.at; s++)
       if (tokensPreserved([...a.slice(0, s), ...a.slice(end)], b)) return true
