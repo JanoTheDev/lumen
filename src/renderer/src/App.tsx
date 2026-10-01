@@ -31,7 +31,8 @@ function readVad(cfg: unknown): VadConfig | null {
   return (cfg as { vad?: VadConfig } | null)?.vad ?? null
 }
 
-export default function App(): JSX.Element {
+/** `headless`: hosted hidden in the assistant window (ui v2), where the bar draws the UI. */
+export default function App({ headless = false }: { headless?: boolean }): JSX.Element {
   const [phase, setPhase] = useState<'listening' | 'processing' | 'error'>('listening')
   const queryFiredRef = useRef(false)
   const cancelledRef = useRef(false)
@@ -219,8 +220,9 @@ export default function App(): JSX.Element {
   }
 
   // Push the input level straight to the waveform bars instead of re-rendering per frame.
+  // Headless, the bars are hidden; the bar's LevelMeter reads --voice-level instead.
   useEffect(() => {
-    if (!listening || phase !== 'listening') return
+    if (headless || !listening || phase !== 'listening') return
     const bars = barsRef.current
     let raf = 0
     const draw = (): void => {
@@ -239,7 +241,7 @@ export default function App(): JSX.Element {
         if (bar) bar.style.height = `${WAVE_BASE}px`
       })
     }
-  }, [listening, phase, levelRef])
+  }, [headless, listening, phase, levelRef])
 
   useEffect(() => {
     return window.api.onCancelRequest(() => {

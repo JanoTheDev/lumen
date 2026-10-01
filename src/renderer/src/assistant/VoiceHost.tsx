@@ -5,7 +5,7 @@ import LegacyVoice from '../App'
 export function VoiceHost(): JSX.Element {
   return (
     <div hidden data-voice-host="">
-      <LegacyVoice />
+      <LegacyVoice headless />
     </div>
   )
 }

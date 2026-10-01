@@ -40,6 +40,14 @@ const DEFAULT_SPEECH_THRESHOLD = 0.04
 
 const SILENCE_HALLUCINATION_RE = /^(thank you( for watching)?|thanks for watching|you|bye)\.?$/i
 const MIN_SPEECH_MS = 300
+// RMS of normal speech sits around 0.05..0.12; scaled so it fills the meter.
+const LEVEL_GAIN = 8
+
+/** Publishes the input level as `--voice-level` (0..1) on :root for the bar's LevelMeter. */
+export function publishVoiceLevel(level: number): void {
+  const v = Math.min(1, Math.max(0, level * LEVEL_GAIN))
+  document.documentElement.style.setProperty('--voice-level', v.toFixed(3))
+}
 
 export function computeRms(data: Float32Array): number {
   if (data.length === 0) return 0
@@ -105,7 +113,10 @@ export function useVoice(
       clearTimeout(s.maxTimer)
       s.maxTimer = null
     }
-    if (sessionRef.current === s) levelRef.current = 0
+    if (sessionRef.current === s) {
+      levelRef.current = 0
+      publishVoiceLevel(0)
+    }
   }, [])
 
   const finish = useCallback(
@@ -167,6 +178,7 @@ export function useVoice(
       }
       sessionRef.current = s
       levelRef.current = 0
+      publishVoiceLevel(0)
       setListening(true)
 
       let stream: MediaStream
@@ -290,7 +302,10 @@ export function useVoice(
           const now = performance.now()
           if (level > threshold) s.speechMs += now - last
           last = now
-          if (sessionRef.current === s) levelRef.current = level
+          if (sessionRef.current === s) {
+            levelRef.current = level
+            publishVoiceLevel(level)
+          }
           s.raf = requestAnimationFrame(tick)
         }
         tick()
