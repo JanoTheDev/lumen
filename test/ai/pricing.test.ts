@@ -46,8 +46,14 @@ describe('pricing', () => {
     expect(usageCost('gpt-5-mini', usage(4_000, 200, 1_000)).total).toBe(0.001425)
   })
 
-  it('falls back to the main-model rate for unknown models', () => {
-    expect(rateFor('some-new-model')).toMatchObject({ input: 2, output: 10, known: false })
+  it('gives unknown models no estimate ($0, flagged unknown)', () => {
+    expect(rateFor('some-new-model')).toMatchObject({ input: 0, output: 0, known: false })
+    expect(usageCost('some-new-model', usage(1_000_000, 1_000_000)).total).toBe(0)
+  })
+
+  it('prices the Gemini models at their paid rates', () => {
+    expect(usageCost('gemini-3.8-flash', usage(1_000_000, 1_000_000)).total).toBe(4.5)
+    expect(rateFor('gemini-3.5-flash-lite')).toMatchObject({ input: 0.3, output: 2.5, known: true })
   })
 })
 

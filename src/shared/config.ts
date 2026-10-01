@@ -466,6 +466,31 @@ export const WEB_DEFAULTS: WebConfig = {
   paidSearch: false
 }
 
+/** Backends a role can use. `auto` follows models.provider. */
+export const MODEL_PROVIDERS = ['anthropic', 'openai', 'gemini', 'compatible', 'local'] as const
+export type ModelProvider = (typeof MODEL_PROVIDERS)[number]
+
+/** Presets of the generic OpenAI-compatible provider (base URLs in main/ai/providers/compatible). */
+export const COMPATIBLE_PRESETS = [
+  'openrouter',
+  'groq',
+  'mistral',
+  'deepseek',
+  'together',
+  'custom'
+] as const
+export type CompatiblePreset = (typeof COMPATIBLE_PRESETS)[number]
+
+/** https anywhere, plain http only on this PC. */
+export const SERVICE_URL_RE =
+  /^(https:\/\/[^\s]{1,200}|http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?(\/[^\s]{0,200})?)$/i
+
+const roleChoice = z.object({
+  provider: z.enum(['auto', ...MODEL_PROVIDERS]),
+  /** Empty = that provider's default model for the role. */
+  model: modelId.optional()
+})
+
 export const configV2Schema = z.object({
   version: z.literal(2),
   theme: v1.theme,
@@ -477,11 +502,34 @@ export const configV2Schema = z.object({
     fast: modelId.optional(),
     planning: modelId.optional(),
     verify: modelId.optional(),
-    provider: z.enum(['auto', 'anthropic', 'openai', 'local']),
+    provider: z.enum(['auto', ...MODEL_PROVIDERS]),
     /** Local OpenAI-compatible server (experimental); unset = auto-detect Ollama / LM Studio. */
     localUrl: z.union([z.literal(''), z.string().regex(/^https?:\/\/[^\s]{1,200}$/i)]).optional(),
     /** Local model name; unset = best installed vision model. */
-    localModel: modelId.optional()
+    localModel: modelId.optional(),
+    /** Never call a cloud model: cloud keys are set aside while on. */
+    localOnly: z.boolean().optional(),
+    /** The user read the Gemini free-tier privacy note (data use, human review, 18+). */
+    geminiAck: z.boolean().optional(),
+    /** The generic OpenAI-compatible service; its key lives in the key vault. */
+    compatible: z
+      .object({
+        preset: z.enum(COMPATIBLE_PRESETS),
+        /** Custom preset only (presets carry their own). */
+        baseUrl: z.union([z.literal(''), z.string().regex(SERVICE_URL_RE)]).optional(),
+        /** Model for roles that pick this service without naming one. */
+        model: modelId.optional()
+      })
+      .optional(),
+    /** Per-role provider + model (Settings → Models & keys); unset roles follow `provider`. */
+    roles: z
+      .object({
+        main: roleChoice.optional(),
+        fast: roleChoice.optional(),
+        planning: roleChoice.optional(),
+        vision: roleChoice.optional()
+      })
+      .optional()
   }),
   hotkey: v1.hotkey,
   answerAutoCloseMs: v1.answerAutoCloseMs,

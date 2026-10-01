@@ -1,6 +1,10 @@
 import type { ZodType } from 'zod'
 
-export type ProviderId = 'anthropic' | 'openai' | 'local'
+/**
+ * anthropic / openai: native SDKs. gemini: Google's OpenAI-compatible endpoint (free tier).
+ * compatible: any OpenAI-compatible service (OpenRouter, Groq, …). local: Ollama / LM Studio.
+ */
+export type ProviderId = 'anthropic' | 'openai' | 'gemini' | 'compatible' | 'local'
 
 /** A system prompt section. Cacheable blocks must be byte-identical across calls. */
 export interface SystemBlock {
@@ -85,9 +89,14 @@ export interface LlmProvider {
   warmup(): Promise<void>
   /** One tool-use turn; absent for providers without tool calling (local servers). */
   toolTurn?: ToolCapable['toolTurn']
+  /** Per-model tool calling (chat-completions backends); absent = every model has it. */
+  supportsTools?(model: string): boolean
+  /** Per-model image input; absent = every model takes images. */
+  supportsVision?(model: string): boolean
 }
 
-export type LlmErrorCode = 'E_TRUNCATED' | 'E_REFUSED' | 'E_NO_KEY'
+/** E_RATE_LIMIT: the service answered 429; the message can be spoken as is. */
+export type LlmErrorCode = 'E_TRUNCATED' | 'E_REFUSED' | 'E_NO_KEY' | 'E_RATE_LIMIT'
 
 export class LlmError extends Error {
   constructor(

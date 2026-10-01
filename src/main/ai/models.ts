@@ -1,7 +1,11 @@
 // Model registry: which provider + model + effort serves each role. One key is enough for
-// every role; per-role overrides from config.models apply when their provider has a key.
-// Without a key, a running local server (Ollama / LM Studio, detected) serves every role.
+// every role. Settings → Models & keys can give each role its own provider and model
+// (config.models.roles); older per-role model ids (models.main / fast / planning / verify) still
+// apply when their provider is usable. Without a key, a running local server (Ollama / LM
+// Studio, detected) serves every role. "Local only" never resolves to a cloud provider.
 import { loadConfig } from '../config'
+import { compatibleReady, compatibleSettings, COMPATIBLE_ENV } from './providers/compatible'
+import { GEMINI_ENV } from './providers/gemini'
 import { localServer } from './providers/local'
 import type { Effort, ProviderId } from './providers/types'
 
@@ -11,9 +15,10 @@ import type { Effort, ProviderId } from './providers/types'
  */
 export type Role = 'fast' | 'main' | 'planning' | 'vision-refine'
 
-type CloudProvider = 'anthropic' | 'openai'
+/** Providers with built-in default models. */
+export type DefaultsProvider = 'anthropic' | 'openai' | 'gemini'
 
-export const DEFAULT_MODELS: Record<CloudProvider, Record<Role, string>> = {
+export const DEFAULT_MODELS: Record<DefaultsProvider, Record<Role, string>> = {
   anthropic: {
     fast: 'claude-haiku-4-5',
     main: 'claude-sonnet-5-5',
@@ -25,8 +30,25 @@ export const DEFAULT_MODELS: Record<CloudProvider, Record<Role, string>> = {
     main: 'gpt-5-mini',
     planning: 'gpt-5-mini',
     'vision-refine': 'gpt-5-mini'
+  },
+  // Free tier (2026-10-01): quotas are per model, so the fast role's many small calls use
+  // Flash-Lite and leave Flash's quota to answers.
+  gemini: {
+    fast: 'gemini-3.5-flash-lite',
+    main: 'gemini-3.8-flash',
+    planning: 'gemini-3.8-flash',
+    'vision-refine': 'gemini-3.8-flash'
   }
 }
+
+/** Order `auto` tries providers in. */
+export const AUTO_ORDER: readonly ProviderId[] = [
+  'anthropic',
+  'openai',
+  'gemini',
+  'compatible',
+  'local'
+]
 
 const ROLE_EFFORT: Record<Role, Effort> = {
   fast: 'low',
@@ -35,6 +57,14 @@ const ROLE_EFFORT: Record<Role, Effort> = {
   'vision-refine': 'low'
 }
 
+/** The Settings name of each role (config.models.roles keys). */
+export const ROLE_CONFIG_KEY = {
+  fast: 'fast',
+  main: 'main',
+  planning: 'planning',
+  'vision-refine': 'vision'
+} as const satisfies Record<Role, string>
+
 export interface RoleModel {
   role: Role
   provider: ProviderId
@@ -42,32 +72,51 @@ export interface RoleModel {
   effort: Effort
 }
 
-function hasKey(p: CloudProvider): boolean {
-  return p === 'anthropic' ? !!process.env.ANTHROPIC_API_KEY : !!process.env.OPENAI_API_KEY
+export function isLocalOnly(): boolean {
+  return loadConfig().models.localOnly === true
+}
+
+/** The provider can take calls now: a key (or a running local server), and not cut off by Local only. */
+export function providerReady(p: ProviderId): boolean {
+  if (p === 'local') return !!localServer()
+  if (isLocalOnly()) return false
+  if (p === 'anthropic') return !!process.env.ANTHROPIC_API_KEY
+  if (p === 'openai') return !!process.env.OPENAI_API_KEY
+  if (p === 'gemini') return !!process.env[GEMINI_ENV]
+  return compatibleReady() && !!process.env[COMPATIBLE_ENV]
 }
 
 /** The provider a model id belongs to, or null when it is not recognisable. */
-export function providerOfModel(model: string): CloudProvider | null {
+export function providerOfModel(model: string): DefaultsProvider | null {
   if (/^claude-/i.test(model)) return 'anthropic'
   if (/^(gpt-|chatgpt-|o\d)/i.test(model)) return 'openai'
+  if (/^gemini-/i.test(model)) return 'gemini'
   return null
 }
 
 /**
- * The provider that serves the defaults: the configured one when usable, else any cloud key,
- * else a detected local server. provider "local" prefers the local server over a key.
+ * The provider that serves the defaults: the configured one when usable, else the first usable
+ * one in AUTO_ORDER. Local only: the local server or nothing.
  */
 export function activeProvider(): ProviderId {
+  if (isLocalOnly()) {
+    if (localServer()) return 'local'
+    throw new Error('Local only is on, but no local model is running. Start Ollama or LM Studio.')
+  }
   const preferred = loadConfig().models.provider
-  if (preferred === 'local' && localServer()) return 'local'
-  if ((preferred === 'anthropic' || preferred === 'openai') && hasKey(preferred)) return preferred
-  if (hasKey('anthropic')) return 'anthropic'
-  if (hasKey('openai')) return 'openai'
-  if (localServer()) return 'local'
-  throw new Error('No API key found. Add an Anthropic or OpenAI key in Settings.')
+  if (preferred !== 'auto' && providerReady(preferred)) return preferred
+  for (const p of AUTO_ORDER) if (providerReady(p)) return p
+  throw new Error('No API key found. Add an AI key in Settings, or start Ollama or LM Studio.')
 }
 
-// Config keys checked per role, first non-empty wins. `verify` is the v1 name of the fast role.
+/** The model a provider uses for a role when none is picked ('' when it has none). */
+export function defaultModel(provider: ProviderId, role: Role): string {
+  if (provider === 'local') return localServer()?.model ?? ''
+  if (provider === 'compatible') return compatibleSettings()?.model ?? ''
+  return DEFAULT_MODELS[provider][role]
+}
+
+// Older config keys checked per role, first non-empty wins. `verify` is the v1 name of fast.
 const OVERRIDE_KEYS: Record<Role, ('main' | 'fast' | 'planning' | 'verify')[]> = {
   fast: ['fast', 'verify'],
   main: ['main'],
@@ -84,20 +133,36 @@ function overrideFor(role: Role): string | undefined {
   return undefined
 }
 
+/** The Settings choice for a role; the vision pass follows the main role when it has none. */
+function choiceFor(role: Role): { provider: ProviderId | 'auto'; model?: string } | undefined {
+  const roles = loadConfig().models.roles
+  const own = roles?.[ROLE_CONFIG_KEY[role]]
+  if (own || role !== 'vision-refine') return own
+  return roles?.main
+}
+
 export function resolveRole(role: Role): RoleModel {
-  const fallback = activeProvider()
   const effort = ROLE_EFFORT[role]
-  if (fallback === 'local') {
+  const choice = choiceFor(role)
+  if (choice && choice.provider !== 'auto') {
+    if (providerReady(choice.provider)) {
+      const model = choice.model?.trim() || defaultModel(choice.provider, role)
+      if (model) return { role, provider: choice.provider, model, effort }
+    }
+    console.log(`[models] ${role}: ${choice.provider} is not available, using the default`)
+  }
+  const fallback = activeProvider()
+  if (fallback === 'local' && !choice?.model) {
     // One local model for every role (loading a second one would evict the first).
     return { role, provider: 'local', model: localServer()!.model, effort }
   }
-  const override = overrideFor(role)
+  const override = choice?.model?.trim() || (fallback === 'local' ? undefined : overrideFor(role))
   if (override) {
     const owner = providerOfModel(override) ?? fallback
-    if (hasKey(owner)) return { role, provider: owner, model: override, effort }
+    if (providerReady(owner)) return { role, provider: owner, model: override, effort }
     console.log(`[models] ignoring ${role} override "${override}": no ${owner} key`)
   }
-  return { role, provider: fallback, model: DEFAULT_MODELS[fallback][role], effort }
+  return { role, provider: fallback, model: defaultModel(fallback, role), effort }
 }
 
 /** Display name for the UI, e.g. "Sonnet 5.5" for claude-sonnet-5-5. */
@@ -108,6 +173,9 @@ export function modelLabel(model: string): string {
     return `${family} ${claude[2]}${claude[3] ? `.${claude[3]}` : ''}`
   }
   if (/^gpt-/i.test(model)) return model.replace(/^gpt-/i, 'GPT-')
-  // Local names like "qwen3.5:9b" or "lmstudio-community/gemma-4-12b": drop the publisher.
+  const gemini = /^gemini-([\d.]+)-(flash|pro)(-lite)?/i.exec(model)
+  if (gemini)
+    return `Gemini ${gemini[1]} ${gemini[2][0].toUpperCase()}${gemini[2].slice(1)}${gemini[3] ? '-Lite' : ''}`
+  // Local / hosted names like "qwen3.5:9b" or "lmstudio-community/gemma-4-12b": drop the publisher.
   return model.split('/').pop() ?? model
 }

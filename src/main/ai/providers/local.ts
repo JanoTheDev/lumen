@@ -1,23 +1,21 @@
 // Local models through an OpenAI-compatible server (Ollama or LM Studio), found without any
 // config: Ollama on :11434 (/api/tags), then LM Studio on :1234 (/v1/models). A configured
-// models.localUrl / models.localModel wins. Experimental: there is no structured-output
-// guarantee, so replies are asked for as JSON (schema hint when the server takes one), checked
-// with zod, and repaired once by sending the validation error back.
+// models.localUrl / models.localModel wins. Each installed model's vision and tool support comes
+// from the server (Ollama /api/show capabilities, LM Studio /api/v1/models capabilities), else
+// from the name (and no tools). Requests go through the shared chat-completions backend: JSON
+// (schema slot when the server takes one), zod check, one repair turn.
 import OpenAI from 'openai'
-import type { ZodType } from 'zod'
-import { extractJsonObject, stripNulls } from '../json'
-import { anthropicJsonSchema } from './structured'
-import {
-  EMPTY_USAGE,
-  LlmError,
-  type ChatChunk,
-  type CompleteResult,
-  type LlmProvider,
-  type StructuredRequest,
-  type Usage
-} from './types'
+import { createChatBackend, resetJsonLevels, type ChatBackend } from './chat-completions'
+import { LlmError } from './types'
+
+export { buildChatParams, validate } from './chat-completions'
 
 export type LocalKind = 'ollama' | 'lmstudio' | 'custom'
+
+export interface ModelCaps {
+  vision: boolean
+  tools: boolean
+}
 
 export interface LocalServer {
   kind: LocalKind
@@ -25,10 +23,14 @@ export interface LocalServer {
   baseUrl: string
   /** Installed models (chat-capable ones first). */
   models: string[]
-  /** Model every role uses. */
+  /** Model every role uses unless a role picks another. */
   model: string
   /** The picked model accepts images. */
   vision: boolean
+  /** The picked model can call tools (agent mode). Unknown counts as no. */
+  tools?: boolean
+  /** Per installed chat model, as far as the server said (else the name heuristic, no tools). */
+  info?: Record<string, ModelCaps>
 }
 
 export const OLLAMA_URL = 'http://localhost:11434'
@@ -66,25 +68,41 @@ function visionRank(model: string): number {
   return i < 0 ? VISION_PREFERENCE.length : i
 }
 
+/** Installed models that can chat (no embedding / rerank / speech models). */
+export function chatModels(models: string[]): string[] {
+  return models.filter((m) => !NOT_CHAT_RE.test(m))
+}
+
 /**
- * The model to use: the configured one when installed, else the best vision model, else the
- * first chat model. `vision` maps model → capability when the server reported it.
+ * The model to use: the configured one when installed, else the best vision model (one with
+ * tool use first), else a chat model with tool use, else the first chat model. `vision` and
+ * `tools` map model → capability when the server reported it.
  */
 export function pickModel(
   models: string[],
   vision: Map<string, boolean>,
-  preferred?: string
+  preferred?: string,
+  tools: Map<string, boolean> = new Map()
 ): { model: string; vision: boolean } | null {
-  const chat = models.filter((m) => !NOT_CHAT_RE.test(m))
+  const chat = chatModels(models)
   if (!chat.length) return null
   const isVision = (m: string): boolean => vision.get(m) ?? looksVision(m)
   if (preferred) {
     const hit = chat.find((m) => m === preferred || m.startsWith(`${preferred}:`))
     if (hit) return { model: hit, vision: isVision(hit) }
   }
-  const withVision = chat.filter(isVision).sort((a, b) => visionRank(a) - visionRank(b))
+  const toolRank = (m: string): number => (tools.get(m) ? 0 : 1)
+  const withVision = chat
+    .filter(isVision)
+    .sort((a, b) => toolRank(a) - toolRank(b) || visionRank(a) - visionRank(b))
   if (withVision.length) return { model: withVision[0], vision: true }
-  return { model: chat[0], vision: false }
+  return { model: chat.find((m) => tools.get(m)) ?? chat[0], vision: false }
+}
+
+/** What a model can do: the server's answer when it gave one, else the name (no tools). */
+export function capsOf(server: LocalServer, model: string): ModelCaps {
+  if (model === server.model) return { vision: server.vision, tools: server.tools ?? false }
+  return server.info?.[model] ?? { vision: looksVision(model), tools: false }
 }
 
 type Fetch = typeof fetch
@@ -92,7 +110,7 @@ type Fetch = typeof fetch
 interface Probe {
   models: string[]
   vision: Map<string, boolean>
-  pick: { model: string; vision: boolean } | null
+  tools: Map<string, boolean>
 }
 
 async function getJson(
@@ -111,47 +129,62 @@ async function getJson(
   return (await res.json()) as Record<string, unknown>
 }
 
-async function probeOllama(fetchFn: Fetch, baseUrl: string, preferred?: string): Promise<Probe> {
+async function probeOllama(fetchFn: Fetch, baseUrl: string): Promise<Probe> {
   const tags = await getJson(fetchFn, `${baseUrl}/api/tags`, PROBE_TIMEOUT_MS)
   const models = ((tags.models as { name?: string; model?: string }[]) ?? [])
     .map((m) => m.name ?? m.model ?? '')
     .filter(Boolean)
-  // /api/show lists capabilities ("vision") on current Ollama; names are the fallback.
+  // /api/show lists capabilities ("vision", "tools") on current Ollama; names are the fallback.
   const vision = new Map<string, boolean>()
+  const tools = new Map<string, boolean>()
   await Promise.all(
-    models
-      .filter((m) => !NOT_CHAT_RE.test(m))
+    chatModels(models)
       .slice(0, 12)
       .map(async (m) => {
         try {
           const show = await getJson(fetchFn, `${baseUrl}/api/show`, SHOW_TIMEOUT_MS, { model: m })
-          if (Array.isArray(show.capabilities))
-            vision.set(m, (show.capabilities as string[]).includes('vision'))
+          if (Array.isArray(show.capabilities)) {
+            const caps = show.capabilities as string[]
+            vision.set(m, caps.includes('vision'))
+            tools.set(m, caps.includes('tools'))
+          }
         } catch {
           /* older server: name heuristic */
         }
       })
   )
-  return { models, vision, pick: pickModel(models, vision, preferred) }
+  return { models, vision, tools }
 }
 
-async function probeOpenAiCompatible(
-  fetchFn: Fetch,
-  baseUrl: string,
-  preferred?: string
-): Promise<Probe> {
+interface LmStudioModel {
+  key?: string
+  capabilities?: { vision?: boolean; trained_for_tool_use?: boolean }
+}
+
+async function probeOpenAiCompatible(fetchFn: Fetch, baseUrl: string): Promise<Probe> {
   const list = await getJson(fetchFn, `${baseUrl}/v1/models`, PROBE_TIMEOUT_MS)
   const models = ((list.data as { id?: string }[]) ?? []).map((m) => m.id ?? '').filter(Boolean)
-  // LM Studio's own API says which models are vision-language ("vlm").
+  // LM Studio's own API: /api/v1/models has capabilities {vision, trained_for_tool_use}; the
+  // older /api/v0/models only says which models are vision-language ("vlm").
   const vision = new Map<string, boolean>()
+  const tools = new Map<string, boolean>()
   try {
-    const v0 = await getJson(fetchFn, `${baseUrl}/api/v0/models`, PROBE_TIMEOUT_MS)
-    for (const m of (v0.data as { id?: string; type?: string }[]) ?? [])
-      if (m.id) vision.set(m.id, m.type === 'vlm')
+    const v1 = await getJson(fetchFn, `${baseUrl}/api/v1/models`, PROBE_TIMEOUT_MS)
+    for (const m of (v1.models as LmStudioModel[]) ?? []) {
+      if (!m.key || !m.capabilities) continue
+      vision.set(m.key, !!m.capabilities.vision)
+      tools.set(m.key, !!m.capabilities.trained_for_tool_use)
+    }
   } catch {
-    /* not LM Studio: name heuristic */
+    try {
+      const v0 = await getJson(fetchFn, `${baseUrl}/api/v0/models`, PROBE_TIMEOUT_MS)
+      for (const m of (v0.data as { id?: string; type?: string }[]) ?? [])
+        if (m.id) vision.set(m.id, m.type === 'vlm')
+    } catch {
+      /* not LM Studio: name heuristic */
+    }
   }
-  return { models, vision, pick: pickModel(models, vision, preferred) }
+  return { models, vision, tools }
 }
 
 export interface DetectOptions {
@@ -160,6 +193,20 @@ export interface DetectOptions {
   /** models.localModel */
   model?: string
   fetch?: Fetch
+}
+
+function serverFrom(
+  kind: LocalKind,
+  baseUrl: string,
+  p: Probe,
+  preferred?: string
+): LocalServer | null {
+  const pick = pickModel(p.models, p.vision, preferred, p.tools)
+  if (!pick) return null
+  const info: Record<string, ModelCaps> = {}
+  for (const m of chatModels(p.models))
+    info[m] = { vision: p.vision.get(m) ?? looksVision(m), tools: p.tools.get(m) ?? false }
+  return { kind, baseUrl, models: p.models, ...pick, tools: info[pick.model].tools, info }
 }
 
 /** Finds a running local server with at least one chat model, or null. Never throws. */
@@ -182,9 +229,8 @@ export async function detectLocal(opts: DetectOptions = {}): Promise<LocalServer
           : [probeOllama, probeOpenAiCompatible]
     for (const probe of probes) {
       try {
-        const found = await probe(fetchFn, c.baseUrl, opts.model)
-        if (found.pick)
-          return { kind: c.kind, baseUrl: c.baseUrl, models: found.models, ...found.pick }
+        const found = serverFrom(c.kind, c.baseUrl, await probe(fetchFn, c.baseUrl), opts.model)
+        if (found) return found
       } catch {
         /* not running */
       }
@@ -221,7 +267,7 @@ export function refreshLocal(
       if (changed)
         console.log(
           found
-            ? `[models] local ${found.kind} at ${found.baseUrl}: ${found.model}${found.vision ? ' (vision)' : ' (text only)'}, ${found.models.length} installed`
+            ? `[models] local ${found.kind} at ${found.baseUrl}: ${found.model}${found.vision ? ' (vision)' : ' (text only)'}${found.tools ? ' (tools)' : ''}, ${found.models.length} installed`
             : '[models] no local model server running'
         )
       server = found
@@ -241,112 +287,6 @@ export function setLocalServer(s: LocalServer | null): void {
 
 // ---- provider ----
 
-type ChatParams = OpenAI.Chat.ChatCompletionCreateParamsNonStreaming
-type ResponseFormat = ChatParams['response_format']
-
-/** How to ask for JSON; downgraded once per server when it rejects the richer form. */
-type JsonLevel = 'schema' | 'object' | 'none'
-let jsonLevel: JsonLevel = 'schema'
-
-function responseFormat(req: StructuredRequest<unknown>, level: JsonLevel): ResponseFormat {
-  if (level === 'none' || (!req.schema && !req.json)) return undefined
-  if (req.schema && level === 'schema')
-    return {
-      type: 'json_schema',
-      json_schema: {
-        name: req.schemaName ?? 'response',
-        schema: anthropicJsonSchema(req.schema),
-        strict: false
-      }
-    }
-  return { type: 'json_object' }
-}
-
-export function buildChatParams(
-  req: StructuredRequest<unknown>,
-  vision: boolean,
-  level: JsonLevel = jsonLevel
-): ChatParams {
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = []
-  let system = req.system.map((b) => b.text).join('\n\n')
-  // Without a schema slot the model only sees the shape in the prompt.
-  if (req.schema && level !== 'schema')
-    system += `\n\nReply with one JSON object matching this JSON Schema, nothing else:\n${JSON.stringify(anthropicJsonSchema(req.schema))}`
-  if (system) messages.push({ role: 'system', content: system })
-  req.messages.forEach((m, i) => {
-    const isLast = i === req.messages.length - 1
-    if (!isLast || m.role !== 'user' || !req.images?.length || !vision) {
-      messages.push({ role: m.role, content: m.content })
-      return
-    }
-    messages.push({
-      role: 'user',
-      content: [
-        ...req.images.map(
-          (img): OpenAI.Chat.ChatCompletionContentPartImage => ({
-            type: 'image_url',
-            image_url: { url: `data:${img.mediaType ?? 'image/jpeg'};base64,${img.base64}` }
-          })
-        ),
-        { type: 'text', text: m.content }
-      ]
-    })
-  })
-  const params: ChatParams = { model: req.model, messages, max_tokens: req.maxTokens }
-  // Deterministic by default: local replies vary a lot with sampling.
-  params.temperature = req.temperature ?? 0
-  const format = responseFormat(req, level)
-  if (format) params.response_format = format
-  return params
-}
-
-function toUsage(u: OpenAI.CompletionUsage | null | undefined): Usage {
-  if (!u) return { ...EMPTY_USAGE }
-  return {
-    inputTokens: u.prompt_tokens ?? 0,
-    outputTokens: u.completion_tokens ?? 0,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0
-  }
-}
-
-function addUsage(a: Usage, b: Usage): Usage {
-  return {
-    inputTokens: a.inputTokens + b.inputTokens,
-    outputTokens: a.outputTokens + b.outputTokens,
-    cacheReadTokens: 0,
-    cacheWriteTokens: 0
-  }
-}
-
-/** zod result for the reply text: data, or the first issues as text for the repair turn. */
-export function validate<T>(text: string, schema: ZodType<T>): { data: T } | { error: string } {
-  const raw = extractJsonObject(text)
-  if (!raw) return { error: 'no JSON object found' }
-  let value: unknown
-  try {
-    value = JSON.parse(raw)
-  } catch (e) {
-    return { error: `invalid JSON (${(e as Error).message})` }
-  }
-  const res = schema.safeParse(stripNulls(value))
-  if (res.success) return { data: res.data }
-  return {
-    error: res.error.issues
-      .slice(0, 5)
-      .map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`)
-      .join('; ')
-  }
-}
-
-function isFormatRejection(e: unknown): boolean {
-  const status = (e as { status?: number }).status
-  return (
-    (status === 400 || status === 422) &&
-    /response_format|json_schema|format/i.test(String((e as Error).message))
-  )
-}
-
 let client: { url: string; sdk: OpenAI } | null = null
 
 function sdkFor(baseUrl: string): OpenAI {
@@ -359,116 +299,29 @@ function sdkFor(baseUrl: string): OpenAI {
 export function createLocalProvider(
   getServer: () => LocalServer | null = localServer,
   getClient: (baseUrl: string) => OpenAI = sdkFor
-): LlmProvider {
+): ChatBackend {
   const current = (): LocalServer => {
     const s = getServer()
     if (!s) throw new LlmError('E_NO_KEY', 'No local model server is running.')
     return s
   }
-
-  /** One request, stepping the JSON request form down when the server rejects it. */
-  async function send(
-    req: StructuredRequest<unknown>,
-    signal?: AbortSignal
-  ): Promise<OpenAI.Chat.ChatCompletion> {
-    const s = current()
-    for (;;) {
-      try {
-        return await getClient(s.baseUrl).chat.completions.create(
-          buildChatParams(req, s.vision, jsonLevel),
-          { signal }
-        )
-      } catch (e) {
-        if (signal?.aborted || jsonLevel === 'none' || !isFormatRejection(e)) throw e
-        jsonLevel = jsonLevel === 'schema' ? 'object' : 'none'
-        console.log(`[models] local server rejected the JSON format; using ${jsonLevel}`)
-      }
-    }
+  const caps = (model: string): ModelCaps | null => {
+    const s = getServer()
+    return s ? capsOf(s, model) : null
   }
-
-  return {
+  return createChatBackend({
     id: 'local',
-
-    async complete<T = unknown>(
-      req: StructuredRequest<T>,
-      signal?: AbortSignal
-    ): Promise<CompleteResult<T>> {
-      const res = await send(req, signal)
-      let text = res.choices[0]?.message?.content ?? ''
-      let usage = toUsage(res.usage)
-      let stopReason = res.choices[0]?.finish_reason === 'length' ? 'max_tokens' : 'end_turn'
-      if (!req.schema) return { data: null, text, usage, model: res.model || req.model, stopReason }
-      let checked = validate(text, req.schema)
-      if ('error' in checked) {
-        // One repair turn: the model sees its own reply and what was wrong with it.
-        console.log(`[schema] local reply invalid (${checked.error}); asking for a fix`)
-        // Format fix only: the image is not sent again (slow on local hardware).
-        const repair: StructuredRequest<T> = {
-          ...req,
-          images: [],
-          messages: [
-            ...req.messages,
-            { role: 'assistant', content: text.slice(0, 4000) },
-            {
-              role: 'user',
-              content: `That reply does not match the required JSON schema: ${checked.error}. Reply again with only the corrected JSON object.`
-            }
-          ]
-        }
-        const again = await send(repair, signal)
-        text = again.choices[0]?.message?.content ?? ''
-        usage = addUsage(usage, toUsage(again.usage))
-        stopReason = again.choices[0]?.finish_reason === 'length' ? 'max_tokens' : 'end_turn'
-        checked = validate(text, req.schema)
-      }
-      return {
-        data: 'data' in checked ? checked.data : null,
-        text,
-        usage,
-        model: res.model || req.model,
-        stopReason
-      }
-    },
-
-    async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
-      const s = current()
-      const events = await getClient(s.baseUrl).chat.completions.create(
-        {
-          ...buildChatParams(req, s.vision, jsonLevel),
-          stream: true,
-          stream_options: { include_usage: true }
-        },
-        { signal }
-      )
-      let text = ''
-      let usage: Usage = { ...EMPTY_USAGE }
-      let model = req.model
-      let finish: string | null = null
-      for await (const ev of events) {
-        if (signal?.aborted) return
-        if (ev.model) model = ev.model
-        if (ev.usage) usage = toUsage(ev.usage)
-        const choice = ev.choices?.[0]
-        if (choice?.finish_reason) finish = choice.finish_reason
-        const delta = choice?.delta?.content
-        if (delta) {
-          text += delta
-          yield { type: 'text', text: delta }
-        }
-      }
-      if (signal?.aborted) return
-      yield {
-        type: 'done',
-        result: { text, usage, model, stopReason: finish === 'length' ? 'max_tokens' : 'end_turn' }
-      }
-    },
-
-    // Detection (providers/index refreshLocalModels) already opened the connection.
-    warmup: () => Promise.resolve()
-  }
+    client: () => getClient(current().baseUrl),
+    vision: (model) => caps(model)?.vision ?? false,
+    tools: (model) => caps(model)?.tools ?? false,
+    // Deterministic by default: local replies vary a lot with sampling.
+    params: { defaultTemperature: 0 },
+    rateLimitMessage: 'The local model server is busy. Try again in a moment.'
+    // No warmup: detection (providers/index refreshLocalModels) already opened the connection.
+  })
 }
 
 /** Test hook. */
 export function resetLocalJsonLevel(): void {
-  jsonLevel = 'schema'
+  resetJsonLevels()
 }

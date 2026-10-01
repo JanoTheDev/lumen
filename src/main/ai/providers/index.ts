@@ -4,8 +4,17 @@
 import { redactForModel } from '../../actions/redact'
 import { loadConfig } from '../../config'
 import { markFreeModel } from '../pricing'
-import { resolveRole, type Role, type RoleModel } from '../models'
+import {
+  AUTO_ORDER,
+  isLocalOnly,
+  providerReady,
+  resolveRole,
+  type Role,
+  type RoleModel
+} from '../models'
 import { createAnthropicProvider } from './anthropic'
+import { createCompatibleProvider } from './compatible'
+import { createGeminiProvider } from './gemini'
 import { createLocalProvider, localServer, refreshLocal, type LocalServer } from './local'
 import { createOpenAIProvider } from './openai'
 import {
@@ -31,40 +40,59 @@ export function onUsage(fn: UsageListener): void {
   listener = fn
 }
 
+/** A cloud provider has its key (and is not set aside by Local only). */
 export function hasKey(id: ProviderId): boolean {
-  if (id === 'anthropic') return !!process.env.ANTHROPIC_API_KEY
-  if (id === 'openai') return !!process.env.OPENAI_API_KEY
-  return false
+  return id !== 'local' && providerReady(id)
 }
 
 /** Any model can be called: a cloud key or a detected local server. */
 export function hasAnyModel(): boolean {
-  return hasKey('anthropic') || hasKey('openai') || !!localServer()
+  return AUTO_ORDER.some(providerReady)
 }
 
-/** A model that takes images is available (vision verify, refine, screen description). */
-export function hasVisionModel(): boolean {
-  return hasKey('anthropic') || hasKey('openai') || !!localServer()?.vision
+/**
+ * The model of a role takes images (vision verify, refine, screen description and labels use
+ * `fast`, the zoom pass `vision-refine`).
+ */
+export function hasVisionModel(role: Role = 'fast'): boolean {
+  try {
+    const { provider, model } = resolveRole(role)
+    return providerFor(provider).supportsVision?.(model) ?? true
+  } catch {
+    return false
+  }
+}
+
+/** Some role is set to a local model, or local is the preferred / only backend. */
+function wantsLocal(): boolean {
+  const m = loadConfig().models
+  if (m.provider === 'local' || isLocalOnly()) return true
+  if (Object.values(m.roles ?? {}).some((c) => c?.provider === 'local')) return true
+  return !AUTO_ORDER.some((p) => p !== 'local' && providerReady(p))
 }
 
 /**
  * Detects a local server (config models.localUrl/localModel, else Ollama then LM Studio).
  * Cached; cheap enough to await before a turn. Skipped when a cloud key serves everything
- * and the user did not pick "local".
+ * and nothing asks for a local model (unless forced, e.g. by Settings).
  */
 export function refreshLocalModels(force = false): Promise<LocalServer | null> {
   const m = loadConfig().models
-  if (m.provider !== 'local' && (hasKey('anthropic') || hasKey('openai')))
-    return Promise.resolve(localServer())
+  if (!force && !wantsLocal()) return Promise.resolve(localServer())
   return refreshLocal({ url: m.localUrl || undefined, model: m.localModel || undefined, force })
 }
 
 function create(id: ProviderId): LlmProvider {
   if (id === 'anthropic') return createAnthropicProvider()
   if (id === 'openai') return createOpenAIProvider()
+  if (id === 'gemini') return createGeminiProvider()
+  if (id === 'compatible') return createCompatibleProvider()
   if (id === 'local') return createLocalProvider()
   throw new LlmError('E_NO_KEY', `Provider "${id}" is not available.`)
 }
+
+/** Calls through these cost nothing: local servers and the Gemini free tier. */
+const FREE_PROVIDERS: readonly ProviderId[] = ['local', 'gemini']
 
 let deterministic = false
 
@@ -105,7 +133,7 @@ export function prepareRequest<R extends ChatRequest>(req: R): R {
 
 function withUsage(inner: LlmProvider): LlmProvider {
   const usageListener: UsageListener = (model, usage, hasImage) => {
-    if (inner.id === 'local') markFreeModel(model)
+    if (FREE_PROVIDERS.includes(inner.id)) markFreeModel(model)
     listener(model, usage, hasImage)
   }
   return {
@@ -123,6 +151,8 @@ function withUsage(inner: LlmProvider): LlmProvider {
       }
     },
     warmup: () => inner.warmup(),
+    ...(inner.supportsTools ? { supportsTools: (m: string) => inner.supportsTools!(m) } : {}),
+    ...(inner.supportsVision ? { supportsVision: (m: string) => inner.supportsVision!(m) } : {}),
     ...(inner.toolTurn
       ? {
           async toolTurn(req, signal) {
@@ -151,10 +181,16 @@ export function providerFor(id: ProviderId): LlmProvider {
   return (instances[id] ??= withUsage(create(id)))
 }
 
-/** Provider, model and effort for a role. */
+/**
+ * Provider, model and effort for a role. `llm.toolTurn` is left out when the role's model has
+ * no tool calling, so agent mode takes its one-call fallback only then.
+ */
 export function getProvider(role: Role): RoleModel & { llm: LlmProvider } {
   const resolved = resolveRole(role)
-  return { ...resolved, llm: providerFor(resolved.provider) }
+  const llm = providerFor(resolved.provider)
+  if (llm.toolTurn && llm.supportsTools && !llm.supportsTools(resolved.model))
+    return { ...resolved, llm: { ...llm, toolTurn: undefined } }
+  return { ...resolved, llm }
 }
 
 /** Test hook: replace (or with null, reset) the provider used for an id. */
@@ -170,8 +206,8 @@ let lastWarm = 0
 export function warmupProviders(now = Date.now()): void {
   if (now - lastWarm < WARM_INTERVAL_MS) return
   lastWarm = now
-  for (const id of ['anthropic', 'openai'] as const) {
-    if (hasKey(id)) void providerFor(id).warmup()
+  for (const id of AUTO_ORDER) {
+    if (id !== 'local' && hasKey(id)) void providerFor(id).warmup()
   }
   void refreshLocalModels()
 }

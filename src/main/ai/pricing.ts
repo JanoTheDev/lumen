@@ -16,26 +16,32 @@ const PRICING: Record<string, Rate> = {
   'gpt-5': { input: 1.25, output: 10, cacheRead: 0.125, cacheWrite: 1.25 },
   'gpt-5-mini': { input: 0.25, output: 2, cacheRead: 0.025, cacheWrite: 0.25 },
   'gpt-5-nano': { input: 0.05, output: 0.4, cacheRead: 0.005, cacheWrite: 0.05 },
-  'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 2.5 }
+  'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25, cacheWrite: 2.5 },
+  // Gemini paid tier (ai.google.dev/gemini-api/docs/pricing, 2026-10-01; 3.8 Flash at its
+  // launch price until 2026-12-31). Calls through the gemini provider are free-tier and count
+  // as $0 (markFreeModel); these apply when a paid route names the same id.
+  'gemini-3.8-flash': { input: 0.75, output: 3.75, cacheRead: 0.075, cacheWrite: 0.75 },
+  'gemini-3.5-flash': { input: 1.5, output: 9, cacheRead: 0.15, cacheWrite: 1.5 },
+  'gemini-3.5-flash-lite': { input: 0.3, output: 2.5, cacheRead: 0.03, cacheWrite: 0.3 }
 }
 
-// Unknown models are priced like the default main model so totals are never zero.
-const FALLBACK = PRICING['claude-sonnet-5-5']
-
 const FREE: Rate = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-// Models served by a local server cost nothing.
+// Models served by a local server or the Gemini free tier cost nothing.
 const freeModels = new Set<string>()
 
 export function markFreeModel(model: string): void {
   freeModels.add(model)
 }
 
-/** Rate for a model id; dated snapshots (`-20251001`, `-2025-08-07`) use their alias's rate. */
+/**
+ * Rate for a model id; dated snapshots (`-20251001`, `-2025-08-07`) use their alias's rate. A
+ * model without a known price has no estimate: $0 and `known: false` (the Cost card says so).
+ */
 export function rateFor(model: string): Rate & { known: boolean } {
   if (freeModels.has(model)) return { ...FREE, known: true }
   const alias = model.replace(/-\d{8}$|-\d{4}-\d{2}-\d{2}$/, '')
   const rate = PRICING[alias]
-  return rate ? { ...rate, known: true } : { ...FALLBACK, known: false }
+  return rate ? { ...rate, known: true } : { ...FREE, known: false }
 }
 
 export interface Cost {
@@ -69,6 +75,6 @@ export function formatUsage(model: string, usage: Usage, hasImage: boolean): str
       ? ` cache r:${usage.cacheReadTokens} w:${usage.cacheWriteTokens}`
       : ''
   const image = hasImage ? ' +vision' : ''
-  const unknown = rateFor(model).known ? '' : ' (estimated rate)'
+  const unknown = rateFor(model).known ? '' : ' (no known price)'
   return `[tokens] ${model}${image} | in:${usage.inputTokens} out:${usage.outputTokens}${cache} | $${cost.total.toFixed(4)}${unknown}`
 }

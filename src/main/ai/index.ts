@@ -97,7 +97,9 @@ export async function callModel(
   const detail: 'low' | 'high' = opts.lowDetail ? 'low' : 'high'
   const { llm, model, effort } = getProvider('main')
   // Files dropped on the bar (08 T21), only when this request is about them.
-  const files = withConversation ? await attachmentsFor(prompt, { pdf: llm.id !== 'local' }) : null
+  const files = withConversation
+    ? await attachmentsFor(prompt, { pdf: llm.id === 'anthropic' || llm.id === 'openai' })
+    : null
   if (files)
     log(
       'plan',
@@ -166,6 +168,9 @@ export async function callModel(
   } catch (e) {
     if (e instanceof LlmError && e.code === 'E_REFUSED')
       return { mode: 'answer', text: REFUSAL_MESSAGE }
+    // A 429 (Gemini free tier, OpenAI-compatible services): say so instead of a generic error.
+    if (e instanceof LlmError && e.code === 'E_RATE_LIMIT')
+      return { mode: 'answer', text: e.message }
     throw e
   }
 }
