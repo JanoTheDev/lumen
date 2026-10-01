@@ -990,6 +990,8 @@ export interface SkillPreviewInfo {
   hasSteps: boolean
   /** An installed copy will be replaced. */
   updates: boolean
+  /** The installed copy is trusted and comes from another pack: trust is reset on install. */
+  resetsTrust?: boolean
 }
 
 export type SkillInstallPreview =

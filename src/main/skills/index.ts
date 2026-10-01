@@ -125,7 +125,7 @@ export function setSkillEnabled(name: string, enabled: boolean): boolean {
 export function setSkillTrusted(name: string, trusted: boolean): boolean {
   const s = registry?.get(name)
   if (!s || !state || s.baseTrust !== 'community-untrusted') return false
-  state.setTrusted(name, trusted)
+  state.setTrusted(name, trusted, s.pin)
   log('done', `skill ${name} ${trusted ? 'trusted' : 'untrusted'}`)
   return true
 }
@@ -177,7 +177,7 @@ function remember(p: Omit<Pending, 'at'>): string {
 
 function preview(p: Omit<Pending, 'at'>): SkillInstallPreview {
   if (!registry) return notReady
-  const r = previewArchive(registry, p.archive, p.subpath)
+  const r = previewArchive(registry, p.archive, p.subpath, p.source)
   if (!r.ok) {
     log('fail', `skill install from ${p.source}: ${r.error}`)
     return r

@@ -3,6 +3,7 @@
 // with the agent-skill PackKind, so the zip checks, staging and markers are shared with lesson
 // packs. Only the user folder is ever written; builtin and app-pack skills are copied there to
 // be edited (the copy overrides them). No Electron.
+import { createHash } from 'crypto'
 import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'fs'
 import { join, resolve, sep } from 'path'
 import type { SkillPreviewInfo } from '@shared/channels'
@@ -19,6 +20,7 @@ import { readZip, ZIP_LIMITS } from '../packs/zip-read'
 import { agentSkillKind } from './kind'
 import { SKILL_FILE, SKILL_NAME_RE, parseSkillFile, skillTemplate } from './manifest'
 import { RESERVED_DIRS, SKILL_PACK_KIND, appPackIds, type SkillRegistry } from './registry'
+import { trustPin } from './state'
 import { STEPS_FILE, parseStepsFile } from './steps'
 
 export type SkillPreview = SkillPreviewInfo
@@ -49,8 +51,11 @@ function kindFor(registry: SkillRegistry): ReturnType<typeof agentSkillKind> {
 export function previewArchive(
   registry: SkillRegistry,
   archive: Buffer,
-  subpath?: string
+  subpath?: string,
+  source = ''
 ): Result<{ skills: SkillPreview[] }> {
+  // Trust is pinned to source + archive hash (skills/state trustPin).
+  const pin = trustPin({ source: source.slice(0, 500), sha256: sha256(archive) })
   try {
     const files = readZip(archive, ZIP_LIMITS)
     const packs = planPacks(files, kindFor(registry), subpath)
@@ -68,7 +73,8 @@ export function previewArchive(
         triggers: m.triggers,
         files: p.files.length,
         hasSteps: p.files.some((f) => f.name === 'steps.json'),
-        updates: existsSync(join(registry.roots.user, m.name))
+        updates: existsSync(join(registry.roots.user, m.name)),
+        ...(resetsTrust(registry, m.name, pin) ? { resetsTrust: true } : {})
       }
     })
     return { ok: true, skills }
@@ -76,6 +82,14 @@ export function previewArchive(
     if (e instanceof NoPackError) return { ok: false, error: 'there are no skills in this file' }
     return failure(e)
   }
+}
+
+const sha256 = (b: Buffer): string => createHash('sha256').update(b).digest('hex')
+
+/** The installed skill `name` is trusted now and the archive would replace it with another pack. */
+function resetsTrust(registry: SkillRegistry, name: string, pin: string): boolean {
+  const s = registry.get(name)
+  return !!s && registry.trustOf(s) === 'community-trusted' && s.pin !== pin
 }
 
 /** Installs every skill in the archive as community-untrusted, then reloads. */
@@ -93,6 +107,8 @@ export function installArchive(
       ...(subpath ? { subpath } : {})
     })
     registry.reload()
+    // A trusted skill replaced by another pack (or other content) is untrusted again.
+    for (const s of installed) if (s.updated) registry.dropStaleTrust(s.id)
     return { ok: true, installed }
   } catch (e) {
     if (e instanceof NoPackError) return { ok: false, error: 'there are no skills in this file' }

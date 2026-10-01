@@ -22,7 +22,7 @@ import {
   SkillFileError,
   parseSkillFile
 } from './manifest'
-import type { SkillStateStore } from './state'
+import { trustPin, type SkillStateStore } from './state'
 
 /** The `.lumen` marker kind of installed skills (packs/install PackKind.name). */
 export const SKILL_PACK_KIND = 'agent-skill'
@@ -50,6 +50,8 @@ export interface LoadedSkill {
   baseTrust: Exclude<SkillTrust, 'community-trusted'>
   overrides?: Exclude<SkillOrigin, 'user'>
   source?: string
+  /** Community skills: the installed pack's trust pin (source + archive hash). */
+  pin?: string
   hasSteps: boolean
   warnings: string[]
 }
@@ -115,9 +117,10 @@ export class SkillRegistry {
     ] as const) {
       for (const app of appPackIds(root)) {
         const appDir = join(root, app)
-        const trust = bundled ? 'builtin' : packMarker(appDir) ? 'community-untrusted' : 'mine'
+        const marker = bundled ? null : packMarker(appDir)
+        const trust = bundled ? 'builtin' : marker ? 'community-untrusted' : 'mine'
         for (const name of subdirs(join(appDir, 'skills')))
-          this.loadOne(join(appDir, 'skills', name), 'app-pack', trust)
+          this.loadOne(join(appDir, 'skills', name), 'app-pack', trust, undefined, marker)
       }
     }
     for (const name of subdirs(this.roots.user)) {
@@ -125,8 +128,10 @@ export class SkillRegistry {
       if (RESERVED_DIRS.has(name) || existsSync(join(dir, APP_PACK_MANIFEST))) continue
       if (!existsSync(join(dir, SKILL_FILE))) continue
       const marker = packMarker(dir)
-      this.loadOne(dir, 'user', marker ? 'community-untrusted' : 'mine', marker?.source)
+      this.loadOne(dir, 'user', marker ? 'community-untrusted' : 'mine', marker?.source, marker)
     }
+    // Binds trust saved before pins existed to the packs installed now.
+    for (const s of this.skills.values()) this.trustOf(s)
     for (const c of this.conflictList) this.opts.log?.(`skills: ${c}`)
     for (const p of this.problemList) this.opts.log?.(`skills: ${p.file}: ${p.message}`)
     return this
@@ -159,9 +164,18 @@ export class SkillRegistry {
   }
 
   trustOf(s: LoadedSkill): SkillTrust {
-    return s.baseTrust === 'community-untrusted' && this.opts.state?.isTrusted(s.manifest.name)
+    return s.baseTrust === 'community-untrusted' &&
+      this.opts.state?.isTrusted(s.manifest.name, s.pin ?? trustPin({}))
       ? 'community-trusted'
       : s.baseTrust
+  }
+
+  /** Drops a saved trust that no longer matches the installed pack (after an install). */
+  dropStaleTrust(name: string): void {
+    const s = this.skills.get(name)
+    const state = this.opts.state
+    if (!s || !state?.isTrusted(name) || this.trustOf(s) === 'community-trusted') return
+    state.setTrusted(name, false)
   }
 
   /** The SKILL.md body (L2), read now. Throws SkillFileError when the file broke since load. */
@@ -233,7 +247,8 @@ export class SkillRegistry {
     dir: string,
     origin: SkillOrigin,
     baseTrust: LoadedSkill['baseTrust'],
-    source?: string
+    source?: string,
+    marker?: { source?: string; sha256?: string } | null
   ): void {
     const folder = dir.split(/[\\/]/).pop()!
     const file = join(dir, SKILL_FILE)
@@ -270,6 +285,7 @@ export class SkillRegistry {
       baseTrust,
       ...(overrides && overrides !== origin ? { overrides } : {}),
       ...(source ? { source } : {}),
+      ...(marker ? { pin: trustPin(marker) } : {}),
       hasSteps: existsSync(join(dir, 'steps.json')),
       warnings: parsed.warnings
     })

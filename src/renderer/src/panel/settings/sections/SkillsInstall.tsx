@@ -85,6 +85,12 @@ export function SkillsInstall({ onInstalled }: { onInstalled: () => void }): JSX
                   {s.description} · v{s.version}
                   {s.author ? ` · by ${s.author}` : ''}
                 </span>
+                {s.resetsTrust && (
+                  <span className="ui-hint" role="note">
+                    You trusted the installed {s.name}. This one comes from a different pack, so it
+                    starts untrusted: it asks before each action until you trust it again.
+                  </span>
+                )}
                 <ul aria-label={`What ${s.name} may do`}>
                   {permissionLines(s.permissions, s.apps).map((line) => (
                     <li key={line}>{line}</li>
