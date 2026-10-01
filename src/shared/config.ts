@@ -517,7 +517,9 @@ export const configV2Schema = z.object({
     /** Spoken language: STT language, reply language and lexicons; auto = detect (cloud only). */
     language: z.enum(VOICE_LANGUAGES).default('en'),
     /** Double-tapping the assistant hotkey starts a conversation: every utterance is a query. */
-    conversation: z.boolean().default(true)
+    conversation: z.boolean().default(true),
+    /** Whisper mode (04 T40): quiet speech gets more gain and a lower speech threshold. */
+    whisperMode: z.boolean().default(false)
   }),
   a11y: z.object({
     announce: z.enum(['auto', 'off']),
@@ -667,6 +669,18 @@ export const configV2Schema = z.object({
     commandMode: z.boolean().default(true),
     /** Saved snippets expand when their phrase is said (04 T38). */
     snippets: z.boolean().default(true),
+    /** Short start / stop sounds while dictating (04 T47); quiet mode silences them. */
+    sounds: z.boolean().default(true),
+    /** The dictation pill shows next to the text caret instead of the bottom bar (04 T47). */
+    caretPill: z.boolean().default(true),
+    /** Lower the system volume while dictating, restored afterwards (04 T47). */
+    duckMedia: z.boolean().default(false),
+    /** "… press enter" / "… send it" at the end presses Enter, never in terminals (04 T47/T48). */
+    spokenKeys: z.boolean().default(true),
+    /** Hands-free dictation ends after this many seconds of silence (04 T48). */
+    silenceSec: z.number().min(1).max(10).default(2),
+    /** Hold this mouse button to dictate (04 T48). */
+    mouseButton: z.enum(['off', 'middle', 'x1', 'x2']).default('off'),
     hotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]),
     cleanup: z.enum(['light', 'off']),
     autoDetect: z.boolean(),
@@ -740,7 +754,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     ttsWithScreenReader: false,
     micDeviceId: '',
     language: 'en',
-    conversation: true
+    conversation: true,
+    whisperMode: false
   },
   a11y: {
     announce: 'auto',
@@ -805,6 +820,12 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     styleApps: {},
     commandMode: true,
     snippets: true,
+    sounds: true,
+    caretPill: true,
+    duckMedia: false,
+    spokenKeys: true,
+    silenceSec: 2,
+    mouseButton: 'off',
     hotkey: 'Ctrl+Shift+D',
     cleanup: 'light',
     autoDetect: true,
