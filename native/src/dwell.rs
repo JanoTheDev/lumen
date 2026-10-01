@@ -290,9 +290,13 @@ impl Dwell {
         if c.enabled && s.stop.is_none() {
             s.fsm.reset();
             let stop = Arc::new(AtomicBool::new(false));
-            s.stop = Some(stop.clone());
-            self.spawn(stop);
-            tracing::info!("dwell started with {}", c.to_json());
+            match self.spawn(stop.clone()) {
+                Ok(()) => {
+                    s.stop = Some(stop);
+                    tracing::info!("dwell started with {}", c.to_json());
+                }
+                Err(e) => tracing::error!("dwell thread: {e}"),
+            }
         } else if !c.enabled
             && let Some(stop) = s.stop.take()
         {
@@ -306,7 +310,7 @@ impl Dwell {
         self.paused.store(paused, Ordering::SeqCst);
     }
 
-    fn spawn(&self, stop: Arc<AtomicBool>) {
+    fn spawn(&self, stop: Arc<AtomicBool>) -> std::io::Result<()> {
         let (out, busy, paused, shared) =
             (self.out.clone(), self.busy.clone(), self.paused.clone(), self.shared.clone());
         std::thread::Builder::new()
@@ -374,21 +378,57 @@ impl Dwell {
                     }
                 }
             })
-            .expect("spawn dwell thread");
+            .map(drop)
     }
+}
+
+#[cfg(windows)]
+type SnapRequest = (i32, i32, Instant, crossbeam_channel::Sender<Option<Value>>);
+
+/// One long-lived UIA thread answers snap requests (its UIA client is reused). It holds
+/// at most one waiting request: while it is stuck in a slow UIA call, new ones are skipped.
+#[cfg(windows)]
+static SNAP_WORKER: Mutex<Option<crossbeam_channel::Sender<SnapRequest>>> = Mutex::new(None);
+
+#[cfg(windows)]
+fn snap_worker() -> Option<crossbeam_channel::Sender<SnapRequest>> {
+    let mut worker = SNAP_WORKER.lock().unwrap();
+    if worker.is_none() {
+        let (tx, rx) = crossbeam_channel::bounded::<SnapRequest>(1);
+        let spawned = std::thread::Builder::new().name("dwell-uia".into()).spawn(move || {
+            crate::com_init();
+            for (x, y, asked, reply) in rx {
+                // Nobody waits for an answer past the budget.
+                if asked.elapsed() < SNAP_BUDGET {
+                    let _ = reply.send(crate::uia::element_at(x, y));
+                }
+            }
+        });
+        if let Err(e) = spawned {
+            tracing::warn!("dwell snap thread: {e}");
+            return None;
+        }
+        *worker = Some(tx);
+    }
+    worker.clone()
 }
 
 /// {rect, role, name} of the control under (x, y), or None if UIA is slower than the budget.
 fn snap_element(x: i32, y: i32) -> Option<Value> {
     #[cfg(windows)]
     {
+        use crossbeam_channel::TrySendError;
         let (tx, rx) = crossbeam_channel::bounded(1);
-        // UIA cannot be interrupted: ask from a throwaway thread and stop waiting after the budget.
-        std::thread::spawn(move || {
-            crate::com_init();
-            let _ = tx.send(crate::uia::element_at(x, y));
-        });
-        rx.recv_timeout(SNAP_BUDGET).ok().flatten()
+        // UIA cannot be interrupted: stop waiting after the budget.
+        match snap_worker()?.try_send((x, y, Instant::now(), tx)) {
+            Ok(()) => rx.recv_timeout(SNAP_BUDGET).ok().flatten(),
+            Err(TrySendError::Full(_)) => None,
+            Err(TrySendError::Disconnected(_)) => {
+                // The worker died (a panic in UIA): start a fresh one next time.
+                *SNAP_WORKER.lock().unwrap() = None;
+                None
+            }
+        }
     }
     #[cfg(not(windows))]
     {
@@ -422,9 +462,10 @@ impl MouseWatch {
             return;
         }
         let flag = Arc::new(AtomicBool::new(false));
-        *stop = Some(flag.clone());
+        let thread_flag = flag.clone();
         let out = self.out.clone();
-        std::thread::spawn(move || {
+        let spawned = std::thread::Builder::new().name("mouse-watch".into()).spawn(move || {
+            let flag = thread_flag;
             let mut last = crate::input::sendinput::cursor_pos();
             while !flag.load(Ordering::SeqCst) {
                 std::thread::sleep(Duration::from_millis(50));
@@ -436,6 +477,10 @@ impl MouseWatch {
                 }
             }
         });
+        match spawned {
+            Ok(_) => *stop = Some(flag),
+            Err(e) => tracing::error!("mouse watch thread: {e}"),
+        }
     }
 }
 
