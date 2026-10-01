@@ -57,9 +57,28 @@ export interface SkillDraft {
   triggers: string[]
   params: DraftParam[]
   instructions: string
-  permissions: { input: boolean; network: string[] }
+  permissions: {
+    input: boolean
+    network: string[]
+    /** Model-written skills only ask for these when the task needs them (least privilege). */
+    profile?: boolean
+    connectors?: string[]
+  }
   steps?: StepsFile
-  source: 'agent-run' | 'voice' | 'recording'
+  /** model: written by the model from a description ("make a skill that …"). */
+  source: 'agent-run' | 'voice' | 'recording' | 'model'
+  whenToUse?: string
+  apps?: string[]
+  /** The agent tools the skill may use (all foreground tools when absent). */
+  tools?: string[]
+  /** Bundled text files (L3), e.g. reference/tone.md. */
+  references?: DraftFile[]
+}
+
+/** A bundled text file of a draft: a path under reference/ and its text. */
+export interface DraftFile {
+  path: string
+  text: string
 }
 
 type ElementOp = (typeof ELEMENT_OPS)[number]
@@ -415,7 +434,9 @@ export function renderSkillMd(d: SkillDraft): string {
     '---',
     `name: ${d.name}`,
     `description: ${yamlString(d.description)}`,
+    ...(d.whenToUse ? [`when_to_use: ${yamlString(d.whenToUse)}`] : []),
     'version: 1.0.0',
+    ...(d.apps?.length ? [`apps: [${d.apps.join(', ')}]`] : []),
     `triggers: [${d.triggers.map(yamlString).join(', ')}]`
   ]
   if (d.params.length) {
@@ -428,17 +449,26 @@ export function renderSkillMd(d: SkillDraft): string {
   lines.push('permissions:', `  input: ${d.permissions.input}`)
   if (d.permissions.network.length)
     lines.push(`  network: [${d.permissions.network.map(yamlString).join(', ')}]`)
+  if (d.permissions.profile) lines.push('  profile: true')
+  if (d.permissions.connectors?.length)
+    lines.push(`  connectors: [${d.permissions.connectors.join(', ')}]`)
+  if (d.tools?.length) lines.push(`tools: [${d.tools.join(', ')}]`)
   lines.push('---', d.instructions.trim(), '')
   return lines.join('\n')
 }
 
 /** The draft as files, validated; throws with a readable reason. */
-export function draftFiles(d: SkillDraft): { skillMd: string; stepsJson?: string } {
+export function draftFiles(d: SkillDraft): {
+  skillMd: string
+  stepsJson?: string
+  extra?: DraftFile[]
+} {
   const skillMd = renderSkillMd(d)
   parseSkillFile(skillMd)
   return {
     skillMd,
-    ...(d.steps ? { stepsJson: `${JSON.stringify(d.steps, null, 2)}\n` } : {})
+    ...(d.steps ? { stepsJson: `${JSON.stringify(d.steps, null, 2)}\n` } : {}),
+    ...(d.references?.length ? { extra: d.references } : {})
   }
 }
 

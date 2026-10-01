@@ -208,11 +208,26 @@ export function deleteSkill(registry: SkillRegistry, name: string): Result {
   return { ok: true }
 }
 
+/** Bundled text files a written skill may carry: reference/<name>.md|.txt, small, few. */
+export const EXTRA_FILE_RE = /^reference\/[a-z0-9][a-z0-9-]{0,40}\.(?:md|txt)$/
+export const EXTRA_FILE_MAX_BYTES = 16 * 1024
+export const EXTRA_FILES_MAX = 5
+
+function extraProblem(extra: readonly { path: string; text: string }[]): string | null {
+  if (extra.length > EXTRA_FILES_MAX) return `at most ${EXTRA_FILES_MAX} reference files`
+  for (const f of extra) {
+    if (!EXTRA_FILE_RE.test(f.path)) return `"${f.path}" is not a reference/<name>.md file`
+    if (Buffer.byteLength(f.text, 'utf8') > EXTRA_FILE_MAX_BYTES)
+      return `${f.path} is larger than 16 KB`
+  }
+  return null
+}
+
 /** A new skill in the user folder from finished files (a saved draft). */
 export function writeNewSkill(
   registry: SkillRegistry,
   name: string,
-  files: { skillMd: string; stepsJson?: string }
+  files: { skillMd: string; stepsJson?: string; extra?: { path: string; text: string }[] }
 ): Result<{ name: string }> {
   const dir = userDir(registry, name)
   if (!dir) return { ok: false, error: 'use lowercase words joined by "-", like "tidy-desktop"' }
@@ -227,9 +242,44 @@ export function writeNewSkill(
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
+  const bad = extraProblem(files.extra ?? [])
+  if (bad) return { ok: false, error: bad }
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, SKILL_FILE), files.skillMd, { encoding: 'utf8', flag: 'wx' })
   if (files.stepsJson) writeFileSync(join(dir, STEPS_FILE), files.stepsJson, 'utf8')
+  for (const f of files.extra ?? []) {
+    mkdirSync(join(dir, 'reference'), { recursive: true })
+    writeFileSync(join(dir, f.path), f.text.replace(/\r\n?/g, '\n'), 'utf8')
+  }
   registry.reload()
   return { ok: true, name }
+}
+
+/**
+ * Saves an edited skill (a reviewed voice edit or update): SKILL.md through saveSkillText (a
+ * builtin is copied to the user folder first), then steps.json: a string replaces it, null
+ * removes it, undefined keeps it.
+ */
+export function saveSkillFiles(
+  registry: SkillRegistry,
+  name: string,
+  files: { skillMd: string; stepsJson?: string | null }
+): Result {
+  if (typeof files.stepsJson === 'string') {
+    try {
+      parseStepsFile(files.stepsJson)
+    } catch (e) {
+      return { ok: false, error: `steps.json: ${(e as Error).message}` }
+    }
+  }
+  const r = saveSkillText(registry, name, files.skillMd)
+  if (!r.ok || files.stepsJson === undefined) return r
+  const s = registry.get(name)
+  const dir = userDir(registry, name)
+  if (!s || !dir || resolve(s.dir) !== dir) return { ok: false, error: 'not in your skills folder' }
+  const file = join(dir, STEPS_FILE)
+  if (files.stepsJson === null) rmSync(file, { force: true })
+  else writeFileSync(file, files.stepsJson, 'utf8')
+  registry.reload()
+  return { ok: true }
 }
