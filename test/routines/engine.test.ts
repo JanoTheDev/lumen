@@ -315,6 +315,21 @@ describe('AutomationScheduler: events', () => {
     expect(s.fireEvent('au_many1')).toBe(true)
   })
 
+  it('queued runs count toward the hourly cap (a task that sets off its own trigger)', async () => {
+    const { s, deps } = setup()
+    const releases: ((e: RunEnd) => void)[] = []
+    deps.run = () => new Promise((res) => releases.push(res))
+    s.start([base({ id: 'au_loop1', trigger: { kind: 'file', folder: 'C:\\D', on: 'added' } })])
+    s.fireEvent('au_loop1', 'f0.pdf')
+    for (let n = 1; n <= 40; n++) {
+      // Each run renames its file, which the watcher reports as a new one.
+      for (let k = 0; k < 5; k++) s.fireEvent('au_loop1', `f${n}-${k}.pdf`)
+      releases[releases.length - 1]?.({ result: 'done' })
+      await vi.advanceTimersByTimeAsync(1000)
+    }
+    expect(releases.length).toBeLessThanOrEqual(EVENT_MAX_PER_HOUR)
+  })
+
   it('run now and remove', async () => {
     const { s, runs } = setup()
     s.start([])

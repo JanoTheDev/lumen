@@ -230,22 +230,31 @@ export class AutomationScheduler {
   fireEvent(id: string, detail?: string): boolean {
     const a = this.get(id)
     if (!a || !a.enabled || isTimeTrigger(a.trigger)) return false
+    // Queued runs count too, so a task that sets off its own trigger (it renames a file in the
+    // watched folder) stops at the hourly cap.
+    const queued = this.pending.get(id)?.length ?? 0
+    if (this.recentRuns(id) + queued >= EVENT_MAX_PER_HOUR) return false
     if (this.running.has(id)) {
       const q = this.pending.get(id) ?? []
       if (q.length < MAX_PENDING && !q.includes(detail)) q.push(detail)
       this.pending.set(id, q)
       return true
     }
-    const now = this.deps.now()
-    const recent = (this.recent.get(id) ?? []).filter((t) => now - t < 60 * 60_000)
-    if (recent.length >= EVENT_MAX_PER_HOUR) {
-      this.recent.set(id, recent)
-      return false
-    }
-    recent.push(now)
-    this.recent.set(id, recent)
+    this.countRun(id)
     this.trigger(a, 'event', detail)
     return true
+  }
+
+  /** Event runs started in the last hour. */
+  private recentRuns(id: string): number {
+    const now = this.deps.now()
+    const recent = (this.recent.get(id) ?? []).filter((t) => now - t < 60 * 60_000)
+    this.recent.set(id, recent)
+    return recent.length
+  }
+
+  private countRun(id: string): void {
+    this.recent.set(id, [...(this.recent.get(id) ?? []), this.deps.now()])
   }
 
   /** Re-plans every time trigger (Task Scheduler registration changed). */
@@ -377,7 +386,10 @@ export class AutomationScheduler {
           const next = q.shift()
           if (!q.length) this.pending.delete(a.id)
           const cur = this.get(a.id)
-          if (cur?.enabled) this.trigger(cur, 'event', next)
+          if (cur?.enabled && this.recentRuns(a.id) < EVENT_MAX_PER_HOUR) {
+            this.countRun(a.id)
+            this.trigger(cur, 'event', next)
+          } else this.pending.delete(a.id)
         }
       })
   }
