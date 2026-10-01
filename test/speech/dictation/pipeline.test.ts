@@ -90,6 +90,8 @@ import { bus } from '../../../src/main/bus'
 import { showAnswer } from '../../../src/main/windows/assistant'
 import {
   dictate,
+  onDictationDown,
+  onDictationUp,
   setDictationRecorder,
   SCRATCHPAD_NOTICE,
   type DictationReport
@@ -116,6 +118,29 @@ beforeEach(() => {
   vi.mocked(showAnswer).mockClear()
   reports.length = 0
   setDictationRecorder((r) => reports.push(r))
+})
+
+describe('dictation hotkey state (M6)', () => {
+  it('starts a new dictation after the renderer ended one with an error', async () => {
+    h.dictation = { enabled: true }
+    let starts = 0
+    const off = bus.on('dictation.started', () => starts++)
+    // Double-tap: hands-free.
+    onDictationDown()
+    onDictationUp()
+    onDictationDown()
+    onDictationUp()
+    expect(starts).toBe(1)
+    // Transcription failed: the renderer reports the end of the recording.
+    bus.emit({ type: 'voice.stopped', ended: true })
+    // The next press starts a new dictation instead of stopping the dead one.
+    onDictationDown()
+    expect(starts).toBe(2)
+    await new Promise((r) => setTimeout(r, 350))
+    onDictationUp()
+    await dictate('')
+    off()
+  })
 })
 
 describe('dictate', () => {

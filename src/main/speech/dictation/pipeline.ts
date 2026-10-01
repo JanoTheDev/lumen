@@ -125,6 +125,11 @@ const activation = new DictationActivation({
 keepEscapeWhile(() => activation.active)
 
 bus.on('voice.cancelled', () => activation.reset())
+// The renderer ended the recording (mic or transcription error, silence): a hands-free or
+// held dictation is over too, so the next press starts a new one instead of "stopping" (M6).
+bus.on('voice.stopped', (e) => {
+  if (e.ended) activation.reset()
+})
 
 // Recording length for the speaking pace (T46): any recording's start and end.
 const clock = new RecordingClock()
