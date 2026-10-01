@@ -5,9 +5,6 @@ vi.mock('@electron-toolkit/utils', () => ({ is: { dev: false } }))
 
 import { waitForSettle, type SettleProbe } from '../../src/main/ai/observe'
 import { setFrameCodec, type GrayImage } from '../../src/main/ai/frames'
-import { alreadyTyped } from '../../src/main/query/research'
-import type { Observed } from '../../src/main/ai/observe'
-import type { QueryContext } from '../../src/main/query/context'
 import { CancelledError } from '../../src/main/query/cancel'
 
 // Frames are keys into a table of 10x10 gray images with one flat value.
@@ -73,34 +70,5 @@ describe('waitForSettle (T19)', () => {
     await expect(
       waitForSettle({ title: 'Page' }, ac.signal, 1500, probe({ frames: ['1'] }))
     ).rejects.toBeInstanceOf(CancelledError)
-  })
-})
-
-describe('alreadyTyped (idempotent retry)', () => {
-  const now = (focus: Observed['obs']['focus'], lines: string[] = []): Observed => ({
-    ctx: {
-      ocr: async () => ({
-        words: [],
-        lines: lines.map((text) => ({ text, rect: { x: 0, y: 0, w: 1, h: 1 }, conf: 90 }))
-      })
-    } as unknown as QueryContext,
-    obs: { at: 0, title: 'Gmail', focus }
-  })
-
-  it('trusts the focused field value when UIA exposes it', async () => {
-    const field = { role: 'edit', name: 'Subject', editable: true, valueTail: 'Resignation' }
-    expect(await alreadyTyped('Resignation', now(field))).toBe(true)
-    // UIA is authoritative: an OCR hit elsewhere does not count.
-    const other = { ...field, valueTail: 'Something else' }
-    expect(await alreadyTyped('Resignation', now(other, ['Resignation']))).toBe(false)
-  })
-
-  it('falls back to OCR when the value is not exposed', async () => {
-    expect(
-      await alreadyTyped('Dear team, I am leaving', now(null, ['Dear team, I am', 'leaving']))
-    ).toBe(true)
-    expect(await alreadyTyped('Dear team', now(null, ['Inbox']))).toBe(false)
-    // Short text is too likely to appear somewhere else on screen.
-    expect(await alreadyTyped('Hi', now(null, ['Hi there']))).toBe(false)
   })
 })

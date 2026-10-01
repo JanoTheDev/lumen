@@ -1,6 +1,6 @@
 // One user turn: route it (LLM router, or the legacy regex steering behind config
-// ai.router = "legacy"), gather screen context, call the model (directly, via the planner
-// or the research loop) and present the result.
+// ai.router = "legacy"), gather screen context, call the model (directly, or as an agent-mode
+// task for multi-step and research requests) and present the result.
 import { randomUUID } from 'crypto'
 import type { ModelResponse } from '@shared/types'
 import { isAbortError, type CancelScope } from './cancel'
@@ -8,7 +8,6 @@ import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext 
 import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
 import { isResearchIntent } from './legacy/classifier'
-import { runFollowUps, runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
 import { mergeSplit, recordSplitHistory, runParallelSplit, type SubResult } from './parallel'
 import {
@@ -29,6 +28,13 @@ import { refreshLocalModels } from '../ai/providers'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
 import { requireAgent } from '../agent/instance'
+import { executeActions } from '../actions/executor'
+import {
+  hasPausedTask,
+  isResumeRequest,
+  resumeAgentTask,
+  runAgentTask
+} from '../agent-mode/session'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
 
@@ -41,7 +47,8 @@ export interface PipelineDeps {
 interface TurnPlan {
   /** Prompt sent to the model (the legacy path appends steering text). */
   prompt: string
-  path: 'model' | 'plan' | 'research' | 'split'
+  /** agent: multi-step and research requests run as an agent-mode task. */
+  path: 'model' | 'agent' | 'split'
   /** Independent answer questions run in parallel (path "split"). */
   subqueries?: string[]
   /** Model-call options from the route (routedMode, targetApp). */
@@ -158,8 +165,8 @@ async function planLegacy(
   return {
     ctx,
     plan: {
-      prompt: research ? prompt : effectivePrompt,
-      path: research ? 'research' : planned ? 'plan' : 'model',
+      prompt: research || planned ? prompt : effectivePrompt,
+      path: research || planned ? 'agent' : 'model',
       routing: {},
       locate: !opts.lowDetail && intent.mode === 'locate' && LOCATE_RE.test(prompt)
     }
@@ -229,11 +236,9 @@ async function planRouted(
         ? 'model'
         : route?.parallelSplit
           ? 'split'
-          : route?.mode === 'research'
-            ? 'research'
-            : route?.mode === 'plan'
-              ? 'plan'
-              : 'model',
+          : route?.mode === 'research' || route?.mode === 'plan'
+            ? 'agent'
+            : 'model',
       subqueries: route?.parallelSplit,
       routing: { routedMode, targetApp },
       locate: route?.mode === 'locate'
@@ -249,6 +254,15 @@ async function runTurn(
 ): Promise<ModelResponse> {
   requireAgent()
   const opts: CallOptions = { ...baseOpts, signal: scope.signal }
+  if (!opts.lowDetail && isResumeRequest(prompt) && hasPausedTask()) {
+    const resumed = resumeAgentTask(scope.signal)
+    if (resumed) {
+      const result = await resumed
+      scope.throwIfCancelled()
+      await present(result, prompt, deps.onGuide, undefined, scope.signal)
+      return result
+    }
+  }
   const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
   const legacy = loadConfig().ai.router === 'legacy'
   log(
@@ -301,11 +315,9 @@ async function runTurn(
     )
     result = mergeSplit(split)
     timer.split(`parallel split (${split.length}) done`)
-  } else if (plan.path === 'research') {
-    result = await runResearch(plan.prompt, ctx, opts, scope)
-    timer.split('research agent done')
-  } else if (plan.path === 'plan') {
-    result = await runPlanned(plan.prompt, ctx, opts, scope, timer)
+  } else if (plan.path === 'agent') {
+    result = await runAgentTask(plan.prompt, ctx, scope.signal)
+    timer.split('agent task done')
   } else {
     const callOpts = { ...opts, ...plan.routing, context: ctx }
     result = await callModel(plan.prompt, screenshot, activeWindow, callOpts)
@@ -325,13 +337,14 @@ async function runTurn(
     log('plan', 'locate chain: follow-up replaced with a locate step')
   }
 
-  // Navigate-then-act replies run their follow-ups here, on the shared loop.
+  // Navigate-then-act replies: the first actions run here, then a locate step highlights on
+  // the loaded page, or the rest continues as an agent task (no fixed delays either way).
   let shown: QueryContext | undefined = ctx.frames.length ? ctx : undefined
   if (!opts.lowDetail && result.mode === 'action' && result.follow_up && result.actions?.length) {
-    const chain = await runFollowUps(result, prompt, ctx, opts, scope)
+    const chain = await continueAfter(result, prompt, opts, scope)
     result = chain.response
     shown = chain.ctx ?? shown
-    timer.split('follow-up chain done')
+    timer.split('follow-up done')
   }
 
   // Start TTS synth early — parallel to renderer showing the answer card
@@ -356,4 +369,37 @@ async function runTurn(
     recordTurn({ utterance: prompt, answer: spoken, mode, targets, app })
   }
   return result
+}
+
+/**
+ * Runs an action reply that needs the result on screen (follow_up): its actions, then either one
+ * locate call on the loaded page or the remaining work as an agent task (skipping its plan and
+ * countdown: the user already saw the request start). The reply has nothing left to execute.
+ */
+async function continueAfter(
+  first: Extract<ModelResponse, { mode: 'action' }>,
+  prompt: string,
+  opts: CallOptions,
+  scope: CancelScope
+): Promise<{ response: ModelResponse; ctx?: QueryContext }> {
+  const done: ModelResponse = { ...first, actions: [], follow_up: undefined }
+  const ran = await executeActions(first.actions, { signal: scope.signal, userText: prompt })
+  scope.throwIfCancelled()
+  if (ran.denied || !ran.executed) return { response: done }
+  const next = first.follow_up?.query ?? ''
+  const now = await captureContext(true, { signal: scope.signal })
+  if (next.startsWith('The page is loaded. Highlight')) {
+    const r = await callModel(next, now.screenshot, now.activeWindow, {
+      ...opts,
+      context: now,
+      lowDetail: true,
+      routedMode: 'locate',
+      turnId: undefined,
+      history: false
+    })
+    return { response: r.mode === 'locate' ? r : done, ctx: now }
+  }
+  log('plan', `follow-up continues as an agent task: "${next.slice(0, 60)}"`)
+  const task = `${prompt} (Already done: ${first.summary ?? 'the first step'}. Next: ${next})`
+  return { response: await runAgentTask(task, now, scope.signal, { skipPlan: true }), ctx: now }
 }

@@ -18,12 +18,12 @@ import { executeActions } from '../actions/executor'
 import { armEscape, disarmEscape } from '../agent/escape'
 import { setStatus } from '../windows/status'
 import * as assistant from '../windows/assistant'
-import { uiV2 } from '../windows/ui-mode'
 import { confirmCountdownMs } from '../a11y/timings'
 import { beforeUtterance, confirmActions, explainBeforeDo } from '../a11y/transcript'
 import { actionRisk, needsTranscriptConfirm } from '../a11y/captions'
 import { LOCAL_HANDLED } from '../a11y/dispatch'
 import { answerAlways, lastUserRequest } from '../agent-mode/confirm'
+import { agentRunning, interceptAgentUtterance } from '../agent-mode/session'
 import { prepareVoiceText } from '../speech/router-hook'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
@@ -56,6 +56,8 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     let prompt = heard
     // "always" answers a grantable policy confirm (before yes/no would drop it).
     if (!opts.lowDetail && answerAlways(heard)) return LOCAL_HANDLED
+    // Agent mode: an answer to its question, "go" / "stop" / "wait" while it runs.
+    if (!opts.lowDetail && interceptAgentUtterance(heard)) return LOCAL_HANDLED
     if (!opts.lowDetail) {
       const u = beforeUtterance(heard)
       if ('handled' in u) return u.handled
@@ -64,6 +66,16 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
 
     const intercepted = deps.intercept(prompt)
     if (intercepted !== undefined) return intercepted
+
+    // One agent task at a time: a new request asks before replacing the running one.
+    if (!opts.lowDetail && agentRunning()) {
+      const replace = await assistant.requestConfirm({
+        summary: 'Stop the current task and start this one?',
+        risk: 'medium'
+      })
+      if (!replace) return LOCAL_HANDLED
+      cancelAll()
+    }
 
     setStatus('thinking', 'Thinking', { index: 2, total: 3 })
     const scope = beginScope()
@@ -104,7 +116,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       if (!cfg.explainBeforeDo && !cfg.showConfidence) return { delayMs: 0 }
       if (!summary || !summary.trim()) return { delayMs: 0 }
       const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
-      if (uiV2() && cfg.explainBeforeDo) {
+      if (cfg.explainBeforeDo) {
         // The bar asks with a countdown; Stop skips the execute that follows.
         await explainBeforeDo(
           summary.trim(),
@@ -113,15 +125,16 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
         )
         return { delayMs: 0 }
       }
+      // showConfidence only: a status line, no delay.
       const baseText = `About to: ${summary.trim()}`
       const displayText =
-        cfg.showConfidence && conf !== 'high'
+        conf !== 'high'
           ? `${conf === 'low' ? '⚠ Low confidence' : '◎ Medium confidence'} — ${baseText}. Say "cancel" to stop.`
           : baseText
       const kind = conf === 'low' ? 'error' : 'acting'
-      const delayMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
-      setStatus(kind, displayText, undefined, delayMs + 1200)
-      return { delayMs: cfg.explainBeforeDo ? delayMs : 0 }
+      const holdMs = conf === 'low' ? 2000 : conf === 'medium' ? 1500 : 1200
+      setStatus(kind, displayText, undefined, holdMs + 1200)
+      return { delayMs: 0 }
     }
   )
 
@@ -132,7 +145,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       ...a,
       bbox: a.bbox ? (normalizeBbox(a.bbox) ?? undefined) : undefined
     })) as Action[]
-    if (uiV2() && assistant.consumeDenied()) {
+    if (assistant.consumeDenied()) {
       log('skip', 'execute skipped: the user stopped it')
       return { done: false, cancelled: true }
     }

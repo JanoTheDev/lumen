@@ -82,6 +82,18 @@ vi.mock('../../src/main/ai', () => ({
     return hooks.reply ?? { mode: 'answer', text: 'Hi', spoken: 'Hi' }
   }
 }))
+const agentTask = vi.hoisted(() => ({ calls: 0 }))
+vi.mock('../../src/main/agent-mode/session', () => ({
+  hasPausedTask: () => false,
+  isResumeRequest: () => false,
+  resumeAgentTask: () => null,
+  // The follow-up continues as an agent task; the user cancels while it runs.
+  runAgentTask: async () => {
+    agentTask.calls++
+    hooks.scope?.cancel()
+    throw new CancelledError()
+  }
+}))
 vi.mock('../../src/main/ai/observe', async (orig) => ({
   ...(await orig<typeof import('../../src/main/ai/observe')>()),
   waitForSettle: async () => ({ reason: 'frames', ms: 0 })
@@ -176,18 +188,16 @@ describe('cancelling a turn (T17)', () => {
     expect(events).toEqual(['cancelled'])
   })
 
-  it('cancelled inside a follow-up chain: no further input, nothing drawn', async () => {
+  it('cancelled inside a follow-up: no further input, nothing drawn', async () => {
     hooks.reply = {
       mode: 'action',
       actions: [{ type: 'hotkey', keys: ['ctrl', 'l'] }],
       follow_up: { query: 'Click the first result', delay_ms: 2000 }
     }
-    // The first reply is the turn's own call; the chain's next call is cancelled.
-    hooks.model = (s) => {
-      if (calls.model > 1) s.cancel()
-    }
+    agentTask.calls = 0
     await runCancelled()
-    expect(calls.model).toBe(2)
+    expect(calls.model).toBe(1)
+    expect(agentTask.calls).toBe(1)
     expect(agentCalls.filter((c) => c === 'execute')).toHaveLength(1)
     expect(ui.highlight.show).not.toHaveBeenCalled()
     expect(speak).not.toHaveBeenCalled()

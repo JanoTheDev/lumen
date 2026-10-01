@@ -329,7 +329,15 @@ export type AssistantCommand = {
     /** Open / close the caption for a correction. */
     | 'edit'
     | 'edit-cancel'
+    /** Agent mode: retry a failed step / skip the countdown / answer an ask_user choice. */
+    | 'retry'
+    | 'go'
+    | 'answer'
   turnId?: string
+  /** retry: the step number (from 1). */
+  step?: number
+  /** answer: the chosen ask_user choice. */
+  text?: string
 }
 
 /** What the assistant bar renders: CONTRACTS C6 state plus display settings from main. */
