@@ -16,18 +16,18 @@ interface StatusMsg {
   step?: { index: number; total: number }
 }
 
-const ACCENT = 'var(--ai-accent, #5b8cff)'
-const ACCENT_MIX = 'color-mix(in srgb, var(--ai-accent, #5b8cff) 22%, transparent)'
+const ACCENT = 'var(--accent)'
+const ACCENT_MIX = 'color-mix(in srgb, var(--accent) 22%, transparent)'
 
 const KIND_STYLE: Record<StatusKind, { dot: string; accent: string }> = {
   idle: { dot: 'rgba(255,255,255,0.25)', accent: 'rgba(255,255,255,0.08)' },
   listening: { dot: ACCENT, accent: ACCENT_MIX },
   transcribing: { dot: ACCENT, accent: ACCENT_MIX },
   thinking: { dot: ACCENT, accent: ACCENT_MIX },
-  acting: { dot: '#facc15', accent: 'rgba(250,204,21,0.22)' },
+  acting: { dot: 'var(--warning)', accent: 'color-mix(in srgb, var(--warning) 22%, transparent)' },
   step: { dot: ACCENT, accent: ACCENT_MIX },
-  answer: { dot: 'var(--ai-success, #4ade80)', accent: 'rgba(74,222,128,0.22)' },
-  error: { dot: 'var(--ai-error, #f87171)', accent: 'rgba(248,113,113,0.22)' }
+  answer: { dot: 'var(--success)', accent: 'color-mix(in srgb, var(--success) 22%, transparent)' },
+  error: { dot: 'var(--danger)', accent: 'color-mix(in srgb, var(--danger) 22%, transparent)' }
 }
 
 export function StatusApp(): JSX.Element {

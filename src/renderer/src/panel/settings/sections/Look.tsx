@@ -1,6 +1,7 @@
 import { ratio } from '../../../theme/contrast'
 import {
   ACCENT_PRESETS,
+  DEFAULT_CUSTOM_COLORS,
   THEME_V1_TO_V2,
   buildPalette,
   type AccentPreset
@@ -19,7 +20,8 @@ const THEMES = [
 type ThemeValue = (typeof THEMES)[number]['value']
 const ACCENT_IDS = Object.keys(ACCENT_PRESETS) as AccentPreset[]
 
-const DEFAULT_CUSTOM = { accent: '#2F6FEB', background: '#111318', foreground: '#ECEEF2' }
+const DEFAULT_CUSTOM: { accent: string; background: string; foreground: string } =
+  DEFAULT_CUSTOM_COLORS
 const HEX = /^#[0-9a-f]{6}$/i
 
 function ColorField({
@@ -36,7 +38,7 @@ function ColorField({
       <input
         type="color"
         aria-label={`${label} picker`}
-        value={HEX.test(value) ? value : '#000000'}
+        value={HEX.test(value) ? value : DEFAULT_CUSTOM_COLORS.accent}
         onChange={(e) => onCommit(e.target.value.toUpperCase())}
       />
       <TextField label={label} value={value} onCommit={onCommit} accept={(v) => HEX.test(v)} mono />

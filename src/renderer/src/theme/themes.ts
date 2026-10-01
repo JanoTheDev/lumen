@@ -94,6 +94,13 @@ export const BASE_THEMES: Record<BaseThemeName, BaseColors> = {
   }
 }
 
+/** Starting point for the Custom theme (the dark theme with the default accent). */
+export const DEFAULT_CUSTOM_COLORS = {
+  accent: '#2F6FEB',
+  background: '#111318',
+  foreground: '#ECEEF2'
+} as const
+
 export interface CustomColors {
   accent?: string
   background?: string
