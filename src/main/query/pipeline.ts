@@ -42,6 +42,7 @@ import { enabledSkill } from '../agent-mode/skill-tools'
 import { matchTrigger } from '../skills'
 import { loadConfig } from '../config'
 import { webTurn } from '../web'
+import { cardsTurn } from '../cards/ask'
 import { log, startTimer } from '../logger'
 
 export interface PipelineDeps {
@@ -279,6 +280,27 @@ async function runTurn(
       await present(result, prompt, deps.onGuide, undefined, scope.signal)
       return result
     }
+  }
+  // Answer cards (05 T40): "the second one", "open the cheapest", "compare them", "cheaper ones".
+  const cards = opts.lowDetail ? null : await cardsTurn(prompt, scope.signal)
+  if (cards) {
+    scope.throwIfCancelled()
+    const result: ModelResponse =
+      'response' in cards
+        ? cards.response
+        : agentModeAvailable()
+          ? await runAgentTask(
+              cards.research,
+              await captureContext(false, { signal: scope.signal }),
+              scope.signal
+            )
+          : { mode: 'answer', text: 'Looking that up needs a model that can use tools.' }
+    scope.throwIfCancelled()
+    speakEarly(result, deps)
+    await present(result, prompt, deps.onGuide, undefined, scope.signal)
+    lastMode = result.mode
+    addToHistory(historyExchange(prompt, result))
+    return result
   }
   // Read the web with me (05 Phase W): "summarize this page", "top news", "open the second one".
   const web = opts.lowDetail ? null : await webTurn(prompt, scope.signal)
