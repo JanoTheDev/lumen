@@ -94,6 +94,11 @@ vi.mock('../../src/main/agent-mode/session', () => ({
     throw new CancelledError()
   }
 }))
+const fallback = vi.hoisted(() => ({ agent: true }))
+vi.mock('../../src/main/query/agent-fallback', async (orig) => ({
+  ...(await orig<typeof import('../../src/main/query/agent-fallback')>()),
+  agentModeAvailable: () => fallback.agent
+}))
 vi.mock('../../src/main/ai/observe', async (orig) => ({
   ...(await orig<typeof import('../../src/main/ai/observe')>()),
   waitForSettle: async () => ({ reason: 'frames', ms: 0 })
@@ -203,6 +208,29 @@ describe('cancelling a turn (T17)', () => {
     expect(speak).not.toHaveBeenCalled()
     expect(historyMessages()).toHaveLength(0)
     expect(events).toEqual(['cancelled'])
+  })
+
+  it('without tool use (local model) a follow-up runs as one plain call (review med)', async () => {
+    fallback.agent = false
+    try {
+      hooks.reply = {
+        mode: 'action',
+        actions: [{ type: 'hotkey', keys: ['ctrl', 'l'] }],
+        follow_up: { query: 'Click the first result', delay_ms: 2000 }
+      }
+      hooks.model = () => {
+        if (calls.model === 2) hooks.reply = { mode: 'answer', text: 'Opened.', spoken: 'Opened.' }
+      }
+      agentTask.calls = 0
+      const scope = new CancelScope()
+      hooks.scope = scope
+      const r = await runQuery('open the first result', {}, scope, { speak, onGuide })
+      expect(agentTask.calls).toBe(0)
+      expect(calls.model).toBe(2)
+      expect(r).toMatchObject({ mode: 'answer', text: expect.stringContaining('one step') })
+    } finally {
+      fallback.agent = true
+    }
   })
 
   it('a failing turn publishes query.failed', async () => {

@@ -9,6 +9,7 @@ import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
 import { isResearchIntent } from './legacy/classifier'
 import { present, type GuideStartFn } from './present'
+import { agentModeAvailable, withNoAgentNote } from './agent-fallback'
 import { mergeSplit, recordSplitHistory, runParallelSplit, type SubResult } from './parallel'
 import {
   describeRoute,
@@ -372,9 +373,14 @@ async function runTurn(
     )
     result = mergeSplit(split)
     timer.split(`parallel split (${split.length}) done`)
-  } else if (plan.path === 'agent') {
+  } else if (plan.path === 'agent' && agentModeAvailable()) {
     result = await runAgentTask(plan.prompt, ctx, scope.signal)
     timer.split('agent task done')
+  } else if (plan.path === 'agent') {
+    log('plan', 'agent path needs tool use; the local model answers in one call')
+    const callOpts = { ...opts, ...plan.routing, context: ctx }
+    result = withNoAgentNote(await callModel(plan.prompt, screenshot, activeWindow, callOpts))
+    timer.split('callModel done (no agent mode)')
   } else {
     const callOpts = { ...opts, ...plan.routing, context: ctx }
     result = await callModel(plan.prompt, screenshot, activeWindow, callOpts)
@@ -507,7 +513,25 @@ async function continueAfter(
     })
     return { response: r.mode === 'locate' ? r : done, ctx: now }
   }
-  log('plan', `follow-up continues as an agent task (${next.length} chars)`)
   const task = `${prompt} (Already done: ${first.summary ?? 'the first step'}. Next: ${next})`
+  if (!agentModeAvailable()) {
+    // One more plain call on the loaded page; its reply is not chained further.
+    log('plan', `follow-up in one call: no agent mode on this model (${next.length} chars)`)
+    const r = await callModel(task, now.screenshot, now.activeWindow, {
+      ...opts,
+      context: now,
+      lowDetail: true,
+      turnId: undefined,
+      history: false
+    })
+    return {
+      response: withNoAgentNote({
+        ...r,
+        ...(r.mode === 'action' ? { follow_up: undefined } : {})
+      } as ModelResponse),
+      ctx: now
+    }
+  }
+  log('plan', `follow-up continues as an agent task (${next.length} chars)`)
   return { response: await runAgentTask(task, now, scope.signal, { skipPlan: true }), ctx: now }
 }
