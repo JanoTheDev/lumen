@@ -92,11 +92,28 @@ const joinDots = (s: string): string =>
     .replace(/^w\s?w\s?w\./i, 'www.')
     .toLowerCase()
 
+/**
+ * Words that put "at" in a sentence, not in an address: "find us at lumen dot app" is a
+ * place to visit, not the mailbox "us". An address with one of them before "at" stays words.
+ */
+const PROSE_BEFORE_AT = new Set(
+  (
+    'us me you him her them it we they everyone anyone someone out in on up off back home ' +
+    'work school here there now today tonight tomorrow online live available look looking ' +
+    'meet see find reach call contact visit stay arrive arrived be is are was were all one'
+  ).split(' ')
+)
+
+const proseLocal = (user: string): boolean =>
+  user
+    .toLowerCase()
+    .split(/\s+dot\s+/)
+    .some((w) => PROSE_BEFORE_AT.has(w))
+
 export function formatAddresses(text: string): string {
   return text
-    .replace(
-      EMAIL_RE,
-      (_m, user: string, domain: string) => `${joinDots(user)}@${joinDots(domain)}`
+    .replace(EMAIL_RE, (m: string, user: string, domain: string) =>
+      proseLocal(user) ? m : `${joinDots(user)}@${joinDots(domain)}`
     )
     .replace(URL_RE, (m: string) => joinDots(m))
 }
@@ -195,6 +212,10 @@ const DROPPED_PHRASES =
 /** The tokens formatting must keep: words, with numbers as digits and spoken syntax removed. */
 export function canonicalTokens(text: string): string[] {
   const t = text
+    // "us@lumen.app" from "us at lumen dot app" is a changed sentence, not an address.
+    .replace(/([\p{L}\p{N}]+)@/gu, (m: string, w: string) =>
+      PROSE_BEFORE_AT.has(w.toLowerCase()) ? `${w} atsign ` : m
+    )
     .replace(DROPPED_PHRASES, ' ')
     .replace(/\bw\s?w\s?w\b/gi, 'www')
     .replace(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)ly\b/gi, '$1')

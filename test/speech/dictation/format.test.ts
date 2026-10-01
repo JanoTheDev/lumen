@@ -42,6 +42,23 @@ describe('formatAddresses', () => {
     expect(formatAddresses('Go to lumen dot app slash docs.')).toBe('Go to lumen.app/docs.')
     expect(formatAddresses('back in the dot com days')).toBe('back in the dot com days')
   })
+
+  it('keeps "at" as a word after ordinary prose words (M4)', () => {
+    expect(formatAddresses('check it out at example dot com')).toBe('check it out at example.com')
+    expect(formatAddresses('find us at lumen dot app')).toBe('find us at lumen.app')
+    expect(formatAddresses('reach me at work dot com')).toBe('reach me at work.com')
+    expect(formatAddresses('write to support at lumen dot app')).toBe('write to support@lumen.app')
+  })
+
+  it('rejects a formatting that glued a prose word onto an address (M4)', () => {
+    expect(canonicalTokens('visit us@lumen.app')).not.toEqual(
+      canonicalTokens('visit us at lumen dot app')
+    )
+    expect(canonicalTokens('ann@lumen.app')).toEqual(canonicalTokens('ann at lumen dot app'))
+    expect(formatDictation('Visit us at lumen dot app.', { kind: 'rich' })).toBe(
+      'Visit us at lumen.app.'
+    )
+  })
 })
 
 describe('formatLists', () => {
