@@ -1,0 +1,34 @@
+{
+  "yes": [
+    "yes",
+    "yeah",
+    "yep",
+    "yup",
+    "sure",
+    "ok",
+    "okay",
+    "confirm",
+    "do it",
+    "go ahead",
+    "yes please",
+    "please do",
+    "continue"
+  ],
+  "no": ["no", "nope", "nah", "deny", "no thanks", "dont", "do not", "dont do it"],
+  "always": ["always", "always allow", "allow always", "yes always", "always yes"],
+  "stop": [
+    "stop",
+    "stop it",
+    "stop that",
+    "cancel",
+    "cancel that",
+    "abort",
+    "never mind",
+    "nevermind",
+    "forget it",
+    "wait stop"
+  ],
+  "next": ["next", "next step", "continue"],
+  "back": ["back", "go back", "previous", "previous step"],
+  "repeat": ["repeat", "say that again", "again"]
+}

@@ -1,0 +1,21 @@
+{
+  "yes": [
+    "si",
+    "sì",
+    "certo",
+    "va bene",
+    "conferma",
+    "confermo",
+    "procedi",
+    "fallo",
+    "si grazie",
+    "ok",
+    "okay"
+  ],
+  "no": ["no", "no grazie", "non farlo", "nega"],
+  "always": ["sempre", "consenti sempre", "si sempre"],
+  "stop": ["stop", "fermati", "ferma", "basta", "annulla", "lascia perdere"],
+  "next": ["avanti", "prossimo", "passo successivo", "successivo", "continua"],
+  "back": ["indietro", "precedente", "passo precedente", "torna indietro"],
+  "repeat": ["ripeti", "ripetere", "di nuovo", "ancora"]
+}

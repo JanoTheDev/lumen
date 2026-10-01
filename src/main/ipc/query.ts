@@ -24,6 +24,7 @@ import { beforeUtterance, confirmActions, explainBeforeDo } from '../a11y/transc
 import { actionRisk, needsTranscriptConfirm } from '../a11y/captions'
 import { LOCAL_HANDLED } from '../a11y/dispatch'
 import { answerAlways, lastUserRequest } from '../agent-mode/confirm'
+import { prepareVoiceText } from '../speech/router-hook'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
 
@@ -46,9 +47,11 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
   })
 
   ipcMain.handle('assistant:query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
-    const heard = safeParse('assistant:query', promptSchema, rawPrompt)
+    const said = safeParse('assistant:query', promptSchema, rawPrompt)
     const opts: CallOptions = safeParse('assistant:query', queryOptsSchema, rawOpts) ?? {}
-    if (heard === undefined) return INVALID
+    if (said === undefined) return INVALID
+    // Short answers in the voice language, "stop, …" while acting (speech/router-hook).
+    const heard = opts.lowDetail ? said : prepareVoiceText(said)
     // The user's own words (follow-ups are lowDetail): caption, confirm answers, corrections.
     let prompt = heard
     // "always" answers a grantable policy confirm (before yes/no would drop it).

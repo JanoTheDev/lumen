@@ -1,0 +1,22 @@
+{
+  "yes": [
+    "ja",
+    "jazeker",
+    "zeker",
+    "prima",
+    "oké",
+    "oke",
+    "ok",
+    "okay",
+    "bevestig",
+    "doe maar",
+    "ga je gang",
+    "ja graag"
+  ],
+  "no": ["nee", "nee dank je", "niet doen", "weigeren"],
+  "always": ["altijd", "altijd toestaan", "ja altijd"],
+  "stop": ["stop", "stoppen", "annuleer", "annuleren", "laat maar", "hou op"],
+  "next": ["volgende", "volgende stap", "verder", "ga door"],
+  "back": ["terug", "vorige", "vorige stap", "ga terug"],
+  "repeat": ["herhaal", "herhalen", "nog een keer", "opnieuw"]
+}

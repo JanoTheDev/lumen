@@ -30,6 +30,10 @@ export const THEME_NAMES = [
   'custom'
 ] as const
 
+/** Voice languages with a confirm/stop lexicon (src/main/speech/lexicon); auto = detect. */
+export const VOICE_LANGUAGES = ['auto', 'en', 'es', 'de', 'fr', 'it', 'pt', 'nl'] as const
+export type VoiceLanguage = (typeof VOICE_LANGUAGES)[number]
+
 export const ACCENT_IDS = ['blue', 'teal', 'green', 'orange', 'pink', 'violet', 'yellow'] as const
 
 export const configV1Schema = z.object({
@@ -278,7 +282,11 @@ export const configV2Schema = z.object({
     /** Speak answers even while a screen reader runs (off: answers go to the screen reader). */
     ttsWithScreenReader: z.boolean().default(false),
     /** Microphone deviceId from enumerateDevices; '' = the system default. */
-    micDeviceId: z.string().max(200).optional()
+    micDeviceId: z.string().max(200).optional(),
+    /** Spoken language: STT language, reply language and lexicons; auto = detect (cloud only). */
+    language: z.enum(VOICE_LANGUAGES).default('en'),
+    /** Double-tapping the assistant hotkey starts a conversation: every utterance is a query. */
+    conversation: z.boolean().default(true)
   }),
   a11y: z.object({
     announce: z.enum(['auto', 'off']),
@@ -398,7 +406,9 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     bargeIn: false,
     copyWhenMuted: false,
     ttsWithScreenReader: false,
-    micDeviceId: ''
+    micDeviceId: '',
+    language: 'en',
+    conversation: true
   },
   a11y: {
     announce: 'auto',
