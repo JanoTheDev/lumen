@@ -509,6 +509,8 @@ export const configV2Schema = z.object({
     localModel: modelId.optional(),
     /** Never call a cloud model: cloud keys are set aside while on. */
     localOnly: z.boolean().optional(),
+    /** Local only may also use a localUrl on the home network (else this PC only). */
+    localLan: z.boolean().optional(),
     /** The user read the Gemini free-tier privacy note (data use, human review, 18+). */
     geminiAck: z.boolean().optional(),
     /** The Gemini key has billing on: calls count at the paid rates, not as free tier. */

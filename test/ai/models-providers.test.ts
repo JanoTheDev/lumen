@@ -4,7 +4,12 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { activeProvider, modelLabel, providerReady, resolveRole } from '../../src/main/ai/models'
 import { setLocalServer, type LocalServer } from '../../src/main/ai/providers/local'
-import { getProvider, hasAnyModel, hasVisionModel } from '../../src/main/ai/providers'
+import {
+  getProvider,
+  hasAnyModel,
+  hasVisionModel,
+  refreshLocalModels
+} from '../../src/main/ai/providers'
 import { setConfigDir, saveConfig } from '../../src/main/config'
 
 let dir: string
@@ -191,5 +196,34 @@ describe('local only', () => {
     setLocalServer(server())
     expect(resolveRole('main')).toMatchObject({ provider: 'local', model: 'qwen3.5:9b' })
     expect(resolveRole('fast').provider).toBe('local')
+  })
+
+  it('uses a server off this PC only with the LAN opt-in, and never a public one', async () => {
+    keys({})
+    saveConfig({ models: { localOnly: true, localUrl: 'http://10.0.0.5:11434' } })
+    setLocalServer(server({ baseUrl: 'http://10.0.0.5:11434' }))
+    expect(providerReady('local')).toBe(false)
+    expect(() => activeProvider()).toThrow(/Local only/)
+    saveConfig({ models: { localOnly: true, localLan: true, localUrl: 'http://10.0.0.5:11434' } })
+    expect(providerReady('local')).toBe(true)
+    setLocalServer(server({ baseUrl: 'http://203.0.113.9:11434' }))
+    expect(providerReady('local')).toBe(false)
+    // Not cut off without Local only.
+    saveConfig({ models: { localOnly: false } })
+    expect(providerReady('local')).toBe(true)
+  })
+
+  it('Local only does not probe a configured server off this PC', async () => {
+    keys({})
+    saveConfig({ models: { localOnly: true, localUrl: 'http://10.0.0.5:11434' } })
+    const fetchSpy = vi.fn(async () => {
+      throw new Error('offline')
+    })
+    vi.stubGlobal('fetch', fetchSpy)
+    await refreshLocalModels(true)
+    const urls = fetchSpy.mock.calls.map((c) => String((c as unknown[])[0]))
+    expect(urls.length).toBeGreaterThan(0)
+    expect(urls.some((u) => u.includes('10.0.0.5'))).toBe(false)
+    vi.unstubAllGlobals()
   })
 })

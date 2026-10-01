@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ModelRoleId, ModelsCatalog } from '@shared/channels'
 import { MODEL_ID_RE, type ModelProvider } from '@shared/config'
+import { isLoopbackUrl } from '@shared/local-url'
 import { Button, Card, Select, Switch, TextField, icons } from '../../../ui'
 import { invoke } from '../../../lib/ipc'
 import type { SectionProps } from '../meta'
@@ -121,12 +122,16 @@ function CompatibleModel({
 
 function LocalCard({
   catalog,
-  reload
+  reload,
+  cfg,
+  patch
 }: {
   catalog: ModelsCatalog
   reload: (refresh?: boolean) => void
-}): JSX.Element {
+} & SectionProps): JSX.Element {
   const p = catalog.providers.find((x) => x.id === 'local')
+  const url = cfg.models.localUrl
+  const offPc = !!url && !isLoopbackUrl(url)
   return (
     <Card
       title="On this PC"
@@ -149,6 +154,14 @@ function LocalCard({
         </>
       ) : (
         <p className="ui-hint">No Ollama or LM Studio running right now.</p>
+      )}
+      {offPc && (
+        <Switch
+          checked={cfg.models.localLan === true}
+          onChange={(on) => void patch({ models: { localLan: on } })}
+          label="Count my network server as local"
+          hint={`${url} is not on this PC. Local only uses it only with this on, and only at a home-network address; requests then travel over your network${url.startsWith('https:') ? '' : ' unencrypted'}.`}
+        />
       )}
       <div className="panel-row">
         <Button variant="quiet" icon={icons.repeat} onClick={() => reload(true)}>
@@ -218,7 +231,7 @@ export function Models({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       {catalog && <CompatibleModel catalog={catalog} cfg={cfg} patch={patch} />}
-      {catalog && <LocalCard catalog={catalog} reload={reload} />}
+      {catalog && <LocalCard catalog={catalog} reload={reload} cfg={cfg} patch={patch} />}
 
       <Card
         title="Models per job"

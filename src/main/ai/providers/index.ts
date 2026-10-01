@@ -2,6 +2,7 @@
 // app's lifetime. Every call's usage is reported to the usage listener, and every message
 // (user turn, history, tool results) has its secrets redacted before it leaves the app.
 import { redactForModel } from '../../actions/redact'
+import { localUrlAllowed } from '@shared/local-url'
 import { loadConfig } from '../../config'
 import { markFreeModel } from '../pricing'
 import {
@@ -79,7 +80,13 @@ function wantsLocal(): boolean {
 export function refreshLocalModels(force = false): Promise<LocalServer | null> {
   const m = loadConfig().models
   if (!force && !wantsLocal()) return Promise.resolve(localServer())
-  return refreshLocal({ url: m.localUrl || undefined, model: m.localModel || undefined, force })
+  // Local only never probes a configured server off this PC (unless the LAN opt-in allows it):
+  // the default Ollama / LM Studio addresses on this PC are tried instead.
+  const url =
+    m.localUrl && (!m.localOnly || localUrlAllowed(m.localUrl, m.localLan === true))
+      ? m.localUrl
+      : undefined
+  return refreshLocal({ url, model: m.localModel || undefined, force })
 }
 
 function create(id: ProviderId): LlmProvider {

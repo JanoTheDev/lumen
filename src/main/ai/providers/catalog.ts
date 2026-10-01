@@ -35,7 +35,10 @@ function cloudModel(id: string, free = false): CatalogModel {
 function notReady(p: ModelProvider): string | undefined {
   if (providerReady(p)) return undefined
   if (p !== 'local' && isLocalOnly()) return 'Off while Local only is on.'
-  if (p === 'local') return 'No Ollama or LM Studio running.'
+  if (p === 'local')
+    return localServer()
+      ? 'The server is not on this PC: Local only skips it unless the network server switch is on.'
+      : 'No Ollama or LM Studio running.'
   if (p === 'gemini' && process.env[GEMINI_ENV] && !geminiAcked())
     return 'Read the free-tier note first.'
   if (p === 'compatible') {

@@ -3,6 +3,7 @@
 // (config.models.roles); older per-role model ids (models.main / fast / planning / verify) still
 // apply when their provider is usable. Without a key, a running local server (Ollama / LM
 // Studio, detected) serves every role. "Local only" never resolves to a cloud provider.
+import { localUrlAllowed } from '@shared/local-url'
 import { loadConfig } from '../config'
 import { compatibleReady, compatibleSettings, COMPATIBLE_ENV } from './providers/compatible'
 import { GEMINI_ENV } from './providers/gemini'
@@ -81,9 +82,20 @@ export function geminiAcked(): boolean {
   return loadConfig().models.geminiAck === true
 }
 
+/**
+ * A local server was found and may be used: with Local only on it must be on this PC, or on
+ * the home network when models.localLan is on.
+ */
+function localUsable(): boolean {
+  const server = localServer()
+  if (!server) return false
+  if (!isLocalOnly()) return true
+  return localUrlAllowed(server.baseUrl, loadConfig().models.localLan === true)
+}
+
 /** The provider can take calls now: a key (or a running local server), and not cut off by Local only. */
 export function providerReady(p: ProviderId): boolean {
-  if (p === 'local') return !!localServer()
+  if (p === 'local') return localUsable()
   if (isLocalOnly()) return false
   if (p === 'anthropic') return !!process.env.ANTHROPIC_API_KEY
   if (p === 'openai') return !!process.env.OPENAI_API_KEY
@@ -106,7 +118,7 @@ export function providerOfModel(model: string): DefaultsProvider | null {
  */
 export function activeProvider(): ProviderId {
   if (isLocalOnly()) {
-    if (localServer()) return 'local'
+    if (localUsable()) return 'local'
     throw new Error('Local only is on, but no local model is running. Start Ollama or LM Studio.')
   }
   const preferred = loadConfig().models.provider
