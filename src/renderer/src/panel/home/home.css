@@ -239,3 +239,123 @@
   flex: 1;
   min-width: 0;
 }
+
+/* Notes, dictation history and stats (04 T44-T46) */
+.home-notes {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.home-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.home-note__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+
+button.home-note__body {
+  transition: background-color var(--dur-fast) var(--ease-in-out);
+}
+
+button.home-note__body:hover {
+  background: var(--accent-soft);
+}
+
+.home-note__text {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.home-note__heard {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-note__meta,
+.home-empty {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.home-note__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.home-note__edit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.home-note__edit textarea {
+  resize: vertical;
+  min-height: 4rem;
+}
+
+.home-details > summary {
+  cursor: pointer;
+  list-style-position: inside;
+  color: var(--fg-muted);
+}
+
+.home-details > summary .home-label {
+  display: inline;
+}
+
+.home-details__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.home-stats__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+}
+
+.home-stats__tile dt {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.home-stats__tile dd {
+  font-weight: var(--weight-strong);
+}

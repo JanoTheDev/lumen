@@ -8,6 +8,10 @@ import { invoke, send, useIpc } from '../../lib/ipc'
 import { useConfig } from '../settings/useConfig'
 import { DEFAULT_SUGGESTIONS, moveIndex } from './suggestions'
 import { Tasks } from './Tasks'
+import { Notes } from './Notes'
+import { DictationHistory } from './DictationHistory'
+import { DictationStats } from './DictationStats'
+import { useDictationStats } from './use-dictation-stats'
 
 function useHomeInfo(): [HomeInfo | null, () => void] {
   const [info, setInfo] = useState<HomeInfo | null>(null)
@@ -82,6 +86,7 @@ export function Home(): JSX.Element {
   const [learning, refreshLesson] = useLearning()
   const learn = learnItems(learning)
   const { cfg, patch } = useConfig()
+  const [stats, refreshStats] = useDictationStats()
   const [ask, setAsk] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const askRef = useRef<HTMLInputElement>(null)
@@ -167,6 +172,10 @@ export function Home(): JSX.Element {
 
       <Tasks />
 
+      {cfg?.dictation.showStats && stats && <DictationStats stats={stats} refresh={refreshStats} />}
+
+      <Notes />
+
       <section className="home-section" aria-labelledby="home-try">
         <h2 id="home-try" className="home-label">
           Try
@@ -248,6 +257,8 @@ export function Home(): JSX.Element {
         </section>
       )}
 
+      <DictationHistory onEnabled={(history) => patch({ dictation: { history } })} />
+
       {cfg && (
         <section className="home-section home-toggles" aria-label="Quick settings">
           <Switch
@@ -264,6 +275,14 @@ export function Home(): JSX.Element {
             checked={cfg.buddy.enabled}
             onChange={(enabled) => patch({ buddy: { enabled } })}
             label="Pointing buddy"
+          />
+          <Switch
+            checked={cfg.dictation.showStats === true}
+            onChange={(showStats) => {
+              patch({ dictation: { showStats } })
+              if (showStats) refreshStats()
+            }}
+            label="Dictation stats"
           />
         </section>
       )}
