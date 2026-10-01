@@ -5,17 +5,21 @@ import { loadSherpa } from '../speech/sherpa'
 import { applyWakeState, wakeStatus } from '../speech/wake'
 import { installKwsModel } from '../speech/wake/kws-model'
 
-// The wake model is the keyword spotter's; the Vosk model only where the native engine is missing.
+/** The wake model is the keyword spotter's; the Vosk model only where the native engine is missing. */
+export async function installWakeModel(): Promise<void> {
+  if (loadSherpa()) {
+    await installKwsModel()
+    applyWakeState(loadConfig())
+  } else {
+    await installModel()
+  }
+}
+
 export function registerWakeIpc(): void {
   ipcMain.handle('wake:model-status', () => wakeStatus())
   ipcMain.handle('wake:model-install', async () => {
     try {
-      if (loadSherpa()) {
-        await installKwsModel()
-        applyWakeState(loadConfig())
-      } else {
-        await installModel()
-      }
+      await installWakeModel()
       return { ok: true }
     } catch (e) {
       return { ok: false, error: (e as Error).message }

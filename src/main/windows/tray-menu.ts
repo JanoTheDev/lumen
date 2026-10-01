@@ -13,6 +13,8 @@ export type TrayAction =
   | 'lessons'
   | 'settings'
   | 'onboarding'
+  | 'logs'
+  | 'diagnostics'
   | 'quit'
   | `guide:${string}`
 
@@ -86,7 +88,15 @@ export function trayMenu(i: TrayInput): TrayItem[] {
     },
     { type: 'separator' },
     { label: 'Settings', action: 'settings' },
-    { label: 'Help and setup', action: 'onboarding' },
+    {
+      label: 'Help and setup',
+      submenu: [
+        { label: 'Setup and tour', action: 'onboarding' },
+        { type: 'separator' },
+        { label: 'Open logs folder', action: 'logs' },
+        { label: 'Export diagnostics…', action: 'diagnostics' }
+      ]
+    },
     { type: 'separator' },
     { label: 'Quit Lumen', action: 'quit' }
   ]

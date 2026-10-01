@@ -355,6 +355,8 @@ export const configV2Schema = z.object({
   }),
   /** First-run setup finished (or skipped). */
   onboarding: z.object({ done: z.boolean() }),
+  /** Windows integration: start Lumen when the user signs in (ignored in the portable build). */
+  system: z.object({ startAtLogin: z.boolean() }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -434,7 +436,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     dictionary: []
   },
   ui: { v2: false, homeHotkey: 'Ctrl+Shift+H' },
-  onboarding: { done: false }
+  onboarding: { done: false },
+  system: { startAtLogin: false }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -519,7 +522,8 @@ const patchObject = z
     ai: s2.ai.partial().strict(),
     dictation: s2.dictation.partial().strict(),
     ui: s2.ui.partial().strict(),
-    onboarding: s2.onboarding.partial().strict()
+    onboarding: s2.onboarding.partial().strict(),
+    system: s2.system.partial().strict()
   })
   .partial()
   .strict()

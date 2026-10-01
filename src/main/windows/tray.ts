@@ -29,6 +29,8 @@ import {
   type TrayInput,
   type TrayItem
 } from './tray-menu'
+import { exportDiagnostics } from '../diagnostics/export'
+import { openLogsFolder } from '../diagnostics/ipc'
 import * as home from './home'
 import * as settings from './settings'
 
@@ -132,6 +134,12 @@ function run(action: TrayAction): void {
       break
     case 'onboarding':
       settings.create('onboarding')
+      break
+    case 'logs':
+      void openLogsFolder()
+      break
+    case 'diagnostics':
+      void exportDiagnostics()
       break
     case 'quit':
       app.quit()

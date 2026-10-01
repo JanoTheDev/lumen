@@ -47,6 +47,16 @@ export interface InvokeChannels {
   'keys:set': { args: [req: { provider: KeyProvider; key: string }]; result: KeySetResult }
   'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
   'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
+  /** First-run checks (keys, mic, agent, hotkey, OCR, wake model, elevation); cheap, no agent calls. */
+  'firstrun:list': { args: []; result: FirstRunCheck[] }
+  /** Runs one check for real (hotkey waits up to 20 s for a press). */
+  'firstrun:run': { args: [id: FirstRunCheckId]; result: FirstRunCheck }
+  'firstrun:fix': { args: [id: FirstRunCheckId]; result: { ok: boolean; error?: string } }
+  'firstrun:complete': { args: []; result: { ok: boolean } }
+  /** Zips logs, crash dumps, redacted config and versions to a file the user picks. */
+  'diag:export': { args: []; result: { ok: boolean; path?: string; error?: string } }
+  'diag:open-logs': { args: []; result: { ok: boolean } }
+  'diag:info': { args: []; result: AppBuildInfo }
   'home:info': { args: []; result: HomeInfo }
   /** "What can I say": every local voice command, with what applies right now first. */
   'a11y:commands': { args: []; result: CommandSheetData }
@@ -353,6 +363,34 @@ export interface OnboardingInfo {
   screenReader: boolean
 }
 
+export type FirstRunCheckId =
+  | 'keys'
+  | 'microphone'
+  | 'agent'
+  | 'hotkey'
+  | 'ocr'
+  | 'wake-model'
+  | 'elevation'
+
+export interface FirstRunCheck {
+  id: FirstRunCheckId
+  /** `pending`: not run yet (needs firstrun:run). */
+  status: 'ok' | 'warn' | 'fail' | 'pending'
+  message: string
+  /** Button label when firstrun:fix can help (opens a Settings page, downloads a model). */
+  fixAction?: string
+}
+
+/** Build facts for About and diagnostics. */
+export interface AppBuildInfo {
+  version: string
+  electron: string
+  packaged: boolean
+  /** Running from the portable exe: no updates, no start at login. */
+  portable: boolean
+  logsDir: string
+}
+
 /** The running OS agent: the Rust sidecar or the Python fallback. */
 export interface AgentImplInfo {
   impl: 'native' | 'python' | null
@@ -508,6 +546,13 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'keys:set',
   'keys:clear',
   'keys:test',
+  'firstrun:list',
+  'firstrun:run',
+  'firstrun:fix',
+  'firstrun:complete',
+  'diag:export',
+  'diag:open-logs',
+  'diag:info',
   'home:info',
   'a11y:commands',
   'a11y:dwell-state',

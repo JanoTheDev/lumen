@@ -66,6 +66,17 @@ import { installTeach } from './teach'
 import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
 import { registerKeysIpc } from './keys/ipc'
+import { installLogFile } from './diagnostics/log-file'
+import { installCrashHandlers, startCrashReporter } from './diagnostics/crash'
+import { registerDiagnosticsIpc } from './diagnostics/ipc'
+import { registerFirstRunIpc } from './first-run/ipc'
+import { applyAutostart, startedHidden } from './first-run/autostart'
+import { onConfigPatched } from './ipc/settings'
+
+// Installed builds have no console: keep a log file, local crash dumps, and survive stray errors.
+installLogFile(app.getPath('logs'))
+startCrashReporter()
+installCrashHandlers()
 
 // No Lumen window may open popups or navigate away from its own renderer.
 function hardenWebContents(): void {
@@ -98,7 +109,7 @@ function createWindows(): void {
   tray.create()
   applyUiScaleOnLoad(loadConfig().a11y.uiScale)
   // First run, or setup never finished: open the setup flow.
-  if (!loadConfig().onboarding.done) settingsWin.create('onboarding')
+  if (!loadConfig().onboarding.done && !startedHidden()) settingsWin.create('onboarding')
 }
 
 function registerIpc(): void {
@@ -113,6 +124,8 @@ function registerIpc(): void {
   registerUsageIpc()
   registerAgentIpc()
   registerKeysIpc()
+  registerFirstRunIpc()
+  registerDiagnosticsIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
     cancel: () => {
@@ -138,6 +151,8 @@ app.whenReady().then(() => {
   // Pasted keys (DPAPI vault) fill in for anything .env did not set.
   loadVault()
   createWindows()
+  applyAutostart(loadConfig().system.startAtLogin)
+  onConfigPatched((next) => applyAutostart(next.system.startAtLogin))
 
   const configWarning = lastConfigWarning()
   if (configWarning) setStatus('error', configWarning, undefined, 8000)
