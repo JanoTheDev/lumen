@@ -96,21 +96,24 @@ export function KeyStep({
   return (
     <div className="ob-stack">
       <p className="ob-lead">
-        Lumen is free. To understand your screen it uses an AI service with your own key, so you pay
-        that service directly, usually a few cents a day. One key is enough.
+        Lumen is free. To understand your screen it uses an AI service with your own key: Anthropic
+        or OpenAI (you pay them directly, usually a few cents a day), Google Gemini’s free tier, or
+        another OpenAI-compatible service. One key is enough.
       </p>
       <KeyForm
         onReady={setHasKey}
+        compatible={cfg.models.compatible}
+        geminiAck={cfg.models.geminiAck}
         onSaved={() => {
           if (local) void patch({ models: { provider: 'auto' } })
         }}
       />
 
-      <details className="ob-details">
-        <summary>No key? Use a free model on this PC</summary>
+      <details className="ob-details" open={local}>
+        <summary>No key? Use a free model on this PC (Ollama, LM Studio)</summary>
         <p>
-          If you run Ollama or LM Studio with a vision model, Lumen can use it instead. It’s free
-          and private but slower and less accurate. This is experimental.
+          If you run Ollama or LM Studio, Lumen finds it on its own and uses its best model (one
+          that can see images, if you have one). It’s free and private but slower and less accurate.
         </p>
         <div className="panel-row">
           <Button

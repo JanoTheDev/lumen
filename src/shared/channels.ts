@@ -9,7 +9,7 @@ import type {
   ClaudeSessionView,
   ClaudeSettingsPatch
 } from './claude-code'
-import type { ConfigPatch } from './config'
+import type { CompatiblePreset, ConfigPatch, ModelProvider } from './config'
 import type {
   ConnectorInput,
   ConnectorResult,
@@ -288,6 +288,8 @@ export interface InvokeChannels {
   'keys:set': { args: [req: { provider: KeyProvider; key: string }]; result: KeySetResult }
   'keys:clear': { args: [provider: KeyProvider]; result: { ok: boolean } }
   'keys:test': { args: [provider: KeyProvider]; result: { ok: boolean; error?: string } }
+  /** Providers, their models and the model each role uses (Settings → Models & keys). */
+  'models:catalog': { args: [opts?: { refresh?: boolean }]; result: ModelsCatalog }
   /** First-run checks (keys, mic, agent, hotkey, OCR, wake model, elevation); cheap, no agent calls. */
   'firstrun:list': { args: []; result: FirstRunCheck[] }
   /** Runs one check for real (hotkey waits up to 20 s for a press). */
@@ -649,7 +651,7 @@ export interface SttStatus {
   modelSizeMb: number
 }
 
-export type KeyProvider = 'anthropic' | 'openai'
+export type KeyProvider = 'anthropic' | 'openai' | 'gemini' | 'compatible'
 
 /** Never carries the key itself, only where it came from and its last 4 characters. */
 export interface KeyStatus {
@@ -657,6 +659,43 @@ export interface KeyStatus {
   set: boolean
   source?: 'env' | 'vault'
   last4?: string
+  /** Set aside while "Local only" is on. */
+  paused?: boolean
+}
+
+export type ModelRoleId = 'main' | 'fast' | 'planning' | 'vision'
+
+export interface CatalogModel {
+  id: string
+  label: string
+  vision: boolean
+  /** Can drive agent mode (tool calls). */
+  tools: boolean
+  /** Has a known price; free models are priced at $0. */
+  priced: boolean
+}
+
+export interface CatalogProvider {
+  id: ModelProvider
+  label: string
+  /** Has a key / a running server / a model, so roles can use it. */
+  ready: boolean
+  /** Why it is not ready, or a short fact (free tier, rate limits). */
+  note?: string
+  /** Calls cost nothing (local, Gemini free tier). */
+  free: boolean
+  models: CatalogModel[]
+}
+
+export interface ModelsCatalog {
+  providers: CatalogProvider[]
+  /** The detected local server, if any. */
+  local: { kind: 'ollama' | 'lmstudio' | 'custom'; baseUrl: string } | null
+  /** The OpenAI-compatible service's preset and base URL in use. */
+  compatible: { preset: CompatiblePreset; baseUrl: string } | null
+  /** What each role resolves to right now, or null when nothing can serve it. */
+  roles: Record<ModelRoleId, { provider: ModelProvider; model: string } | null>
+  localOnly: boolean
 }
 
 export interface KeySetResult {
@@ -763,7 +802,7 @@ export interface UsageOverview {
   estimatePerDay: number
   /** estimatePerDay x 30. */
   estimatePerMonth: number
-  /** Some calls this session used a model without a known price (counted at the Sonnet rate). */
+  /** Some calls this session used a model without a known price (not in the totals). */
   estimated: boolean
 }
 
@@ -1199,6 +1238,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'keys:set',
   'keys:clear',
   'keys:test',
+  'models:catalog',
   'firstrun:list',
   'firstrun:run',
   'firstrun:fix',

@@ -36,7 +36,7 @@ export function costView(u: UsageOverview, now = new Date()): CostView {
     today: `Today ${usd(u.today.usd)} (${calls(u.today.calls)}), since Lumen started ${usd(u.sessionUsd)}.`,
     recent,
     note: u.estimated
-      ? 'Some models have no known price; they are counted at a mid-range rate.'
+      ? 'Some models have no known price, so they are left out of this estimate.'
       : undefined
   }
 }

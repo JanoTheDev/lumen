@@ -5,9 +5,9 @@ import { INVALID, safeParse } from '../ipc/validate'
 import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
 import { ocr, systemInfo } from '../agent/commands'
-import { KEY_PROVIDERS, hasKey } from '../keys/vault'
+import { KEY_PROVIDERS, hasKey, setLocalOnly } from '../keys/vault'
 import { installWakeModel } from '../ipc/wake'
-import { patchConfig } from '../ipc/settings'
+import { onConfigPatched, patchConfig } from '../ipc/settings'
 import { captureNextHotkey } from '../speech/hotkey'
 import { wakeStatus } from '../speech/wake'
 import { CHECK_IDS, fixCheck, listChecks, runCheck, type CheckProbes } from './checks'
@@ -42,7 +42,10 @@ export function resetElevatedCache(): void {
 
 const probes: CheckProbes = {
   keyProviders: () => KEY_PROVIDERS.filter((p) => hasKey(p)),
-  localMode: () => loadConfig().models.provider === 'local',
+  localMode: () => {
+    const m = loadConfig().models
+    return m.provider === 'local' || m.localOnly === true
+  },
   micAccess: () =>
     process.platform === 'win32' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted',
   agent: () => {
@@ -82,6 +85,12 @@ const probes: CheckProbes = {
 }
 
 export function registerFirstRunIpc(): void {
+  // Local only (Settings → Models & keys) sets cloud keys aside the moment it is switched, before
+  // any next turn (speech included) reads a key. Here because this module already listens to config.
+  onConfigPatched((next, prev) => {
+    if (next.models.localOnly !== prev.models.localOnly)
+      setLocalOnly(next.models.localOnly === true)
+  })
   ipcMain.handle('firstrun:list', () => listChecks(probes))
   ipcMain.handle('firstrun:run', (_e, raw: unknown) => {
     const id = safeParse('firstrun:run', idSchema, raw)

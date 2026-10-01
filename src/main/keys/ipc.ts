@@ -1,10 +1,12 @@
-// keys:* channels. The renderer only ever sees where a key came from and its last 4 characters.
+// keys:* and models:catalog channels. The renderer only ever sees where a key came from and its
+// last 4 characters.
 import { ipcMain } from 'electron'
 import { z } from 'zod'
+import { buildCatalog } from '../ai/providers/catalog'
 import { INVALID, safeParse } from '../ipc/validate'
 import { clearKey, keyStatus, setKey, testKey } from './vault'
 
-const providerSchema = z.enum(['anthropic', 'openai'])
+const providerSchema = z.enum(['anthropic', 'openai', 'gemini', 'compatible'])
 const setSchema = z
   .object({
     provider: providerSchema,
@@ -16,6 +18,7 @@ const setSchema = z
       .regex(/^[A-Za-z0-9_\-.]+$/)
   })
   .strict()
+const catalogSchema = z.object({ refresh: z.boolean().optional() }).strict().optional()
 
 export function registerKeysIpc(): void {
   ipcMain.handle('keys:status', () => keyStatus())
@@ -35,5 +38,10 @@ export function registerKeysIpc(): void {
     const provider = safeParse('keys:test', providerSchema, raw)
     if (!provider) return INVALID
     return testKey(provider)
+  })
+  ipcMain.handle('models:catalog', async (_e, raw: unknown) => {
+    const parsed = catalogSchema.safeParse(raw)
+    if (!parsed.success) return INVALID
+    return buildCatalog(parsed.data?.refresh === true)
   })
 }

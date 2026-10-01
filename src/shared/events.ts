@@ -221,6 +221,6 @@ export type AppEvent =
    */
   | { type: 'claude.bar'; view: ClaudeBarView | null; show?: boolean; id?: string }
   /** A key was pasted or removed in the app (never carries the key). */
-  | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
+  | { type: 'keys.changed'; provider: 'anthropic' | 'openai' | 'gemini' | 'compatible' }
 
 export type AppEventType = AppEvent['type']

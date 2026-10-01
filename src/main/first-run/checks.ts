@@ -58,7 +58,11 @@ function keysCheck(p: CheckProbes): FirstRunCheck {
   const providers = p.keyProviders()
   if (providers.length) return check('keys', 'ok', `AI key set (${providers.join(', ')}).`)
   if (p.localMode()) return check('keys', 'ok', 'Local mode: no AI key needed.')
-  return check('keys', 'fail', 'No AI key yet. Paste an Anthropic or OpenAI key to continue.')
+  return check(
+    'keys',
+    'fail',
+    'No AI key yet. Paste a key (Anthropic, OpenAI, Gemini free tier or another service) or use Ollama or LM Studio on this PC.'
+  )
 }
 
 function micCheck(p: CheckProbes): FirstRunCheck {

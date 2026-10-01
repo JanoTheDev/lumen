@@ -1,5 +1,8 @@
 // Onboarding step order. Every step can be skipped; steps that need features which are not
 // built yet stay behind flags.
+import type { KeyProvider } from '@shared/channels'
+import type { CompatiblePreset } from '@shared/config'
+import { GEMINI_KEYS_URL } from '@shared/model-providers'
 
 export type StepId =
   | 'profile'
@@ -87,23 +90,37 @@ export function talkHint(o: { hotkey: string; tap: boolean; wake: string | null 
   return o.wake ? `Say “${o.wake}”, or ${verb} ${tail}` : `${o.tap ? 'Tap' : 'Hold'} ${tail}`
 }
 
-/** Where to get a key, per provider. Both offer pay-as-you-go keys without a subscription. */
+/** Where to get a key, per provider. All offer keys without a subscription; Gemini's is free. */
 export const KEY_LINKS = {
   anthropic: 'https://console.anthropic.com/settings/keys',
-  openai: 'https://platform.openai.com/api-keys'
+  openai: 'https://platform.openai.com/api-keys',
+  gemini: GEMINI_KEYS_URL
 } as const
 
 /** Rough check before sending a pasted key to main (main validates again). */
-export function looksLikeKey(provider: 'anthropic' | 'openai', key: string): boolean {
+export function looksLikeKey(provider: KeyProvider, key: string): boolean {
   const k = key.trim()
   if (!/^[A-Za-z0-9_\-.]{20,300}$/.test(k)) return false
-  return provider === 'anthropic' ? k.startsWith('sk-ant-') : k.startsWith('sk-')
+  if (provider === 'anthropic') return k.startsWith('sk-ant-')
+  if (provider === 'openai') return k.startsWith('sk-') && !k.startsWith('sk-ant-')
+  // Gemini and other services: formats vary, the test call decides.
+  return true
 }
 
 /** Guess the provider from a pasted key so the user doesn't have to pick. */
-export function guessProvider(key: string): 'anthropic' | 'openai' | null {
+export function guessProvider(key: string): KeyProvider | null {
   const k = key.trim()
   if (k.startsWith('sk-ant-')) return 'anthropic'
+  if (guessPreset(k)) return 'compatible'
   if (k.startsWith('sk-')) return 'openai'
+  if (k.startsWith('AIza')) return 'gemini'
+  return null
+}
+
+/** The OpenAI-compatible service a key belongs to, when its prefix says so. */
+export function guessPreset(key: string): CompatiblePreset | null {
+  const k = key.trim()
+  if (k.startsWith('sk-or-')) return 'openrouter'
+  if (k.startsWith('gsk_')) return 'groq'
   return null
 }

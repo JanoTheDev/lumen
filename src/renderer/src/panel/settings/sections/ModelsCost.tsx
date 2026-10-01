@@ -16,7 +16,7 @@ export function ModelsCost(): JSX.Element {
   return (
     <Card
       title="Cost"
-      description="A rough estimate from the token counts and list prices of the models Lumen called on this PC. Your provider’s bill is the real number. Local models cost nothing."
+      description="A rough estimate from the token counts and list prices of the models Lumen called on this PC. Your provider’s bill is the real number. Local models and the Gemini free tier count as $0."
     >
       {!v ? (
         <p className="ui-hint">Loading…</p>
