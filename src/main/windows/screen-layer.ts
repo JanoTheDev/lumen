@@ -28,7 +28,6 @@ interface Layer {
 const EXIT_MS = 260
 /** Locate spotlights clear themselves (surfaces.md §3.4). */
 const LOCATE_MS = 6000
-const SUCCESS_MS = 1100
 const FAILURE_MS = 1500
 const CURSOR_MS = 16
 const CURSOR_IDLE_MS = 100
@@ -338,11 +337,6 @@ function flash(rect: Rect, style: 'success' | 'failure', ms: number): void {
     scene = { ...scene, highlights: scene.highlights.filter((h) => h.id !== id) }
     render()
   }, ms)
-}
-
-/** Briefly marks a rect as done (green ring + check), then drops it. */
-export function flashSuccess(rect: Rect): void {
-  flash(rect, 'success', SUCCESS_MS)
 }
 
 /** Marks a rect as failed (red ring + cross) for 1.5s. Pair it with an announcement. */

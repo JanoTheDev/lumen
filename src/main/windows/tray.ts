@@ -96,8 +96,8 @@ function refresh(): void {
   tray.setToolTip(trayTooltip(i))
 }
 
-/** "Pause listening" in the tray or Home: turns the wake word off and remembers why. */
-export async function setListeningPaused(paused: boolean): Promise<void> {
+/** "Pause listening" in the tray: turns the wake word off and remembers why. */
+async function setListeningPaused(paused: boolean): Promise<void> {
   pausedByUser = paused
   await patchConfig({ wakeWord: { enabled: !paused } })
   refresh()
