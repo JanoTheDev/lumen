@@ -63,6 +63,11 @@ export interface NewAutomation {
   catchUp?: boolean
 }
 
+export interface StartOpts {
+  /** Ids a wake task asked to run (`--run-automation`), delivered right after start. */
+  wakeIds?: readonly string[]
+}
+
 export type AutomationPatch = Partial<
   Pick<Automation, 'enabled' | 'name' | 'preApproved' | 'trigger' | 'action' | 'wake' | 'catchUp'>
 >
@@ -78,7 +83,7 @@ export class AutomationScheduler {
 
   constructor(private readonly deps: EngineDeps) {}
 
-  start(list: Automation[]): void {
+  start(list: Automation[], opts: StartOpts = {}): void {
     this.items = list.slice(0, MAX_AUTOMATIONS)
     this.stopped = false
     const now = this.deps.now()
@@ -95,6 +100,14 @@ export class AutomationScheduler {
         this.due.set(a.id, { at: now + STARTUP_DELAY_MS, via: 'catch-up' })
         continue
       }
+      // Task Scheduler started Lumen for this one-off: its time just passed, runWake runs it.
+      if (
+        a.trigger.kind === 'once' &&
+        missed !== null &&
+        opts.wakeIds?.includes(a.id) &&
+        now - missed <= STALE_MS
+      )
+        continue
       if (a.trigger.kind === 'once' && missed !== null) {
         // Its time passed while Lumen was closed: done, without running.
         this.patch(a.id, {

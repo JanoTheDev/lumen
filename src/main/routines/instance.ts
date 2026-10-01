@@ -36,6 +36,11 @@ export function claimAutomationInstance(argv: readonly string[] = process.argv):
   return true
 }
 
+/** Runs asked for that wait for onAutomationRequest (read before the scheduler starts). */
+export function waitingAutomationRequests(): string[] {
+  return [...waiting]
+}
+
 /** The automation runs asked for so far, then every later one. */
 export function onAutomationRequest(fn: (id: string) => void): void {
   handler = fn

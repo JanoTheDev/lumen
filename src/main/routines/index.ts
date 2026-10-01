@@ -69,7 +69,7 @@ import {
   preapprovalQuestion
 } from './draft'
 import { AutomationScheduler, type RunEnd } from './engine'
-import { onAutomationRequest, onSecondLaunch } from './instance'
+import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
 import { WakeTasks } from './schtasks'
@@ -593,7 +593,8 @@ export function installRoutines(file = join(dirname(configPath()), 'automations.
   setPresence(userPresent)
   const list = store.load()
   knownIds = new Set(list.map((a) => a.id))
-  engine.start(list)
+  // A one-off a wake task started Lumen for is not "missed": runWake runs it below.
+  engine.start(list, { wakeIds: waitingAutomationRequests() })
   watchers.sync(engine.all())
   void wake.reconcile(engine.all()).then(() => engine.replan())
   onConfigPatched(() => watchers.sync(engine.all()))

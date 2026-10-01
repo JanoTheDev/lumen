@@ -240,6 +240,26 @@ describe('AutomationScheduler: start, catch-up, wake', () => {
     expect(s.runWake('au_nope1')).toBe(false)
   })
 
+  it('a one-off whose wake task started Lumen runs instead of counting as missed', async () => {
+    const { s, runs } = setup()
+    const at = Date.now() - 5000
+    s.start(
+      [
+        base({ id: 'au_wonce1', trigger: { kind: 'once', at }, wake: true }),
+        base({ id: 'au_wonce2', trigger: { kind: 'once', at }, wake: true })
+      ],
+      { wakeIds: ['au_wonce1'] }
+    )
+    expect(s.get('au_wonce1')!.enabled).toBe(true)
+    expect(s.get('au_wonce2')!.enabled).toBe(false)
+    expect(s.runWake('au_wonce1')).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(runs).toEqual(['au_wonce1:wake'])
+    const a = s.get('au_wonce1')!
+    expect(a.enabled).toBe(false)
+    expect(a.runs?.some((r) => r.result === 'skipped')).toBe(false)
+  })
+
   it('a timer run right after a wake run of the same time is skipped', async () => {
     const { s, runs } = setup()
     s.start([base({ id: 'au_dup1', trigger: { kind: 'daily', at: '12:30' } })])
