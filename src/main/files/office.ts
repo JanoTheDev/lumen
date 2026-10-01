@@ -1,8 +1,9 @@
-// Readers for shared Office files and tables: Excel (.xlsx) sheets as CSV text, PowerPoint
-// (.pptx) slide text, Word (.docx) text with headings, lists and tables kept, and a short
+// Readers for shared Office files and tables: Excel (.xlsx) sheets as CSV text (date cells as
+// ISO dates), PowerPoint (.pptx) slide text with speaker notes, Word (.docx) text with headings, lists and tables kept, and a short
 // statistics line for CSV / sheets. The zip is read with the strict pack reader (no zip
 // bombs: sizes and CRCs checked), Word files too before mammoth sees them. Pure apart from
 // mammoth.
+import { posix } from 'path'
 import { readZip, type ZipFile } from '../packs/zip-read'
 import { writeZip } from '../docs-out/zip'
 import { parseCsv, rowsToCsv, sniffSeparator } from '../docs-out/text'
@@ -51,7 +52,10 @@ function resolveTarget(target: string): string {
   return (t.startsWith('xl/') ? t : `xl/${t}`).toLowerCase()
 }
 
-/** The sheets of an .xlsx, in workbook order (values as shown before number formats). */
+/**
+ * The sheets of an .xlsx, in workbook order: values before number formats, except that cells
+ * with a date or time format are ISO dates / times instead of day numbers.
+ */
 export function readXlsx(buf: Buffer): SheetData[] {
   const zip = unzip(buf)
   const workbook = zip.get('xl/workbook.xml')?.toString('utf8')
@@ -65,6 +69,10 @@ export function readXlsx(buf: Buffer): SheetData[] {
   }
   const sharedXml = zip.get('xl/sharedstrings.xml')?.toString('utf8') ?? ''
   const shared = [...sharedXml.matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => texts(m[1]))
+  const dates: DateCells = {
+    styles: dateStyles(zip.get('xl/styles.xml')?.toString('utf8') ?? ''),
+    date1904: /<workbookPr\b[^>]*\sdate1904="(?:1|true)"/.test(workbook)
+  }
   const out: SheetData[] = []
   for (const m of workbook.matchAll(/<sheet\b[^>]*>/g)) {
     const name = attr(m[0], 'name') ?? `Sheet${out.length + 1}`
@@ -72,12 +80,103 @@ export function readXlsx(buf: Buffer): SheetData[] {
     const path = rid ? targets.get(rid) : undefined
     const xml = path ? zip.get(path)?.toString('utf8') : undefined
     if (!xml) continue
-    out.push({ name, rows: sheetRows(xml, shared) })
+    out.push({ name, rows: sheetRows(xml, shared, dates) })
   }
   return out
 }
 
-function sheetRows(xml: string, shared: string[]): string[][] {
+// ---- dates: Excel keeps them as day numbers with a date number format ----
+
+export type DateKind = 'date' | 'time' | 'datetime'
+
+interface DateCells {
+  /** Cell style index (the s attribute) → what its number format shows. */
+  styles: Map<number, DateKind>
+  date1904: boolean
+}
+
+/** Built-in number formats that show dates or times. */
+const BUILTIN_DATES: Record<number, DateKind> = {
+  14: 'date',
+  15: 'date',
+  16: 'date',
+  17: 'date',
+  18: 'time',
+  19: 'time',
+  20: 'time',
+  21: 'time',
+  22: 'datetime',
+  45: 'time',
+  46: 'time',
+  47: 'time'
+}
+
+/** What a custom number format code shows: a date, a time, both, or (undefined) a number. */
+export function formatKind(code: string): DateKind | undefined {
+  const c = code
+    .split(';')[0]
+    .replace(/"[^"]*"/g, '')
+    .replace(/\\./g, '')
+    .replace(/[_*]./g, '')
+    .replace(/\[[^\]]*\]/g, (m) => (/^\[(h+|m+|s+)\]$/i.test(m) ? m.slice(1, -1) : ''))
+  const date = /[dy]|m{3,}/i.test(c) || (/m/i.test(c) && !/[hs]/i.test(c))
+  const time = /[hs]/i.test(c)
+  return date && time ? 'datetime' : date ? 'date' : time ? 'time' : undefined
+}
+
+/** The cell styles of styles.xml whose number format is a date or time. */
+export function dateStyles(xml: string): Map<number, DateKind> {
+  const custom = new Map<number, DateKind | undefined>()
+  for (const m of xml.matchAll(/<numFmt\b[^>]*>/g)) {
+    const id = Number(attr(m[0], 'numFmtId'))
+    const code = attr(m[0], 'formatCode')
+    if (Number.isInteger(id) && code !== undefined) custom.set(id, formatKind(code))
+  }
+  const out = new Map<number, DateKind>()
+  const xfs = /<cellXfs\b[^>]*>([\s\S]*?)<\/cellXfs>/.exec(xml)?.[1] ?? ''
+  let i = 0
+  for (const m of xfs.matchAll(/<xf\b[^>]*>/g)) {
+    const id = Number(attr(m[0], 'numFmtId') ?? 0)
+    const kind = custom.has(id) ? custom.get(id) : BUILTIN_DATES[id]
+    if (kind) out.set(i, kind)
+    i++
+  }
+  return out
+}
+
+const pad = (n: number, w = 2): string => String(n).padStart(w, '0')
+
+/**
+ * An Excel day number as ISO text: "2026-09-30", "14:05:00", "2026-09-30T14:05:00". The 1900
+ * system counts the 29 February 1900 that never was (Excel's Lotus bug); the 1904 system starts
+ * on 1 January 1904. Null for a number no date can be. Pure.
+ */
+export function excelDate(serial: number, kind: DateKind, date1904 = false): string | null {
+  if (!Number.isFinite(serial) || serial < 0 || serial >= 2_958_466) return null
+  let days = Math.floor(serial)
+  let secs = Math.round((serial - days) * 86_400)
+  if (secs >= 86_400) {
+    days++
+    secs -= 86_400
+  }
+  const clock = (h: number): string =>
+    `${pad(h)}:${pad(Math.floor(secs / 60) % 60)}:${pad(secs % 60)}`
+  if (kind === 'time') return clock(Math.floor(secs / 3600) + (serial >= 1 ? days * 24 : 0))
+  let date: string
+  if (date1904) {
+    date = new Date(Date.UTC(1904, 0, 1 + days)).toISOString().slice(0, 10)
+  } else {
+    if (days === 0) return null
+    if (days === 60) date = '1900-02-29'
+    else
+      date = new Date(Date.UTC(1899, 11, days < 60 ? 31 + days : 30 + days))
+        .toISOString()
+        .slice(0, 10)
+  }
+  return kind === 'datetime' ? `${date}T${clock(Math.floor(secs / 3600))}` : date
+}
+
+function sheetRows(xml: string, shared: string[], dates?: DateCells): string[][] {
   const rows: string[][] = []
   for (const r of xml.matchAll(/<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g)) {
     const index = Number(attr(`<row${r[1]}>`, 'r') ?? rows.length + 1) - 1
@@ -95,7 +194,11 @@ function sheetRows(xml: string, shared: string[]): string[][] {
       if (type === 's') value = shared[Number(v)] ?? ''
       else if (type === 'inlineStr') value = texts(body)
       else if (type === 'b') value = v === '1' ? 'TRUE' : 'FALSE'
-      else if (v !== undefined) value = xmlDecode(v)
+      else if (v !== undefined) {
+        value = xmlDecode(v)
+        const kind = !type || type === 'n' ? dates?.styles.get(Number(attr(head, 's'))) : undefined
+        if (kind) value = excelDate(Number(value), kind, dates?.date1904) ?? value
+      }
       if (col < 1000) row[col] = value
     }
     if (index >= 0 && index < 1_048_576) rows[index] = Array.from(row, (x) => x ?? '')
@@ -103,7 +206,36 @@ function sheetRows(xml: string, shared: string[]): string[][] {
   return Array.from(rows, (r) => r ?? [])
 }
 
-/** Slide text of a .pptx, one block per slide in order. */
+/** The paragraphs of a DrawingML fragment, one line each. */
+function paragraphs(xml: string): string {
+  return xml
+    .split(/<\/a:p>/)
+    .map((p) => texts(p, 'a:t').trim())
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** The speaker notes of a slide (the notes page's body placeholder), or "". */
+function slideNotes(zip: Map<string, Buffer>, slidePath: string): string {
+  const rels = zip.get(slidePath.replace(/([^/]+)$/, '_rels/$1.rels'))?.toString('utf8') ?? ''
+  const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)]
+    .map((m) => m[0])
+    .find((r) => /\/notesSlide"/.test(r))
+  const target = rel && attr(rel, 'Target')
+  if (!target) return ''
+  const path = target.startsWith('/')
+    ? target.slice(1)
+    : posix.normalize(posix.join(posix.dirname(slidePath), target))
+  const xml = zip.get(path.toLowerCase())?.toString('utf8') ?? ''
+  return [...xml.matchAll(/<p:sp\b[\s\S]*?<\/p:sp>/g)]
+    .map((m) => m[0])
+    .filter((sp) => /<p:ph\b[^>]*\btype="body"/.test(sp))
+    .map(paragraphs)
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** Slide text of a .pptx, one block per slide in order, speaker notes after "Notes:". */
 export function readPptx(buf: Buffer): string[] {
   const zip = unzip(buf)
   const slides = [...zip.keys()]
@@ -112,12 +244,9 @@ export function readPptx(buf: Buffer): string[] {
     .sort((a, b) => Number(a[1]) - Number(b[1]))
   if (!slides.length && !zip.has('ppt/presentation.xml')) throw new Error('not a PowerPoint file')
   return slides.map((m) => {
-    const xml = zip.get(m[0])?.toString('utf8') ?? ''
-    return xml
-      .split(/<\/a:p>/)
-      .map((p) => texts(p, 'a:t').trim())
-      .filter(Boolean)
-      .join('\n')
+    const text = paragraphs(zip.get(m[0])?.toString('utf8') ?? '')
+    const notes = slideNotes(zip, m[0])
+    return notes ? `${text}${text ? '\n' : ''}Notes: ${notes}` : text
   })
 }
 
