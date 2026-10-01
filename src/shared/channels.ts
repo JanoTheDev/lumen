@@ -94,6 +94,8 @@ export interface InvokeChannels {
   'teach:command': { args: [command: LessonCommand]; result: { ok: boolean } }
   /** The lesson to continue and recent completions (Home "Continue learning"). */
   'teach:progress': { args: []; result: LessonProgressView }
+  /** Starts the short "prove it" review of a completed lesson (07 T29). */
+  'teach:review': { args: [id: string]; result: { ok: boolean; error?: string } }
   /** Deletes one of the user's own lessons. */
   'teach:delete': { args: [id: string]; result: { ok: boolean } }
   /** Saves the last "show me how" lesson to the user's lessons. */
@@ -488,6 +490,26 @@ export interface LessonListItem {
   source: 'pack' | 'user'
   /** Times completed. */
   completed: number
+  /** Curriculum unit (07 T28); none for lessons the curriculum leaves out. */
+  unit?: { id: string; title: string }
+  /** Skill tree state: done, the one to learn next, open, or locked by prereqs. */
+  status?: 'done' | 'next' | 'open' | 'locked'
+  /** Titles of the prereqs still to do (locked lessons). */
+  needs?: string[]
+  /** A spaced-repetition review is due (07 T29). */
+  reviewDue?: boolean
+}
+
+/** One app's learning progress (07 T27). */
+export interface LearningApp {
+  appId: string
+  appName: string
+  /** 0-1: mean mastery of the skills (lesson tags) its lessons teach. */
+  mastery: number
+  completed: number
+  total: number
+  /** The next unlocked lesson; null when all are done. */
+  next: { lessonId: string; title: string } | null
 }
 
 export interface LessonProgressView {
@@ -503,6 +525,10 @@ export interface LessonProgressView {
   } | null
   /** Completed lessons, newest first (max 5). */
   recent: { lessonId: string; title: string; appName: string; completedAt: number }[]
+  /** Every app with lessons; ones the user has started first. */
+  apps: LearningApp[]
+  /** Reviews due today or earlier, most overdue first. due = YYYY-MM-DD. */
+  reviews: { lessonId: string; title: string; appName: string; due: string }[]
 }
 
 export interface HomeInfo {
@@ -650,6 +676,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'teach:start',
   'teach:command',
   'teach:progress',
+  'teach:review',
   'teach:delete',
   'teach:save-last',
   'bridges:status',

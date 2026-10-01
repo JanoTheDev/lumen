@@ -1,14 +1,14 @@
 // Lesson engine wiring (plans 07 Phase 1): the real ports on top of the agent, the verifier,
 // the announcer and the bus; the registry and progress store; the router hook for lesson
 // voice commands. index.ts calls installTeach() once the agent and a11y are set up.
-import { app, shell } from 'electron'
+import { app, powerMonitor, shell } from 'electron'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { LessonListItem, LessonProgressView } from '@shared/channels'
 import type { LessonCommand } from '@shared/events'
 import type { ElementNode, InputStep, Point, Rect } from '@shared/types'
 import { bus } from '../bus'
-import { loadConfig } from '../config'
+import { loadConfig, saveConfig } from '../config'
 import { log, type LogTag } from '../logger'
 import { physRectToLogical, physToLogical, rectCenter } from '../actions/coords'
 import * as commands from '../agent/commands'
@@ -24,6 +24,7 @@ import { skillContext } from '../ai/skills'
 import { matchPlayGuide } from '../guides/voice-nav'
 import { setTeachHandler } from '../query/pipeline'
 import { flattenElements } from '../query/uia-list'
+import { onBroadcast } from '../windows/registry'
 import {
   lessonNumber,
   matchAppOnly,
@@ -35,6 +36,7 @@ import {
 } from './commands'
 import { setLessonContextProvider } from './context'
 import { pacingFor } from './hints'
+import { createLearning, type Learning } from './learning'
 import type { DoAction, ElementMatch, Lesson, LessonTarget } from './lesson'
 import { migrateGuides } from './migrate-guides'
 import type { Frame, Ports, ResolvedTarget, UiaEvent, WindowInfo } from './ports'
@@ -65,6 +67,7 @@ let registry: SkillRegistry | null = null
 let store: ProgressStore | null = null
 let runner: LessonRunner | null = null
 let offer: ResumeOffer | null = null
+let learning: Learning | null = null
 /** The last "show me how" lesson, for "save this lesson". */
 let lastGenerated: { lesson: Lesson; skill: Skill | null } | null = null
 let skillsRoot = ''
@@ -498,6 +501,7 @@ export function startLesson(
     skill: found.skill,
     source: found.skill.source === 'user' ? 'user' : 'pack',
     ...pacingFor(loadConfig().a11y),
+    idleHints: !!learning?.idleHintsFor(found.skill.id),
     ...opts,
     stats: opts.stepIndex !== undefined && active?.lessonId === id ? active.steps : undefined
   })
@@ -517,7 +521,8 @@ function startGenerated(lesson: Lesson, skill: Skill | null): void {
     skill,
     source: 'generated',
     autoStart: true,
-    ...pacingFor(loadConfig().a11y)
+    ...pacingFor(loadConfig().a11y),
+    idleHints: !!learning?.idleHintsFor(skill?.id ?? lesson.app)
   })
 }
 
@@ -585,6 +590,13 @@ export function lessonCommand(cmd: LessonCommand): boolean {
   return cmd === 'resume' || cmd === 'yes' ? resumeOffered() : false
 }
 
+/** Starts the short review of a completed lesson (T29). */
+export function startReview(id: string): { ok: boolean; error?: string } {
+  if (!learning) return { ok: false, error: 'not ready' }
+  offer = null
+  return learning.startReview(id)
+}
+
 export function listLessons(appId?: string): LessonListItem[] {
   if (!registry || !store) return []
   const mine = new Set(registry.userLessons().map((x) => x.lesson.id))
@@ -592,8 +604,14 @@ export function listLessons(appId?: string): LessonListItem[] {
 }
 
 export function lessonProgress(): LessonProgressView {
-  if (!registry || !store) return { active: null, recent: [] }
-  return progressView(store.get(), runner?.state ?? null, Date.now(), (id) => registry!.lesson(id))
+  if (!registry || !store) return { active: null, recent: [], apps: [], reviews: [] }
+  return progressView(
+    store.get(),
+    runner?.state ?? null,
+    Date.now(),
+    (id) => registry!.lesson(id),
+    registry.all()
+  )
 }
 
 /** Deletes one of the user's own lessons (never a pack lesson). */
@@ -669,6 +687,9 @@ export function interceptLesson(utterance: string): unknown | undefined {
     log('plan', `lesson command: ${cmd}`)
     return HANDLED
   }
+  // A newer suggestion (next lesson, review prompt) and the learning commands (T27-T33).
+  const learned = learning?.intercept(utterance)
+  if (learned !== undefined) return learned
   if (!running && offer && cmd) {
     if (cmd === 'resume' || cmd === 'yes' || cmd === 'next')
       return resumeOffered() ? HANDLED : undefined
@@ -742,6 +763,34 @@ function watchedStep(r: LessonRunner): string | null {
   return `${r.state.lesson?.id}#${r.state.index}`
 }
 
+function installLearning(): void {
+  learning = createLearning({
+    registry: () => registry,
+    store: () => store,
+    runner: () => runner,
+    config: () => loadConfig().teach,
+    setReminders: (on) => {
+      try {
+        saveConfig({ teach: { reviewReminders: on } })
+      } catch (e) {
+        log('fail', `review reminders setting not saved (${(e as Error).message})`)
+      }
+    },
+    startLesson: (id) => startLesson(id),
+    pacing: () => pacingFor(loadConfig().a11y),
+    foreground: (maxAgeMs) => recentForeground(maxAgeMs),
+    // OS last-input time: no hooks, no screen reading.
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    show: (lessonId, text) => bus.emit({ type: 'lesson.resume-offer', lessonId, text }),
+    say: (text) => announce(text, { kind: 'answer' }),
+    log: (msg) => log('plan', msg),
+    handled: HANDLED
+  })
+  bus.on('lesson.done', (e) => learning?.onLessonDone(e.lessonId, e.completed))
+  onBroadcast('settings:changed', () => learning?.sync())
+  learning.install()
+}
+
 export function installTeach(): void {
   if (runner) return
   const base = join(homedir(), '.ai-overlay')
@@ -780,6 +829,7 @@ export function installTeach(): void {
   bus.on('voice.cancelled', () => runner?.hold('voice', false))
   app.on('before-quit', () => store?.flush())
   watchFocus()
+  installLearning()
   installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
 
   // Passive resume offer once the bar can show it; nothing starts by itself.

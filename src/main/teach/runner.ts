@@ -4,6 +4,7 @@ import { PausableTimer, realClock, type Clock } from '../a11y/timings'
 import { startCheck, newBudget, type CheckHandle, type VisionBudget } from './checks'
 import { accepts, reduce } from './engine'
 import {
+  LEVEL,
   buildScene,
   describeDoIt,
   doItActions,
@@ -45,6 +46,10 @@ export interface StartOptions {
   stats?: Record<string, StepStats>
   /** Voice-only / switch users: offer "do it" from the start of every step (T21). */
   offerEarly?: boolean
+  /** A spaced-repetition review (T29): no pointing before the first hint. */
+  review?: boolean
+  /** Hints come from idle time (T33), not the timer ladder. */
+  idleHints?: boolean
 }
 
 export class LessonRunner {
@@ -113,7 +118,9 @@ export class LessonRunner {
       autoStart: o.autoStart,
       pace: o.pace,
       stats: o.stats,
-      offerEarly: o.offerEarly
+      offerEarly: o.offerEarly,
+      review: o.review,
+      idleHints: o.idleHints
     })
   }
 
@@ -126,6 +133,13 @@ export class LessonRunner {
 
   accepts(c: LessonCommand): boolean {
     return accepts(this.s, c)
+  }
+
+  /** The user has been idle in the lesson app (T33); false when no step is waiting. */
+  idle(voice: boolean): boolean {
+    if (this.s.phase !== 'step.waiting') return false
+    this.dispatch({ type: 'idle', voice })
+    return true
   }
 
   appBlurred(): void {
@@ -224,6 +238,12 @@ export class LessonRunner {
     const st = lesson?.steps[step]
     if (!st) return
     const seq = ++this.sceneSeq
+    // A review proves the user remembers: nothing on screen until the first hint (T29).
+    if (this.s.review && level < LEVEL.HINT) {
+      this.resolved = null
+      this.ports.screen.emitScene(null)
+      return
+    }
     let r: ResolvedTarget | null = null
     if (st.target) {
       r = await this.ports.target

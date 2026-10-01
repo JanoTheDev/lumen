@@ -1,21 +1,30 @@
-// Lesson picker data (plans 07 T22): the list for Settings / Home / voice, and the "continue
-// learning" view of the progress file. Pure: registry, progress and runner state come in.
-import type { LessonListItem, LessonProgressView } from '@shared/channels'
+// Lesson picker data (plans 07 T22, T27, T28): the list for Settings / Home / voice in skill
+// tree order, and the "continue learning" view of the progress file (lesson to continue, recent
+// completions, mastery and the next lesson per app, due reviews). Pure: registry, progress and
+// runner state come in.
+import type { LearningApp, LessonListItem, LessonProgressView } from '@shared/channels'
+import { skillTree, type TreeLesson } from './curriculum'
 import type { Lesson } from './lesson'
 import type { Progress } from './progress'
-import { resumeOffer } from './progress'
-import type { Skill } from './registry'
+import { lessonSkills, masteryKey, resumeOffer } from './progress'
+import { hasMatchRules, type Skill } from './registry'
+import { dueReviews } from './review'
 import { isRunning, type LessonState } from './state'
 
-const LEVEL_ORDER = { beginner: 0, intermediate: 1, advanced: 2 } as const
 const RECENT = 5
 
+const doneIn = (progress: Progress) => (id: string) =>
+  (progress.lessons[id]?.completedAt.length ?? 0) > 0
+
 function lessonItem(
-  lesson: Lesson,
+  t: TreeLesson,
   skill: Skill,
   progress: Progress,
-  source: LessonListItem['source']
+  source: LessonListItem['source'],
+  due: ReadonlySet<string>
 ): LessonListItem {
+  const { lesson } = t
+  const title = (id: string): string => skill.lessons.find((l) => l.id === id)?.title ?? id
   return {
     id: lesson.id,
     title: lesson.title,
@@ -26,25 +35,61 @@ function lessonItem(
     minutes: lesson.minutes,
     steps: lesson.steps.length,
     source,
-    completed: progress.lessons[lesson.id]?.completedAt.length ?? 0
+    completed: progress.lessons[lesson.id]?.completedAt.length ?? 0,
+    ...(t.unit ? { unit: t.unit } : {}),
+    status: t.status,
+    ...(t.needs.length ? { needs: t.needs.map(title) } : {}),
+    ...(due.has(lesson.id) ? { reviewDue: true } : {})
   }
 }
 
-/** Every lesson (or one app's), apps by name, lessons by level then their pack order. */
+/** Every lesson (or one app's), apps by name, lessons in skill tree order. */
 export function lessonList(
   skills: Skill[],
   progress: Progress,
   userIds: ReadonlySet<string>,
-  appId?: string
+  appId?: string,
+  now = Date.now()
 ): LessonListItem[] {
+  const due = new Set(dueReviews(progress, now).map((r) => r.lessonId))
   return skills
     .filter((s) => !appId || s.id === appId)
     .sort((a, b) => a.name.localeCompare(b.name))
     .flatMap((s) =>
-      s.lessons
-        .map((l, i) => ({ l, i }))
-        .sort((a, b) => LEVEL_ORDER[a.l.level] - LEVEL_ORDER[b.l.level] || a.i - b.i)
-        .map(({ l }) => lessonItem(l, s, progress, userIds.has(l.id) ? 'user' : 'pack'))
+      skillTree(s.lessons, s.curriculum, doneIn(progress)).map((t) =>
+        lessonItem(t, s, progress, userIds.has(t.lesson.id) ? 'user' : 'pack', due)
+      )
+    )
+}
+
+/** Mean mastery of the skills (lesson tags) an app's lessons teach; 0 when it has none. */
+export function appMastery(skill: Skill, progress: Progress): number {
+  const tags = new Set(skill.lessons.flatMap(lessonSkills))
+  if (!tags.size) return 0
+  let total = 0
+  for (const t of tags) total += progress.mastery[masteryKey(skill.id, t)] ?? 0
+  return Math.round((total / tags.size) * 100) / 100
+}
+
+export function learningApps(skills: Skill[], progress: Progress): LearningApp[] {
+  const isDone = doneIn(progress)
+  return skills
+    .filter((s) => s.lessons.length && hasMatchRules(s))
+    .map((s) => {
+      const tree = skillTree(s.lessons, s.curriculum, isDone)
+      const next = tree.find((t) => t.status === 'next')?.lesson
+      return {
+        appId: s.id,
+        appName: s.name,
+        mastery: appMastery(s, progress),
+        completed: tree.filter((t) => t.status === 'done').length,
+        total: tree.length,
+        next: next ? { lessonId: next.id, title: next.title } : null
+      }
+    })
+    .sort(
+      (a, b) =>
+        Number(b.completed > 0) - Number(a.completed > 0) || a.appName.localeCompare(b.appName)
     )
 }
 
@@ -52,11 +97,12 @@ export function progressView(
   progress: Progress,
   running: LessonState | null,
   now: number,
-  find: (id: string) => { lesson: Lesson; skill: Skill } | null
+  find: (id: string) => { lesson: Lesson; skill: Skill } | null,
+  skills: Skill[] = []
 ): LessonProgressView {
   const appName = (id: string, fallback: string): string => find(id)?.skill.name ?? fallback
   let active: LessonProgressView['active'] = null
-  if (running && isRunning(running) && running.lesson) {
+  if (running && isRunning(running) && running.lesson && !running.review) {
     const l = running.lesson
     active = {
       lessonId: l.id,
@@ -91,5 +137,11 @@ export function progressView(
     })
     .sort((a, b) => b.completedAt - a.completedAt)
     .slice(0, RECENT)
-  return { active, recent }
+  const reviews = dueReviews(progress, now).flatMap((r) => {
+    const f = find(r.lessonId)
+    return f
+      ? [{ lessonId: r.lessonId, title: f.lesson.title, appName: f.skill.name, due: r.due }]
+      : []
+  })
+  return { active, recent, apps: learningApps(skills, progress), reviews }
 }

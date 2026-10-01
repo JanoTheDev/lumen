@@ -1,11 +1,14 @@
-// Lesson progress and resume (plans 07 T17): ~/.ai-overlay/teach/progress.json. The active
-// lesson is written on every step change, so a crash or kill resumes on the same step.
+// Lesson progress and resume (plans 07 T17, T27): ~/.ai-overlay/teach/progress.json. The active
+// lesson is written on every step change, so a crash or kill resumes on the same step. A
+// finished run updates the lesson record, the mastery of its tags and its SM-2 card (T29).
 // Writes are debounced (500 ms) and atomic (tmp file + rename). No Electron.
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
 import { realClock, type Clock } from '../a11y/timings'
 import type { Lesson } from './lesson'
+import { PRACTICE_LESSON_ID } from './practice-lesson'
 import type { ProgressSink } from './runner'
+import { isCard, localDay, runQuality, sm2, type SrsCard } from './srs'
 import type { LessonSource, LessonState, StepStats } from './state'
 
 export const RESUME_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -30,53 +33,118 @@ export interface LessonRecord {
   completedAt: number[]
   bestTimeSec: number
   hintsUsed: number
-  doItForMe: number
+  doItForMeCount: number
   skipped: number
+  /** SM-2 quality (0-5) of the latest finished run, review or not. */
+  lastQuality?: number
 }
 
 export interface Progress {
-  version: 1
+  version: 2
   active?: ActiveLesson
   lessons: Record<string, LessonRecord>
-  /** Spaced repetition cards (T29). */
-  srs: Record<string, unknown>
+  /** Mastery 0-1 per "<app>:<tag>" (lesson tags), moved by every finished run (T27). */
+  mastery: Record<string, number>
+  /** SM-2 cards per lesson id (T29). */
+  srs: Record<string, SrsCard>
+  /** Review reminders: at most one prompt a day (T29). */
+  reminders: { lastPromptDay?: string }
 }
 
-export const emptyProgress = (): Progress => ({ version: 1, lessons: {}, srs: {} })
+export const emptyProgress = (): Progress => ({
+  version: 2,
+  lessons: {},
+  mastery: {},
+  srs: {},
+  reminders: {}
+})
+
+/** How far one run moves a tag's mastery towards its score (quality / 5). */
+export const MASTERY_RATE = 0.5
+
+/** Tags that say where a lesson came from, not what it teaches. */
+const META_TAGS = new Set(['generated', 'saved', 'migrated-guide'])
+
+export const masteryKey = (app: string, tag: string): string => `${app}:${tag}`
+
+/** The skill tags a lesson's runs count towards. */
+export function lessonSkills(lesson: Lesson): string[] {
+  return (lesson.tags ?? []).filter((t) => !META_TAGS.has(t))
+}
+
+/** Whether finished runs of this lesson get a review card and move mastery. */
+function tracked(lesson: Lesson, s: LessonState): boolean {
+  return s.source !== 'generated' && lesson.id !== PRACTICE_LESSON_ID
+}
+
+function withMastery(
+  prev: Record<string, number>,
+  lesson: Lesson,
+  quality: number
+): Record<string, number> {
+  const out = { ...prev }
+  const score = quality / 5
+  for (const tag of lessonSkills(lesson)) {
+    const k = masteryKey(lesson.app, tag)
+    const m = out[k] ?? 0
+    out[k] = Math.round((m + MASTERY_RATE * (score - m)) * 1000) / 1000
+  }
+  return out
+}
 
 function sum(stats: Record<string, StepStats>, f: (s: StepStats) => number): number {
   return Object.values(stats).reduce((n, s) => n + f(s), 0)
+}
+
+function finished(prev: Progress, s: LessonState, lesson: Lesson, now: number): Progress {
+  const quality = runQuality(s.stats)
+  const keep = tracked(lesson, s)
+  const srs = keep ? { ...prev.srs, [lesson.id]: sm2(prev.srs[lesson.id], quality, now) } : prev.srs
+  const mastery = keep ? withMastery(prev.mastery, lesson, quality) : prev.mastery
+  const rec = prev.lessons[lesson.id]
+  // A review proves a lesson again: card, mastery and quality only. The record and the
+  // lesson left part-way stay as they are.
+  if (s.review) {
+    const lessons = rec
+      ? { ...prev.lessons, [lesson.id]: { ...rec, lastQuality: quality } }
+      : prev.lessons
+    return { ...prev, srs, mastery, lessons }
+  }
+  const base: LessonRecord = rec ?? {
+    completedAt: [],
+    bestTimeSec: 0,
+    hintsUsed: 0,
+    doItForMeCount: 0,
+    skipped: 0
+  }
+  const started = prev.active?.lessonId === lesson.id ? prev.active.startedAt : now
+  const timeSec = Math.max(1, Math.round((now - started) / 1000))
+  return {
+    ...prev,
+    active: undefined,
+    srs,
+    mastery,
+    lessons: {
+      ...prev.lessons,
+      [lesson.id]: {
+        completedAt: [...base.completedAt, now],
+        bestTimeSec: base.bestTimeSec ? Math.min(base.bestTimeSec, timeSec) : timeSec,
+        hintsUsed: base.hintsUsed + sum(s.stats, (x) => x.hints),
+        doItForMeCount: base.doItForMeCount + sum(s.stats, (x) => (x.doItForMe ? 1 : 0)),
+        skipped: base.skipped + sum(s.stats, (x) => (x.skipped ? 1 : 0)),
+        lastQuality: quality
+      }
+    }
+  }
 }
 
 /** The progress file after a lesson state change. */
 export function applyState(prev: Progress, s: LessonState, now: number): Progress {
   const lesson = s.lesson
   if (!lesson || s.phase === 'idle') return prev
-  if (s.phase === 'done') {
-    const rec = prev.lessons[lesson.id] ?? {
-      completedAt: [],
-      bestTimeSec: 0,
-      hintsUsed: 0,
-      doItForMe: 0,
-      skipped: 0
-    }
-    const started = prev.active?.lessonId === lesson.id ? prev.active.startedAt : now
-    const timeSec = Math.max(1, Math.round((now - started) / 1000))
-    return {
-      version: 1,
-      srs: prev.srs,
-      lessons: {
-        ...prev.lessons,
-        [lesson.id]: {
-          completedAt: [...rec.completedAt, now],
-          bestTimeSec: rec.bestTimeSec ? Math.min(rec.bestTimeSec, timeSec) : timeSec,
-          hintsUsed: rec.hintsUsed + sum(s.stats, (x) => x.hints),
-          doItForMe: rec.doItForMe + sum(s.stats, (x) => (x.doItForMe ? 1 : 0)),
-          skipped: rec.skipped + sum(s.stats, (x) => (x.skipped ? 1 : 0))
-        }
-      }
-    }
-  }
+  if (s.phase === 'done') return finished(prev, s, lesson, now)
+  // Reviews are short and never resumed.
+  if (s.review) return prev
   const paused = s.phase === 'paused' || s.phase === 'aborted'
   const same = prev.active?.lessonId === lesson.id
   const step = lesson.steps[s.index]
@@ -129,9 +197,45 @@ export function resumeOffer(
   }
 }
 
-function isProgress(v: unknown): v is Progress {
-  const p = v as Progress
-  return !!p && p.version === 1 && typeof p.lessons === 'object' && !!p.lessons
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  !!v && typeof v === 'object' && !Array.isArray(v)
+
+const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+function record(v: unknown): LessonRecord | null {
+  if (!isObject(v)) return null
+  const r: LessonRecord = {
+    completedAt: Array.isArray(v.completedAt)
+      ? v.completedAt.filter((x): x is number => typeof x === 'number')
+      : [],
+    bestTimeSec: num(v.bestTimeSec),
+    hintsUsed: num(v.hintsUsed),
+    // v1 called it doItForMe.
+    doItForMeCount: num(v.doItForMeCount ?? v.doItForMe),
+    skipped: num(v.skipped)
+  }
+  if (typeof v.lastQuality === 'number') r.lastQuality = v.lastQuality
+  return r
+}
+
+/** A v1 or v2 file as v2; null when it is not a progress file. */
+export function migrateProgress(raw: unknown): Progress | null {
+  if (!isObject(raw) || (raw.version !== 1 && raw.version !== 2) || !isObject(raw.lessons))
+    return null
+  const out = emptyProgress()
+  for (const [id, v] of Object.entries(raw.lessons)) {
+    const r = record(v)
+    if (r) out.lessons[id] = r
+  }
+  if (isObject(raw.srs))
+    for (const [id, c] of Object.entries(raw.srs)) if (isCard(c)) out.srs[id] = c
+  if (isObject(raw.mastery))
+    for (const [k, m] of Object.entries(raw.mastery))
+      if (typeof m === 'number' && m >= 0 && m <= 1) out.mastery[k] = m
+  if (isObject(raw.reminders) && typeof raw.reminders.lastPromptDay === 'string')
+    out.reminders.lastPromptDay = raw.reminders.lastPromptDay
+  if (isObject(raw.active)) out.active = raw.active as unknown as ActiveLesson
+  return out
 }
 
 export class ProgressStore implements ProgressSink {
@@ -149,8 +253,7 @@ export class ProgressStore implements ProgressSink {
   private read(): Progress {
     try {
       if (!existsSync(this.file)) return emptyProgress()
-      const raw = JSON.parse(readFileSync(this.file, 'utf8')) as unknown
-      return isProgress(raw) ? { ...emptyProgress(), ...raw } : emptyProgress()
+      return migrateProgress(JSON.parse(readFileSync(this.file, 'utf8'))) ?? emptyProgress()
     } catch {
       return emptyProgress()
     }
@@ -173,6 +276,15 @@ export class ProgressStore implements ProgressSink {
   clearActive(): void {
     if (!this.data.active) return
     this.data = { ...this.data, active: undefined }
+    this.flush()
+  }
+
+  /** Notes that today's review reminder was shown (at most one a day). */
+  markPrompted(now: number): void {
+    this.data = {
+      ...this.data,
+      reminders: { ...this.data.reminders, lastPromptDay: localDay(now) }
+    }
     this.flush()
   }
 

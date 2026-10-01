@@ -51,6 +51,10 @@ export interface LessonState {
   praise: number
   /** Voice-only / switch users: "do it" is offered from the first hint level (T21). */
   offerEarly: boolean
+  /** A spaced-repetition "prove it" run (T29): no pointing before the first hint. */
+  review: boolean
+  /** Opt-in idle hints (T33): hints come when the user is idle, not on the timer ladder. */
+  idleHints: boolean
 }
 
 export type TimerId = 'hint' | 'timeout' | 'advance'
@@ -67,8 +71,12 @@ export type LessonEvent =
       pace?: number
       stats?: Record<string, StepStats>
       offerEarly?: boolean
+      review?: boolean
+      idleHints?: boolean
     }
   | { type: 'command'; command: LessonCommand }
+  /** The user has been idle in the lesson app (T33): the next hint, quietly unless voice. */
+  | { type: 'idle'; voice: boolean }
   | { type: 'timer'; id: TimerId }
   /** forced = the answer to an "evaluate now" (after "done"). */
   | { type: 'check'; step: number; result: CheckResult; forced?: boolean }
@@ -111,7 +119,9 @@ export const IDLE: LessonState = {
   pace: 1,
   stats: {},
   praise: 0,
-  offerEarly: false
+  offerEarly: false,
+  review: false,
+  idleHints: false
 }
 
 /** A lesson is on (the voice grammar and lesson context apply). */

@@ -7,6 +7,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { join } from 'path'
 import { z } from 'zod'
 import { matchSkill, type SkillPack, type SkillRegion } from '../ai/skills'
+import { parseCurriculum, type Curriculum } from './curriculum'
 import { parseLesson, type Lesson } from './lesson'
 
 export type SkillSource = 'builtin' | 'user'
@@ -16,6 +17,8 @@ export interface Skill extends SkillPack {
   bridge?: string
   source: SkillSource
   lessons: Lesson[]
+  /** curriculum.json (T28): units → lesson ids. */
+  curriculum?: Curriculum
 }
 
 export interface RegistryProblem {
@@ -169,6 +172,9 @@ export class SkillRegistry {
       return
     }
     const prev = this.skills.get(meta.id)
+    // A user pack replaces the bundled one but keeps bundled lessons it does not redefine.
+    const all = prev ? mergeLessons(prev.lessons, lessons) : lessons
+    const curriculum = this.loadCurriculum(join(dir, 'curriculum.json'), all) ?? prev?.curriculum
     this.skills.set(meta.id, {
       id: meta.id,
       name: meta.name,
@@ -179,9 +185,22 @@ export class SkillRegistry {
       ...(meta.bridge ? { bridge: meta.bridge } : {}),
       regions: loadRegions(dir),
       source,
-      // A user pack replaces the bundled one but keeps bundled lessons it does not redefine.
-      lessons: prev ? mergeLessons(prev.lessons, lessons) : lessons
+      lessons: all,
+      ...(curriculum ? { curriculum } : {})
     })
+  }
+
+  /** The pack's curriculum; a broken one is listed in problems() and ignored. */
+  private loadCurriculum(file: string, lessons: Lesson[]): Curriculum | undefined {
+    if (!existsSync(file)) return undefined
+    try {
+      const r = parseCurriculum(readJson(file), lessons)
+      if ('curriculum' in r) return r.curriculum
+      this.problem(file, r.error)
+    } catch (e) {
+      this.problem(file, zodMessage(e))
+    }
+    return undefined
   }
 
   private loadLessons(dir: string): Lesson[] {

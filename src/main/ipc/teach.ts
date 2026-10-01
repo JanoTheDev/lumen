@@ -1,5 +1,5 @@
-// Lesson picker IPC (07 T22): list, start / resume, commands, progress, the user's own lessons,
-// and the onboarding practice board's clicks.
+// Lesson picker IPC (07 T22, T29): list, start / resume, reviews, commands, progress, the user's
+// own lessons, and the onboarding practice board's clicks.
 import { ipcMain } from 'electron'
 import { lessonCommandSchema, lessonIdSchema, nameSchema, practiceLabelSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
@@ -10,7 +10,8 @@ import {
   listLessons,
   practiceClick,
   saveGeneratedLesson,
-  startOrResume
+  startOrResume,
+  startReview
 } from '../teach'
 
 export function registerTeachIpc(): void {
@@ -29,6 +30,10 @@ export function registerTeachIpc(): void {
     return { ok: !!cmd && lessonCommand(cmd) }
   })
   ipcMain.handle('teach:progress', () => lessonProgress())
+  ipcMain.handle('teach:review', (_e, raw: unknown) => {
+    const id = safeParse('teach:review', lessonIdSchema, raw)
+    return id ? startReview(id) : INVALID
+  })
   ipcMain.handle('teach:delete', (_e, raw: unknown) => {
     const id = safeParse('teach:delete', lessonIdSchema, raw)
     return { ok: !!id && deleteLesson(id) }

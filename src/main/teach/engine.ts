@@ -52,7 +52,9 @@ const cancelAll: LessonEffect[] = [
   { type: 'cancelTimer', id: 'advance' }
 ]
 
-function hintTimer(level: number, pace: number): LessonEffect[] {
+/** The next ladder timer; none when idle hints (T33) drive the ladder instead. */
+function hintTimer(s: LessonState, level: number, pace = s.pace): LessonEffect[] {
+  if (s.idleHints) return []
   const ms = nextHintDelay(level, pace)
   return ms === null ? [] : [{ type: 'startTimer', id: 'hint', ms }]
 }
@@ -60,7 +62,8 @@ function hintTimer(level: number, pace: number): LessonEffect[] {
 function present(s0: LessonState, index: number): Transition {
   const lesson = s0.lesson!
   const step = lesson.steps[index]
-  const level = startLevel(step)
+  // A review (T29) says the step but points only from the first hint on.
+  const level = s0.review ? LEVEL.SAY : startLevel(step)
   let s: LessonState = { ...s0, phase: 'step.waiting', index, level }
   if (!s.stats[step.id]) s = withStats(s, {})
   const effects: LessonEffect[] = [
@@ -69,7 +72,7 @@ function present(s0: LessonState, index: number): Transition {
     { type: 'point', step: index, level },
     { type: 'say', text: step.say, interruptible: true },
     { type: 'startChecks', step: index },
-    ...hintTimer(level, s.pace),
+    ...hintTimer(s, level),
     ...(step.timeoutSec
       ? [
           {
@@ -85,12 +88,15 @@ function present(s0: LessonState, index: number): Transition {
   return { state: s, effects }
 }
 
-/** Moves the hint ladder to `level` (never down). L4 and up is the do-it offer. */
-function escalate(s0: LessonState, target: number): Transition {
+/**
+ * Moves the hint ladder to `level` (never down). L4 and up is the do-it offer. quiet = an idle
+ * hint (T33): shown in the bar, not spoken.
+ */
+function escalate(s0: LessonState, target: number, quiet = false): Transition {
   const lesson = s0.lesson!
   const step = stepOf(s0)
   const level = Math.max(s0.level, target)
-  if (level >= LEVEL.OFFER) return offer({ ...s0, level: LEVEL.OFFER })
+  if (level >= LEVEL.OFFER) return offer({ ...s0, level: LEVEL.OFFER }, quiet)
   let s: LessonState = { ...s0, level }
   const text = hintText(step, level)
   if (level >= LEVEL.HINT) s = withStats(s, { hints: Math.max(stats(s).hints, level - 1) })
@@ -99,16 +105,17 @@ function escalate(s0: LessonState, target: number): Transition {
     { type: 'point', step: s.index, level }
   ]
   if (text) {
-    effects.push(
-      { type: 'say', text, interruptible: true },
-      { type: 'assistant', state: stepState(lesson, s.index, text) }
-    )
+    if (!quiet) effects.push({ type: 'say', text, interruptible: true })
+    effects.push({ type: 'assistant', state: stepState(lesson, s.index, text) })
   }
-  effects.push(...hintTimer(level, s.pace), { type: 'log', msg: `hint level ${level}` })
+  effects.push(...hintTimer(s, level), {
+    type: 'log',
+    msg: `hint level ${level}${quiet ? ' (idle, quiet)' : ''}`
+  })
   return { state: s, effects }
 }
 
-function offer(s0: LessonState): Transition {
+function offer(s0: LessonState, quiet = false): Transition {
   const s: LessonState = withStats({ ...s0, phase: 'offer-do-it' }, { hints: 3 })
   return {
     state: s,
@@ -116,7 +123,7 @@ function offer(s0: LessonState): Transition {
       { type: 'cancelTimer', id: 'hint' },
       { type: 'cancelTimer', id: 'timeout' },
       { type: 'point', step: s.index, level: LEVEL.RING },
-      { type: 'say', text: OFFER_TEXT, interruptible: true },
+      ...(quiet ? [] : [{ type: 'say', text: OFFER_TEXT, interruptible: true } as const]),
       {
         type: 'assistant',
         state: stepState(s.lesson!, s.index, OFFER_TEXT, {
@@ -235,7 +242,7 @@ function notYet(s0: LessonState): Transition {
       { type: 'say', text, interruptible: true },
       { type: 'assistant', state: stepState(s.lesson!, s.index, text) },
       { type: 'startChecks', step: s.index },
-      ...hintTimer(level, s.pace)
+      ...hintTimer(s, level)
     ]
   }
 }
@@ -370,7 +377,7 @@ function onCommand(s: LessonState, c: LessonCommand): Transition {
         effects: [
           { type: 'say', text, interruptible: true },
           { type: 'cancelTimer', id: 'hint' },
-          ...(s.phase === 'step.waiting' ? hintTimer(s.level, pace) : [])
+          ...(s.phase === 'step.waiting' ? hintTimer(s, s.level, pace) : [])
         ]
       }
     }
@@ -389,6 +396,8 @@ export function reduce(s: LessonState, e: LessonEvent): Transition {
       pace: e.pace ?? 1,
       stats: e.stats ?? {},
       offerEarly: !!e.offerEarly,
+      review: !!e.review,
+      idleHints: !!e.idleHints,
       index: Math.min(Math.max(0, e.stepIndex ?? 0), e.lesson.steps.length - 1)
     }
     const prev: LessonEffect[] = isRunning(s) ? cancelAll : []
@@ -436,6 +445,10 @@ export function reduce(s: LessonState, e: LessonEvent): Transition {
           { type: 'startChecks', step: s.index }
         ]
       }
+    case 'idle':
+      return s.phase === 'step.waiting'
+        ? escalate(s, Math.max(s.level, LEVEL.POINT) + 1, !e.voice)
+        : same(s)
     case 'app-blur':
       return s.phase === 'step.waiting' || s.phase === 'offer-do-it'
         ? pause(s, 'app blur')

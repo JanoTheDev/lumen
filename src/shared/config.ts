@@ -319,7 +319,16 @@ export const configV2Schema = z.object({
   privacy: z.object({ saveScreenshots: z.boolean(), telemetry: z.boolean() }),
   teach: z.object({
     activeSkill: z.string().max(80).nullable(),
-    hintLevel: z.enum(['auto', 'minimal', 'detailed'])
+    hintLevel: z.enum(['auto', 'minimal', 'detailed']),
+    /** Offer a due lesson review when its app is opened, at most once a day (07 T29). */
+    reviewReminders: z.boolean(),
+    /** Opt-in idle hints (07 T33): off by default; no screenshots outside a lesson. */
+    idleHint: z.boolean(),
+    /** Skill ids idle hints are on for; empty = every app. */
+    idleHintApps: z.array(z.string().max(80)).max(50),
+    idleHintSec: z.number().int().min(5).max(300),
+    /** Speak idle hints (else bar caption only). */
+    idleHintVoice: z.boolean()
   }),
   memory: z.object({
     enabled: z.boolean(),
@@ -419,7 +428,15 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },
   privacy: { saveScreenshots: false, telemetry: false },
-  teach: { activeSkill: null, hintLevel: 'auto' },
+  teach: {
+    activeSkill: null,
+    hintLevel: 'auto',
+    reviewReminders: true,
+    idleHint: false,
+    idleHintApps: [],
+    idleHintSec: 20,
+    idleHintVoice: false
+  },
   memory: {
     enabled: false,
     autoLearn: 'ask',

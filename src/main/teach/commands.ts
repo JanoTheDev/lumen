@@ -294,3 +294,66 @@ export function lessonNumber(query: string): number | null {
   const n = /^\d+$/.test(w[0]) ? Number(w[0]) : (NUMBER_WORDS[w[0]] ?? 0)
   return n > 0 && n <= 50 ? n : null
 }
+
+const NEXT_RES = [
+  /^what (?:should|can|do) i (?:learn|study|try|do) next(?: (?:in|for|with) (?<app>.+))?$/,
+  /^what (?:should|can|do) i (?:learn|study|try) (?:in|for|with) (?<app>.+?) next$/,
+  /^(?:whats|what is) (?:my )?next lesson(?: (?:in|for) (?<app>.+))?$/,
+  /^(?:suggest|recommend) (?:a|my next|the next) lesson(?: (?:in|for) (?<app>.+))?$/
+]
+
+/** "what should I learn next in Blender?" → { app: 'blender' }; no app named → {}. */
+export function matchLearnNext(utterance: string): { app?: string } | null {
+  if (!utterance || utterance.length > 120) return null
+  const norm = normalize(utterance)
+  for (const re of NEXT_RES) {
+    const m = re.exec(norm)
+    if (m) {
+      const app = m.groups?.app?.trim()
+      return app ? { app } : {}
+    }
+  }
+  return null
+}
+
+const START_IT = new Set(
+  [
+    'start it',
+    'start the lesson',
+    'start the review',
+    'start review',
+    'review',
+    'review it',
+    'lets review',
+    'do the review',
+    'do the lesson',
+    'quick review',
+    'lets do it'
+  ].map(normalize)
+)
+
+/** "start it" / "review" — takes a suggested lesson or a review prompt. */
+export function matchStartIt(utterance: string): boolean {
+  return utterance.length <= 40 && START_IT.has(normalize(utterance))
+}
+
+const STOP_REMINDING =
+  /^(?:stop|no more|dont|do not|never)(?: (?:the|review|lesson))* remind(?:ing|ers?)?(?: me)?(?: (?:about|of) (?:reviews?|lessons?))?$/
+
+/** "stop reminding me", "no more reminders", "don't remind me about reviews". */
+export function matchStopReminding(utterance: string): boolean {
+  return utterance.length <= 60 && STOP_REMINDING.test(normalize(utterance))
+}
+
+const COACH_ON =
+  /^(?:(?:turn on|start|enable) coach(?:ing)?(?: mode)?|coach mode(?: on)?|coach me)$/
+const COACH_OFF = /^(?:(?:turn off|stop|end|disable) coach(?:ing)?(?: mode)?|coach mode off)$/
+
+/** "coach mode on" → true, "stop coaching" → false, else null (T33). */
+export function matchCoach(utterance: string): boolean | null {
+  if (!utterance || utterance.length > 40) return null
+  const norm = normalize(utterance)
+  if (COACH_ON.test(norm)) return true
+  if (COACH_OFF.test(norm)) return false
+  return null
+}

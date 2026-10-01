@@ -328,3 +328,28 @@ describe('vision budget', () => {
     expect(t.runner.state.stats.look.attempts).toBe(2)
   })
 })
+
+describe('LessonRunner review and idle runs (07 T29, T33)', () => {
+  it('a review shows nothing on screen until the first hint', async () => {
+    const t = setup()
+    t.runner.start(LESSON, { autoStart: true, review: true })
+    await flush()
+    expect(t.scenes.at(-1)).toBeNull()
+    expect(t.said.at(-1)).toBe('Open the File menu.')
+    t.runner.command('help')
+    await flush()
+    expect(t.scenes.at(-1)).toMatchObject({ buddy: { mode: 'point' } })
+  })
+
+  it('idle() gives the next hint quietly and only while a step waits', async () => {
+    const t = setup()
+    t.runner.start(LESSON, { autoStart: true, idleHints: true })
+    await flush()
+    const said = t.said.length
+    expect(t.runner.idle(false)).toBe(true)
+    expect(t.said.length).toBe(said)
+    expect(t.states.at(-1)).toMatchObject({ statusText: 'File is top left.' })
+    t.runner.command('pause')
+    expect(t.runner.idle(false)).toBe(false)
+  })
+})
