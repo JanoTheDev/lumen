@@ -2,6 +2,7 @@
 //   1. 06's local grammar (injected; a no-op until 06 lands). Handled means done.
 //   2. The local prefilter: whole-utterance commands only (guide nav while a guide is active,
 //      save/replay/play with the word "guide", cancel words, "do it" continuations).
+//      Then the background intent ("in the background …"), which starts a background task.
 //   3. The LLM router on the fast model: mode, screen needs, target app and parallel split.
 //      The main call receives the mode as an instruction and does not re-decide it.
 import { z } from 'zod'
@@ -119,6 +120,25 @@ export function routeLocal(
     hit.kind === 'guide-nav' || hit.kind === 'memory' ? ` ${JSON.stringify(hit.command)}` : ''
   log('plan', `prefilter: ${hit.kind}${detail}`)
   return handle(hit)
+}
+
+// ---- 2b. Background intent (08 T31) ----
+
+const BG_LEAD_RE =
+  /^(?:(?:ok|okay|hey lumen|lumen|please|can you|could you)[,\s]+)*(?:in the background|while i(?:'m| am)? work(?:ing)?|while i do (?:my|other) (?:work|stuff))[,:\s]+(?:(?:can|could) you |please )?(.+)$/i
+const BG_TAIL_RE = /^(.+?)[,\s]+(?:in the background|while i(?:'m| am)? work(?:ing)?)[.!?]*$/i
+const KEEP_EYE_RE = /^(?:(?:please|can you|could you)\s+)*(keep an eye on .+)$/i
+
+/**
+ * "in the background, …", "… while I work", "keep an eye on …": the task to run as a
+ * background task (the lead-in removed), or null.
+ */
+export function matchBackgroundIntent(utterance: string): { prompt: string } | null {
+  const u = utterance.trim().replace(/\s+/g, ' ')
+  const m = BG_LEAD_RE.exec(u) ?? BG_TAIL_RE.exec(u) ?? KEEP_EYE_RE.exec(u)
+  const prompt = m?.[1]?.trim().replace(/^[,:\s]+/, '')
+  if (!prompt || prompt.split(' ').length < 2) return null
+  return { prompt: prompt.charAt(0).toUpperCase() + prompt.slice(1) }
 }
 
 // ---- 3. LLM router ----

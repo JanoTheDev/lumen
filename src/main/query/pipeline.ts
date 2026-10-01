@@ -14,6 +14,7 @@ import {
   describeRoute,
   isContinuation,
   mainModeFor,
+  matchBackgroundIntent,
   mentionsOtherScreen,
   MIN_ROUTE_CONFIDENCE,
   routeWithLlm,
@@ -35,6 +36,9 @@ import {
   resumeAgentTask,
   runAgentTask
 } from '../agent-mode/session'
+import { startBackgroundTask } from '../agent-mode/background'
+import { enabledSkill } from '../agent-mode/skill-tools'
+import { matchTrigger } from '../skills'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
 
@@ -55,7 +59,11 @@ interface TurnPlan {
   routing: Pick<CallOptions, 'routedMode' | 'targetApp'>
   /** A locate request: a navigate + follow_up reply must end in locate. */
   locate: boolean
+  /** The router picked an installed skill. */
+  skill?: SkillCall
 }
+
+type SkillCall = { name: string; args?: { name: string; value: string }[] }
 
 /**
  * "Show me how" (07 T18): a routed guide request becomes a lesson. The handler returns the
@@ -241,7 +249,8 @@ async function planRouted(
             : 'model',
       subqueries: route?.parallelSplit,
       routing: { routedMode, targetApp },
-      locate: route?.mode === 'locate'
+      locate: route?.mode === 'locate',
+      ...(confident && route?.skill ? { skill: route.skill } : {})
     }
   }
 }
@@ -263,6 +272,27 @@ async function runTurn(
       return result
     }
   }
+  const bg = opts.lowDetail ? null : matchBackgroundIntent(prompt)
+  // A skill's trigger phrase (11 T03/T04): runs as an agent task with the skill loaded, or as a
+  // background task for `context: background` skills and "in the background, <phrase>".
+  const hit = opts.lowDetail ? null : matchTrigger(bg?.prompt ?? prompt)
+  const skill = hit?.kind === 'skill' ? enabledSkill(hit.name) : null
+  if (bg && !skill) {
+    const result = startInBackground(bg.prompt)
+    await present(result, prompt, deps.onGuide, undefined, scope.signal)
+    return result
+  }
+  if (skill) {
+    log('plan', `skill trigger: ${skill.manifest.name}`)
+    return runSkillTurn(
+      bg?.prompt ?? prompt,
+      { name: skill.manifest.name },
+      !!bg,
+      null,
+      scope,
+      deps
+    )
+  }
   const timer = startTimer(`query "${prompt.slice(0, 60)}"${opts.lowDetail ? ' [low-detail]' : ''}`)
   const legacy = loadConfig().ai.router === 'legacy'
   log(
@@ -278,6 +308,12 @@ async function runTurn(
   timer.split('routed + context gathered')
   log('plan', `active window: ${activeWindow}`)
   log('plan', `query: "${plan.prompt.slice(0, 80)}"`)
+
+  // The router picked an installed skill (05): same path as a trigger phrase.
+  if (plan.skill && enabledSkill(plan.skill.name)) {
+    timer.total()
+    return runSkillTurn(plan.prompt, plan.skill, false, ctx, scope, deps)
+  }
 
   if (
     teachHandler &&
@@ -369,6 +405,54 @@ async function runTurn(
     recordTurn({ utterance: prompt, answer: spoken, mode, targets, app })
   }
   return result
+}
+
+/**
+ * A skill run (11 T04 minimum): an agent task with the skill's instructions preloaded, or a
+ * background task when the skill says `context: background` or the user said "in the background".
+ */
+async function runSkillTurn(
+  prompt: string,
+  call: SkillCall,
+  background: boolean,
+  ctx: QueryContext | null,
+  scope: CancelScope,
+  deps: PipelineDeps
+): Promise<ModelResponse> {
+  const skill = enabledSkill(call.name)!
+  const args = call.args?.length
+    ? ` (skill values: ${call.args.map((a) => `${a.name}=${a.value}`).join(', ')})`
+    : ''
+  let result: ModelResponse
+  if (background || skill.manifest.context === 'background') {
+    result = startInBackground(`${prompt}${args}`, skill.manifest.name)
+  } else {
+    const now =
+      ctx ??
+      windowOnlyContext(
+        await requireAgent()
+          .activeWindow()
+          .catch(() => '')
+      )
+    result = await runAgentTask(prompt, now, scope.signal, {
+      skill: skill.manifest.name,
+      ...(call.args?.length ? { skillArgs: call.args } : {})
+    })
+    scope.throwIfCancelled()
+  }
+  await present(result, prompt, deps.onGuide, undefined, scope.signal)
+  addToHistory(historyExchange(prompt, result))
+  return result
+}
+
+/** "in the background, …" (08 T31): starts a background task; the reply says so. */
+function startInBackground(prompt: string, skill?: string): ModelResponse {
+  const t = startBackgroundTask({ prompt, origin: 'voice', ...(skill ? { skill } : {}) })
+  const text =
+    t.phase === 'queued'
+      ? `Queued in the background: ${t.title}. It starts when another task finishes.`
+      : `Working on it in the background: ${t.title}. I'll tell you when it's done.`
+  return { mode: 'answer', text, spoken: text }
 }
 
 /**
