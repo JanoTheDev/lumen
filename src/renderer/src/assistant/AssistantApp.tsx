@@ -17,6 +17,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AssistantView } from '@shared/channels'
 import type { AssistantPhase } from '@shared/events'
 import { Button, IconButton, icons, type IconComponent } from '../ui'
+import { CardStrip } from '../cards/CardStrip'
 import { animateSpring, fadeOut, prefersReducedMotion } from '../ui/motion'
 import { send, useIpc } from '../lib/ipc'
 import { BarLive, CaptionEditor, CaptionRow, FeedbackLine } from './Caption'
@@ -342,6 +343,9 @@ export function AssistantApp(): JSX.Element {
                           onLink={openLink}
                         />
                       </div>
+                      {v.answer.cardsId && !v.answer.streaming && (
+                        <CardStrip id={v.answer.cardsId} simple={simple} />
+                      )}
                       {v.model && <p className="as-answer__meta">{v.model}</p>}
                     </div>
                   ) : null}

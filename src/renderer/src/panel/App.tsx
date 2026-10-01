@@ -8,6 +8,7 @@ import './home/home.css'
 import { Onboarding } from './onboarding/Onboarding'
 import './onboarding/onboarding.css'
 import { TasksPage } from './tasks/TasksPage'
+import { AnswerPage } from '../cards/AnswerPage'
 import './tasks/tasks.css'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
@@ -40,6 +41,8 @@ export function App(): JSX.Element {
         <Home />
       ) : route.name === 'onboarding' ? (
         <Onboarding />
+      ) : route.name === 'answer' ? (
+        <AnswerPage id={route.id} table={route.table} />
       ) : route.name === 'tasks' ? (
         <TasksPage id={route.id} />
       ) : (
