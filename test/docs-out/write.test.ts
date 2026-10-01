@@ -8,7 +8,14 @@ import {
   writeRoots,
   type Folders
 } from '../../src/main/docs-out/place'
-import { createDocument, lastMade, type WriteDeps } from '../../src/main/docs-out/write'
+import {
+  createDocument,
+  lastMade,
+  writeTarget,
+  type WriteDeps
+} from '../../src/main/docs-out/write'
+import { linkSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'fs'
+import { tempDir } from '../helpers/fixtures'
 import type { EvalAction } from '../../src/main/actions/safety'
 
 const HOME = 'C:\\Users\\ana'
@@ -96,7 +103,7 @@ function fakeDeps(over: Partial<WriteDeps> = {}): WriteDeps & {
       actions.push(a)
       return { ok: true, reason: '', finish: () => {} }
     },
-    keepForUndo: () => true,
+    prepareUndo: () => ({ commit: () => {}, discard: () => {} }),
     now: () => 1000,
     ...over
   }
@@ -138,8 +145,9 @@ describe('createDocument', () => {
   })
 
   it('replaces only through a replace confirm and keeps an undo copy', async () => {
-    const keep = vi.fn(() => true)
-    const deps = fakeDeps({ keepForUndo: keep })
+    const commit = vi.fn()
+    const keep = vi.fn(() => ({ commit, discard: () => {} }))
+    const deps = fakeDeps({ prepareUndo: keep })
     const existing = join(F.desktop, 'Packing.md')
     deps.files.set(existing, 'old')
     const r = await createDocument(
@@ -150,6 +158,7 @@ describe('createDocument', () => {
     expect(r.ok).toBe(true)
     expect(deps.actions[0].action).toBe('replace')
     expect(keep).toHaveBeenCalledWith(existing, 'changed', 't3')
+    expect(commit).toHaveBeenCalledOnce()
     expect(deps.files.get(existing)).not.toBe('old')
   })
 
@@ -184,10 +193,13 @@ describe('createDocument', () => {
   })
 
   it('reports a file that appeared meanwhile instead of overwriting it', async () => {
+    const commit = vi.fn()
+    const discard = vi.fn()
     const deps = fakeDeps({
       write: async () => {
         throw Object.assign(new Error('exists'), { code: 'EEXIST' })
-      }
+      },
+      prepareUndo: () => ({ commit, discard })
     })
     const r = await createDocument(
       { format: 'txt', name: 'x', place: 'default', replace: false, ...content },
@@ -196,5 +208,31 @@ describe('createDocument', () => {
     )
     expect(r.ok).toBe(false)
     expect(!r.ok && r.error).toMatch(/just appeared/)
+    // Review M4: no "created" record pointing at the other program's file.
+    expect(commit).not.toHaveBeenCalled()
+    expect(discard).toHaveBeenCalledOnce()
+  })
+})
+
+describe('writeTarget (review L2)', () => {
+  it('a replace swaps a hard link for a new file and leaves the other name alone', async () => {
+    const t = tempDir('write-link-')
+    try {
+      const elsewhere = join(t.dir, 'elsewhere')
+      const docs = join(t.dir, 'Documents')
+      mkdirSync(elsewhere)
+      mkdirSync(docs)
+      writeFileSync(join(elsewhere, 'a.txt'), 'outside')
+      linkSync(join(elsewhere, 'a.txt'), join(docs, 'a.txt'))
+      await writeTarget(join(docs, 'a.txt'), 'new', true)
+      expect(readFileSync(join(docs, 'a.txt'), 'utf8')).toBe('new')
+      expect(readFileSync(join(elsewhere, 'a.txt'), 'utf8')).toBe('outside')
+      expect(readdirSync(docs)).toEqual(['a.txt'])
+      await expect(writeTarget(join(docs, 'a.txt'), 'x', false)).rejects.toMatchObject({
+        code: 'EEXIST'
+      })
+    } finally {
+      t.cleanup()
+    }
   })
 })

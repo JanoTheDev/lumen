@@ -18,7 +18,7 @@ function deps(files: Map<string, unknown>, gateOrigins: string[]): WriteDeps {
       gateOrigins.push(ctx.origin)
       return { ok: true, reason: '', finish: () => {} }
     },
-    keepForUndo: () => true,
+    prepareUndo: () => ({ commit: () => {}, discard: () => {} }),
     now: () => 1
   }
 }

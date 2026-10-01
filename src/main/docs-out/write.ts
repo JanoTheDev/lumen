@@ -1,10 +1,13 @@
 // create_file: content → format → a new file. The folder and name are checked (place.ts),
 // every write goes through the policy gate (a new file in Documents\Lumen is low; elsewhere is
 // medium for agents; replacing an existing file always asks) and is audited there, and undo
-// can remove what was made ("undo that"). The file is written exclusively ('wx'), so a file
-// that appeared meanwhile is never overwritten without the confirm.
+// can remove what was made ("undo that"; the record is kept only once the write worked). A new
+// file is written exclusively ('wx'), so a file that appeared meanwhile is never overwritten
+// without the confirm; a replace writes a temp file and renames it over the old name, so a
+// link at that name is replaced, never written through.
+import { randomBytes } from 'crypto'
 import { existsSync, realpathSync } from 'fs'
-import { mkdir, writeFile } from 'fs/promises'
+import { mkdir, rename, rm, writeFile } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type { GateCtx } from '../actions/policy'
 import type { EvalAction } from '../actions/safety'
@@ -46,8 +49,15 @@ export interface WriteDeps {
     action: EvalAction,
     ctx: GateCtx
   ): Promise<{ ok: boolean; reason: string; finish(r: 'ok' | 'error'): void }>
-  /** Undo record (keepFileForUndo); false = no copy of a replaced file could be kept. */
-  keepForUndo(path: string, verb: 'created' | 'changed', taskId: string): boolean
+  /**
+   * Undo record (prepareFileUndo): committed once the write worked, discarded when it failed;
+   * null = no copy of a replaced file could be kept.
+   */
+  prepareUndo(
+    path: string,
+    verb: 'created' | 'changed',
+    taskId: string
+  ): { commit(): void; discard(): void } | null
   now(): number
 }
 
@@ -142,16 +152,20 @@ export async function createDocument(
     ctx
   )
   if (!g.ok) return { ok: false, error: `I did not save it: ${g.reason}`, denied: true }
+  let undo: { commit(): void; discard(): void } | null = null
   try {
     const data = bytes ?? (await render(format, doc, deps.pdf))
     await deps.mkdir(dirname(target))
-    if (!deps.keepForUndo(target, replacing ? 'changed' : 'created', ctx.taskId) && replacing) {
+    undo = deps.prepareUndo(target, replacing ? 'changed' : 'created', ctx.taskId)
+    if (!undo && replacing) {
       g.finish('error')
       return { ok: false, error: 'I could not keep a copy of the old file, so I left it alone.' }
     }
     await deps.write(target, data, replacing)
+    undo?.commit()
     g.finish('ok')
   } catch (e) {
+    undo?.discard()
     g.finish('error')
     const code = (e as NodeJS.ErrnoException).code
     log('fail', `create_file failed: ${code ?? (e as Error).message}`)
@@ -175,11 +189,32 @@ export async function createDocument(
   }
 }
 
+/**
+ * Writes the file: exclusively ('wx', EEXIST when taken), or for a replace through a temp file
+ * in the same folder renamed over the old name, so a symlink or hard link there is replaced
+ * and the file it points at is left alone.
+ */
+export async function writeTarget(
+  p: string,
+  data: Buffer | string,
+  replace: boolean
+): Promise<void> {
+  if (!replace) return writeFile(p, data, { flag: 'wx' })
+  const tmp = join(dirname(p), `.${basename(p)}.${randomBytes(4).toString('hex')}.tmp`)
+  await writeFile(tmp, data, { flag: 'wx' })
+  try {
+    await rename(tmp, p)
+  } catch (e) {
+    await rm(tmp, { force: true }).catch(() => {})
+    throw e
+  }
+}
+
 /** The real dependencies (Electron paths, the policy gate, undo). */
 export async function realWriteDeps(): Promise<WriteDeps> {
   const { app } = await import('electron')
   const { gate } = await import('../actions/policy')
-  const { keepFileForUndo } = await import('../undo')
+  const { prepareFileUndo } = await import('../undo')
   const { htmlToPdf } = await import('./pdf')
   const { loadConfig } = await import('../config')
   const { expandRoot } = await import('../agent-mode/background/files')
@@ -203,13 +238,13 @@ export async function realWriteDeps(): Promise<WriteDeps> {
     mkdir: async (dir) => {
       await mkdir(dir, { recursive: true })
     },
-    write: (p, data, replace) => writeFile(p, data, { flag: replace ? 'w' : 'wx' }),
+    write: writeTarget,
     pdf: htmlToPdf,
     gate: async (action, ctx) => {
       const g = await gate(action, ctx)
       return { ok: g.ok, reason: g.decision.reason, finish: (r) => g.finish(r) }
     },
-    keepForUndo: keepFileForUndo,
+    prepareUndo: prepareFileUndo,
     now: () => Date.now()
   }
 }
