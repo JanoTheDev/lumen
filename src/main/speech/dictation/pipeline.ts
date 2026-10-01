@@ -20,8 +20,10 @@ import {
 } from './autodetect'
 import { applyBacktrack } from './backtrack'
 import { cleanupDictation } from './cleanup'
+import { applyCodingMode } from './coding'
 import { looksLikeEditCommand } from './command'
 import { dropEditChip, runEditCommand } from './command-run'
+import { appTermsFor, applySpellAs, rulesFromCorrections, withRules } from './dictionary'
 import { addNote, handleNoteCommand } from './notes'
 import { insertDictation, readFocus } from './insert'
 import { watchCorrections, type LearnDeps } from './learn-watch'
@@ -33,9 +35,11 @@ import {
   takeRecoverable
 } from './recovery'
 import { noTextField, RecordingClock, scratchpadOnFailure } from './scratchpad'
-import { shapeDictation } from './shape'
+import { takeScreenNames } from './screen-names'
+import { shapeDictation, type ShapeExtras } from './shape'
 import { expandSnippet, loadSnippets, matchSnippet } from './snippets'
 import type { FocusTarget } from './terminal-guard'
+import { claudeResolver, matchClaudeDictation, sendToClaude, titleResolver } from './to-claude'
 
 type DictationConfig = AppConfig['dictation']
 
@@ -134,8 +138,12 @@ export function onDictationUp(): void {
 
 const learnDeps: LearnDeps = {
   dictionary: () => loadConfig().dictation.dictionary,
-  learned(dictionary, added) {
-    void patchConfig({ dictation: { ...loadConfig().dictation, dictionary } })
+  learned(dictionary, added, found) {
+    const cur = loadConfig().dictation
+    // A respelling ("Figmah" fixed to "Figma") also becomes a spell-as rule (T39).
+    const rules = rulesFromCorrections(found ?? [], added)
+    const spellAs = rules.length ? withRules(cur.spellAs ?? [], rules) : cur.spellAs
+    void patchConfig({ dictation: { ...cur, dictionary, spellAs } })
     const names = added.map((w) => `“${w}”`).join(', ')
     log('step', `dictionary learned: ${added.join(', ')}`)
     setStatus('answer', `Added ${names} to your dictionary (Settings, Voice)`, undefined, 5000)
@@ -185,6 +193,58 @@ function reportBase(
     style: meta.style,
     durationMs: meta.durationMs
   }
+}
+
+const FILE_TAG_RE = /\b(?:at|tag) file\b/i
+
+/** App terms, screen names and the file resolver for shaping (T39, T41, T42). */
+async function shapeExtras(
+  cleanedText: string,
+  target: FocusTarget,
+  cfg: DictationConfig
+): Promise<ShapeExtras> {
+  const [screenNames, resolveFile] = await Promise.all([
+    takeScreenNames(),
+    cfg.codingMode && FILE_TAG_RE.test(cleanedText) ? titleResolver(target.title) : undefined
+  ])
+  return { appTerms: appTermsFor(cfg.appDictionary, target), screenNames, resolveFile }
+}
+
+/** "To Claude, …" on the dictation hotkey (T42): cleaned, coding mode, sent to the session. */
+async function dictateToClaude(
+  body: string,
+  raw: string,
+  pendingId: string,
+  cfg: DictationConfig,
+  signal: AbortSignal,
+  durationMs: number | undefined
+): Promise<DictateResult> {
+  const corrected = cfg.backtrack ? applyBacktrack(body).text : body
+  const spoken = applySpellAs(corrected || body, cfg.spellAs)
+  const [cleaned, resolveFile] = await Promise.all([
+    cleanupDictation(spoken, {
+      mode: cfg.cleanup,
+      dictionary: cfg.dictionary,
+      backtrack: cfg.backtrack,
+      signal
+    }),
+    claudeResolver(),
+    takeScreenNames()
+  ])
+  if (signal.aborted) throw new CancelledError()
+  const text = applyCodingMode(cleaned.text, { resolveFile })
+  const res = await sendToClaude(text)
+  report({ raw, text, app: 'claude-code', source: 'hotkey', ok: res.ok, durationMs })
+  if (res.ok) {
+    clearPending(pendingId)
+    log('done', `dictation sent to Claude (${text.length} chars)`)
+    setStatus('answer', res.notice, undefined, 3000)
+  } else {
+    archivePending(pendingId)
+    setStatus('error', res.notice, undefined, 4000)
+    showAnswer(`${res.notice}\n\n${text}`)
+  }
+  return { ok: res.ok, notice: res.notice }
 }
 
 /** Types already-cleaned text; on failure the text is kept in recovered.txt and shown. */
@@ -267,6 +327,10 @@ ${text}`)
         return { ok: edited.ok, notice: edited.notice }
       }
     }
+    // "To Claude, …" goes to the Claude Code session (T42).
+    const toClaude = cfg.codingMode ? matchClaudeDictation(text) : null
+    if (toClaude)
+      return await dictateToClaude(toClaude, text, pendingId, cfg, scope.signal, durationMs)
     const snippet = cfg.snippets ? snippetFor(text, false) : null
     if (snippet)
       return await finishInsert(agent, pendingId, snippet, await focus, cfg, {
@@ -275,14 +339,15 @@ ${text}`)
         durationMs
       })
     // Course correction (T34) before cleanup; the cleanup check runs on the corrected text.
-    const spoken = cfg.backtrack ? applyBacktrack(text).text : text
-    if (!spoken.trim()) {
+    const corrected = cfg.backtrack ? applyBacktrack(text).text : text
+    if (!corrected.trim()) {
       clearPending(pendingId)
       setStatus('answer', 'Scratched that', undefined, 1500)
       return { ok: true, notice: 'nothing left after the correction' }
     }
     const [cleaned, target] = await Promise.all([
-      cleanupDictation(spoken, {
+      // Spell-as rules (T39) before cleanup, so the model sees the written form.
+      cleanupDictation(applySpellAs(corrected, cfg.spellAs), {
         mode: cfg.cleanup,
         dictionary: cfg.dictionary,
         backtrack: cfg.backtrack,
@@ -292,7 +357,9 @@ ${text}`)
     ])
     scope.throwIfCancelled()
     log('plan', `dictation cleanup: ${cleaned.source}`)
-    const shaped = shapeDictation(cleaned, target, cfg)
+    const extras = await shapeExtras(cleaned.text, target, cfg)
+    scope.throwIfCancelled()
+    const shaped = shapeDictation(cleaned, target, cfg, extras)
     return await finishInsert(agent, pendingId, shaped.text, target, cfg, {
       raw: text,
       source: 'hotkey',
@@ -339,7 +406,7 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
   }
 
   const spoken = cfg.backtrack ? applyBacktrack(prompt).text : prompt
-  const cleanup = cleanupDictation(spoken || prompt, {
+  const cleanup = cleanupDictation(applySpellAs(spoken || prompt, cfg.spellAs), {
     mode: cfg.cleanup,
     dictionary: cfg.dictionary,
     backtrack: cfg.backtrack,
@@ -363,7 +430,7 @@ export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Pr
     clearPending(pendingId)
     throw e
   }
-  const shaped = shapeDictation(cleaned, target, cfg)
+  const shaped = shapeDictation(cleaned, target, cfg, await shapeExtras(cleaned.text, target, cfg))
   await finishInsert(agent, pendingId, shaped.text, target, cfg, {
     raw: prompt,
     source: 'auto',

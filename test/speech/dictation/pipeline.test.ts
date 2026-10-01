@@ -11,7 +11,19 @@ const h = vi.hoisted(() => ({
   executed: [] as unknown[],
   notes: [] as unknown[],
   snippets: [] as unknown[],
-  dictation: {} as Record<string, unknown>
+  dictation: {} as Record<string, unknown>,
+  claude: [] as string[],
+  session: true
+}))
+
+vi.mock('../../../src/main/claude-code', () => ({
+  focusedProject: () => undefined,
+  projectForTitle: () => undefined,
+  sendDictation: (text: string) => {
+    if (!h.session) return { ok: false, notice: 'No Claude session is open.' }
+    h.claude.push(text)
+    return { ok: true, notice: 'Sent to Claude in lumen.' }
+  }
 }))
 
 vi.mock('../../../src/main/windows/assistant', () => ({
@@ -87,6 +99,8 @@ beforeEach(() => {
   h.notes.length = 0
   h.snippets = []
   h.dictation = {}
+  h.claude.length = 0
+  h.session = true
   reports.length = 0
   setDictationRecorder((r) => reports.push(r))
 })
@@ -128,6 +142,54 @@ describe('dictate', () => {
   it('says nothing is left after "scratch that"', async () => {
     const res = await dictate('send the file to Bob scratch that')
     expect(res.ok).toBe(true)
+    expect(h.executed).toEqual([])
+  })
+
+  it('applies spell-as rules and the focused app terms (T39)', async () => {
+    h.dictation = {
+      spellAs: [{ from: 'cube control', to: 'kubectl' }],
+      appDictionary: { winword: ['Acme Cloud'] }
+    }
+    // Cleanup is off in these tests, so the sentence start stays lowercase.
+    await dictate('run cube control on acme cloud')
+    expect(h.executed).toEqual([
+      { type: 'type', text: 'run kubectl on Acme Cloud.', allowTerminal: false }
+    ])
+  })
+
+  it('writes code in a code editor (T42)', async () => {
+    h.focus = { ...h.focus, process: 'code.exe', title: 'app.ts - demo - Visual Studio Code' }
+    await dictate('rename camel case user name to snake case account id')
+    expect(h.executed).toEqual([
+      { type: 'type', text: 'rename userName to account_id', allowTerminal: false }
+    ])
+  })
+
+  it('tags a spoken file name in a code editor (T42)', async () => {
+    h.focus = { ...h.focus, process: 'cursor.exe', title: 'app.ts - demo - Cursor' }
+    await dictate('look at file app dot ts')
+    expect(h.executed).toEqual([{ type: 'type', text: 'look @app.ts', allowTerminal: false }])
+  })
+
+  it('leaves code words alone with coding mode off', async () => {
+    h.focus = { ...h.focus, process: 'code.exe', title: 'app.ts' }
+    h.dictation = { codingMode: false }
+    await dictate('config dot json')
+    expect(h.executed).toEqual([{ type: 'type', text: 'config dot json', allowTerminal: false }])
+  })
+
+  it('sends "to Claude, …" to the Claude Code session instead of typing (T42)', async () => {
+    const res = await dictate('to Claude, fix camel case get user in at file user dot ts')
+    expect(res).toEqual({ ok: true, notice: 'Sent to Claude in lumen.' })
+    expect(h.claude).toEqual(['fix getUser in @user.ts'])
+    expect(h.executed).toEqual([])
+    expect(reports[0]).toMatchObject({ app: 'claude-code', ok: true })
+  })
+
+  it('keeps the text when no Claude session is open', async () => {
+    h.session = false
+    const res = await dictate('dictate to Claude add a test')
+    expect(res.ok).toBe(false)
     expect(h.executed).toEqual([])
   })
 })
