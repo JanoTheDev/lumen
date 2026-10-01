@@ -5,7 +5,7 @@
 // Privacy: every text goes through the secret redactor before it is kept; typed text is never
 // kept (only its length, like the audit log); results and observations are cut to a few
 // hundred characters; screenshots are never kept.
-import type { ChatEntry, ChatKind, ChatPhase, ToolStatus } from '@shared/task-chat'
+import type { ChatEntry, ChatKind, ChatPhase, SubJob, ToolStatus } from '@shared/task-chat'
 import type { ToolCall, ToolContent } from '../ai/providers/types'
 import { redactForLog } from '../actions/redact'
 
@@ -23,6 +23,8 @@ export type RunEvent =
   | { type: 'model'; text: string }
   | { type: 'call'; call: ToolCall }
   | { type: 'result'; call: ToolCall; outcome: { content: ToolContent[]; isError?: boolean } }
+  /** run_subagents (08 T49): the state of its jobs, nested under the call's row. */
+  | { type: 'jobs'; callId: string; jobs: readonly SubJob[] }
 
 /** The header facts kept with a transcript (foreground tasks and Claude sessions have no task file). */
 export interface ChatMeta {
@@ -133,6 +135,10 @@ export function toolLabel(name: string, input: Obj): string {
       return 'Asked to use the mouse'
     case 'spawn_task':
       return `Started a helper: ${oneLine(red(String(input.prompt ?? '')), 60)}`
+    case 'run_subagents': {
+      const n = Array.isArray(input.jobs) ? input.jobs.length : 0
+      return `Asked ${n} ${n === 1 ? 'helper' : 'helpers'}`
+    }
     case 'use_skill':
       return `Used the skill ${quoted(String(input.name ?? ''))}`
     case 'read_skill_file':
@@ -189,8 +195,15 @@ function statusOf(isError: boolean | undefined, text: string): ToolStatus {
 function size(e: ChatEntry): number {
   let n = 40
   for (const v of Object.values(e)) if (typeof v === 'string') n += v.length
+  if (e.k === 'tool' && e.jobs)
+    for (const j of e.jobs) n += 40 + j.task.length + (j.result ?? '').length
   return n
 }
+
+/** At most this many jobs per run_subagents row. */
+export const MAX_JOBS = 6
+const JOB_TASK_MAX = 200
+const JOB_STEP_MAX = 120
 
 export interface RecorderOptions {
   now(): number
@@ -379,12 +392,41 @@ export class TranscriptRecorder {
     })
   }
 
+  /** run_subagents: the jobs under the call's row (redacted, cut short). */
+  jobs(callId: string, jobs: readonly SubJob[]): void {
+    const n = this.calls.get(callId)
+    if (n === undefined) return
+    const clean = jobs.slice(0, MAX_JOBS).map(
+      (j): SubJob => ({
+        role: this.clean(j.role, 20),
+        task: this.clean(j.task, JOB_TASK_MAX),
+        status: j.status,
+        costUsd: Number.isFinite(j.costUsd) ? j.costUsd : 0,
+        ...(j.step ? { step: this.clean(j.step, JOB_STEP_MAX) } : {}),
+        ...(j.result ? { result: this.clean(j.result, RESULT_MAX) } : {})
+      })
+    )
+    this.replace(n, { jobs: clean })
+  }
+
   /** Marks calls still running as stopped (the run ended under them). */
   closeOpen(): void {
     for (const n of this.calls.values()) {
       const e = this.list.find((x) => x.n === n)
       if (e?.k === 'tool' && e.status === 'running')
-        this.replace(n, { status: 'error', result: 'Stopped.' })
+        this.replace(n, {
+          status: 'error',
+          result: 'Stopped.',
+          ...(e.jobs
+            ? {
+                jobs: e.jobs.map((j) =>
+                  j.status === 'running' || j.status === 'queued'
+                    ? { ...j, status: 'stopped' as const }
+                    : j
+                )
+              }
+            : {})
+        })
     }
     this.calls.clear()
   }
@@ -392,6 +434,7 @@ export class TranscriptRecorder {
   run(ev: RunEvent): void {
     if (ev.type === 'model') this.assistant(ev.text)
     else if (ev.type === 'call') this.toolStart(ev.call)
+    else if (ev.type === 'jobs') this.jobs(ev.callId, ev.jobs)
     else this.toolEnd(ev.call, ev.outcome)
   }
 }

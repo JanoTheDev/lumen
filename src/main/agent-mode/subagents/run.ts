@@ -1,0 +1,320 @@
+// Sub-agent runs (08 T49): each job of a run_subagents call runs on the shared agent-loop
+// runner in background mode (no plan, no countdown, no input lane, nothing spoken) with its
+// role's prompt and tools, in the pool. The tools are the parent's own handlers, already behind
+// the parent's guards (skill envelope, pre-approval, granted folders, network, the policy
+// gate's userText / observed text), so a job can do nothing its parent could not.
+//
+// Budget: every job's model and tool cost counts toward the parent's cost cap; a job stops
+// before its next turn once the parent's remaining money is spent. Cancel: the parent's signal
+// ends every job (and takes waiting ones out of the pool). Pause: jobs wait between turns.
+import type { SubJob } from '@shared/task-chat'
+import type {
+  AgentMessage,
+  SystemBlock,
+  ToolContent,
+  ToolDef,
+  ToolTurnResult,
+  Usage
+} from '../../ai/providers/types'
+import { redactForModel } from '../../actions/redact'
+import { readUrls } from '../../cards/research'
+import { observed } from '../prompts'
+import {
+  runAgent,
+  type RunnerDeps,
+  type ToolCtx,
+  type ToolHandler,
+  type ToolOutcome
+} from '../runner'
+import { toolLabel } from '../transcript'
+import { jobCaps, isRole, RESULT_MAX, ROLES, roleTools, type SubagentRole } from './roles'
+import type { SubagentPool } from './pool'
+import { MAX_JOBS, runSubagentsInput } from './tool'
+
+/** What a parent hands its sub-agents. */
+export interface SubagentEnv {
+  pool: SubagentPool
+  /** The parent's offered tools with their (guarded) handlers; roles pick from these. */
+  tools(): Promise<{ defs: ToolDef[]; handlers: Record<string, ToolHandler> }>
+  /** One model turn on the sub-agent model (fast or main, or the parent skill's). */
+  turn(
+    req: { system: SystemBlock[]; tools: ToolDef[]; messages: AgentMessage[] },
+    signal: AbortSignal
+  ): Promise<ToolTurnResult>
+  costOf(model: string, usage: Usage): number
+  now(): number
+  /** Per-job cost cap (Settings). */
+  costCapUsd: number
+  /** Waits while the parent is paused. */
+  hold?(signal: AbortSignal): Promise<void>
+  /** Jobs of this parent running now (the Home Tasks row: "N helpers working"). */
+  onActive?(n: number): void
+  log?(tag: string, msg: string): void
+}
+
+export interface JobResult {
+  role: SubagentRole
+  task: string
+  status: 'done' | 'failed' | 'stopped'
+  /** ≤ RESULT_MAX characters, redacted. */
+  text: string
+  sources: string[]
+  costUsd: number
+}
+
+/** The parent's money ran out: the job stops before its next turn. */
+class BudgetSpent extends Error {
+  constructor() {
+    super("the task's budget ran out")
+  }
+}
+
+/** Money shared by the jobs of one call: the parent's remaining budget. */
+export class SharedBudget {
+  private spent = 0
+  constructor(private readonly limit: number) {}
+  spend(usd: number): void {
+    if (Number.isFinite(usd) && usd > 0) this.spent += usd
+  }
+  get left(): number {
+    return this.limit - this.spent
+  }
+  get total(): number {
+    return this.spent
+  }
+}
+
+const MAX_SOURCES = 8
+const TASK_SHOWN = 200
+const NO_ACTION_CAP = 1_000_000
+
+const text = (t: string): ToolContent[] => [{ type: 'text', text: t }]
+const textOf = (c: readonly ToolContent[]): string =>
+  c.map((x) => (x.type === 'text' ? x.text : '')).join('\n')
+
+function clip(t: string, max: number): string {
+  const s = t.trim()
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s
+}
+
+/** The first user turn of a job. */
+export function jobTurn(task: string, now: Date): string {
+  const when = now.toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+  return `<context>\ndate: ${when}\n</context>\n<job>${task}</job>`
+}
+
+/** A job's result as the parent model reads it: fenced, redacted, sources listed by Lumen. */
+export function fenceResult(r: JobResult, i: number): string {
+  // The model-written text may not fake the sources list or close the fence (observed() strips
+  // observed tags); only the URLs Lumen saw fetched go in <sources>.
+  const body = r.text.replace(/<\/?sources[^>]*>/gi, '')
+  const lines = [
+    `job ${i + 1} (${r.role}): ${clip(r.task, TASK_SHOWN)}`,
+    `status: ${r.status}`,
+    body
+  ]
+  if (r.sources.length) lines.push(`<sources>\n${r.sources.join('\n')}\n</sources>`)
+  return observed(`subagent:${r.role}`, lines.join('\n'))
+}
+
+/** Runs one job; throws only when the parent was cancelled. */
+export async function runJob(
+  role: SubagentRole,
+  task: string,
+  offered: { defs: ToolDef[]; handlers: Record<string, ToolHandler> },
+  env: SubagentEnv,
+  budget: SharedBudget,
+  parent: Pick<ToolCtx, 'task'>,
+  signal: AbortSignal,
+  onStep?: (label: string, costUsd: number) => void
+): Promise<JobResult> {
+  const spec = ROLES[role]
+  const defs = roleTools(role, offered.defs)
+  const sources: string[] = []
+  let cost = 0
+  const charge = (usd: number): void => {
+    if (!Number.isFinite(usd) || usd <= 0) return
+    cost += usd
+    budget.spend(usd)
+  }
+  const handlers: Record<string, ToolHandler> = {}
+  for (const d of defs) {
+    const h = offered.handlers[d.name]
+    if (!h) continue
+    handlers[d.name] = async (input, ctx): Promise<ToolOutcome> => {
+      onStep?.(toolLabel(d.name, input), cost)
+      const out = await h(input, ctx)
+      if (out.costUsd) charge(out.costUsd)
+      if (!out.isError)
+        for (const u of readUrls(d.name, input, textOf(out.content)))
+          if (!sources.includes(u) && sources.length < MAX_SOURCES) sources.push(u)
+      return out
+    }
+  }
+  const caps = jobCaps(role, env.costCapUsd)
+  // The job's runner task carries the parent's id: tools that key by task (the paid-search
+  // budget, audit lines) count it as the parent's.
+  const parentId = parent.task().id
+  const deps: RunnerDeps = {
+    model: {
+      plan: async () => ({ plan: null }),
+      turn: async (req, s) => {
+        const r = await env.turn(req, s)
+        charge(env.costOf(r.model, r.usage))
+        onStep?.('', cost)
+        return r
+      }
+    },
+    handlers,
+    publish: () => {},
+    speak: () => {},
+    countdown: async () => 'go',
+    // A job never grows past its caps: it stops and reports what it has.
+    askContinue: async () => false,
+    costOf: env.costOf,
+    now: env.now,
+    newId: () => parentId,
+    ...(env.log ? { log: env.log } : {}),
+    between: async (s) => {
+      await env.hold?.(s)
+      if (budget.left <= 0) throw new BudgetSpent()
+      return []
+    }
+  }
+  const result = (status: JobResult['status'], t: string): JobResult => ({
+    role,
+    task,
+    status,
+    text: clip(redactForModel(t), RESULT_MAX),
+    sources,
+    costUsd: cost
+  })
+  try {
+    const r = await runAgent(
+      {
+        prompt: task,
+        context: {},
+        tools: ['finish'],
+        extraTools: defs,
+        cancelWindowMs: 0,
+        skipPlan: true,
+        system: spec.system,
+        firstTurn: jobTurn(task, new Date(env.now())),
+        caps: { ...caps, maxActions: NO_ACTION_CAP },
+        signal,
+        owner: `subagent:${parentId}`,
+        speakSummary: false
+      },
+      deps
+    )
+    if (r.status === 'done') {
+      const needs = r.needsUserAction?.trim()
+      const parts = [
+        r.summary,
+        needs ? (/^needs:/i.test(needs) ? needs : `needs: ${needs}`) : '',
+        r.report ?? ''
+      ]
+      return result('done', parts.filter(Boolean).join('\n'))
+    }
+    return result('stopped', r.summary)
+  } catch (e) {
+    if (signal.aborted) throw e
+    if (e instanceof BudgetSpent) return result('stopped', `Stopped: ${e.message}.`)
+    return result('failed', `It failed: ${(e as Error).message}`)
+  }
+}
+
+/** The run_subagents handler for one parent. */
+export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
+  return async (raw, ctx): Promise<ToolOutcome> => {
+    const parsed = runSubagentsInput.safeParse(raw)
+    if (!parsed.success)
+      return { content: text('Invalid run_subagents input: give 1 to 6 jobs.'), isError: true }
+    const jobs = parsed.data.jobs
+      .map((j) => ({ role: j.role, task: j.task.trim() }))
+      .filter((j) => isRole(j.role) && j.task)
+    if (!jobs.length) return { content: text('Give each job a role and a task.'), isError: true }
+    if (jobs.length > MAX_JOBS)
+      return { content: text(`At most ${MAX_JOBS} jobs per call.`), isError: true }
+
+    const offered = await env.tools()
+    const budget = new SharedBudget(ctx.remainingUsd?.() ?? Number.POSITIVE_INFINITY)
+    const views: SubJob[] = jobs.map((j) => ({
+      role: j.role,
+      task: clip(j.task, TASK_SHOWN),
+      status: 'queued',
+      costUsd: 0
+    }))
+    let active = 0
+    const emit = (): void => {
+      if (ctx.callId && !ctx.signal.aborted)
+        ctx.report?.({ type: 'jobs', callId: ctx.callId, jobs: views.map((v) => ({ ...v })) })
+    }
+    const setActive = (d: number): void => {
+      active += d
+      if (!ctx.signal.aborted) env.onActive?.(active)
+    }
+    emit()
+    let results: JobResult[]
+    try {
+      results = await Promise.all(
+        jobs.map((j, i) =>
+          env.pool.run(
+            async () => {
+              try {
+                const r = await runJob(
+                  j.role,
+                  j.task,
+                  offered,
+                  env,
+                  budget,
+                  ctx,
+                  ctx.signal,
+                  (label, cost) => {
+                    views[i] = { ...views[i], costUsd: cost, ...(label ? { step: label } : {}) }
+                    emit()
+                  }
+                )
+                views[i] = {
+                  role: views[i].role,
+                  task: views[i].task,
+                  status: r.status,
+                  costUsd: r.costUsd,
+                  result: clip(r.text, 600)
+                }
+                emit()
+                return r
+              } finally {
+                setActive(-1)
+              }
+            },
+            ctx.signal,
+            () => {
+              setActive(1)
+              views[i] = { ...views[i], status: 'running' }
+              emit()
+            }
+          )
+        )
+      )
+    } finally {
+      if (!ctx.signal.aborted) env.onActive?.(0)
+    }
+    const done = results.filter((r) => r.status === 'done').length
+    const block = results.map(fenceResult).join('\n')
+    const head = `${done} of ${results.length} ${results.length === 1 ? 'job' : 'jobs'} finished.`
+    return {
+      content: text(`${head}\n${block}`),
+      costUsd: budget.total,
+      label: `${results.length} ${results.length === 1 ? 'helper' : 'helpers'}, ${done} done`,
+      ...(done ? {} : { isError: true })
+    }
+  }
+}

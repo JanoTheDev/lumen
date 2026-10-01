@@ -141,6 +141,25 @@ const SOURCE_RE = /<observed source="web (https?:\/\/[^"]+)">/g
 const READS_LINKS = (name: string): boolean =>
   name === 'lookup_howto' || name === 'spawn_task' || name.startsWith('mcp__')
 
+/** run_subagents (08 T49): the pages its sub-agents fetched, listed by Lumen (not the model). */
+const SUBAGENT_SOURCES_RE = /<sources>([\s\S]*?)<\/sources>/g
+
+/**
+ * The URLs one successful tool result counts as read: the URL it opened or fetched, fetched
+ * pages' fences, links named by tools that read pages, sub-agents' fetched pages. Raw strings.
+ */
+export function readUrls(name: string, input: Record<string, unknown>, text: string): string[] {
+  const out: string[] = []
+  if ((name === 'navigate' || name === 'fetch_url') && typeof input.url === 'string')
+    out.push(input.url)
+  for (const s of text.matchAll(SOURCE_RE)) out.push(s[1])
+  if (READS_LINKS(name)) out.push(...(text.match(URL_RE) ?? []))
+  if (name === 'run_subagents')
+    for (const block of text.matchAll(SUBAGENT_SOURCES_RE))
+      out.push(...(block[1].match(URL_RE) ?? []))
+  return out
+}
+
 /**
  * What a task read, from its conversation: successful tool results (text), the URLs it opened
  * (navigate) or fetched (fetch_url, the fetched page's final URL), and the links named by tools
@@ -169,9 +188,8 @@ export function observedFrom(
       if (block.type !== 'tool_result' || block.isError) continue
       const call = calls.get(block.id)
       const t = block.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n')
-      if (call && (call.name === 'navigate' || call.name === 'fetch_url')) addUrl(call.input.url)
-      for (const s of t.matchAll(SOURCE_RE)) addUrl(s[1])
-      if (call && READS_LINKS(call.name)) for (const u of t.match(URL_RE) ?? []) addUrl(u)
+      if (call) readUrls(call.name, call.input, t).forEach(addUrl)
+      else for (const s of t.matchAll(SOURCE_RE)) addUrl(s[1])
       if (size < MAX_OBSERVED_TEXT) {
         parts.push(t)
         size += t.length

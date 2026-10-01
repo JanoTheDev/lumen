@@ -66,6 +66,12 @@ export interface ToolCtx {
   retry: boolean
   /** The conversation so far (what the task observed: present_cards checks its sources). */
   messages?(): readonly AgentMessage[]
+  /** This call's id (live transcript updates of a long call, run_subagents). */
+  callId?: string
+  /** Transcript events from inside the call (the runner's observe). */
+  report?(e: RunEvent): void
+  /** Money left under the task's cost cap now (sub-agents share it). */
+  remainingUsd?(): number
 }
 
 export type ToolHandler = (input: Record<string, unknown>, ctx: ToolCtx) => Promise<ToolOutcome>
@@ -442,7 +448,10 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           signal,
           step,
           retry: fails === 1,
-          messages: () => messages
+          messages: () => messages,
+          callId: call.id,
+          ...(deps.observe ? { report: deps.observe } : {}),
+          remainingUsd: () => Math.max(0, caps.maxCostUsd - task.counters.costUsd)
         }),
         signal
       )

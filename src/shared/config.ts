@@ -640,6 +640,17 @@ export const configV2Schema = z.object({
         quiet: false
       }),
     /**
+     * Sub-agents (08 T49): run_subagents jobs at once (outside the background slots), their
+     * model role and the cost cap of each job (it also counts toward the parent's cap).
+     */
+    subagents: z
+      .object({
+        max: z.number().int().min(1).max(6),
+        model: z.enum(['fast', 'main']),
+        costCapUsd: z.number().min(0.01).max(1)
+      })
+      .default({ max: 4, model: 'fast', costCapUsd: 0.05 }),
+    /**
      * Proactive mode (08 T23): opt-in, local only. `rules`: "when I open <app>, say <text>"
      * (the foreground app is watched only while enabled and a rule exists).
      */
@@ -860,6 +871,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
       readFolders: [],
       quiet: false
     },
+    subagents: { max: 4, model: 'fast', costCapUsd: 0.05 },
     proactive: { enabled: false, rules: [] }
   },
   privacy: { saveScreenshots: false, telemetry: false },

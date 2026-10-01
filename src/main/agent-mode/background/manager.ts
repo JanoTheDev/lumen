@@ -41,6 +41,8 @@ export interface TaskControl {
   ask(text: string, choices?: string[], phase?: 'asking' | 'needs-foreground'): Promise<string>
   /** Before each model turn: waits while paused, then hands over the user's steer messages. */
   between?(signal: AbortSignal): Promise<string[]>
+  /** Waits while the task is paused (its sub-agents, between their turns). */
+  hold?(signal: AbortSignal): Promise<void>
   /** The runner's transcript events (model text, tool calls, results). */
   record?(e: RunEvent): void
 }
@@ -353,7 +355,20 @@ export class BackgroundManager {
       phase: 'running',
       counters: { ...e.task.counters, startedAt: this.deps.now() }
     })
+    // Several waiters (the task and its sub-agents) may hold at once: one wake for all.
+    const hold = async (signal: AbortSignal): Promise<void> => {
+      while (e.paused && !signal.aborted)
+        await new Promise<void>((resolve) => {
+          const prev = e.wake
+          e.wake = () => {
+            prev?.()
+            resolve()
+          }
+          signal.addEventListener('abort', () => resolve(), { once: true })
+        })
+    }
     const ctl: TaskControl = {
+      hold,
       task: () => this.entries.get(id)!.task,
       signal: ac.signal,
       update: (p) => {
@@ -382,11 +397,7 @@ export class BackgroundManager {
           })
         }),
       between: async (signal) => {
-        while (e.paused && !signal.aborted)
-          await new Promise<void>((resolve) => {
-            e.wake = resolve
-            signal.addEventListener('abort', () => resolve(), { once: true })
-          })
+        await hold(signal)
         const notes = e.steers
         e.steers = []
         return notes

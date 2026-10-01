@@ -8,6 +8,19 @@ export type ChatKind = 'background' | 'foreground' | 'claude'
 
 export type ToolStatus = 'running' | 'ok' | 'error' | 'denied'
 
+/** One sub-agent job of a run_subagents call (08 T49), shown nested under that tool row. */
+export interface SubJob {
+  role: string
+  /** The job as the parent wrote it, cut short and redacted. */
+  task: string
+  status: 'queued' | 'running' | 'done' | 'failed' | 'stopped'
+  costUsd: number
+  /** What it is doing now ("Read example.com"). */
+  step?: string
+  /** Short, redacted result. */
+  result?: string
+}
+
 interface EntryBase {
   /** Increasing per transcript; an entry sent again with the same n replaces the old one. */
   n: number
@@ -28,6 +41,8 @@ export type ChatEntry = EntryBase &
         status: ToolStatus
         /** Short, redacted result or observation. */
         result?: string
+        /** run_subagents: one row per sub-agent job, updated live. */
+        jobs?: SubJob[]
       }
     | { k: 'question'; text: string; choices?: string[]; answer?: string }
     | { k: 'status'; text: string }

@@ -311,4 +311,6 @@ export interface BackgroundTask {
   unseen?: boolean
   /** A Claude Code session's stretch of work (08 T39): its session id and live phase. */
   claude?: { id: string; projectName: string; phase: ClaudePhase }
+  /** Sub-agents (08 T49) working for the task right now. */
+  helpers?: number
 }
