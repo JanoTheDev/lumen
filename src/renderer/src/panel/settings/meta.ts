@@ -22,6 +22,7 @@ export type SectionId =
   | 'bridges'
   | 'claude-code'
   | 'connectors'
+  | 'news'
   | 'privacy'
   | 'about'
 
@@ -115,6 +116,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Connectors',
     icon: icons.external,
     keywords: 'connectors mcp servers tools calendar email files folder integrations agent token'
+  },
+  {
+    id: 'news',
+    label: 'News & reading',
+    icon: icons.search,
+    keywords:
+      'news feeds rss atom headlines read the web summarize page article tldr sources interests web search paid'
   },
   {
     id: 'claude-code',

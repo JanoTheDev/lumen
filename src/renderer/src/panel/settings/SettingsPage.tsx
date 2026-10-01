@@ -13,6 +13,7 @@ import { Helpers } from './sections/Helpers'
 import { Lessons } from './sections/Lessons'
 import { Look } from './sections/Look'
 import { Memory } from './sections/Memory'
+import { News } from './sections/News'
 import { Models } from './sections/Models'
 import { Privacy } from './sections/Privacy'
 import { Skills } from './sections/Skills'
@@ -32,6 +33,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   bridges: Bridges,
   'claude-code': ClaudeCode,
   connectors: Connectors,
+  news: News,
   privacy: Privacy,
   about: About
 }
