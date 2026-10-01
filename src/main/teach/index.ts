@@ -11,6 +11,8 @@ import { bus } from '../bus'
 import { loadConfig, saveConfig } from '../config'
 import { log, type LogTag } from '../logger'
 import { physRectToLogical, physToLogical, rectCenter } from '../actions/coords'
+import { gate, newTaskId } from '../actions/policy'
+import type { EvalAction } from '../actions/safety'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
 import { announce } from '../a11y'
@@ -288,6 +290,15 @@ async function regionPoint(
   return r ? rectCenter(r) : null
 }
 
+/** A do-it action as the safety policy sees it. */
+function lessonPolicyAction(a: DoAction): EvalAction {
+  if (a.t === 'keys') return { type: 'hotkey', keys: a.combo }
+  if (a.t === 'type') return { type: 'type', text: a.text }
+  if (a.t === 'open_url') return { type: 'open_url', url: a.url }
+  if (a.t === 'invoke') return { type: 'uia_act', action: 'invoke', elementName: a.element.name }
+  return { type: a.t }
+}
+
 async function runAction(
   a: DoAction,
   skill: Skill | null | undefined,
@@ -454,9 +465,18 @@ function realPorts(): Ports {
     },
     exec: {
       run: async (actions, { skill, signal }) => {
+        // Every do-it action passes the safety policy (origin lesson) and the audit log.
+        const taskId = newTaskId()
+        let prev: string | undefined
         for (const a of actions) {
           if (signal.aborted) return false
-          if (!(await runAction(a, skill, signal).catch(() => false))) return false
+          const pa = lessonPolicyAction(a)
+          const g = await gate(pa, { origin: 'lesson', taskId }, prev)
+          if (!g.ok) return false
+          prev = pa.type
+          const ok = await runAction(a, skill, signal).catch(() => false)
+          g.finish(ok ? 'ok' : signal.aborted ? 'cancelled' : 'error')
+          if (!ok) return false
         }
         return true
       }

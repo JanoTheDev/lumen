@@ -1,3 +1,5 @@
+import { redactForLog } from './actions/redact'
+
 export type LogTag = 'plan' | 'step' | 'verify' | 'retry' | 'fail' | 'skip' | 'done' | 'time'
 
 const TAG_PAD = 9 // [verify] = 8 chars + 1 space; all tags fit within 9
@@ -18,7 +20,8 @@ function clockStamp(): string {
 }
 
 export function log(tag: LogTag, message: string, meta: LogMeta = {}): void {
-  const parts: string[] = [clockStamp(), `[${tag}]`.padEnd(TAG_PAD), message]
+  // Secrets never reach the console or the log file (safety-policy §3).
+  const parts: string[] = [clockStamp(), `[${tag}]`.padEnd(TAG_PAD), redactForLog(message)]
   if (meta.model) parts.push(`| ${meta.model}`)
   if (meta.cost != null) parts.push(`| $${meta.cost.toFixed(5)}`)
   if (meta.timeMs != null) parts.push(`| ${(meta.timeMs / 1000).toFixed(2)}s`)

@@ -29,6 +29,7 @@ import { assertSafeUrl, isSafeUrl } from './actions/safety'
 import { replaySavedGuide, saveLastAsGuide, startGuide } from './guides/session'
 import { cancelAll } from './query/cancel'
 import { interceptLocal } from './query/local'
+import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
 import { runQuery } from './query/pipeline'
 import { setAnswerAnnouncer, speakAnswer, warmTts } from './speech/tts'
 import { prepareStt, transcribe } from './speech/stt'
@@ -111,6 +112,7 @@ function registerIpc(): void {
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()
+  registerAgentModeIpc()
   registerKeysIpc()
   registerFirstRunIpc()
   registerDiagnosticsIpc()
@@ -122,7 +124,7 @@ function registerIpc(): void {
     }
   })
   registerQueryIpc({
-    intercept: interceptLocal,
+    intercept: (prompt) => interceptAgentMode(prompt) ?? interceptLocal(prompt),
     preempt: (prompt, opts, scope) =>
       opts.lowDetail ? Promise.resolve(false) : maybeAutoDictate(prompt, scope.signal),
     runQuery: (prompt, opts, scope) =>
@@ -166,6 +168,7 @@ app.whenReady().then(() => {
   wireAgentEvents(agent)
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
+  installAgentMode()
   registerIpc()
   installA11y()
   installLessonOutput()

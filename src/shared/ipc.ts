@@ -29,6 +29,18 @@ export const obsBridgeSchema = z
     port: z.number().int().min(1024).max(65535).optional()
   })
   .strict()
+/** Agent-mode grant scope (08 T03). */
+export const grantScopeSchema = z
+  .string()
+  .max(220)
+  .regex(/^(app|mcp|domain|scheme):\S+$/)
+/** audit:list query (08 T04). */
+export const auditQuerySchema = z
+  .object({
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    taskId: z.string().max(64).optional()
+  })
+  .strict()
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([
   'left',

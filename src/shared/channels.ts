@@ -85,6 +85,11 @@ export interface InvokeChannels {
   'usage:get': { args: []; result: UsageOverview }
   /** Which OS agent is running (Settings shows it read-only). */
   'agent:info': { args: []; result: AgentImplInfo }
+  /** Stored "always" grants for medium-risk actions (08 T03). */
+  'agent:grants-list': { args: []; result: AgentGrant[] }
+  'agent:grants-revoke': { args: [scope: string]; result: { ok: boolean } }
+  /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
+  'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
   /** Lessons (07 T22): every pack and user lesson, or one app's when `appId` is given. */
   'teach:list': { args: [appId?: string]; result: LessonListItem[] }
   /** Starts a lesson; the lesson left part-way resumes on its step. */
@@ -457,6 +462,27 @@ export interface UpdateStatus {
   error?: string
 }
 
+/** An "always for <app / site / tool>" grant; high risk is never grantable. */
+export interface AgentGrant {
+  /** "app:<process>" | "mcp:<server>/<tool>" | "domain:<site>" | "scheme:mailto" */
+  scope: string
+  level: 'medium'
+  createdAt: string
+}
+
+/** One audit log line: an executed or denied action. Typed text is only a hash + length. */
+export interface AuditLine {
+  t: string
+  task: string
+  origin: 'user-direct' | 'agent' | 'lesson' | 'routine' | 'mcp'
+  action: Record<string, unknown>
+  risk: 'low' | 'medium' | 'high' | 'blocked'
+  decision: string
+  result: 'ok' | 'error' | 'cancelled' | 'denied'
+  ms: number
+  reason?: string
+}
+
 /** The running OS agent (the native sidecar). */
 export interface AgentImplInfo {
   /** "native" once the agent sent its ready event, else null. */
@@ -660,6 +686,9 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:delete-all',
   'usage:get',
   'agent:info',
+  'agent:grants-list',
+  'agent:grants-revoke',
+  'audit:list',
   'teach:list',
   'teach:start',
   'teach:command',

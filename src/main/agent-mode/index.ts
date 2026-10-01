@@ -1,0 +1,52 @@
+// Safety wiring (08 Phase 1): grants file, audit log, the bar's confirm card as the policy's
+// confirm UI, IPC for the grants list and the audit viewer, and "what did you just do".
+import { ipcMain } from 'electron'
+import { dirname, join } from 'path'
+import { auditQuerySchema, grantScopeSchema } from '@shared/ipc'
+import { configPath } from '../config'
+import { INVALID, safeParse } from '../ipc/validate'
+import * as assistant from '../windows/assistant'
+import { installAudit, lastTaskSummary, listAudit } from '../audit/log'
+import { setConfirmUi } from './confirm'
+import { grants, installGrants } from './grants'
+
+export function installAgentMode(): void {
+  const root = dirname(configPath())
+  installGrants(join(root, 'grants.json'))
+  installAudit(join(root, 'audit'))
+  setConfirmUi({
+    ask: (card) => assistant.requestConfirm(card),
+    confirm: () => assistant.command({ type: 'confirm' })
+  })
+}
+
+export function registerAgentModeIpc(): void {
+  ipcMain.handle('agent:grants-list', (_e, ...args: unknown[]) =>
+    args.length ? INVALID : grants().list()
+  )
+  ipcMain.handle('agent:grants-revoke', (_e, raw: unknown) => {
+    const scope = safeParse('agent:grants-revoke', grantScopeSchema, raw)
+    if (scope === undefined) return INVALID
+    return { ok: grants().revoke(scope) }
+  })
+  ipcMain.handle('audit:list', (_e, raw: unknown) => {
+    const q = safeParse('audit:list', auditQuerySchema, raw)
+    if (!q) return INVALID
+    return listAudit(q.date, q.taskId)
+  })
+}
+
+const WHAT_DID_YOU_DO_RE =
+  /^(what (did|have) you (just )?(do|done)|what did you just change|what happened just now)$/
+
+/** Whole-utterance voice commands of the safety layer; undefined = not ours. */
+export function interceptAgentMode(prompt: string): unknown | undefined {
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!WHAT_DID_YOU_DO_RE.test(words)) return undefined
+  const text = lastTaskSummary()
+  return { mode: 'answer', text, spoken: text.replace(/^- /gm, '') }
+}

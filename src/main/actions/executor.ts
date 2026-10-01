@@ -1,12 +1,14 @@
 // The single place model actions run on the machine: click targets resolved against the
 // turn's screen context (resolveTarget), refinement of low-confidence clicks, on-screen
-// preview, safety policy and cancellation.
+// preview, safety policy and cancellation. Every action passes the policy gate (evaluate,
+// confirm, audit) before it runs, so no caller can skip it.
 import { shell } from 'electron'
 import type { Action, Rect, Target } from '@shared/types'
 import { currentFrame, physToLogical, rectCenter } from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
-import { assertSafeUrl } from './safety'
-import { passesPolicy } from './policy'
+import { assertLaunchableUrl, type Origin, type TaskState } from './safety'
+import { gate, newTaskId } from './policy'
+import { redactForLog } from './redact'
 import { requireAgent } from '../agent/instance'
 import type { AgentBridge } from '../agent/bridge'
 import { canRefine, needsRefine, refineTarget } from '../query/refine'
@@ -38,14 +40,28 @@ export interface ExecuteOptions {
   /** Show the target highlight / pointer before clicking. Default true. */
   preview?: boolean
   signal?: AbortSignal
+  /** Who asked (safety-policy ctx.origin). Default "agent", the strictest model origin. */
+  origin?: Origin
+  /** The user's words for this task. */
+  userText?: string
+  /** The user already said yes to this batch (transcript confirm). */
+  approved?: boolean
+  /** Audit task id; one per call when absent. */
+  taskId?: string
+  /** Sites and apps the task already used (agent runner). */
+  task?: TaskState
+  /** Text the agent read this task (injection check). */
+  observedText?: string
 }
 
 export interface ExecuteResult {
   /** Number of actions sent to the agent (or opened in the browser). */
   executed: number
   cancelled: boolean
-  /** The safety policy stopped the batch. */
+  /** The safety policy (or the user at its confirm) stopped the batch. */
   blocked: boolean
+  /** Why the batch stopped: E_DENIED with the policy reason. */
+  denied?: { code: 'E_DENIED'; reason: string }
   /** A scroll hit the bottom of the page; the rest of the batch was skipped. */
   reachedBottom: boolean
   /** Physical rects of the click targets, in order (the verifier diffs around them). */
@@ -197,6 +213,14 @@ export async function executeActions(
   const preview = opts.preview ?? true
   const forceRefine = opts.forceRefine ?? false
   const { signal } = opts
+  const gateCtx = {
+    origin: opts.origin ?? ('agent' as const),
+    taskId: opts.taskId ?? newTaskId(),
+    userText: opts.userText,
+    approved: opts.approved,
+    task: opts.task,
+    observedText: opts.observedText
+  }
   const result: ExecuteResult = {
     executed: 0,
     cancelled: false,
@@ -215,10 +239,21 @@ export async function executeActions(
   const disarmCancel = armCancel()
 
   let firstClick = true
-  let prev: AgentAction | undefined
+  let prevType: string | undefined
   try {
     for (const action of actions) {
       if (signal?.aborted) break
+      const g = await gate(action, gateCtx, prevType)
+      if (!g.ok) {
+        result.blocked = true
+        result.denied = { code: 'E_DENIED', reason: g.decision.reason }
+        break
+      }
+      prevType = action.type
+      if (signal?.aborted) {
+        g.finish('cancelled')
+        break
+      }
       let scaled: AgentAction | null
       try {
         scaled = await resolve(action, {
@@ -229,68 +264,30 @@ export async function executeActions(
           targets: result.targets
         })
       } catch (e) {
+        g.finish(signal?.aborted ? 'cancelled' : 'error')
         if (signal?.aborted) break
         throw e
       }
-      if (signal?.aborted) break
-
-      if (!scaled) continue
-      if (!scaled.type) {
-        console.warn('[execute] skipping action with no type:', JSON.stringify(action))
-        continue
-      }
-      console.log('[execute] running:', JSON.stringify(scaled))
-      if (!(await passesPolicy(scaled, prev))) {
-        result.blocked = true
+      if (signal?.aborted) {
+        g.finish('cancelled')
         break
       }
-      prev = scaled
 
-      if (scaled.type === 'open_url' && scaled.url) {
-        console.log('[execute] opening URL:', scaled.url)
-        const before = await titleNow(agent)
-        await shell.openExternal(assertSafeUrl(scaled.url))
-        result.executed++
-        await settle(before, signal)
-        await agent.execute({ type: 'focus_browser' })
-      } else if (scaled.type === 'navigate_url' && scaled.url) {
-        console.log('[execute] navigate_url:', scaled.url)
-        const before = await titleNow(agent)
-        try {
-          await agent.execute(scaled)
-        } catch (e) {
-          // No browser window to navigate: open the (already policy-checked) URL instead.
-          log('step', `navigate_url failed (${(e as Error).message}), opening in default browser`)
-          await shell.openExternal(assertSafeUrl(scaled.url))
-        }
-        result.executed++
-        // The page has loaded when its title changes or the frames stop moving (max 1.5 s).
-        await settle(before, signal)
-      } else {
-        // Show pointer preview before first click
-        if (
-          preview &&
-          firstClick &&
-          scaled.type === 'click' &&
-          scaled.x != null &&
-          scaled.y != null
-        ) {
-          firstClick = false
-          highlight.send('screen:pointer', {
-            ...physToLogical({ x: scaled.x, y: scaled.y }),
-            text: 'Clicking here…'
-          })
-          highlight.show()
-          await sleep(300)
-        }
-        const actionResult = (await agent.execute(scaled)) as Record<string, unknown> | null
-        result.executed++
-        if (actionResult?.reached_bottom) {
-          console.log('[execute] reached_bottom detected — stopping action loop')
-          result.reachedBottom = true
-          break
-        }
+      if (!scaled?.type) {
+        if (scaled) console.warn('[execute] skipping action with no type:', JSON.stringify(action))
+        g.finish('error')
+        continue
       }
+      console.log('[execute] running:', redactForLog(JSON.stringify(scaled)))
+      let stop: boolean
+      try {
+        stop = await run(scaled)
+        g.finish('ok')
+      } catch (e) {
+        g.finish(signal?.aborted ? 'cancelled' : 'error')
+        throw e
+      }
+      if (stop) break
       await sleep(scaled.type === 'hotkey' ? 300 : 150)
     }
   } finally {
@@ -302,4 +299,62 @@ export async function executeActions(
   result.cancelled = !!signal?.aborted
   if (result.cancelled) log('skip', 'execution aborted by user')
   return result
+
+  /** Runs one resolved action; true = stop the batch (the page hit its bottom). */
+  async function run(scaled: AgentAction): Promise<boolean> {
+    if (scaled.type === 'open_url' && scaled.url) {
+      console.log('[execute] opening URL:', scaled.url)
+      const url = assertLaunchableUrl(scaled.url)
+      const web = /^https?:/i.test(url)
+      const before = web ? await titleNow(agent) : ''
+      await shell.openExternal(url)
+      result.executed++
+      if (web) {
+        await settle(before, signal)
+        await agent.execute({ type: 'focus_browser' })
+      }
+    } else if (scaled.type === 'navigate_url' && scaled.url && !/^https?:/i.test(scaled.url)) {
+      // mailto: / ms-settings: (already policy-checked) have no tab to navigate.
+      await shell.openExternal(assertLaunchableUrl(scaled.url))
+      result.executed++
+    } else if (scaled.type === 'navigate_url' && scaled.url) {
+      console.log('[execute] navigate_url:', scaled.url)
+      const before = await titleNow(agent)
+      try {
+        await agent.execute(scaled)
+      } catch (e) {
+        // No browser window to navigate: open the (already policy-checked) URL instead.
+        log('step', `navigate_url failed (${(e as Error).message}), opening in default browser`)
+        await shell.openExternal(assertLaunchableUrl(scaled.url))
+      }
+      result.executed++
+      // The page has loaded when its title changes or the frames stop moving (max 1.5 s).
+      await settle(before, signal)
+    } else {
+      // Show pointer preview before first click
+      if (
+        preview &&
+        firstClick &&
+        scaled.type === 'click' &&
+        scaled.x != null &&
+        scaled.y != null
+      ) {
+        firstClick = false
+        highlight.send('screen:pointer', {
+          ...physToLogical({ x: scaled.x, y: scaled.y }),
+          text: 'Clicking here…'
+        })
+        highlight.show()
+        await sleep(300)
+      }
+      const actionResult = (await agent.execute(scaled)) as Record<string, unknown> | null
+      result.executed++
+      if (actionResult?.reached_bottom) {
+        console.log('[execute] reached_bottom detected — stopping action loop')
+        result.reachedBottom = true
+        return true
+      }
+    }
+    return false
+  }
 }

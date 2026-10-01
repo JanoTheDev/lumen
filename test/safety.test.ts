@@ -3,8 +3,6 @@ import {
   assertSafeUrl,
   isSafeUrl,
   classifyHotkey,
-  classifyType,
-  checkAction,
   normalizeCombo,
   isShellWindow
 } from '../src/main/actions/safety'
@@ -93,24 +91,5 @@ describe('isShellWindow', () => {
     ['Inbox - Gmail - Google Chrome', false]
   ])('%s → %s', (title, expected) => {
     expect(isShellWindow(title)).toBe(expected)
-  })
-})
-
-describe('checkAction', () => {
-  it('denies unsafe open_url and navigate_url', () => {
-    expect(checkAction({ type: 'open_url', url: 'file:///C:/x.exe' }).verdict).toBe('deny')
-    expect(checkAction({ type: 'navigate_url', url: 'javascript:alert(1)' }).verdict).toBe('deny')
-    expect(checkAction({ type: 'open_url', url: 'https://youtube.com' }).verdict).toBe('allow')
-  })
-
-  it('checks typing against the target window', () => {
-    expect(classifyType({ windowTitle: 'Command Prompt' })).toBe('confirm')
-    expect(
-      checkAction({ type: 'type', text: 'hi' }, { windowTitle: 'Untitled - Notepad' }).verdict
-    ).toBe('allow')
-  })
-
-  it('allows unrelated actions', () => {
-    expect(checkAction({ type: 'scroll' }).verdict).toBe('allow')
   })
 })
