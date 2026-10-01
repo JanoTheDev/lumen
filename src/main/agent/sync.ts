@@ -1,6 +1,6 @@
 // Pushes hotkey, listener (wake word + cancel phrases) and dwell settings to the agent.
 import { getAgent } from './instance'
-import { splitPhrases } from './state'
+import { dictationHotkeyOf, splitPhrases } from './state'
 import type { AppConfig } from '../config'
 import { installModel, modelInstalled } from '../wake-model'
 import * as dwellRing from '../windows/dwell-ring'
@@ -53,8 +53,20 @@ export async function applyAgentState(cfg: AppConfig): Promise<void> {
   } catch (e) {
     console.error('[hotkey] bind failed:', (e as Error).message)
   }
+  await applyDictationHotkey(cfg)
   applyListenerState(cfg)
   applyDwellState(cfg)
+}
+
+/** Binds (or unbinds) the dictation hotkey; an old agent without the command is ignored. */
+export async function applyDictationHotkey(cfg: AppConfig): Promise<void> {
+  const agent = getAgent()
+  if (!agent) return
+  try {
+    await agent.setDictationHotkey(dictationHotkeyOf(cfg, cfg.hotkey))
+  } catch (e) {
+    console.error('[dictation] hotkey bind failed:', (e as Error).message)
+  }
 }
 
 export function setHotkey(combo: string): Promise<unknown> {

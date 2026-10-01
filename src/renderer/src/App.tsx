@@ -13,6 +13,10 @@ interface VadConfig {
 
 const DEFAULT_VAD: VadConfig = { speechThreshold: 0.04, silenceMs: 1500, maxWaitMs: 8000 }
 const DEFAULT_MAX_RECORD_MS = 30000
+// Dictation: held up to 10 min; hands-free ends after a longer pause than a query.
+const DICTATION_MAX_RECORD_MS = 10 * 60_000
+const DICTATION_HANDS_FREE_MAX_MS = 3 * 60_000
+const DICTATION_SILENCE_MS = 2000
 const WAVE_SHAPE = [0.4, 0.7, 1, 0.85, 0.6, 0.45, 0.3]
 const WAVE_BASE = 3
 const WAVE_PEAK = 16
@@ -30,6 +34,8 @@ export default function App(): JSX.Element {
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wakeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const voiceSessionRef = useRef(0)
+  // The current recording is dictation (typed by main), not an assistant query.
+  const dictationRef = useRef(false)
   const vadRef = useRef<VadConfig | null>(null)
   const barsRef = useRef<Array<HTMLDivElement | null>>([])
 
@@ -103,8 +109,26 @@ export default function App(): JSX.Element {
     setPhase('listening')
   }
 
+  const handleDictation = async (text: string, info?: VoiceResultInfo): Promise<void> => {
+    dictationRef.current = false
+    const keep = !shouldDropTranscript(text, info?.speechMs)
+    if (keep) setPhase('processing')
+    try {
+      // "" tells main the session ended with nothing to type.
+      await window.api.dictate(keep ? text.trim() : '')
+    } catch (err) {
+      console.error('[dictation] error:', err)
+    } finally {
+      resetHud()
+    }
+  }
+
   const handleResult = async (text: string, info?: VoiceResultInfo): Promise<void> => {
     console.log('[voice] result:', text)
+    if (dictationRef.current) {
+      await handleDictation(text, info)
+      return
+    }
     if (shouldDropTranscript(text, info?.speechMs)) {
       if (text.trim())
         console.warn('[voice] dropping likely silence hallucination:', JSON.stringify(text))
@@ -125,6 +149,8 @@ export default function App(): JSX.Element {
       console.log('[query] sending:', text)
       const result = await window.api.query(text.trim())
       if (cancelledRef.current || (result as { cancelled?: boolean } | null)?.cancelled) return
+      // Auto-detected dictation: main already typed it.
+      if ((result as { dictated?: boolean } | null)?.dictated) return
       const r = result as ClaudeResponse & { url?: string }
       console.log('[query] response:', JSON.stringify(r))
       await applyResponse(r)
@@ -198,6 +224,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     return window.api.onCancelRequest(() => {
       cancelledRef.current = true
+      dictationRef.current = false
       queryFiredRef.current = false
       voiceSessionRef.current++
       if (wakeTimerRef.current) {
@@ -253,6 +280,7 @@ export default function App(): JSX.Element {
       clearSessionTimers()
       queryFiredRef.current = false
       cancelledRef.current = false
+      dictationRef.current = false
       setPhase('listening')
       return ++voiceSessionRef.current
     }
@@ -271,14 +299,18 @@ export default function App(): JSX.Element {
       console.log('[voice] __voiceStop called')
       if (stop()) setPhase('processing')
     }
-    // Wake-word / hands-free recording: auto-stop after sustained silence,
-    // abort if nothing is said, hard stop at maxRecordMs (enforced in useVoice).
-    w.__wakeVoiceStart = () => {
-      console.log('[wake-voice] starting — will auto-stop on silence')
-      const session = beginSessionRef.current()
-      const vad = vadRef.current ?? DEFAULT_VAD
-      const maxRecordMs = vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS
-      start({ speechThreshold: vad.speechThreshold, maxRecordMs })
+    // Auto-stop after sustained silence once speech was heard, give up when nothing is said
+    // within maxWaitMs, hard stop at maxRecordMs (also enforced in useVoice).
+    const watchSilence = (
+      session: number,
+      opts: {
+        threshold: number
+        silenceMs: number
+        maxWaitMs: number
+        maxRecordMs: number
+        onNoSpeech: () => void
+      }
+    ): void => {
       const startedAt = Date.now()
       let heardSpeech = false
       let silenceStart = 0
@@ -286,34 +318,78 @@ export default function App(): JSX.Element {
         wakeTimerRef.current = null
         if (session !== voiceSessionRef.current || cancelledRef.current) return
         const now = Date.now()
-        if (now - startedAt >= maxRecordMs) {
-          console.log('[wake-voice] max duration reached — stopping')
+        if (now - startedAt >= opts.maxRecordMs) {
+          console.log('[auto-stop] max duration reached — stopping')
           setPhase('processing')
           stop()
           return
         }
-        if (levelRef.current > vad.speechThreshold) {
+        if (levelRef.current > opts.threshold) {
           heardSpeech = true
           silenceStart = 0
         } else if (heardSpeech) {
           if (silenceStart === 0) silenceStart = now
-          else if (now - silenceStart >= vad.silenceMs) {
-            console.log('[wake-voice] silence detected — stopping')
+          else if (now - silenceStart >= opts.silenceMs) {
+            console.log('[auto-stop] silence detected — stopping')
             setPhase('processing')
             stop()
             return
           }
         }
-        if (!heardSpeech && now - startedAt > vad.maxWaitMs) {
-          console.log('[wake-voice] no speech — aborting')
+        if (!heardSpeech && now - startedAt > opts.maxWaitMs) {
+          console.log('[auto-stop] no speech — aborting')
           cancelledRef.current = true
           abort()
+          opts.onNoSpeech()
           resetHudRef.current()
           return
         }
         wakeTimerRef.current = setTimeout(tick, 80)
       }
+      if (wakeTimerRef.current) clearTimeout(wakeTimerRef.current)
       wakeTimerRef.current = setTimeout(tick, 200)
+    }
+    w.__wakeVoiceStart = () => {
+      console.log('[wake-voice] starting — will auto-stop on silence')
+      const session = beginSessionRef.current()
+      const vad = vadRef.current ?? DEFAULT_VAD
+      const maxRecordMs = vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS
+      start({ speechThreshold: vad.speechThreshold, maxRecordMs })
+      watchSilence(session, {
+        threshold: vad.speechThreshold,
+        silenceMs: vad.silenceMs,
+        maxWaitMs: vad.maxWaitMs,
+        maxRecordMs,
+        onNoSpeech: () => {}
+      })
+    }
+    // Dictation hotkey: held until release; a double-tap turns it hands-free.
+    w.__dictationStart = () => {
+      console.log('[dictation] starting')
+      beginSessionRef.current()
+      dictationRef.current = true
+      const vad = vadRef.current ?? DEFAULT_VAD
+      start({
+        speechThreshold: vad.speechThreshold,
+        maxRecordMs: DICTATION_MAX_RECORD_MS,
+        watchdogMs: DICTATION_MAX_RECORD_MS + 5000,
+        dictation: true
+      })
+    }
+    w.__dictationHandsFree = () => {
+      if (!dictationRef.current) return
+      console.log('[dictation] hands-free — will auto-stop on silence')
+      const vad = vadRef.current ?? DEFAULT_VAD
+      watchSilence(voiceSessionRef.current, {
+        threshold: vad.speechThreshold,
+        silenceMs: Math.max(vad.silenceMs, DICTATION_SILENCE_MS),
+        maxWaitMs: vad.maxWaitMs,
+        maxRecordMs: DICTATION_HANDS_FREE_MAX_MS,
+        onNoSpeech: () => {
+          dictationRef.current = false
+          window.api.dictate('').catch(() => {})
+        }
+      })
     }
   }, [start, stop, abort, levelRef])
 

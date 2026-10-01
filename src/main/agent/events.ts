@@ -12,6 +12,7 @@ import { captureContext } from '../query/capture'
 import * as dwellRing from '../windows/dwell-ring'
 import { isOverOwnWindow } from '../windows/registry'
 import { setStatus } from '../windows/status'
+import { onDictationDown, onDictationUp } from '../speech/dictation/pipeline'
 
 let agentFailed = false
 
@@ -54,6 +55,9 @@ export function wireAgentEvents(agent: AgentBridge): void {
     // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
     startSpeculativeCapture(() => captureContext(true))
   })
+
+  agent.onEvent('dictation-down', () => onDictationDown())
+  agent.onEvent('dictation-up', () => onDictationUp())
 
   agent.onEvent('wake-detected', () => {
     console.log('[wake] detected — showing HUD, starting recording with VAD auto-stop')

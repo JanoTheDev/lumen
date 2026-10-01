@@ -176,6 +176,15 @@ export const configV2Schema = z.object({
   }),
   /** router "legacy" = the old regex classifier + prompt overrides (rollback switch). */
   ai: z.object({ router: z.enum(['llm', 'legacy']) }),
+  /** Speak-to-type. hotkey "" = no dedicated hotkey; autoDetect = dictate from the main hotkey. */
+  dictation: z.object({
+    enabled: z.boolean(),
+    hotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]),
+    cleanup: z.enum(['light', 'off']),
+    autoDetect: z.boolean(),
+    terminal: z.enum(['type-no-enter', 'block']),
+    dictionary: z.array(shortText(60)).max(500)
+  }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -223,7 +232,15 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     maxInjectTokens: 1200,
     privateMode: false
   },
-  ai: { router: 'llm' }
+  ai: { router: 'llm' },
+  dictation: {
+    enabled: true,
+    hotkey: 'Ctrl+Shift+D',
+    cleanup: 'light',
+    autoDetect: true,
+    terminal: 'type-no-enter',
+    dictionary: []
+  }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -306,7 +323,8 @@ export const configPatchSchema = z
     privacy: s2.privacy.partial().strict(),
     teach: s2.teach.partial().strict(),
     memory: s2.memory.partial().strict(),
-    ai: s2.ai.partial().strict()
+    ai: s2.ai.partial().strict(),
+    dictation: s2.dictation.partial().strict()
   })
   .partial()
   .strict()

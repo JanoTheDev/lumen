@@ -58,6 +58,10 @@ export type AppEvent =
   | { type: 'voice.started'; handsFree: boolean }
   | { type: 'voice.stopped' }
   | { type: 'voice.cancelled' }
+  /** Dictation hotkey pressed: record for typing, not for the assistant. */
+  | { type: 'dictation.started' }
+  /** The open dictation recording becomes hands-free (ends on silence or a tap). */
+  | { type: 'dictation.hands-free' }
   | { type: 'query.started'; turnId: string; prompt: string }
   /** Streamed text of the answer's spoken part, as it arrives. */
   | { type: 'query.delta'; turnId: string; delta: string }

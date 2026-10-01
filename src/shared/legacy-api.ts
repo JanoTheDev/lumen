@@ -36,7 +36,9 @@ export function createLegacyApi(lumen: LumenApi) {
     hideAnswerOverlay: () => send('answer:hide'),
     onShowAnswer: (cb: (text: string) => void) => on('answer:text', cb),
     onCancelRequest: (cb: () => void) => on('assistant:cancel-request', cb),
-    transcribe: (audio: ArrayBuffer) => lumen.invoke('voice:transcribe', audio),
+    transcribe: (audio: ArrayBuffer, opts?: { dictation?: boolean }) =>
+      lumen.invoke('voice:transcribe', audio, opts),
+    dictate: (text: string) => lumen.invoke('voice:dictate', text),
     resizeAnswerOverlay: (h: number) => send('answer:resize', h),
     getConfig: () => lumen.invoke('settings:get'),
     saveConfig: (patch: Record<string, unknown>) => lumen.invoke('settings:patch', patch),

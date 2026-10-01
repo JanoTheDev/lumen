@@ -17,7 +17,26 @@ export function whisperPrompt(userVocab: string): string {
   return `AI assistant voice command. User speaks English. Common words: open, click, email, Gmail, drafts, inbox, reply, compose, send, navigate, GitHub, Lumen, Claude, Anthropic${vocabList}.`
 }
 
-export async function transcribe(audio: ArrayBuffer): Promise<string> {
+// Whisper reads the prompt as preceding text: a punctuated sample nudges it to punctuate,
+// and listed names nudge their spelling. Kept well under its 224-token prompt window.
+const MAX_PROMPT_TERMS = 60
+
+export function dictationPrompt(dictionary: readonly string[], userVocab = ''): string {
+  const extra = userVocab
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const terms = [...new Set([...dictionary.map((d) => d.trim()), ...extra])]
+    .filter(Boolean)
+    .slice(0, MAX_PROMPT_TERMS)
+  const names = terms.length ? ` Names and terms: ${terms.join(', ')}.` : ''
+  return `Dictated text, written out with normal punctuation and capital letters.${names}`
+}
+
+export async function transcribe(
+  audio: ArrayBuffer,
+  opts: { dictation?: boolean } = {}
+): Promise<string> {
   if (!process.env.OPENAI_API_KEY) throw new Error('Whisper requires OPENAI_API_KEY')
 
   if (audio.byteLength < MIN_AUDIO_BYTES) {
@@ -31,7 +50,9 @@ export async function transcribe(audio: ArrayBuffer): Promise<string> {
       file: await toFile(Buffer.from(audio), 'recording.webm', { type: 'audio/webm' }),
       model: 'whisper-1',
       language: 'en',
-      prompt: whisperPrompt(loadConfig().voiceVocab)
+      prompt: opts.dictation
+        ? dictationPrompt(loadConfig().dictation.dictionary, loadConfig().voiceVocab)
+        : whisperPrompt(loadConfig().voiceVocab)
     },
     { timeout: 60000 }
   )

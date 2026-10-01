@@ -67,6 +67,14 @@ export function startVoice(handsFree: boolean): void {
   run(handsFree ? 'window.__wakeVoiceStart?.()' : 'window.__voiceStart?.()')
 }
 
+export function startDictation(): void {
+  run('window.__dictationStart?.()')
+}
+
+export function dictationHandsFree(): void {
+  run('window.__dictationHandsFree?.()')
+}
+
 export function stopVoice(): void {
   run('window.__voiceStop?.()')
 }
@@ -77,5 +85,10 @@ bus.on('voice.started', (e) => {
   show()
   startVoice(e.handsFree)
 })
+bus.on('dictation.started', () => {
+  show()
+  startDictation()
+})
+bus.on('dictation.hands-free', () => dictationHandsFree())
 bus.on('voice.stopped', () => stopVoice())
 bus.on('voice.cancelled', () => send('assistant:cancel-request'))

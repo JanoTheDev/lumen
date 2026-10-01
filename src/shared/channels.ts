@@ -19,7 +19,12 @@ export interface InvokeChannels {
     args: [summary: string, confidence?: Confidence | string]
     result: { delayMs: number }
   }
-  'voice:transcribe': { args: [audio: ArrayBuffer]; result: string }
+  'voice:transcribe': {
+    args: [audio: ArrayBuffer, opts?: { dictation?: boolean }]
+    result: string
+  }
+  /** Dictation hotkey transcript to clean up and type; "" ends the session with nothing typed. */
+  'voice:dictate': { args: [text: string]; result: { ok: boolean; notice?: string } }
   'voice:speak': { args: [text: string]; result: { ok: boolean; error?: string } }
   'settings:get': { args: []; result: Record<string, unknown> }
   'settings:patch': {
@@ -90,6 +95,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'assistant:execute',
   'assistant:announce',
   'voice:transcribe',
+  'voice:dictate',
   'voice:speak',
   'settings:get',
   'settings:patch',

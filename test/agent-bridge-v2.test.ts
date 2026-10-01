@@ -123,6 +123,7 @@ async function flush(): Promise<void> {
 
 const INIT: AgentInitArgs = {
   hotkey: 'Ctrl+Shift+Space',
+  dictationHotkey: 'Ctrl+Shift+D',
   wake: { enabled: false, phrase: '', cancelPhrases: [] },
   dwell: { enabled: false, ms: 1400, cooldownMs: 1500 },
   logLevel: 'info'
@@ -389,6 +390,7 @@ describe('buildAgentInitState', () => {
     } as unknown as AppConfig
     expect(buildAgentInitState(cfg)).toEqual({
       hotkey: 'Alt+B',
+      dictationHotkey: '',
       wake: { enabled: true, phrase: 'hey lumen', cancelPhrases: ['stop', 'cancel', 'never mind'] },
       dwell: { enabled: true, ms: 900, cooldownMs: 2000 },
       logLevel: 'info'
@@ -403,10 +405,29 @@ describe('buildAgentInitState', () => {
     } as unknown as AppConfig
     expect(buildAgentInitState(cfg, 'debug')).toEqual({
       hotkey: 'Ctrl+Shift+Space',
+      dictationHotkey: '',
       wake: { enabled: false, phrase: '', cancelPhrases: [] },
       dwell: { enabled: false, ms: 1400, cooldownMs: 1500 },
       logLevel: 'debug'
     })
     expect(buildAgentInitState(undefined).hotkey).toBe('Ctrl+Shift+Space')
+  })
+
+  it('binds the dictation hotkey only when enabled and distinct from the main one', () => {
+    const base = { hotkey: 'Ctrl+Shift+Space' }
+    const on = { enabled: true, hotkey: 'Ctrl+Shift+D' }
+    expect(
+      buildAgentInitState({ ...base, dictation: on } as unknown as AppConfig).dictationHotkey
+    ).toBe('Ctrl+Shift+D')
+    expect(
+      buildAgentInitState({ ...base, dictation: { ...on, enabled: false } } as unknown as AppConfig)
+        .dictationHotkey
+    ).toBe('')
+    expect(
+      buildAgentInitState({
+        ...base,
+        dictation: { ...on, hotkey: 'ctrl+shift+space' }
+      } as unknown as AppConfig).dictationHotkey
+    ).toBe('')
   })
 })

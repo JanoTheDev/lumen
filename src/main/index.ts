@@ -18,7 +18,13 @@ import { AgentBridge } from './agent/bridge'
 import { getAgent, setAgent } from './agent/instance'
 import { startAgent, wireAgentEvents } from './agent/events'
 import { holdEscape, releaseEscape, resetEscape, setEscapeHandler } from './agent/escape'
-import { applyAgentState, applyDwellState, applyListenerState, setHotkey } from './agent/sync'
+import {
+  applyAgentState,
+  applyDictationHotkey,
+  applyDwellState,
+  applyListenerState,
+  setHotkey
+} from './agent/sync'
 import { assertSafeUrl, isSafeUrl } from './actions/safety'
 import { replaySavedGuide, saveLastAsGuide, startGuide } from './guides/session'
 import { cancelAll } from './query/cancel'
@@ -26,6 +32,7 @@ import { interceptLocal } from './query/local'
 import { runQuery } from './query/pipeline'
 import { speakAnswer } from './speech/tts'
 import { transcribe } from './speech/stt'
+import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pipeline'
 import { isOwnRendererUrl } from './windows/factory'
 import { applyUiScaleOnLoad } from './windows/registry'
 import { setStatus } from './windows/status'
@@ -75,11 +82,13 @@ function registerIpc(): void {
   registerAnswerIpc()
   registerHighlightIpc()
   registerWakeIpc()
-  registerVoiceIpc({ speak: speakAnswer, transcribe })
+  registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
-  registerSettingsIpc({ setHotkey, applyListenerState, applyDwellState })
+  registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerQueryIpc({
     intercept: interceptLocal,
+    preempt: (prompt, opts, scope) =>
+      opts.lowDetail ? Promise.resolve(false) : maybeAutoDictate(prompt, scope.signal),
     runQuery: (prompt, opts, scope) =>
       runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide })
   })
@@ -109,6 +118,8 @@ app.whenReady().then(() => {
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
   registerIpc()
+  // Dictation left over from a crash is offered once the answer card can show it.
+  setTimeout(offerRecovery, 2500)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) hud.create()

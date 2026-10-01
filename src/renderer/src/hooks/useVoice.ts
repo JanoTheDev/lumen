@@ -10,6 +10,10 @@ export interface VoiceStartOptions {
   speechThreshold?: number
   // Hard cap on recording length; the recording is stopped and transcribed when reached.
   maxRecordMs?: number
+  // Dictation: transcribed with the dictation prompt (punctuation, personal dictionary).
+  dictation?: boolean
+  // Safety stop for a recording nobody ended (default 60s).
+  watchdogMs?: number
 }
 
 interface UseVoiceReturn {
@@ -237,7 +241,11 @@ export function useVoice(
           )
           let text: string
           try {
-            text = (await window.api.transcribe(arrayBuffer)) ?? ''
+            text =
+              (await window.api.transcribe(
+                arrayBuffer,
+                opts.dictation ? { dictation: true } : undefined
+              )) ?? ''
           } catch (err) {
             console.error('[voice] transcription failed:', err)
             if (s.discarded) return
@@ -273,7 +281,7 @@ export function useVoice(
         console.warn('[voice] watchdog: transcription stalled, discarding')
         abortSession(s)
         onErrorRef.current?.('Voice request timed out')
-      }, WATCHDOG_MS)
+      }, opts.watchdogMs ?? WATCHDOG_MS)
 
       if (opts.maxRecordMs && opts.maxRecordMs > 0) {
         s.maxTimer = setTimeout(() => {

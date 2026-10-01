@@ -24,7 +24,12 @@ export interface QueryIpcDeps {
   /** Router stages 1 + 2 (local grammar, prefilter); returns a response when handled. */
   intercept: (prompt: string) => unknown | undefined
   runQuery: (prompt: string, opts: CallOptions, scope: CancelScope) => Promise<ModelResponse>
+  /** Runs first inside the queue; true = the utterance was fully handled (e.g. dictated). */
+  preempt?: (prompt: string, opts: CallOptions, scope: CancelScope) => Promise<boolean>
 }
+
+/** Reply for an utterance that was typed as dictation instead of going to the assistant. */
+export const DICTATED = { mode: 'answer', text: '', dictated: true } as const
 
 export function registerQueryIpc(deps: QueryIpcDeps): void {
   const userQueue = new TaskQueue(1, 'request-queue')
@@ -46,9 +51,10 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     armEscape()
     try {
       // Serialize user requests; parallel splits happen inside the turn (router).
-      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () =>
-        deps.runQuery(prompt, opts, scope)
+      const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, async () =>
+        (await deps.preempt?.(prompt, opts, scope)) ? DICTATED : deps.runQuery(prompt, opts, scope)
       )
+      if (result === DICTATED) return result
       const modeLabel = (result as { mode?: string }).mode
       if (modeLabel === 'action') setStatus('acting', 'Executing', { index: 3, total: 3 }, 2000)
       else if (modeLabel === 'guide') setStatus('step', 'Guide ready', undefined, 2500)

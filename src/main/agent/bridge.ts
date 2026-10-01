@@ -268,6 +268,11 @@ export class AgentBridge {
     return this.call('set_hotkey', { combo })
   }
 
+  /** Second push-to-talk binding: emits dictation-down / dictation-up. "" unbinds. */
+  async setDictationHotkey(combo: string): Promise<unknown> {
+    return this.call('set_dictation_hotkey', { combo })
+  }
+
   async enableListener(phrase: string, cancelPhrases: string[]): Promise<unknown> {
     return this.call('wake_enable', { phrase, cancel_phrases: cancelPhrases })
   }

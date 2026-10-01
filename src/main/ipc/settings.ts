@@ -9,6 +9,7 @@ import * as settingsWin from '../windows/settings'
 
 export interface SettingsIpcDeps {
   setHotkey: (combo: string) => Promise<unknown>
+  applyDictationHotkey: (cfg: AppConfig) => Promise<void>
   applyListenerState: (cfg: AppConfig) => void
   applyDwellState: (cfg: AppConfig) => void
 }
@@ -39,6 +40,9 @@ export function registerSettingsIpc(deps: SettingsIpcDeps): void {
         console.error('[hotkey] rebind failed:', (e as Error).message)
       }
     }
+    const dictationKey = (c: AppConfig): string =>
+      JSON.stringify([c.hotkey, c.dictation.enabled, c.dictation.hotkey])
+    if (dictationKey(prev) !== dictationKey(next)) await deps.applyDictationHotkey(next)
     if (patch.statusBubble && prev.statusBubble.enabled && !next.statusBubble.enabled) {
       hideStatus()
     }

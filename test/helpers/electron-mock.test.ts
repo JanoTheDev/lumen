@@ -16,6 +16,7 @@ describe('electron-mock helper', () => {
   let tmp: ReturnType<typeof tempDir>
   const deps = {
     setHotkey: vi.fn(async () => {}),
+    applyDictationHotkey: vi.fn(async () => {}),
     applyListenerState: vi.fn(),
     applyDwellState: vi.fn()
   }

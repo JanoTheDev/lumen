@@ -1,11 +1,20 @@
 import { ipcMain } from 'electron'
+import { z } from 'zod'
 import { audioSchema, textSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
 
+const transcribeOptsSchema = z.object({ dictation: z.boolean().optional() }).strict().optional()
+
+export interface TranscribeOptions {
+  /** Dictation: punctuation-friendly prompt biased with the personal dictionary. */
+  dictation?: boolean
+}
+
 export interface VoiceIpcDeps {
   speak: (text: string, voice: string) => Promise<void>
-  transcribe: (audio: ArrayBuffer) => Promise<string>
+  transcribe: (audio: ArrayBuffer, opts?: TranscribeOptions) => Promise<string>
+  dictate: (text: string) => Promise<{ ok: boolean; notice?: string }>
 }
 
 export function registerVoiceIpc(deps: VoiceIpcDeps): void {
@@ -21,9 +30,20 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
       return { ok: false, error: (e as Error).message }
     }
   })
-  ipcMain.handle('voice:transcribe', async (_event, raw: unknown) => {
+  ipcMain.handle('voice:transcribe', async (_event, raw: unknown, rawOpts: unknown) => {
     const audio = safeParse('voice:transcribe', audioSchema, raw)
     if (!audio) return ''
-    return deps.transcribe(audio)
+    const opts = safeParse('voice:transcribe', transcribeOptsSchema, rawOpts) ?? {}
+    return deps.transcribe(audio, opts)
+  })
+  ipcMain.handle('voice:dictate', async (_event, raw: unknown) => {
+    const text = safeParse('voice:dictate', textSchema, raw)
+    if (text === undefined) return INVALID
+    try {
+      return await deps.dictate(text)
+    } catch (e) {
+      console.error('[dictation] failed:', (e as Error).message)
+      return { ok: false, notice: (e as Error).message }
+    }
   })
 }
