@@ -130,6 +130,22 @@ describe('Deictic', () => {
     ])
   })
 
+  it('a typed "click this" after an unrelated voice turn uses the pointer now (review med)', async () => {
+    const { d, run, at } = setup()
+    at(0)
+    d.onVoiceStarted()
+    d.onPointer({ x: 10, y: 10 })
+    at(2000)
+    d.onVoiceStopped()
+    // The spoken turn: not a deictic command, it consumes the recording's timing.
+    expect(d.intercept("what's the weather")).toBeUndefined()
+    at(12_000)
+    await d.intercept('click this')
+    expect(run.mock.calls[0][0]).toEqual([
+      { type: 'input', steps: [{ t: 'click', button: 'left', x: 999, y: 999 }] }
+    ])
+  })
+
   it('a typed "move this there" asks to say it while pointing', () => {
     const { d, run } = setup()
     expect(d.intercept('move this there')).toMatchObject({ mode: 'answer' })

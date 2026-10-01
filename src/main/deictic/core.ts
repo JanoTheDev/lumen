@@ -93,10 +93,17 @@ export class Deictic {
   /** The command's response (or its promise), undefined when it is not a deictic command. */
   intercept(utterance: string): unknown | undefined {
     if (!this.deps.enabled()) return undefined
+    // A recording's timing belongs to the first utterance after it (its transcript), so a
+    // later typed "click this" uses the pointer now, not where it rested back then.
     const cmd = parseDeictic(utterance)
-    if (!cmd) return undefined
-    if (cmd.kind === 'what' && this.deps.aboutFiles?.(utterance, this.pointedRecently()))
+    if (!cmd) {
+      this.last = null
       return undefined
+    }
+    if (cmd.kind === 'what' && this.deps.aboutFiles?.(utterance, this.pointedRecently())) {
+      this.last = null
+      return undefined
+    }
     const pts = this.points(cmd, utterance)
     this.last = null
     if (!pts)
