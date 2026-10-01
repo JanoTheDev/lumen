@@ -42,8 +42,8 @@ export interface AssistantState {
   }
   /** The caption is open for a correction ("correct that" / "spell that" / Edit). */
   captionEdit?: { mode: 'edit' | 'spell'; draft: string }
-  /** A short notice with an optional action button (muted output → Unmute). */
-  notice?: { text: string; action?: 'unmute' }
+  /** A short notice with an optional action button (muted output → Unmute, an edit → Undo). */
+  notice?: { text: string; action?: 'unmute' | 'undo' }
   model?: string
   /** The running agent-mode task: plan, step list and counters (08 T13). */
   agentTask?: AgentTask

@@ -359,6 +359,14 @@ export function AssistantApp(): JSX.Element {
                           Unmute
                         </Button>
                       )}
+                      {v.notice.action === 'undo' && (
+                        <Button
+                          icon={icons.repeat}
+                          onClick={() => send('assistant:command', { type: 'undo' })}
+                        >
+                          Undo
+                        </Button>
+                      )}
                     </div>
                   )}
                 </Fade>

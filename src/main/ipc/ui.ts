@@ -31,6 +31,7 @@ const commandSchema = z
       'confirm-always',
       'deny',
       'unmute',
+      'undo',
       'edit',
       'edit-cancel',
       'retry',

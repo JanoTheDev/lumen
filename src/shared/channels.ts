@@ -667,6 +667,8 @@ export type AssistantCommand = {
     /** The confirm card's "Always" button: confirm and store a grant for its scope. */
     | 'confirm-always'
     | 'unmute'
+    /** The notice's Undo button (dictation command mode). */
+    | 'undo'
     /** Open / close the caption for a correction. */
     | 'edit'
     | 'edit-cancel'

@@ -355,6 +355,13 @@ export function setUnmuteHandler(fn: () => void): void {
   unmuteHandler = fn
 }
 
+let undoHandler: () => void = () => {}
+
+/** What the notice's Undo button does (set by dictation command mode). */
+export function setUndoHandler(fn: () => void): void {
+  undoHandler = fn
+}
+
 let deps: CommandDeps = { cancel: () => {} }
 
 export function setCommandDeps(d: CommandDeps): void {
@@ -403,6 +410,9 @@ export function command(cmd: AssistantCommand): void {
       break
     case 'unmute':
       unmuteHandler()
+      break
+    case 'undo':
+      undoHandler()
       break
     case 'cancel':
       deps.cancel()
