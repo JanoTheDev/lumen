@@ -127,6 +127,12 @@ export function routeLocal(
 const BG_LEAD_RE =
   /^(?:(?:ok|okay|hey lumen|lumen|please|can you|could you)[,\s]+)*(?:in the background|while i(?:'m| am)? work(?:ing)?|while i do (?:my|other) (?:work|stuff))[,:\s]+(?:(?:can|could) you |please )?(.+)$/i
 const BG_TAIL_RE = /^(.+?)[,\s]+(?:in the background|while i(?:'m| am)? work(?:ing)?)[.!?]*$/i
+/**
+ * The tail form ("… while I work") only for a task-like request: "what music should I listen
+ * to while I work" is a question and "turn on focus mode while I work" a foreground action.
+ */
+const BG_TASK_VERB_RE =
+  /^(?:(?:ok|okay|hey lumen|lumen|please|can you|could you)[,\s]+)*(?:check|watch|monitor|track|find|search|look (?:up|into|for)|research|summari[sz]e|compare|collect|gather|draft|write|prepare|read|download|list|figure out|work out)\b/i
 const KEEP_EYE_RE = /^(?:(?:please|can you|could you)\s+)*(keep an eye on .+)$/i
 
 /**
@@ -135,7 +141,11 @@ const KEEP_EYE_RE = /^(?:(?:please|can you|could you)\s+)*(keep an eye on .+)$/i
  */
 export function matchBackgroundIntent(utterance: string): { prompt: string } | null {
   const u = utterance.trim().replace(/\s+/g, ' ')
-  const m = BG_LEAD_RE.exec(u) ?? BG_TAIL_RE.exec(u) ?? KEEP_EYE_RE.exec(u)
+  const tail = BG_TAIL_RE.exec(u)
+  const m =
+    BG_LEAD_RE.exec(u) ??
+    (tail && BG_TASK_VERB_RE.test(tail[1]) ? tail : null) ??
+    KEEP_EYE_RE.exec(u)
   const prompt = m?.[1]?.trim().replace(/^[,:\s]+/, '')
   if (!prompt || prompt.split(' ').length < 2) return null
   return { prompt: prompt.charAt(0).toUpperCase() + prompt.slice(1) }
@@ -229,7 +239,9 @@ export function normalizeRoute(raw: Route): Route {
   }
   route.appSwitch = raw.appSwitch && !!route.targetApp
   const skill = raw.skill?.name.trim()
-  if (skill) route.skill = { ...raw.skill, name: skill }
+  // A skill acts, so it only rides on an acting route (a guide or answer stays one).
+  if (skill && (route.mode === 'plan' || route.mode === 'action'))
+    route.skill = { ...raw.skill, name: skill }
   else delete route.skill
   return route
 }

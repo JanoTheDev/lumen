@@ -32,4 +32,13 @@ describe('matchBackgroundIntent', () => {
     expect(matchBackgroundIntent('open gmail')).toBeNull()
     expect(matchBackgroundIntent('in the background, go')).toBeNull()
   })
+
+  it('the tail form needs a task verb (review low)', () => {
+    expect(matchBackgroundIntent('what music should I listen to while I work')).toBeNull()
+    expect(matchBackgroundIntent('turn on focus mode while I work')).toBeNull()
+    expect(matchBackgroundIntent('play some music in the background')).toBeNull()
+    expect(matchBackgroundIntent('check my inbox for the invoice while I work')).toEqual({
+      prompt: 'Check my inbox for the invoice'
+    })
+  })
 })
