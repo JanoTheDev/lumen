@@ -77,6 +77,17 @@ describe('grammar', () => {
     expect(parseLabelCommand('name this window')).toEqual({ kind: 'label-window' })
     expect(parseLabelCommand('click the render button')).toBeNull()
   })
+
+  it('everyday phrases are not label commands (review med)', () => {
+    expect(parseLabelCommand('call that number')).toBeNull()
+    expect(parseLabelCommand('call this mom')).toBeNull()
+    expect(parseLabelCommand('name this file report')).toBeNull()
+    expect(parseLabelCommand('label that photo holiday')).toBeNull()
+    expect(parseLabelCommand('call this icon Export')).toEqual({
+      kind: 'name-this',
+      label: 'Export'
+    })
+  })
 })
 
 describe('readReply', () => {
