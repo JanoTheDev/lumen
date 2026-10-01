@@ -80,7 +80,12 @@ import { announce, installA11y } from './a11y'
 import { installFace } from './face'
 import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
-import { installRoutines, interceptRoutines, registerRoutinesIpc } from './routines'
+import {
+  claimAutomationInstance,
+  installRoutines,
+  interceptRoutines,
+  registerRoutinesIpc
+} from './routines'
 import { installUserActivityPause } from './agent-mode/input-lane'
 import { installSkills } from './skills'
 import { installLessonOutput } from './windows/lesson'
@@ -172,6 +177,9 @@ function registerIpc(): void {
       runQuery(prompt, opts, scope, { speak: speakAnswer, onGuide: startGuide })
   })
 }
+
+// A second installed Lumen (a wake-up task, or started again by hand) hands over and quits.
+if (!claimAutomationInstance()) app.exit(0)
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId(APP_ID)

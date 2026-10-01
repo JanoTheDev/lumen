@@ -78,7 +78,7 @@ const NUMBER_WORDS: Record<string, number> = {
   ninety: 90
 }
 
-const DAY_WORDS: Record<string, number> = {
+export const DAY_WORDS: Record<string, number> = {
   sunday: 0,
   monday: 1,
   tuesday: 2,
@@ -88,15 +88,15 @@ const DAY_WORDS: Record<string, number> = {
   saturday: 6
 }
 
-function num(word: string): number | null {
+export function num(word: string): number | null {
   if (/^\d+$/.test(word)) return Number(word)
   return NUMBER_WORDS[word] ?? null
 }
 
-const NUM = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty[ -]five|sixty|ninety)`
+export const NUM = String.raw`(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty[ -]five|sixty|ninety)`
 const DAY = String.raw`(?:sun|mon|tues|wednes|thurs|fri|satur)days?`
 const PERIOD = String.raw`(?:weekdays?|week ?days?|weekends?|days?|mornings?|evenings?|nights?|${DAY}(?:(?:,| and|, and) ${DAY})*)`
-const TIME = String.raw`(?:at |@ ?)?(noon|midnight|\d{1,2}(?:[:.]\d{2})?(?: ?[ap]\.?m\.?)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?: o'?clock)?(?: ?(?:in the )?(morning|evening|at night|afternoon))?`
+export const TIME = String.raw`(?:at |@ ?)?(noon|midnight|\d{1,2}(?:[:.]\d{2})?(?: ?[ap]\.?m\.?)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)(?: o'?clock)?(?: ?(?:in the )?(morning|evening|at night|afternoon))?`
 
 const EVERY_N_RE = new RegExp(
   String.raw`^(?:every|each) (?:(half an hour|half hour)|(?:${NUM} )?(minutes?|mins?|hours?))\b`
@@ -144,10 +144,10 @@ export type ParsedRoutine =
 const ROUTINE_PREFIX_RE =
   /^(?:please )?(?:create|add|make|set up|setup|start|new) (?:a |me a )?(?:new )?routine(?: that| which| to)?[:,]? */
 
-const NOT_A_TASK_RE =
+export const NOT_A_TASK_RE =
   /^(?:i|i'm|im|my|me|it|it's|its|is|are|was|were|the|a|an|we|you|he|she|they|this|that|there|our|your|his|her|their|does|do|did|should|would|can|could|will|how|what|why|when|where|who|which|so|and|but|or|of|in|on|for)\b/
 
-function cleanPrompt(p: string): string {
+export function cleanPrompt(p: string): string {
   return p
     .replace(/^[\s,:;–—-]+/, '')
     .replace(/^(?:then|please|i want you to|can you|could you)\s+/i, '')
@@ -155,7 +155,9 @@ function cleanPrompt(p: string): string {
     .trim()
 }
 
-function leading(text: string): { schedule: RoutineSchedule; rest: string; def: boolean } | null {
+export function leading(
+  text: string
+): { schedule: RoutineSchedule; rest: string; def: boolean } | null {
   const e = EVERY_N_RE.exec(text)
   if (e) {
     let minutes: number

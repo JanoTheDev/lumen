@@ -1,6 +1,7 @@
-// Routine pre-approval (safety-policy §5): a routine runs while nobody may be watching, so its
-// high-risk tool calls are skipped unless the routine pre-approved that exact call shape when
-// it was set up. Low and medium calls run as in any background task.
+// Automation (routine) pre-approval (safety-policy §5): an automation runs while nobody may be
+// watching, so its high-risk tool calls are skipped unless it pre-approved that exact call shape
+// when it was set up, and it never takes the mouse and keyboard while the user is away. Low and
+// medium calls run as in any background task.
 import type { ActionShape } from '@shared/routines'
 
 export type RoutineRisk = 'low' | 'high'
@@ -64,12 +65,28 @@ export function validShape(s: unknown): s is ActionShape {
   )
 }
 
-/** The background runner's guard for a routine: high-risk calls need a matching shape. */
+/** Is the user at the PC (own input in the last 2 minutes, not in quiet mode)? */
+let userPresent: () => boolean = () => true
+
+/** Wired at start (routines/index): the presence rule for taking the mouse and keyboard. */
+export function setPresence(fn: () => boolean): void {
+  userPresent = fn
+}
+
+/**
+ * The background runner's guard for an automation (origin routine): high-risk calls need a
+ * matching shape, and the mouse and keyboard (request_foreground) are taken only while the
+ * user is at the PC, even when pre-approved.
+ */
 export function routineGuard(
-  shapes: ActionShape[]
+  shapes: ActionShape[],
+  present: () => boolean = () => userPresent()
 ): (tool: string, input: Record<string, unknown>) => string | null {
-  return (tool, input) =>
-    routineRisk(tool) === 'high' && !preApproved(shapes, tool, input)
-      ? `a routine skips ${tool} unless it was pre-approved for this routine (Settings → Background & routines). Finish and say what is left for the user.`
-      : null
+  return (tool, input) => {
+    if (routineRisk(tool) === 'high' && !preApproved(shapes, tool, input))
+      return `an automation skips ${tool} unless it was pre-approved for it (Settings → Automations). Finish and say what is left for the user.`
+    if (tool === FOREGROUND_SHAPE.tool && !present())
+      return 'the user is away from the PC, so an automation does not use the mouse or keyboard now. Finish and say what is left for the user.'
+    return null
+  }
 }
