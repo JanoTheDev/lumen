@@ -4,6 +4,7 @@
 // is thrown away in favour of a local cleanup.
 import { getProvider } from '../../ai/providers'
 import type { LlmProvider } from '../../ai/providers/types'
+import { ANCHOR_WINDOW, cueSpans } from './backtrack'
 
 export type CleanupMode = 'light' | 'off'
 
@@ -24,6 +25,9 @@ Never:
 - Change the language.
 
 Reply with the cleaned text only.`
+
+/** Added to the prompt when course correction is on (T34). */
+export const BACKTRACK_PROMPT = `One more allowed edit: when the speaker corrects themselves with "no wait", "scratch that", "actually", "I mean", "or rather" or "make that", drop the words they took back together with that phrase and keep the correction ("send it Tuesday, actually Wednesday" -> "send it Wednesday"). Only do this when it is clearly a correction.`
 
 // Spoken tokens a faithful cleanup may drop.
 const FILLERS = new Set(['um', 'umm', 'uh', 'uhh', 'uhm', 'er', 'erm', 'ah', 'hmm', 'mm', 'mhm'])
@@ -55,13 +59,30 @@ export function tokenize(text: string): string[] {
   )
 }
 
+export interface PreserveOptions {
+  /** A spoken self-correction may drop one span of ≤ 8 words that ends at a cue. */
+  allowRetraction?: boolean
+}
+
 /**
  * True when `cleaned` keeps every word of `raw` in order and adds none. Raw words may only
- * be dropped when they are fillers, stutters or spoken formatting commands.
+ * be dropped when they are fillers, stutters or spoken formatting commands (and, with
+ * `allowRetraction`, one retracted span ending at a correction cue).
  */
-export function wordsPreserved(raw: string, cleaned: string): boolean {
+export function wordsPreserved(raw: string, cleaned: string, opts: PreserveOptions = {}): boolean {
   const a = tokenize(raw)
   const b = tokenize(cleaned)
+  if (tokensPreserved(a, b)) return true
+  if (!opts.allowRetraction) return false
+  for (const cue of cueSpans(a)) {
+    const end = cue.at + cue.len
+    for (let s = Math.max(0, cue.at - ANCHOR_WINDOW); s <= cue.at; s++)
+      if (tokensPreserved([...a.slice(0, s), ...a.slice(end)], b)) return true
+  }
+  return false
+}
+
+function tokensPreserved(a: readonly string[], b: readonly string[]): boolean {
   if (!b.length) return !a.some((w) => !FILLERS.has(w))
   let j = 0
   let dropped = 0
@@ -142,6 +163,8 @@ export interface CleanupOptions {
   mode: CleanupMode
   dictionary?: readonly string[]
   signal?: AbortSignal
+  /** Course correction on: the model may apply spoken self-corrections the local pass left. */
+  backtrack?: boolean
   /** Test seam: the fast-role provider. */
   resolve?: () => { llm: Pick<LlmProvider, 'complete'>; model: string }
 }
@@ -165,7 +188,10 @@ export async function cleanupDictation(raw: string, opts: CleanupOptions): Promi
     const res = await llm.complete(
       {
         model,
-        system: [{ text: CLEANUP_PROMPT, cacheable: true }],
+        system: [
+          { text: CLEANUP_PROMPT, cacheable: !opts.backtrack },
+          ...(opts.backtrack ? [{ text: BACKTRACK_PROMPT, cacheable: true }] : [])
+        ],
         messages: [{ role: 'user', content: cleanupTurn(input, dictionary) }],
         maxTokens: Math.min(4096, Math.ceil(input.length / 2) + 64),
         temperature: 0,
@@ -174,7 +200,7 @@ export async function cleanupDictation(raw: string, opts: CleanupOptions): Promi
       signal
     )
     const cleaned = unwrapReply(res.text)
-    if (cleaned && wordsPreserved(input, cleaned))
+    if (cleaned && wordsPreserved(input, cleaned, { allowRetraction: opts.backtrack }))
       return { text: applyDictionary(cleaned, dictionary), source: 'model' }
     console.warn('[dictation] cleanup changed words; using local cleanup')
   } catch (e) {
