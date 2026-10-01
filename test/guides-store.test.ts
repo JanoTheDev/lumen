@@ -87,11 +87,22 @@ describe('guide store', () => {
     'a.b',
     'C:',
     'a'.repeat(65),
+    '..%2fconfig',
+    '%2e%2e',
+    '/etc/passwd',
+    'C:\\Windows',
+    'con.json',
     null,
     42
   ])('rejects id %s', (id) => {
     expect(isValidGuideId(id)).toBe(false)
     expect(guidePath(id)).toBeNull()
+  })
+
+  // Windows device names pass the id pattern; on Windows 10 'con.json' opens the console
+  // device instead of a file. See 10-quality/tasks.md Notes.
+  it.fails.each(['con', 'nul', 'aux', 'prn', 'com1', 'lpt1'])('rejects reserved name %s', (id) => {
+    expect(isValidGuideId(id)).toBe(false)
   })
 
   it('accepts well-formed ids', () => {

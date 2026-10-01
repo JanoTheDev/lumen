@@ -44,10 +44,24 @@ describe('parseGuideNav', () => {
     ['done with the report, send it', null],
     ['repeat the last email to john', null],
     ['open the back office page', null],
+    ['close this tab', null],
+    ['go back to the previous page in chrome', null],
+    ['next week', null],
+    ['what is the next step to export', null],
+    ['done?', 'done'],
+    ['Um, back please', 'prev'],
+    ['NEXT STEP', 'next'],
     ['', null],
     ['   ', null]
   ] as const)('%j -> %s', (utterance, expected) => {
     expect(parseGuideNav(utterance)).toBe(expected)
+  })
+})
+
+// Natural repeat phrasings are not recognised yet; see 10-quality/tasks.md Notes.
+describe('parseGuideNav gaps', () => {
+  it.fails.each(['repeat that', 'one more time', 'say it again'])('%j -> repeat', (u) => {
+    expect(parseGuideNav(u)).toBe('repeat')
   })
 })
 
