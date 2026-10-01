@@ -3,6 +3,7 @@ import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from './hooks/useVoice'
 import { startSpeaker } from './voice/speaker'
 import { setWakeFeedPaused, startWakeFeed } from './voice/wake-feed'
+import { startMicDeviceSync } from './voice/mic'
 import { RmsGate } from './voice/vad/rms'
 
 type ClaudeResponse = ModelResponse
@@ -253,6 +254,7 @@ export default function App(): JSX.Element {
 
   useEffect(() => startSpeaker(), [])
   useEffect(() => startWakeFeed(), [])
+  useEffect(() => startMicDeviceSync(), [])
   useEffect(() => setWakeFeedPaused(listening), [listening])
 
   useEffect(() => {

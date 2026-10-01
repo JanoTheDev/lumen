@@ -1,7 +1,7 @@
 // Streams the shared mic to main as 16 kHz Int16 PCM while main's wake-word spotter listens.
 // Same stream as recording (one mic open, echo cancellation applies to both).
 import tapUrl from './worklets/pcm-tap.ts?worker&url'
-import { dropMic, getMicStream, holdMic } from './mic'
+import { dropMic, getMicStream, holdMic, onMicChanged } from './mic'
 
 const HOLDER = 'wake'
 const REOPEN_MS = 1500
@@ -83,12 +83,17 @@ export function setWakeFeedPaused(on: boolean): void {
 /** Follows main's wake state; returns the cleanup. */
 export function startWakeFeed(): () => void {
   const off = window.lumen.on('voice:wake-listen', setListening)
+  // Another microphone was picked: move the feed to it.
+  const offMic = onMicChanged(() => {
+    if (wanted) void open()
+  })
   window.lumen
     .invoke('voice:wake-state')
     .then((s) => setListening(s.listen))
     .catch(() => {})
   return () => {
     off()
+    offMic()
     setListening(false)
   }
 }
