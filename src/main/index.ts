@@ -65,6 +65,9 @@ import { registerTeachIpc } from './ipc/teach'
 import { registerSkillsIpc } from './ipc/skills'
 import { registerBridgesIpc } from './ipc/bridges'
 import { registerConnectorsIpc } from './ipc/connectors'
+import { registerPluginsIpc } from './plugins'
+import { interceptStyles } from './ai/style-runtime'
+import { registerStylesIpc } from './ipc/styles'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
@@ -145,6 +148,8 @@ function registerIpc(): void {
   registerFirstsIpc()
   registerBridgesIpc()
   registerConnectorsIpc()
+  registerPluginsIpc()
+  registerStylesIpc()
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()
@@ -165,6 +170,7 @@ function registerIpc(): void {
   registerQueryIpc({
     intercept: (prompt) =>
       interceptClaudeCode(prompt) ??
+      interceptStyles(prompt) ??
       interceptAgentMode(prompt) ??
       interceptRoutines(prompt) ??
       interceptHelpers(prompt) ??

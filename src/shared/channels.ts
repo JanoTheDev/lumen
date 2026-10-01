@@ -18,6 +18,14 @@ import type {
   ConnectorToolInfo,
   ConnectorView
 } from './connectors'
+import type {
+  ClaudeHomeScan,
+  PluginImportRequest,
+  PluginImportResult,
+  PluginPreviewResult,
+  PluginSource
+} from './plugins'
+import type { ActiveStyle, StyleInfo } from './styles'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
@@ -589,6 +597,17 @@ export interface InvokeChannels {
   /** Connects now and reports the tool count or the error. */
   'connectors:test': { args: [id: string]; result: ConnectorTestResult }
   'connectors:tools': { args: [id: string]; result: ConnectorToolInfo[] | { error: string } }
+  /** OAuth sign-in in the browser (loopback redirect); resolves when signed in or failed. */
+  'connectors:sign-in': { args: [id: string]; result: ConnectorResult }
+  'connectors:sign-out': { args: [id: string]; result: ConnectorResult }
+  /** Claude Code plugin import: what ~/.claude holds, a preview, the import. */
+  'plugins:scan': { args: []; result: ClaudeHomeScan }
+  'plugins:preview': { args: [req: PluginSource]; result: PluginPreviewResult }
+  'plugins:import': { args: [req: PluginImportRequest]; result: PluginImportResult }
+  'plugins:cancel': { args: [token: string]; result: { ok: boolean } }
+  /** Reply styles ("modes"): the installed ones and the one in use. */
+  'styles:list': { args: []; result: { styles: StyleInfo[]; active: ActiveStyle | null } }
+  'styles:set': { args: [style: ActiveStyle | null]; result: { ok: boolean; error?: string } }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -1458,7 +1477,15 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'connectors:update',
   'connectors:remove',
   'connectors:test',
-  'connectors:tools'
+  'connectors:tools',
+  'connectors:sign-in',
+  'connectors:sign-out',
+  'plugins:scan',
+  'plugins:preview',
+  'plugins:import',
+  'plugins:cancel',
+  'styles:list',
+  'styles:set'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
