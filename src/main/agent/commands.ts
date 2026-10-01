@@ -118,6 +118,25 @@ export function activeWindow(
   return bridge.request<ActiveWindowInfo>('active_window', {}, opts)
 }
 
+/** `focus_info`: the foreground window plus the keyboard-focused element. */
+export interface FocusInfoResult {
+  process: string
+  title: string
+  /** false: UIA could not read the focused element (the other fields are empty). */
+  uia: boolean
+  role: string
+  name: string
+  editable: boolean
+  password: boolean
+  valueTail: string
+  /** UIA ClassName of the focused element (newer agents only). */
+  className?: string
+}
+
+export function focusInfo(bridge: AgentBridge, opts?: RequestOptions): Promise<FocusInfoResult> {
+  return bridge.request<FocusInfoResult>('focus_info', {}, opts)
+}
+
 export function input(
   bridge: AgentBridge,
   steps: InputStep[],

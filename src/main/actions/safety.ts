@@ -133,6 +133,11 @@ export interface WindowInfo {
   className?: string
   /** The focused element is a password field (UIA IsPassword). */
   isPassword?: boolean
+  /** false: the agent could not read the focused element (password / terminal unknown). */
+  focusKnown?: boolean
+  /** UIA name and role of the focused element. */
+  focusName?: string
+  focusRole?: string
 }
 
 export interface GrantLookup {
@@ -234,12 +239,47 @@ const TERMINAL_PROCESSES = new Set([
 const TERMINAL_CLASSES =
   /^(consolewindowclass|cascadia_hosting_window_class|termcontrol|xterm-helper-textarea)$/i
 
-/** cmd, PowerShell, Windows Terminal, the Run box or a VS Code terminal has the focus. */
+/** Editors and IDEs with an integrated terminal (VS Code, its forks, JetBrains, Visual Studio). */
+const IDE_PROCESSES = new Set([
+  'code.exe',
+  'code - insiders.exe',
+  'vscodium.exe',
+  'cursor.exe',
+  'windsurf.exe',
+  'zed.exe',
+  'devenv.exe',
+  'idea64.exe',
+  'idea.exe',
+  'pycharm64.exe',
+  'webstorm64.exe',
+  'phpstorm64.exe',
+  'rider64.exe',
+  'clion64.exe',
+  'goland64.exe',
+  'rubymine64.exe',
+  'datagrip64.exe',
+  'studio64.exe',
+  'fleet.exe'
+])
+/** VS Code's terminal textarea is named "Terminal 1, pwsh …"; JetBrains' tool window "Terminal". */
+const TERMINAL_FOCUS_NAME_RE = /^terminal\b|\bterminal \d/i
+
+export function isIde(w: WindowInfo | undefined): boolean {
+  return IDE_PROCESSES.has(lower(w?.process))
+}
+
+/** cmd, PowerShell, Windows Terminal, the Run box or an IDE's integrated terminal has the focus. */
 export function isTerminal(w: WindowInfo | undefined): boolean {
   if (!w) return false
   if (TERMINAL_PROCESSES.has(lower(w.process))) return true
   if (w.className && TERMINAL_CLASSES.test(w.className)) return true
+  if (isIde(w) && TERMINAL_FOCUS_NAME_RE.test(w.focusName ?? '')) return true
   return isShellWindow(w.title)
+}
+
+/** An IDE has the focus but which pane (editor or terminal) cannot be told. */
+function ideFocusUnclear(w: WindowInfo | undefined): boolean {
+  return isIde(w) && !isTerminal(w) && !w?.className && (w?.focusKnown !== true || !w.focusName)
 }
 
 const MESSAGING_PROCESSES = new Set([
@@ -508,6 +548,8 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   }
   if (combo === 'enter' && afterType && isTerminal(w))
     out.push({ risk: 'high', reason: 'runs the typed command' })
+  else if (combo === 'enter' && afterType && agentish(ctx.origin) && ideFocusUnclear(w))
+    out.push({ risk: 'high', reason: 'may run the typed text in the editor’s terminal' })
 }
 
 // ---- typing ----
@@ -529,6 +571,16 @@ function typeFindings(text: string, ctx: PolicyCtx, out: Finding[], redactions: 
         : { risk: 'high', reason: `types into a terminal: “${maskSecrets(text)}”` }
     )
     return
+  }
+  if (agentish(ctx.origin)) {
+    // Fail closed when the focused element cannot be read: it may be a password field or an
+    // IDE's terminal.
+    if (ideFocusUnclear(w)) {
+      out.push({ risk: 'high', reason: 'may type into the editor’s terminal' })
+      return
+    }
+    if (w?.focusKnown === false)
+      out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
   }
   const secrets = findSecrets(text)
   if (secrets.length) {

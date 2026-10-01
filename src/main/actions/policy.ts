@@ -17,7 +17,7 @@ import {
 } from './safety'
 import { describeActions } from '../a11y/captions'
 import { getAgent } from '../agent/instance'
-import type { ActiveWindowInfo } from '../agent/commands'
+import type { ActiveWindowInfo, FocusInfoResult } from '../agent/commands'
 import { askUser } from '../agent-mode/confirm'
 import { grants } from '../agent-mode/grants'
 import { summarizeAction, writeAudit, type AuditDecision, type AuditResult } from '../audit/log'
@@ -47,30 +47,66 @@ export interface Gate {
 const ACTIVE_WINDOW_MS = 1500
 
 function needsWindow(a: EvalAction, ctx: GateCtx): boolean {
-  if (a.type === 'type' || a.type === 'hotkey' || a.type === 'input') return true
-  if (a.type === 'uia_act' && a.action === 'set_value') return true
+  if (needsFocus(a)) return true
   const agentish = ctx.origin === 'agent' || ctx.origin === 'routine' || ctx.origin === 'mcp'
   return agentish && !!ctx.task && /^(click|uia_act)/.test(a.type)
 }
 
-/** Title + process of the foreground window; {} when the agent cannot say. */
-export async function foregroundWindow(): Promise<WindowInfo> {
+/** Keyboard actions: the focused element decides (password field, IDE terminal). */
+function needsFocus(a: EvalAction): boolean {
+  if (a.type === 'type' || a.type === 'hotkey') return true
+  if (a.type === 'uia_act' && a.action === 'set_value') return true
+  return a.type === 'input' && !!a.steps?.some((s) => s.t === 'type' || s.t === 'keys')
+}
+
+/**
+ * Title + process of the foreground window; {} when the agent cannot say. With `focus`, also
+ * the focused element (password field, name, class) from focus_info; `focusKnown: false` when
+ * the agent could not read it.
+ */
+export async function foregroundWindow(opts: { focus?: boolean } = {}): Promise<WindowInfo> {
+  const unknown: WindowInfo = opts.focus ? { focusKnown: false } : {}
   const agent = getAgent()
-  if (!agent) return {}
+  if (!agent) return unknown
+  if (opts.focus) {
+    try {
+      const f = await agent.request<FocusInfoResult>(
+        'focus_info',
+        {},
+        { timeoutMs: ACTIVE_WINDOW_MS }
+      )
+      if (f?.title || f?.process) return focusWindow(f)
+    } catch {
+      /* older agent: window only */
+    }
+  }
   try {
     const w = await agent.request<ActiveWindowInfo>(
       'active_window',
       {},
       { timeoutMs: ACTIVE_WINDOW_MS }
     )
-    if (w?.title || w?.process) return { title: w.title, process: w.process }
+    if (w?.title || w?.process) return { ...unknown, title: w.title, process: w.process }
   } catch {
     /* older agent: title only */
   }
   try {
-    return { title: await agent.activeWindow() }
+    return { ...unknown, title: await agent.activeWindow() }
   } catch {
-    return {}
+    return unknown
+  }
+}
+
+function focusWindow(f: FocusInfoResult): WindowInfo {
+  const known = f.uia === true
+  return {
+    title: f.title,
+    process: f.process,
+    focusKnown: known,
+    ...(known
+      ? { isPassword: f.password === true, focusName: f.name ?? '', focusRole: f.role ?? '' }
+      : {}),
+    ...(f.className ? { className: f.className } : {})
   }
 }
 
@@ -97,7 +133,9 @@ function describeSteps(steps: InputStep[]): string {
 /** Rates, confirms when needed, and audits a denial. `prevType`: the batch's previous action. */
 export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string): Promise<Gate> {
   const t0 = Date.now()
-  const activeWindow = needsWindow(action, ctx) ? await foregroundWindow() : undefined
+  const activeWindow = needsWindow(action, ctx)
+    ? await foregroundWindow({ focus: needsFocus(action) })
+    : undefined
   const agentish = ctx.origin === 'agent' || ctx.origin === 'routine' || ctx.origin === 'mcp'
   const cfg = loadConfig()
   const policyCtx: PolicyCtx = {

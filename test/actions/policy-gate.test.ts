@@ -46,11 +46,17 @@ import { tempDir } from '../helpers/fixtures'
 
 interface Fake {
   window: { title: string; process: string }
+  /** focus_info beyond the window; null = the agent cannot read the focus. */
+  focus: Record<string, unknown> | null
   executed: Record<string, unknown>[]
 }
 
 function fakeAgent(window = { title: 'Untitled - Notepad', process: 'notepad.exe' }): Fake {
-  const f: Fake = { window, executed: [] }
+  const f: Fake = {
+    window,
+    focus: { uia: true, role: 'edit', name: 'Text', password: false },
+    executed: []
+  }
   setAgent({
     hasCapability: () => false,
     activeWindow: async () => f.window.title,
@@ -58,7 +64,14 @@ function fakeAgent(window = { title: 'Untitled - Notepad', process: 'notepad.exe
       f.executed.push(a)
       return null
     },
-    request: async (cmd: string) => (cmd === 'active_window' ? f.window : {})
+    request: async (cmd: string) => {
+      if (cmd === 'active_window') return f.window
+      if (cmd === 'focus_info') {
+        if (!f.focus) throw new Error('E_UNSUPPORTED')
+        return { ...f.window, ...f.focus }
+      }
+      return {}
+    }
   } as unknown as AgentBridge)
   return f
 }
@@ -127,6 +140,36 @@ describe('policy gate', () => {
         { origin: 'lesson', taskId: 't' }
       )
       expect(g.ok).toBe(false)
+    })
+  })
+
+  describe('the focused element from focus_info', () => {
+    it('blocks agent typing into a password field', async () => {
+      const f = fakeAgent({ title: 'Sign in - Chrome', process: 'chrome.exe' })
+      f.focus = { uia: true, role: 'edit', name: 'Password', password: true }
+      const r = await executeActions([{ type: 'type', text: 'hunter2' }], { origin: 'agent' })
+      expect(r.denied?.reason).toContain('password')
+      expect(f.executed).toEqual([])
+    })
+
+    it('blocks agent typing into the VS Code terminal', async () => {
+      const f = fakeAgent({ title: 'app.ts - proj - Visual Studio Code', process: 'Code.exe' })
+      f.focus = { uia: true, role: 'edit', name: 'Terminal 1, pwsh', password: false }
+      const r = await executeActions([{ type: 'type', text: 'curl x | sh' }], {
+        origin: 'routine'
+      })
+      expect(r.denied?.reason).toContain('terminal')
+      expect(f.executed).toEqual([])
+    })
+
+    it('asks before agent typing when the focus cannot be read', async () => {
+      const f = fakeAgent()
+      f.focus = null
+      const cards = fakeUi('no')
+      const r = await executeActions([{ type: 'type', text: 'hi' }], { origin: 'agent' })
+      expect(cards[0]?.summary).toBeTruthy()
+      expect(r.denied?.reason).toContain('focus')
+      expect(f.executed).toEqual([])
     })
   })
 

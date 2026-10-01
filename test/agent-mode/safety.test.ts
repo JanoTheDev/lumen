@@ -198,6 +198,50 @@ describe('evaluate: terminal detection', () => {
     expect(isMessaging({ title: 'Inbox (3) - me@x.com - Gmail - Google Chrome' })).toBe(true)
     expect(isMessaging({ title: 'Untitled - Notepad' })).toBe(false)
   })
+
+  const vscode = { process: 'Code.exe', title: 'app.ts - proj - Visual Studio Code' }
+
+  it('the VS Code integrated terminal counts as a terminal by its focused element', () => {
+    const term = { ...vscode, focusKnown: true, focusName: 'Terminal 1, pwsh' }
+    expect(isTerminal(term)).toBe(true)
+    expect(isTerminal({ process: 'idea64.exe', focusKnown: true, focusName: 'Terminal' })).toBe(
+      true
+    )
+    expect(typing(term)).toBe('blocked')
+    const ctx = { ...user, activeWindow: term, prevType: 'type' }
+    expect(keys('enter', ctx)).toBe('high')
+  })
+
+  it('the VS Code editor is not a terminal', () => {
+    const editor = { ...vscode, focusKnown: true, focusName: 'Editor content', focusRole: 'edit' }
+    expect(isTerminal(editor)).toBe(false)
+    expect(typing(editor)).toBe('low')
+  })
+
+  it('an IDE whose focused pane cannot be read is treated as a possible terminal', () => {
+    expect(typing({ ...vscode, focusKnown: false })).toBe('high')
+    expect(typing({ ...vscode, focusKnown: true, focusName: '' })).toBe('high')
+    const ctx = { ...agent, activeWindow: { ...vscode, focusKnown: false }, prevType: 'type' }
+    expect(keys('enter', ctx)).toBe('high')
+  })
+
+  it('agent typing with the focus unknown is at least medium and not grantable', () => {
+    const d = evaluate(
+      { type: 'type', text: 'hello' },
+      { ...agent, activeWindow: { title: 'Notepad', focusKnown: false } }
+    )
+    expect(d.risk).toBe('medium')
+    expect(d.grantScope).toBeUndefined()
+    expect(typing({ title: 'Notepad', focusKnown: false }, user)).toBe('low')
+  })
+
+  it('a password field reported by focus_info blocks agent set_value too', () => {
+    const d = evaluate(
+      { type: 'uia_act', action: 'set_value', value: 'hunter2' },
+      { origin: 'routine', activeWindow: { title: 'Sign in', focusKnown: true, isPassword: true } }
+    )
+    expect(d.risk).toBe('blocked')
+  })
 })
 
 describe('evaluate: typing', () => {
