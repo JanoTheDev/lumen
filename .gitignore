@@ -12,10 +12,6 @@ plans/
 
 # secrets — never commit
 .env
-agent/.venv
-agent/__pycache__/
-**/__pycache__/
-*.pyc
 
 # rust build output
 native/target/

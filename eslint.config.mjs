@@ -11,8 +11,6 @@ export default defineConfig(
       '**/node_modules',
       '**/dist',
       '**/out',
-      'agent/.venv/**',
-      '**/__pycache__/**',
       'native/target/**',
       'eval/**/fixtures/**',
       'resources/**',
