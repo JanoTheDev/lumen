@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { audioSchema, textSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
+import { sttStatus } from '../speech/stt'
+import { installLocalModel } from '../speech/stt/local-model'
 
 const transcribeOptsSchema = z.object({ dictation: z.boolean().optional() }).strict().optional()
 
@@ -35,6 +37,15 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
     if (!audio) return ''
     const opts = safeParse('voice:transcribe', transcribeOptsSchema, rawOpts) ?? {}
     return deps.transcribe(audio, opts)
+  })
+  ipcMain.handle('voice:stt-status', () => sttStatus())
+  ipcMain.handle('voice:stt-install', async () => {
+    try {
+      await installLocalModel()
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: (e as Error).message }
+    }
   })
   ipcMain.handle('voice:dictate', async (_event, raw: unknown) => {
     const text = safeParse('voice:dictate', textSchema, raw)

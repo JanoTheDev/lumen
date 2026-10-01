@@ -31,7 +31,7 @@ import { cancelAll } from './query/cancel'
 import { interceptLocal } from './query/local'
 import { runQuery } from './query/pipeline'
 import { speakAnswer } from './speech/tts'
-import { transcribe } from './speech/stt'
+import { prepareStt, transcribe } from './speech/stt'
 import { dictate, maybeAutoDictate, offerRecovery } from './speech/dictation/pipeline'
 import { isOwnRendererUrl } from './windows/factory'
 import { applyUiScaleOnLoad } from './windows/registry'
@@ -118,6 +118,7 @@ app.whenReady().then(() => {
   // Not awaited: IPC handlers below must be registered before the windows finish loading.
   startAgent(agent)
   registerIpc()
+  prepareStt()
   // Dictation left over from a crash is offered once the answer card can show it.
   setTimeout(offerRecovery, 2500)
 

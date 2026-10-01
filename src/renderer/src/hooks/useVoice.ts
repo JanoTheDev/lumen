@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, type MutableRefObject } from 'react'
+import { toSttWav } from '../voice/wav'
 
 export interface VoiceResultInfo {
   // Milliseconds of audio above the speech threshold during the recording.
@@ -232,7 +233,13 @@ export function useVoice(
           teardownAudio(s)
           if (s.discarded) return
           const blob = new Blob(chunks, { type: mimeType })
-          const arrayBuffer = await blob.arrayBuffer()
+          const encoded = await blob.arrayBuffer()
+          // 16 kHz WAV for the local engine; the encoded recording is the fallback.
+          const arrayBuffer = await toSttWav(encoded).catch((err) => {
+            console.warn('[voice] wav conversion failed, sending encoded audio:', err)
+            return encoded
+          })
+          if (s.discarded) return
           console.log(
             '[voice] audio captured, size:',
             arrayBuffer.byteLength,

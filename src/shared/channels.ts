@@ -26,6 +26,8 @@ export interface InvokeChannels {
   /** Dictation hotkey transcript to clean up and type; "" ends the session with nothing typed. */
   'voice:dictate': { args: [text: string]; result: { ok: boolean; notice?: string } }
   'voice:speak': { args: [text: string]; result: { ok: boolean; error?: string } }
+  'voice:stt-status': { args: []; result: SttStatus }
+  'voice:stt-install': { args: []; result: { ok: boolean; error?: string } }
   'settings:get': { args: []; result: Record<string, unknown> }
   'settings:patch': {
     args: [patch: ConfigPatch | Record<string, unknown>]
@@ -61,6 +63,17 @@ export interface StatusMessage {
   step?: { index: number; total: number }
 }
 
+/** Which speech-to-text engine answers and how the offline model download is going. */
+export interface SttStatus {
+  pref: string
+  engine: 'local' | 'cloud' | null
+  localSupported: boolean
+  localInstalled: boolean
+  installing: boolean
+  percent?: number
+  modelSizeMb: number
+}
+
 export interface WakeModelProgress {
   phase: 'downloading' | 'extracting' | 'done' | 'error'
   percent?: number
@@ -81,6 +94,7 @@ export interface EventChannels {
   'assistant:run-query': [text: string]
   'settings:changed': [config: Record<string, unknown>]
   'wake:model-progress': [progress: WakeModelProgress]
+  'voice:stt-model-progress': [progress: WakeModelProgress]
   'status:set': [message: StatusMessage]
   'status:hide': []
   'voice:tts-audio': [audio: { mime: string; data: string }]
@@ -97,6 +111,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'voice:transcribe',
   'voice:dictate',
   'voice:speak',
+  'voice:stt-status',
+  'voice:stt-install',
   'settings:get',
   'settings:patch',
   'screen:hide',
@@ -133,6 +149,7 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'assistant:run-query',
   'settings:changed',
   'wake:model-progress',
+  'voice:stt-model-progress',
   'status:set',
   'status:hide',
   'voice:tts-audio'

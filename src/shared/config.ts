@@ -211,7 +211,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   dwellClick: { ...DEFAULT_CONFIG_V1.dwellClick },
   vad: { ...DEFAULT_CONFIG_V1.vad },
   guideAutoDismissOnMove: DEFAULT_CONFIG_V1.guideAutoDismissOnMove,
-  voice: { stt: 'cloud-batch', tts: 'off', ttsVoice: 'alloy', ttsRate: 1, bargeIn: false },
+  voice: { stt: 'local', tts: 'off', ttsVoice: 'alloy', ttsRate: 1, bargeIn: false },
   a11y: {
     announce: 'off',
     uiScale: 1,
