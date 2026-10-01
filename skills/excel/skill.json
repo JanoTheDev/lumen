@@ -1,0 +1,16 @@
+{
+  "id": "excel",
+  "name": "Microsoft Excel",
+  "version": "1.0.0",
+  "description": "Spreadsheet basics in Excel for Microsoft 365: entering data, formulas, tables, sorting, filtering and charts.",
+  "match": {
+    "process": ["EXCEL.EXE"],
+    "title": [" - Excel$"]
+  },
+  "uiaQuality": "good",
+  "appVersion": ">=2409",
+  "appVersionTested": "Excel for Microsoft 365, Current Channel version 2509 (Windows desktop)",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Uses the classic ribbon labels. Cell UIA names are assumed to be the cell reference (A1) with the content exposed through ValuePattern; not measured. The web version of Excel is not matched."
+}

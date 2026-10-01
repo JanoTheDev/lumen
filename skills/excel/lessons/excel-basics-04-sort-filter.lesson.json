@@ -1,0 +1,243 @@
+{
+  "id": "excel-basics-04-sort-filter",
+  "app": "excel",
+  "title": "Sort and filter a table",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["excel-basics-03-format-table"],
+  "appVersion": ">=2409",
+  "summary": "Sort a table by amount and filter it by month, then clear the filter.",
+  "tags": ["tables", "sort", "filter"],
+  "steps": [
+    {
+      "id": "check-table",
+      "say": "Make sure your data is a table with arrow buttons in the header row. Say done when you see them.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are there filter arrow buttons in the header row of the data?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The arrows sit at the right of each heading cell.",
+        "Click inside the data and press Control Shift L to turn the filter buttons on."
+      ],
+      "why": "Sort and filter commands live behind those header arrows.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Shift+L"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-amount-filter",
+      "say": "Click the arrow button in the Amount heading.",
+      "target": {
+        "text": "Amount"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is a dropdown menu open under the Amount heading with sort options?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is the small arrow at the right edge of cell B1.",
+        "Click B1 and press Alt and the down arrow."
+      ],
+      "why": "Each column has its own sort and filter menu.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "B1"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "keys",
+            "combo": "Alt+Down"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sort-largest",
+      "say": "Click Sort Largest to Smallest.",
+      "target": {
+        "element": {
+          "name": "Sort Largest to Smallest"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Sort Largest to Smallest"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Are the rows now ordered with the biggest Amount at the top?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is the second option at the top of the menu.",
+        "Use the Data tab and click the Z to A sort button instead."
+      ],
+      "why": "Sorting puts the biggest values where you see them first.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Sort Largest to Smallest"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-month-filter",
+      "say": "Now click the arrow button in the Month heading.",
+      "target": {
+        "text": "Month"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is a dropdown menu open under the Month heading with a list of months?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is at the right edge of cell A1.",
+        "Click A1 and press Alt and the down arrow."
+      ],
+      "why": "Filtering hides rows you don't need right now.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A1"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "keys",
+            "combo": "Alt+Down"
+          }
+        ]
+      }
+    },
+    {
+      "id": "filter-months",
+      "say": "Untick Select All, tick two months, then click OK.",
+      "target": {
+        "element": {
+          "name": "OK",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does the table now show only two month rows, with a funnel icon on the Month heading?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The month list is in the lower half of the menu. OK is at the bottom.",
+        "Type a month name in the Search box to find it quickly."
+      ],
+      "why": "Hidden rows are still there, only out of sight.",
+      "timeoutSec": 120
+    },
+    {
+      "id": "clear-filter",
+      "say": "Open the Month arrow again and click Clear Filter From Month to show every row.",
+      "target": {
+        "text": "Month"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are all six month rows visible again?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The funnel icon on the heading shows a filter is active.",
+        "On the Data tab, click Clear in the Sort and Filter group."
+      ],
+      "why": "Clearing filters avoids thinking data went missing."
+    }
+  ]
+}

@@ -1,0 +1,448 @@
+{
+  "id": "excel-basics-02-sum-average",
+  "app": "excel",
+  "title": "Add up and average a column",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["excel-basics-01-enter-autofill"],
+  "appVersion": ">=2409",
+  "summary": "Add a column of numbers, total it with AutoSum and average it with a typed formula.",
+  "tags": ["formulas", "sum", "average"],
+  "steps": [
+    {
+      "id": "check-months",
+      "say": "Make sure you have months in A2 to A7 from the last lesson. Say done when ready.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does column A list months in rows 2 to 7?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Any six labels work. The numbers next to them are what matter.",
+        "Type six labels in A2 to A7 yourself if the earlier lesson was skipped."
+      ],
+      "why": "Labels next to numbers tell you what each total refers to."
+    },
+    {
+      "id": "select-b1",
+      "say": "Click cell B1.",
+      "target": {
+        "element": {
+          "name": "B1",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "B1"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show B1?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Find column B along the top and row 1 down the left side.",
+        "Click the Name Box left of the formula bar, type B1, and press Enter."
+      ],
+      "why": "Column B will hold the amounts for each month.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "B1"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "type-amounts",
+      "say": "Type Amount in B1, then a number in each cell from B2 to B7, pressing Enter after each.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "B7",
+                "value": {
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Are there numbers in cells B2 to B7?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Any numbers will do, for example 120, 95, 140, 110, 130 and 150.",
+        "Press Enter after each number so the selection moves down one row."
+      ],
+      "why": "Numbers are what formulas calculate with.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "type",
+            "text": "Amount"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "120"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "95"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "140"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "110"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "130"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          },
+          {
+            "t": "type",
+            "text": "150"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      },
+      "timeoutSec": 180
+    },
+    {
+      "id": "select-b8",
+      "say": "Click cell B8.",
+      "target": {
+        "element": {
+          "name": "B8",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "B8"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show B8?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Find column B along the top and row 8 down the left side.",
+        "Click the Name Box left of the formula bar, type B8, and press Enter."
+      ],
+      "why": "The total goes right under the numbers it adds.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "B8"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "autosum",
+      "say": "Press Alt and the equals sign together for AutoSum, then press Enter.",
+      "target": {
+        "shortcut": "Alt+="
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "B8",
+                "value": {
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does cell B8 now show the total of the numbers above it?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Excel suggests the range B2 to B7 with a moving border. Enter accepts it.",
+        "On the Home tab, click AutoSum in the Editing group at the right, then press Enter."
+      ],
+      "why": "AutoSum writes the SUM formula for you and picks the range above.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Alt+="
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-b8-again",
+      "say": "Click cell B8.",
+      "target": {
+        "element": {
+          "name": "B8",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "B8"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show B8?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "B8 is the cell with the total.",
+        "Click the Name Box left of the formula bar, type B8, and press Enter."
+      ],
+      "why": "Selecting the cell shows its formula.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "B8"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "read-formula",
+      "say": "Look at the formula bar above the grid. It shows the SUM formula behind the total. Say done.",
+      "target": {
+        "region": "formula-bar"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "manual"
+        }
+      },
+      "hints": [
+        "The cell shows the result, the formula bar shows how it was calculated.",
+        "Press Control and the backtick key to show every formula in the sheet, and again to hide them."
+      ],
+      "why": "Knowing where formulas live helps you check and fix them."
+    },
+    {
+      "id": "select-b9",
+      "say": "Click cell B9.",
+      "target": {
+        "element": {
+          "name": "B9",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "B9"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show B9?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Find column B along the top and row 9 down the left side.",
+        "Click the Name Box left of the formula bar, type B9, and press Enter."
+      ],
+      "why": "The average goes under the total.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "B9"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "average",
+      "say": "Type equals AVERAGE, open bracket, B2 colon B7, close bracket, then press Enter.",
+      "target": {
+        "element": {
+          "name": "B9",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "B9",
+                "value": {
+                  "regex": "^\\d+(\\.\\d+)?$"
+                }
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does cell B9 show the average of the numbers in B2 to B7?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Spelled out it is equals, AVERAGE, then B2 colon B7 inside round brackets.",
+        "On the Home tab, open the arrow next to AutoSum and choose Average."
+      ],
+      "why": "AVERAGE adds the numbers and divides by how many there are.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "type",
+            "text": "=AVERAGE(B2:B7)"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+{
+  "id": "excel-basics-01-enter-autofill",
+  "app": "excel",
+  "title": "Enter data and fill a series",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": [],
+  "appVersion": ">=2409",
+  "summary": "Type a heading and a month, then use the fill handle to continue the series.",
+  "tags": ["data-entry", "autofill"],
+  "steps": [
+    {
+      "id": "check-workbook",
+      "say": "Open Excel with a blank workbook. Say done when you see the empty grid.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": " - Excel$"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "On the Excel start screen, click Blank workbook.",
+        "If Excel is already open, press Control N for a new blank workbook."
+      ],
+      "why": "A fresh workbook means nothing you care about can be overwritten.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+N"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-a1",
+      "say": "Click cell A1.",
+      "target": {
+        "element": {
+          "name": "A1",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "A1"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show A1?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Find column A along the top and row 1 down the left side.",
+        "Click the Name Box left of the formula bar, type A1, and press Enter."
+      ],
+      "why": "A1 is the top left cell, a natural place for a heading.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A1"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "type-header",
+      "say": "Type the word Month, then press Enter.",
+      "target": {
+        "element": {
+          "name": "A1",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "A1",
+                "value": "Month"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does cell A1 now contain Month?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Typing replaces whatever was in the cell. Enter saves it and moves down.",
+        "Click in the formula bar above the grid and type there instead."
+      ],
+      "why": "Headings at the top tell you what each column holds.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "type",
+            "text": "Month"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "type-jan",
+      "say": "Type Jan, then press Enter.",
+      "target": {
+        "element": {
+          "name": "A2",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "A2",
+                "value": "Jan"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does cell A2 now contain Jan?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You should now be in A2, right under Month.",
+        "Click cell A2 first if the selection moved somewhere else."
+      ],
+      "why": "Excel recognises month names and can continue them for you.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "type",
+            "text": "Jan"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reselect-a2",
+      "say": "Click cell A2.",
+      "target": {
+        "element": {
+          "name": "A2",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "A2"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Name Box at the top left show A2?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A2 is the cell with Jan in it.",
+        "Click the Name Box left of the formula bar, type A2, and press Enter."
+      ],
+      "why": "The fill handle belongs to the selected cell.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A2"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "drag-fill",
+      "say": "Drag the small square at the bottom right of A2 down to row 7.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "value",
+              "match": {
+                "name": "A7",
+                "value": "Jun"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does column A now list Jan, Feb, Mar, Apr, May and Jun in rows 2 to 7?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The pointer turns into a thin black plus sign over the square. Hold the mouse button while dragging.",
+        "Select A2 to A7, then on the Home tab choose Fill and then Series, and click OK."
+      ],
+      "why": "Autofill continues a pattern so you don't type every entry.",
+      "timeoutSec": 120
+    },
+    {
+      "id": "check-series",
+      "say": "Check that Feb to Jun appeared. Control Z undoes the fill if something went wrong.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does column A list the months Jan to Jun in rows 2 to 7?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "If you see Jan repeated, open the small Auto Fill Options button and pick Fill Series.",
+        "Undo with Control Z and drag again from A2."
+      ],
+      "why": "Checking the result catches a copy instead of a series."
+    }
+  ]
+}

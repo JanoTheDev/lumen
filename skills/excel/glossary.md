@@ -1,0 +1,27 @@
+# Excel glossary
+
+- **Workbook** — one Excel file; it can hold many worksheets.
+- **Worksheet** — one grid of cells, shown as a tab at the bottom.
+- **Cell** — a single box in the grid, where one value or formula lives.
+- **Address** — a cell's name: its column letter plus row number, such as B4.
+- **Range** — a rectangle of cells written as first and last address, such as A1:C10.
+- **Active cell** — the cell with the thick border; typing goes here.
+- **Name Box** — the box left of the formula bar that shows or jumps to an address.
+- **Formula bar** — the long box above the grid showing the real contents of the active cell.
+- **Formula** — a calculation that starts with an equals sign.
+- **Function** — a built-in calculation, such as SUM, AVERAGE or IF, used inside formulas.
+- **Argument** — the input a function needs, written inside its brackets.
+- **AutoSum** — the button that writes a SUM formula for the cells above or to the left.
+- **Fill handle** — the small square at the bottom right of the selection, dragged to copy or extend.
+- **Autofill** — continuing a pattern such as Jan, Feb, Mar by dragging the fill handle.
+- **Relative reference** — an address that shifts when a formula is copied, like B2.
+- **Absolute reference** — an address locked with dollar signs, like $B$2, that does not shift.
+- **Table** — a range formatted as one object with headers, filters and automatic styling.
+- **Header row** — the first row of a table, naming each column.
+- **Sort** — reorder rows by the values in one column.
+- **Filter** — temporarily hide rows that don't match a condition.
+- **Chart** — a graph built from a range of data.
+- **Ribbon** — the tabbed toolbar across the top of the window.
+- **Contextual tab** — a ribbon tab that appears only for the selected object, such as Chart Design.
+- **Key tips** — the letters that appear on the ribbon when you press Alt.
+- **Status bar** — the bottom bar that shows quick totals for the selection.

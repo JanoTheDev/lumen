@@ -1,0 +1,247 @@
+{
+  "id": "excel-basics-05-make-chart",
+  "app": "excel",
+  "title": "Make a chart from your data",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["excel-basics-02-sum-average"],
+  "appVersion": ">=2409",
+  "summary": "Select data and insert a recommended column chart with a title.",
+  "tags": ["charts"],
+  "steps": [
+    {
+      "id": "check-data",
+      "say": "Make sure your Month and Amount data is on screen. Say done when ready.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are columns of months and amounts visible in the grid?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Any two columns, one of labels and one of numbers, will work.",
+        "Go back to the first lesson to create the sample data."
+      ],
+      "why": "A chart needs labels and numbers to plot."
+    },
+    {
+      "id": "select-data",
+      "say": "Select A1 to B7, the headings and the six rows of data.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are cells A1 to B7 highlighted?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Drag from A1 to B7. Leave out the total and average rows.",
+        "Type A1 colon B7 in the Name Box and press Enter."
+      ],
+      "why": "The chart uses whatever cells are selected.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A1:B7"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-insert",
+      "say": "Click the Insert tab at the top.",
+      "target": {
+        "element": {
+          "name": "Insert",
+          "role": "TabItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "Insert"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Insert tab of the ribbon showing, with a Charts group?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Insert is the tab right after Home.",
+        "Press Alt, then N, to open it with the keyboard."
+      ],
+      "why": "Charts, pictures and shapes are all added from Insert.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "Insert",
+              "role": "TabItem"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "recommended-charts",
+      "say": "Click Recommended Charts, then pick a column chart and click OK.",
+      "target": {
+        "element": {
+          "name": "Recommended Charts",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Insert Chart"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a chart now visible on the sheet?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Recommended Charts is in the Charts group. The first suggestion is usually a column chart.",
+        "Press Alt and F1 to drop a default chart straight onto the sheet."
+      ],
+      "why": "Recommended Charts shows previews so you can choose by eye.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Alt+F1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "chart-visible",
+      "say": "Check that a chart appeared on the sheet. Say done when you see it.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is there a chart with bars for each month on the sheet?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It appears over the grid, near your data.",
+        "If nothing appeared, select the data again and press Alt and F1."
+      ],
+      "why": "Seeing the chart confirms it used the right cells."
+    },
+    {
+      "id": "chart-title",
+      "say": "Click the chart title, select its text, and type Amount by month.",
+      "target": {
+        "text": "Chart Title"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does the chart title now read Amount by month?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click the title once to select the box, then again to edit the text.",
+        "Use Chart Elements, the plus button next to the chart, to turn the title on if it is missing."
+      ],
+      "why": "A clear title tells readers what the chart shows."
+    },
+    {
+      "id": "move-chart",
+      "say": "Drag the chart by its edge so it doesn't cover your data. Control Z undoes a move.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is the chart positioned so it no longer covers cells A1 to B9?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Grab the chart border, not the bars or the title.",
+        "On Chart Design, click Move Chart and choose New sheet."
+      ],
+      "why": "With data and chart both visible, you can watch the chart follow your edits."
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+{
+  "id": "excel-basics-03-format-table",
+  "app": "excel",
+  "title": "Turn your data into a table",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": ["excel-basics-02-sum-average"],
+  "appVersion": ">=2409",
+  "summary": "Convert a range into an Excel table and choose a table style.",
+  "tags": ["tables", "formatting"],
+  "steps": [
+    {
+      "id": "click-in-data",
+      "say": "Click any cell inside your Month and Amount data, for example A3.",
+      "target": {
+        "element": {
+          "name": "A3",
+          "role": "DataItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "selected",
+              "match": {
+                "name": "A3"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a cell inside the Month and Amount data selected?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Pick a cell between A1 and B7. Leave out the total and average rows.",
+        "Use the Name Box to jump to A3."
+      ],
+      "why": "Excel uses the selected cell to find the whole block of data.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A3"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "select-range",
+      "say": "Select A1 to B7 by dragging from A1 down to B7.",
+      "target": {
+        "region": "grid"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Are cells A1 to B7 highlighted, without rows 8 and 9?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Leave out the total and average rows so the table holds only the data.",
+        "Type A1 colon B7 in the Name Box and press Enter."
+      ],
+      "why": "Selecting the exact range keeps the totals outside the table.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+G"
+          },
+          {
+            "t": "type",
+            "text": "A1:B7"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "create-table",
+      "say": "Press Control T to create a table.",
+      "target": {
+        "shortcut": "Ctrl+T"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Create Table"
+              }
+            },
+            {
+              "type": "keypress",
+              "combo": "Ctrl+T"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A small Create Table window opens showing the range.",
+        "On the Home tab, click Format as Table in the Styles group and pick any style."
+      ],
+      "why": "Tables add filter buttons and keep formatting tidy as data grows.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+T"
+          }
+        ]
+      }
+    },
+    {
+      "id": "headers-ok",
+      "say": "Make sure My table has headers is ticked, then click OK.",
+      "target": {
+        "element": {
+          "name": "OK",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "OK"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the data now formatted as a table with banded rows and arrow buttons in the header row?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The check box tells Excel that row 1 holds the column names.",
+        "Press Enter to choose OK with the keyboard."
+      ],
+      "why": "With headers, each column keeps its name instead of becoming data.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "OK",
+              "role": "Button"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "pick-style",
+      "say": "On the Table Design tab, pick a different style from Table Styles.",
+      "target": {
+        "element": {
+          "name": "Table Design",
+          "role": "TabItem"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Has the table's colour style changed from the default blue?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Table Design appears at the top only while a cell in the table is selected.",
+        "Skip this by saying done if you like the default look. Control Z undoes a style."
+      ],
+      "why": "Styles make a table readable without formatting each cell."
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "window": "main",
+  "layout": "Excel for Microsoft 365, maximized at 1920x1080, ribbon expanded, 100% zoom",
+  "notes": "Estimated from the default layout, not measured.",
+  "regions": {
+    "title-bar": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.04,
+      "desc": "Title bar with file name, search box and Quick Access Toolbar"
+    },
+    "ribbon-tabs": {
+      "x": 0.0,
+      "y": 0.04,
+      "w": 1.0,
+      "h": 0.035,
+      "desc": "Ribbon tab names: File, Home, Insert and so on"
+    },
+    "ribbon": {
+      "x": 0.0,
+      "y": 0.075,
+      "w": 1.0,
+      "h": 0.11,
+      "desc": "Buttons of the selected ribbon tab"
+    },
+    "name-box": {
+      "x": 0.0,
+      "y": 0.19,
+      "w": 0.07,
+      "h": 0.03,
+      "desc": "Name Box showing the selected cell address, left of the formula bar"
+    },
+    "formula-bar": {
+      "x": 0.09,
+      "y": 0.19,
+      "w": 0.91,
+      "h": 0.03,
+      "desc": "Formula bar showing the real contents of the selected cell"
+    },
+    "grid": {
+      "x": 0.0,
+      "y": 0.22,
+      "w": 1.0,
+      "h": 0.71,
+      "desc": "Worksheet cells, column letters on top and row numbers on the left"
+    },
+    "sheet-tabs": {
+      "x": 0.0,
+      "y": 0.935,
+      "w": 0.5,
+      "h": 0.03,
+      "desc": "Worksheet tabs and the plus button, bottom left"
+    },
+    "status-bar": {
+      "x": 0.0,
+      "y": 0.968,
+      "w": 1.0,
+      "h": 0.032,
+      "desc": "Status bar with Sum, Average, Count and zoom, along the bottom"
+    }
+  }
+}
