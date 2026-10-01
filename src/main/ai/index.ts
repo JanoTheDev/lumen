@@ -30,6 +30,7 @@ import {
 import { noteAnswerModel, recordUsage } from './cost'
 import { installTurnMetrics } from './turn-metrics'
 import { attachmentsFor } from '../files/attach'
+import { activeStyleBlock } from './style-runtime'
 
 export interface CallOptions {
   lowDetail?: boolean // use low-res image + fewer tokens (for follow_up row enumeration)
@@ -132,7 +133,8 @@ export async function callModel(
               loadConfig().helpers,
               readingLevelAppId(skill?.id, ctx?.foreground.process)
             ) || undefined,
-          regions: skill && screenshotBase64 ? regionsLine(skill) : undefined
+          regions: skill && screenshotBase64 ? regionsLine(skill) : undefined,
+          replyStyle: activeStyleBlock() || undefined
         }).concat(files?.text ? '\n\n' + files.text : '')
       }
     ],

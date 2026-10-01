@@ -66,7 +66,9 @@ const KNOWN_KEYS = [
   'permissions',
   'context',
   'model',
-  'tools'
+  'tools',
+  'kind',
+  'levels'
 ] as const
 
 export const manifestSchema = z.object({
@@ -95,7 +97,9 @@ export const manifestSchema = z.object({
   tools: z
     .array(z.string().regex(/^[a-z][a-z0-9_]*$/))
     .max(40)
-    .optional()
+    .optional(),
+  /** "style": a reply style (ai/style.ts reads its `levels` and body). */
+  kind: z.enum(['task', 'style']).optional()
 })
 
 export interface ParsedSkillFile {
@@ -153,7 +157,8 @@ export function parseSkillFile(text: string): ParsedSkillFile {
     permissions: m.permissions,
     context: m.context,
     ...(m.model ? { model: m.model } : {}),
-    ...(m.tools ? { tools: m.tools } : {})
+    ...(m.tools ? { tools: m.tools } : {}),
+    ...(m.kind === 'style' ? { kind: 'style' as const } : {})
   }
   return { manifest, body: split.body, warnings }
 }

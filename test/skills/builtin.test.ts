@@ -27,6 +27,9 @@ const STARTERS = [
   'summarize-this-page',
   'write-an-email'
 ]
+/** Reply styles (`kind: style`): listed by styles(), never in the index or triggers. */
+const STYLES = ['brief', 'explain-like-im-new', 'formal', 'friendly', 'teacher']
+const ALL = [...STARTERS, ...STYLES].sort()
 
 describe('builtin skills', () => {
   it('all load without problems or warnings', () => {
@@ -35,8 +38,10 @@ describe('builtin skills', () => {
       readdirSync(BUILTIN)
         .filter((n) => !n.includes('.'))
         .sort()
-    ).toEqual(STARTERS)
-    expect(reg.all().map((s) => s.manifest.name)).toEqual(STARTERS)
+    ).toEqual(ALL)
+    expect(reg.all().map((s) => s.manifest.name)).toEqual(ALL)
+    expect(reg.enabled().map((s) => s.manifest.name)).toEqual(STARTERS)
+    expect(reg.styles().map((s) => s.manifest.name)).toEqual(STYLES)
     for (const s of reg.all()) {
       expect(s.warnings, s.manifest.name).toEqual([])
       expect(reg.trustOf(s)).toBe('builtin')

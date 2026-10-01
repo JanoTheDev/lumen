@@ -150,9 +150,16 @@ export class SkillRegistry {
     return [...this.skills.values()].sort((a, b) => a.manifest.name.localeCompare(b.manifest.name))
   }
 
-  /** Switched-on skills, by name. */
+  /** Switched-on task skills, by name. Reply styles (`kind: style`) are in styles(). */
   enabled(): LoadedSkill[] {
-    return this.all().filter((s) => !this.opts.state?.isDisabled(s.manifest.name))
+    return this.all().filter(
+      (s) => s.manifest.kind !== 'style' && !this.opts.state?.isDisabled(s.manifest.name)
+    )
+  }
+
+  /** Reply styles, switched on or off. */
+  styles(): LoadedSkill[] {
+    return this.all().filter((s) => s.manifest.kind === 'style')
   }
 
   get(name: string): LoadedSkill | null {

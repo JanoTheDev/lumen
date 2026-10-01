@@ -219,6 +219,8 @@ export interface SkillManifest {
   context: 'foreground' | 'background'
   model?: 'fast' | 'main' | 'planning'
   tools?: string[]
+  /** `kind: style`: a reply style (ai/style.ts), never run as a task or offered to the model. */
+  kind?: 'style'
 }
 
 /** One skill as Settings shows it. */

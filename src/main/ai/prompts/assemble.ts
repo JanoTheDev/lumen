@@ -59,6 +59,8 @@ export interface TurnContext {
   language?: string
   /** Reading level line of the app in front (coach readingLevelLineFor); '' / unset = standard. */
   readingLevel?: string
+  /** The active reply style, already fenced with its rule (ai/style.ts fenceStyle). */
+  replyStyle?: string
   now?: Date
 }
 
@@ -111,7 +113,9 @@ ${ctx.elements}`)
     ? `\n<app_guide app="${ctx.skill.name}">\n${ctx.skill.text}\n</app_guide>`
     : ''
   const memory = ctx.memory ? `\n${ctx.memory}` : ''
-  return `<context>\n${lines.join('\n')}\n</context>${memory}${skill}\n<request>${ctx.prompt}</request>`
+  // Outside <context> (which is data): the user chose this style; its rule keeps it to wording.
+  const style = ctx.replyStyle ? `\n${ctx.replyStyle}` : ''
+  return `<context>\n${lines.join('\n')}\n</context>${memory}${skill}${style}\n<request>${ctx.prompt}</request>`
 }
 
 /** Rough token count (about 3.5 characters per token for English prose and JSON). */

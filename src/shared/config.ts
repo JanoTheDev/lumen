@@ -689,7 +689,18 @@ export const configV2Schema = z.object({
   ai: z.object({
     router: z.enum(['llm', 'legacy']),
     maxSteps: z.number().int().min(1).max(20).optional(),
-    maxFollowUps: z.number().int().min(0).max(12).optional()
+    maxFollowUps: z.number().int().min(0).max(12).optional(),
+    /** Reply style ("mode") in use: a `kind: style` skill and its level; null / unset = none. */
+    style: z
+      .object({
+        name: z
+          .string()
+          .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+          .max(64),
+        level: z.string().max(30).optional()
+      })
+      .nullable()
+      .optional()
   }),
   /** Speak-to-type. hotkey "" = no dedicated hotkey; autoDetect = dictate from the main hotkey. */
   dictation: z.object({

@@ -9,6 +9,7 @@ import { physRectToImage, physToImage } from '../actions/coords'
 import { PLAIN_STYLE_LINE, answerStyle } from '../a11y/phrases'
 import { loadConfig } from '../config'
 import { captureContext } from '../query/capture'
+import { activeStyleBlock } from './style-runtime'
 import { replyLanguageLine } from '../speech/language'
 import type { QueryContext } from '../query/context'
 import { resolveTarget } from '../query/resolve-target'
@@ -64,17 +65,24 @@ export interface DescribeDeps {
   style?: () => 'plain' | undefined
   /** Reply language line ('' for English). */
   language?: () => string
+  /** The active reply style block ('' when none). */
+  replyStyle?: () => string
 }
 
 const defaultDeps: DescribeDeps = {
   capture: (signal, allScreens) => captureContext(true, { signal, allScreens }),
   hasModel: hasVisionModel,
   style: () => answerStyle(loadConfig()),
-  language: () => replyLanguageLine(loadConfig().voice.language)
+  language: () => replyLanguageLine(loadConfig().voice.language),
+  replyStyle: activeStyleBlock
 }
 
 const styleLines = (deps: DescribeDeps): string[] =>
-  [deps.style?.() === 'plain' ? PLAIN_STYLE_LINE : '', deps.language?.() ?? ''].filter(Boolean)
+  [
+    deps.style?.() === 'plain' ? PLAIN_STYLE_LINE : '',
+    deps.language?.() ?? '',
+    deps.replyStyle?.() ?? ''
+  ].filter(Boolean)
 
 const describeSchema = z.object({ spoken: z.string(), actionable: z.array(z.string()) })
 const explainSchema = z.object({ spoken: z.string() })
