@@ -1,0 +1,214 @@
+{
+  "id": "blender-basics-03-edit-mode-extrude",
+  "app": "blender",
+  "title": "Edit Mode: extrude a face",
+  "summary": "Switch the cube into Edit Mode, select its top face and pull it upward with Extrude.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["blender-basics-02-add-transform"],
+  "appVersion": ">=4.2",
+  "tags": ["modeling", "edit-mode"],
+  "steps": [
+    {
+      "id": "select-cube",
+      "say": "In Object Mode, click the cube in the 3D viewport so it gets an orange outline.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "mode": "OBJECT", "active_object_type": "MESH" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the cube in the 3D viewport outlined in orange, showing it is selected?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You can also click Cube in the Outliner at the top right.",
+        "No cube in the scene? Press Shift A, then Mesh, then Cube."
+      ],
+      "why": "Edit Mode works on the selected object."
+    },
+    {
+      "id": "enter-edit-mode",
+      "say": "With your mouse over the 3D viewport, press Tab to switch to Edit Mode.",
+      "target": { "shortcut": "Tab" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "mode": "EDIT_MESH" } },
+            {
+              "type": "vision",
+              "prompt": "Does the mode selector at the top left of the viewport now read Edit Mode, with the cube's vertices and edges visible?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The header should change from Object Mode to Edit Mode.",
+        "Or open the mode selector at the top left of the viewport and pick Edit Mode."
+      ],
+      "why": "Edit Mode lets you change the shape itself, not only move the whole object.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Tab" }
+        ]
+      }
+    },
+    {
+      "id": "face-select",
+      "say": "Press 3 on the number row above the letters to switch to face select.",
+      "target": { "shortcut": "3" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "mesh_select_mode": "FACE" } },
+            {
+              "type": "vision",
+              "prompt": "In the viewport header, is the face select button, the third of the three small square icons next to Edit Mode, highlighted?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use the 3 above the E key, not the one on the numpad.",
+        "Or click the third of the three small icons right of the Edit Mode selector."
+      ],
+      "why": "Face select lets you pick whole faces with one click.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "3" }
+        ]
+      }
+    },
+    {
+      "id": "deselect",
+      "say": "Press Alt A to clear the current selection.",
+      "target": { "shortcut": "Alt+A" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Alt+A" },
+            {
+              "type": "vision",
+              "prompt": "Is the cube now shown with no orange highlighted faces?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold Alt, tap A, and let go.",
+        "Or open the Select menu in the viewport header and choose None."
+      ],
+      "why": "Starting from an empty selection makes sure only one face gets extruded.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Alt+A" }
+        ]
+      }
+    },
+    {
+      "id": "pick-top-face",
+      "say": "Click the top face of the cube. It turns orange.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "selected_face_count": 1 } },
+            {
+              "type": "vision",
+              "prompt": "Is exactly one face, the top of the cube, highlighted in orange?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click near the middle of the top surface, where the face dot is.",
+        "Cannot see the top? Hold the middle mouse button and drag to orbit until it faces you."
+      ],
+      "why": "Extrude works on whatever faces are selected."
+    },
+    {
+      "id": "extrude",
+      "say": "Press E and move the mouse up to pull the face out of the cube. Click to confirm.",
+      "target": { "shortcut": "E" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "last_operator": "VIEW3D_OT_edit_mesh_extrude_move_normal" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the cube now taller, with new side faces between the original top and the raised face?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The face follows the mouse until you click. Right click cancels the move.",
+        "For an exact height, press E, type 1, and press Enter. Control Z undoes the extrude."
+      ],
+      "why": "Extrude adds new geometry, so you can grow shapes out of a simple cube.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "E" },
+          { "t": "type", "text": "1" },
+          { "t": "keys", "combo": "Enter" }
+        ]
+      }
+    },
+    {
+      "id": "back-to-object-mode",
+      "say": "Press Tab again to go back to Object Mode.",
+      "target": { "shortcut": "Tab" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "mode": "OBJECT" } },
+            {
+              "type": "vision",
+              "prompt": "Does the mode selector at the top left of the viewport read Object Mode again?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Keep the mouse over the 3D viewport when you press Tab.",
+        "Or pick Object Mode from the mode selector at the top left of the viewport."
+      ],
+      "why": "Object Mode is where you arrange, shade and render finished objects.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Tab" }
+        ]
+      }
+    }
+  ]
+}

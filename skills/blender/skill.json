@@ -1,0 +1,17 @@
+{
+  "id": "blender",
+  "name": "Blender",
+  "version": "1.0.0",
+  "description": "Free 3D creation suite: modeling, materials, lighting, animation and rendering.",
+  "match": {
+    "process": ["blender.exe"],
+    "title": ["Blender"]
+  },
+  "uiaQuality": "none",
+  "bridge": "blender-addon",
+  "appVersion": ">=4.2",
+  "appVersionTested": "5.2 LTS (5.2.2), shortcuts cross-checked for 4.5 LTS",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "Default keymap and the default Layout workspace assumed. Blender draws its own UI, so pointing relies on regions.json, OCR and vision; exact checks need the Lumen Blender add-on."
+}

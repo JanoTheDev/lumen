@@ -1,0 +1,37 @@
+# Blender glossary
+
+- **3D Viewport** — the main editor that shows the scene in 3D.
+- **Editor** — one panel of the window (3D Viewport, Outliner, Properties, Timeline); each has its own header and shortcuts.
+- **Area** — a rectangle of the window that holds one editor; areas can be resized and split.
+- **Workspace** — a saved arrangement of editors for a task, chosen with the tabs in the top bar.
+- **Object** — a thing in the scene, such as a mesh, camera or light.
+- **Mesh** — an object made of vertices, edges and faces.
+- **Vertex** — a single point of a mesh.
+- **Edge** — a straight line between two vertices.
+- **Face** — a flat surface filled in between edges.
+- **Object Mode** — the mode for arranging whole objects.
+- **Edit Mode** — the mode for changing the shape of a single mesh.
+- **Active object** — the last clicked object; most tools act on it.
+- **Origin** — the small dot an object moves, rotates and scales around.
+- **3D cursor** — red and white ring marking where new objects are added.
+- **Transform** — moving (G), rotating (R) or scaling (S).
+- **Axis lock** — pressing X, Y or Z during a transform so it only happens along that axis.
+- **Extrude** — pulling new geometry out of selected faces or edges.
+- **Inset** — making a smaller face inside a selected face.
+- **Loop cut** — adding a ring of edges around a mesh.
+- **Bevel** — rounding or chamfering an edge.
+- **Modifier** — a non-destructive effect stacked on an object, such as Subdivision Surface.
+- **Material** — the settings that define how a surface looks.
+- **Principled BSDF** — the default all-purpose surface shader in new materials.
+- **Base Color** — the main color of a Principled BSDF material.
+- **Viewport shading** — how the viewport draws: Wireframe, Solid, Material Preview or Rendered.
+- **Material Preview** — shading mode that shows materials with sample lighting.
+- **Render engine** — the program that makes the final image, EEVEE (fast) or Cycles (physically based).
+- **Render** — computing the final image from the active camera.
+- **Active camera** — the camera used for renders.
+- **Keyframe** — a stored value at a point in time, used for animation.
+- **Outliner** — the tree list of everything in the scene.
+- **Properties editor** — the panel with tabs for render, scene, object, modifier and material settings.
+- **Menu Search** — F3 popup to find any command by name.
+- **Pie menu** — a round menu around the pointer, for example the Z shading menu.
+- **Adjust Last Operation** — panel in the lower left of the viewport to tweak the operation just done.

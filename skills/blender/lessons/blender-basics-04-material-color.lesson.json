@@ -1,0 +1,161 @@
+{
+  "id": "blender-basics-04-material-color",
+  "app": "blender",
+  "title": "Give an object a material and a color",
+  "summary": "Create a new material in the Properties editor, set its Base Color and preview it in the viewport.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["blender-basics-02-add-transform"],
+  "appVersion": ">=4.2",
+  "tags": ["materials", "shading"],
+  "steps": [
+    {
+      "id": "select-object",
+      "say": "In Object Mode, click the monkey head you added earlier so it has an orange outline.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "mode": "OBJECT", "active_object_type": "MESH" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is one object in the 3D viewport outlined in orange, showing it is selected?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click Suzanne in the Outliner at the top right if it is hard to hit in the view.",
+        "No monkey yet? Press Shift A, point at Mesh, and click Monkey."
+      ],
+      "why": "A material is added to the selected object."
+    },
+    {
+      "id": "material-tab",
+      "say": "In the Properties editor at the bottom right, click the Material tab. It is the red checkered sphere near the bottom of the icon column.",
+      "target": { "region": "properties-tabs" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "properties_context": "MATERIAL" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Properties editor now show material settings, with either a New button or a material name at the top?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hover over the icons in the narrow column on the left edge of the Properties editor. A tooltip names each tab.",
+        "The Material tab is usually the last icon in the column."
+      ],
+      "why": "All surface settings for the selected object live in the Material tab."
+    },
+    {
+      "id": "new-material",
+      "say": "Click New to create a material.",
+      "target": { "text": "New" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "last_operator": "MATERIAL_OT_new" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the Material tab now show a material named Material with a Surface panel listing Principled BSDF?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "New is a wide button with a plus sign near the top of the Material tab.",
+        "If you see a material name instead of New, this object already has a material. Say done and go on."
+      ],
+      "why": "A new material starts with the Principled BSDF shader, which covers most surfaces."
+    },
+    {
+      "id": "open-base-color",
+      "say": "In the Surface panel, click the color bar next to Base Color.",
+      "target": { "text": "Base Color" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a color picker popup with a color wheel open over the Properties editor?"
+        }
+      },
+      "hints": [
+        "Base Color is one of the first settings under Principled BSDF. The bar is light grey.",
+        "Scroll down inside the Properties editor if the Surface panel is out of view."
+      ],
+      "why": "Base Color is the main color of the surface."
+    },
+    {
+      "id": "pick-color",
+      "say": "Click a strong color in the wheel, such as red or blue, then move the mouse away to close the picker.",
+      "target": { "region": "properties" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "active_material_base_color_changed": true }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the bar next to Base Color now a clear color instead of light grey?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The slider beside the wheel sets brightness. Drag it up if the color looks black.",
+        "You can also type a hex code, such as FF0000 for red, in the Hex field of the picker."
+      ],
+      "why": "The color is stored in the material, so every object using it changes together."
+    },
+    {
+      "id": "material-preview",
+      "say": "With your mouse over the 3D viewport, press Z and choose Material Preview.",
+      "target": { "shortcut": "Z" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "viewport_shading": "MATERIAL" } },
+            {
+              "type": "vision",
+              "prompt": "Does the selected object in the 3D viewport now show the chosen color with soft lighting and reflections?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Z opens a round menu around the pointer. Material Preview is one of its options.",
+        "Or click the third of the four sphere icons at the right end of the viewport header."
+      ],
+      "why": "Solid view ignores materials. Material Preview shows them with sample lighting."
+    }
+  ]
+}

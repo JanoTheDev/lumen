@@ -1,0 +1,195 @@
+{
+  "id": "blender-basics-01-navigate-viewport",
+  "app": "blender",
+  "title": "Move around the 3D viewport",
+  "summary": "Orbit, pan and zoom the view, jump to front and top views, and frame the whole scene.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": [],
+  "appVersion": ">=4.2",
+  "tags": ["navigation", "viewport"],
+  "steps": [
+    {
+      "id": "check-layout",
+      "say": "Make sure the Layout tab is selected in the top bar. Click Layout if another tab is highlighted.",
+      "target": { "text": "Layout" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "workspace": "Layout" } },
+            {
+              "type": "vision",
+              "prompt": "Is the Layout workspace tab highlighted in the top bar, with a large 3D view in the middle of the window?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Layout is the first tab to the right of the Help menu, at the very top.",
+        "If you see no tabs, open File, New, General to start a fresh scene."
+      ],
+      "why": "The lessons point at places on screen that match the Layout workspace."
+    },
+    {
+      "id": "orbit",
+      "say": "With your mouse over the 3D viewport, hold the middle mouse button and drag to orbit around the scene.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the viewing angle of the 3D viewport changed compared to the start, so the cube is seen from a different side?"
+        }
+      },
+      "hints": [
+        "The middle button is the scroll wheel. Press it down like a button and move the mouse.",
+        "No middle button? Drag the colored axis ball in the top right corner of the viewport instead."
+      ],
+      "why": "Orbiting lets you look at your model from every side.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Numpad6" },
+          { "t": "keys", "combo": "Numpad6" },
+          { "t": "keys", "combo": "Numpad8" }
+        ]
+      }
+    },
+    {
+      "id": "pan",
+      "say": "Now hold Shift, then hold the middle mouse button and drag. The view slides sideways without turning.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has the scene shifted sideways or up and down in the 3D viewport without the viewing angle changing?"
+        }
+      },
+      "hints": [
+        "Keep Shift held down the whole time you drag.",
+        "You can also drag the hand icon below the axis ball in the top right of the viewport."
+      ],
+      "why": "Panning moves your view without losing the angle you picked.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Ctrl+Numpad4" },
+          { "t": "keys", "combo": "Ctrl+Numpad4" }
+        ]
+      }
+    },
+    {
+      "id": "zoom",
+      "say": "Roll the mouse wheel to zoom in and out.",
+      "target": { "region": "3d-viewport" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Do the objects in the 3D viewport appear noticeably larger or smaller than at the start of this step?"
+        }
+      },
+      "hints": [
+        "Keep the pointer over the big middle area while you scroll.",
+        "Without a wheel, drag the magnifier icon below the axis ball, or press the plus and minus keys on the numpad."
+      ],
+      "why": "Zooming brings details close or shows the whole scene.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "scroll", "dx": 0, "dy": -3, "region": "3d-viewport" }
+        ]
+      }
+    },
+    {
+      "id": "front-view",
+      "say": "With your mouse over the 3D viewport, press Numpad 1 for the front view.",
+      "target": { "shortcut": "Numpad1" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Numpad1" },
+            {
+              "type": "vision",
+              "prompt": "Does the top left of the 3D viewport now show the word Front, with the scene seen straight from the front?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use the 1 on the numeric keypad, not the 1 above the letters.",
+        "Or click the green Y circle with a minus sign on the axis ball, or open View, Viewpoint, Front."
+      ],
+      "why": "Straight views make it easier to line things up.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Numpad1" }
+        ]
+      }
+    },
+    {
+      "id": "top-view",
+      "say": "Press Numpad 7 to look down from the top.",
+      "target": { "shortcut": "Numpad7" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Numpad7" },
+            {
+              "type": "vision",
+              "prompt": "Does the top left of the 3D viewport now show the word Top, with the scene seen from directly above?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The 7 key is the top left key of the numeric keypad.",
+        "Or click the blue Z circle on the axis ball, or open View, Viewpoint, Top."
+      ],
+      "why": "The top view works like a floor plan of your scene.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Numpad7" }
+        ]
+      }
+    },
+    {
+      "id": "frame-all",
+      "say": "Press Home to fit everything in the scene into the view.",
+      "target": { "shortcut": "Home" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Home" },
+            {
+              "type": "vision",
+              "prompt": "Are the cube, the camera and the light all visible inside the 3D viewport now?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Home is in the small key block above the arrow keys.",
+        "Or open the View menu in the viewport header and choose Frame All."
+      ],
+      "why": "Frame All is the quickest way back when you get lost in 3D space.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Home" }
+        ]
+      }
+    }
+  ]
+}

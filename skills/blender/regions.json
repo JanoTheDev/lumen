@@ -1,0 +1,73 @@
+{
+  "window": "main",
+  "layout": "Layout workspace, default startup file, 1920x1080 maximized",
+  "notes": "Estimated from the default screen layout; re-measure on a real install. Custom layouts or other workspaces break these.",
+  "regions": {
+    "top-menus": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 0.14,
+      "h": 0.028,
+      "desc": "File, Edit, Render, Window, Help menus, top left"
+    },
+    "workspace-tabs": {
+      "x": 0.14,
+      "y": 0.0,
+      "w": 0.5,
+      "h": 0.028,
+      "desc": "Workspace tabs (Layout, Modeling, Shading), top bar"
+    },
+    "viewport-header": {
+      "x": 0.0,
+      "y": 0.028,
+      "w": 0.79,
+      "h": 0.028,
+      "desc": "3D Viewport header with mode selector and shading buttons"
+    },
+    "3d-viewport": {
+      "x": 0.0,
+      "y": 0.056,
+      "w": 0.79,
+      "h": 0.634,
+      "desc": "Main 3D view, center left"
+    },
+    "toolbar": {
+      "x": 0.0,
+      "y": 0.06,
+      "w": 0.025,
+      "h": 0.45,
+      "desc": "Tool icons along the left edge of the viewport"
+    },
+    "sidebar": {
+      "x": 0.66,
+      "y": 0.06,
+      "w": 0.13,
+      "h": 0.62,
+      "desc": "N panel on the right edge of the viewport, hidden by default"
+    },
+    "navigation-gizmo": {
+      "x": 0.72,
+      "y": 0.06,
+      "w": 0.06,
+      "h": 0.2,
+      "desc": "Axis ball and view buttons, top right of the viewport"
+    },
+    "outliner": { "x": 0.79, "y": 0.028, "w": 0.21, "h": 0.3, "desc": "Scene tree, top right" },
+    "properties": {
+      "x": 0.79,
+      "y": 0.328,
+      "w": 0.21,
+      "h": 0.647,
+      "desc": "Properties editor, bottom right"
+    },
+    "properties-tabs": {
+      "x": 0.79,
+      "y": 0.34,
+      "w": 0.016,
+      "h": 0.6,
+      "desc": "Column of tab icons on the left edge of the Properties editor"
+    },
+    "timeline": { "x": 0.0, "y": 0.69, "w": 0.79, "h": 0.285, "desc": "Timeline along the bottom" },
+    "status-bar": { "x": 0.0, "y": 0.975, "w": 1.0, "h": 0.025, "desc": "Status bar, very bottom" }
+  }
+}

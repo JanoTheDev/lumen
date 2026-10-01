@@ -1,0 +1,180 @@
+{
+  "id": "blender-basics-05-render-save",
+  "app": "blender",
+  "title": "Render an image and save it",
+  "summary": "Look through the camera, render a still image with F12 and save it as a picture file.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["blender-basics-04-material-color"],
+  "appVersion": ">=4.2",
+  "tags": ["rendering", "output"],
+  "steps": [
+    {
+      "id": "check-object-mode",
+      "say": "Make sure the top left of the 3D viewport says Object Mode. Press Tab if it says Edit Mode.",
+      "target": { "region": "viewport-header" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "bridge", "app": "blender", "expect": { "mode": "OBJECT" } },
+            {
+              "type": "vision",
+              "prompt": "Does the mode selector at the top left of the 3D viewport read Object Mode?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The mode selector is the first drop-down in the strip above the 3D view.",
+        "Click the selector and choose Object Mode."
+      ],
+      "why": "Renders show the scene as it looks in Object Mode."
+    },
+    {
+      "id": "camera-view",
+      "say": "With your mouse over the 3D viewport, press Numpad 0 to look through the camera.",
+      "target": { "shortcut": "Numpad0" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Numpad0" },
+            {
+              "type": "vision",
+              "prompt": "Does the 3D viewport now show a darkened border around a lighter frame, with Camera Perspective written at the top left?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Use the 0 on the numeric keypad.",
+        "Or click the camera icon below the axis ball at the top right of the viewport."
+      ],
+      "why": "The camera view shows exactly what will appear in the render.",
+      "doItForMe": {
+        "actions": [
+          { "t": "move", "region": "3d-viewport" },
+          { "t": "keys", "combo": "Numpad0" }
+        ]
+      }
+    },
+    {
+      "id": "render",
+      "say": "Press F12 to render. A Blender Render window opens and the picture builds up.",
+      "target": { "shortcut": "F12" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "last_operator": "RENDER_OT_render" }
+            },
+            { "type": "window-title", "regex": "Blender Render" },
+            {
+              "type": "vision",
+              "prompt": "Is a separate Blender Render window open showing a rendered image of the scene?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "On some laptops F12 needs the Fn key held down.",
+        "Or open the Render menu at the top left and choose Render Image."
+      ],
+      "why": "Rendering turns the scene into a finished image from the camera's point of view.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "F12" }] }
+    },
+    {
+      "id": "wait-render",
+      "say": "Wait until the render finishes. The progress text at the top of the render window stops changing.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the Blender Render window show a complete image with no progress bar still running?"
+        }
+      },
+      "hints": [
+        "A simple scene takes a few seconds. Say done when the image looks finished.",
+        "Press Escape to stop a render that takes too long."
+      ],
+      "why": "Saving before the render ends would save an unfinished picture.",
+      "timeoutSec": 300
+    },
+    {
+      "id": "save-as",
+      "say": "With your mouse over the render window, press Shift Alt S to open Save As.",
+      "target": { "shortcut": "Shift+Alt+S" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            { "type": "keypress", "combo": "Shift+Alt+S" },
+            {
+              "type": "vision",
+              "prompt": "Is a Blender file browser open, with a file name field and a save button at the bottom?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Still renders are not saved on their own. This step writes the file.",
+        "Or open the Image menu at the top left of the render window and choose Save As."
+      ],
+      "why": "The render only lives in memory until you save it.",
+      "doItForMe": { "actions": [{ "t": "keys", "combo": "Shift+Alt+S" }] }
+    },
+    {
+      "id": "choose-file",
+      "say": "Pick a folder, type a file name in the field at the bottom, then click the save button at the bottom right.",
+      "target": { "text": "Save As Image" },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": { "last_operator": "IMAGE_OT_save_as" }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the file browser closed, leaving the render window showing the image again?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Pressing Enter in the file name field also saves.",
+        "The file format, PNG by default, is set in the panel on the right side of the file browser."
+      ],
+      "why": "Choosing the place and name yourself means you know where the picture is later."
+    },
+    {
+      "id": "close-render",
+      "say": "Close the render window with the X at its top right corner.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Blender Render window gone, leaving the main Blender window in front?"
+        }
+      },
+      "hints": [
+        "Your saved image stays on disk after the window closes.",
+        "Press F11 later to bring the last render back."
+      ],
+      "why": "The render window can always be reopened, so closing it loses nothing."
+    }
+  ]
+}

@@ -1,0 +1,319 @@
+{
+  "id": "blender-basics-02-add-transform",
+  "app": "blender",
+  "title": "Add an object and move, rotate, scale it",
+  "summary": "Add the Monkey head, then move it along one axis, rotate it by a set angle and scale it down.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["blender-basics-01-navigate-viewport"],
+  "appVersion": ">=4.2",
+  "tags": ["objects", "transform"],
+  "steps": [
+    {
+      "id": "check-object-mode",
+      "say": "Check the top left of the 3D viewport. It should say Object Mode. If it says Edit Mode, press Tab.",
+      "target": {
+        "region": "viewport-header"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": {
+                "mode": "OBJECT"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Does the mode selector at the top left of the 3D viewport read Object Mode?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The mode selector is the first drop-down in the strip above the 3D view.",
+        "Click the selector and pick Object Mode from the list."
+      ],
+      "why": "Adding and arranging whole objects happens in Object Mode."
+    },
+    {
+      "id": "open-add-menu",
+      "say": "With your mouse over the 3D viewport, press Shift A to open the Add menu.",
+      "target": {
+        "shortcut": "Shift+A"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Shift+A"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a menu titled Add open in the 3D viewport, listing Mesh, Curve, Light and Camera?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Hold Shift, tap A, then let go of both.",
+        "You can also click Add in the viewport header."
+      ],
+      "why": "The Add menu holds every kind of object Blender can create.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "3d-viewport"
+          },
+          {
+            "t": "keys",
+            "combo": "Shift+A"
+          }
+        ]
+      }
+    },
+    {
+      "id": "add-monkey",
+      "say": "Point at Mesh, then click Monkey.",
+      "target": {
+        "text": "Monkey"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": {
+                "last_operator": "MESH_OT_primitive_monkey_add"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a new monkey head in the 3D viewport, highlighted with an orange outline, that was not there before?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Mesh is the first entry. Its submenu opens to the side when you hover over it.",
+        "Or press F3, type Monkey, and press Enter."
+      ],
+      "why": "A new object always appears at the 3D cursor and is selected right away.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Escape"
+          },
+          {
+            "t": "move",
+            "region": "3d-viewport"
+          },
+          {
+            "t": "keys",
+            "combo": "F3"
+          },
+          {
+            "t": "wait",
+            "ms": 400
+          },
+          {
+            "t": "type",
+            "text": "Monkey"
+          },
+          {
+            "t": "wait",
+            "ms": 400
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "move-x",
+      "say": "Press G, then X, and move the mouse to slide the monkey along the red line. Click to confirm.",
+      "target": {
+        "shortcut": "G"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": {
+                "last_operator": "TRANSFORM_OT_translate"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the monkey head moved sideways away from the center of the grid compared to the start of this step?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "A red line appears after you press X. The monkey can only slide along it.",
+        "To move an exact amount, press G, X, type 2, and press Enter."
+      ],
+      "why": "Locking to one axis keeps the move precise and predictable.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "3d-viewport"
+          },
+          {
+            "t": "keys",
+            "combo": "G"
+          },
+          {
+            "t": "keys",
+            "combo": "X"
+          },
+          {
+            "t": "type",
+            "text": "2"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rotate-z",
+      "say": "Press R, then Z, type 45, and press Enter to turn the monkey 45 degrees.",
+      "target": {
+        "shortcut": "R"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": {
+                "last_operator": "TRANSFORM_OT_rotate"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the monkey head now facing a different direction than at the start of this step?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The angle shows in the viewport header while you type.",
+        "Rotation is also in the sidebar. Press N and edit Rotation Z under Item."
+      ],
+      "why": "Typing a number gives an exact angle instead of guessing with the mouse.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "3d-viewport"
+          },
+          {
+            "t": "keys",
+            "combo": "R"
+          },
+          {
+            "t": "keys",
+            "combo": "Z"
+          },
+          {
+            "t": "type",
+            "text": "45"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scale-half",
+      "say": "Press S, type 0.5, and press Enter to make the monkey half its size.",
+      "target": {
+        "shortcut": "S"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "bridge",
+              "app": "blender",
+              "expect": {
+                "last_operator": "TRANSFORM_OT_resize"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the monkey head clearly smaller than it was at the start of this step?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Type zero, a period, then five. The header shows the scale while you type.",
+        "Right click or press Escape to cancel, then try again. Control Z undoes a confirmed scale."
+      ],
+      "why": "Scaling with a typed value keeps the proportions exact.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "move",
+            "region": "3d-viewport"
+          },
+          {
+            "t": "keys",
+            "combo": "S"
+          },
+          {
+            "t": "type",
+            "text": "0.5"
+          },
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "review",
+      "say": "If anything looks wrong, press Control Z to undo it. Say done when the monkey looks right.",
+      "target": null,
+      "expect": {
+        "type": "user-action",
+        "check": "manual"
+      },
+      "hints": ["Each Control Z steps back one action. Control Shift Z steps forward again."],
+      "why": "Undo makes it safe to experiment."
+    }
+  ]
+}
