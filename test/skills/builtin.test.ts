@@ -22,7 +22,10 @@ const STARTERS = [
   'read-this-aloud',
   'reply-to-this-email',
   'screenshot-and-explain',
-  'summarize-this-page'
+  'search-my-mail',
+  'summarize-my-inbox',
+  'summarize-this-page',
+  'write-an-email'
 ]
 
 describe('builtin skills', () => {
@@ -44,7 +47,9 @@ describe('builtin skills', () => {
     for (const name of STARTERS) {
       const out = loadSkill(reg, { name })
       expect(out.isError, name).toBeUndefined()
-      expect(out.content[0].text, name).not.toMatch(/\{(tone|resolution|steps)\}/)
+      expect(out.content[0].text, name).not.toMatch(
+        /\{(tone|resolution|steps|message|to|about|forward|count|query|open)\}/
+      )
     }
     expect(loadSkill(reg, { name: 'export-for-youtube' }).content[0].text).toContain(
       'reference/resolve.md'

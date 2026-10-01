@@ -9,7 +9,10 @@ exports[`builtin skills > L1 prompt text (snapshot) fits the budget 1`] = `
 - make-text-bigger-here: Makes text bigger in the app in front with its own zoom, or for all of Windows when the user wants that. Use when: The user says text is too small, or asks to zoom in or make things bigger.
 - morning-briefing: Opens the user's calendar and mail and reads out today's events and the newest unread emails. Use when: The user says good morning or asks what is on today, their schedule or their briefing.
 - read-this-aloud: Reads the selected text, or the main text in the foreground window, out loud. Use when: The user asks to read something aloud, read it to them, or read the screen.
-- reply-to-this-email: Drafts a reply to the open email and types it into the reply box. Never sends it. Use when: The user asks to reply to, answer or respond to the email on screen.
+- reply-to-this-email: Drafts a reply to the open email in Gmail, Outlook or another mail app and types it into the reply box. Never sends it. Use when: The user asks to reply to, answer or respond to the email on screen, maybe saying what to write.
 - screenshot-and-explain: Looks at the whole screen and explains in plain words what is shown and what the user can do next. Use when: The user asks what they are looking at, what this is, or what something on screen means.
-- summarize-this-page: Sums up the web page, document or email in front of the user in a few plain sentences. Use when: The user asks for a summary, the gist or a tl;dr of what is on screen."
+- search-my-mail: Searches the mailbox on screen (Gmail, Outlook) for a sender, subject or words, and opens the email the user asked for. Use when: The user asks to find, search for or open an email, for example "open the email from Anna" or "search my mail for the invoice".
+- summarize-my-inbox: Reads the newest emails in the inbox on screen (Gmail, Outlook or another mail app) and says who wrote, about what, and what needs an answer. Use when: The user asks to read their latest emails, what is new in their mail, or to sum up their inbox.
+- summarize-this-page: Sums up the web page, document or email in front of the user in a few plain sentences. Use when: The user asks for a summary, the gist or a tl;dr of what is on screen.
+- write-an-email: Writes a new email or forwards the open one in Gmail, Outlook or another mail app, with the recipient checked and files attached. Leaves it as a draft. Use when: The user asks to write, draft, compose or send an email to someone, or to forward this email to someone."
 `;
