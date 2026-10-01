@@ -4,7 +4,12 @@
 import { app, powerMonitor, shell } from 'electron'
 import { homedir } from 'os'
 import { join } from 'path'
-import type { LessonListItem, LessonProgressView } from '@shared/channels'
+import type {
+  LessonDraftEdit,
+  LessonListItem,
+  LessonProgressView,
+  RecordingStatus
+} from '@shared/channels'
 import type { LessonCommand } from '@shared/events'
 import type { ElementNode, InputStep, Point, Rect } from '@shared/types'
 import { bus } from '../bus'
@@ -52,6 +57,11 @@ import { bridgePort, installBridgeOffer } from './bridges'
 import { lessonList, progressView } from './picker'
 import { PRACTICE_LESSON, PRACTICE_LESSON_ID } from './practice-lesson'
 import { makeShowMeHow } from './show-me'
+import { appIdFor } from './generate'
+import { installPackSupport } from './packs'
+import { draftTextSchema, RECORD_PROMPT, recordTurn } from './record-prompt'
+import type { RawUiaEvent, RecordedApp } from './recorder'
+import { createRecorder, type Recorder } from './recording'
 import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
 
 const CAPTURE_TIMEOUT_MS = 4000
@@ -71,6 +81,7 @@ let store: ProgressStore | null = null
 let runner: LessonRunner | null = null
 let offer: ResumeOffer | null = null
 let learning: Learning | null = null
+let recorder: Recorder | null = null
 /** The last "show me how" lesson, for "save this lesson". */
 let lastGenerated: { lesson: Lesson; skill: Skill | null } | null = null
 let skillsRoot = ''
@@ -400,6 +411,148 @@ async function explainWhy(
   return res.text.trim() || null
 }
 
+// ---- Record my steps (T31) ----
+
+const RECORD_KINDS = ['invoked', 'selected', 'value', 'window-opened', 'focused']
+const DRAFT_TIMEOUT_MS = 25_000
+
+/** The agent's UIA, focus and key-combo events for a recording (values are dropped later). */
+function subscribeRecording(on: {
+  uia(e: RawUiaEvent): void
+  key(combo: string): void
+}): () => void {
+  const sub = { kinds: new Set(RECORD_KINDS), cb: (e: UiaEvent) => on.uia(e) }
+  uiaSubs.add(sub)
+  keySubs.add(on.key)
+  wantFocusEvents('record', true)
+  uiaEvents.want('record', true)
+  keyComboEvents.want('record', true)
+  return () => {
+    uiaSubs.delete(sub)
+    keySubs.delete(on.key)
+    wantFocusEvents('record', false)
+    uiaEvents.want('record', false)
+    keyComboEvents.want('record', false)
+  }
+}
+
+async function recordedApp(): Promise<RecordedApp | null> {
+  const w = await recentForeground(900)
+  if (!w) return null
+  const process = w.process || w.exe
+  const skill = registry?.matchApp({ process, title: w.title })
+  if (skill) return { id: skill.id, name: skill.name, process }
+  const id = appIdFor(null, process)
+  return { id, name: registry?.get(id)?.name ?? id, process }
+}
+
+/** A screenshot the user asked for during a recording (memory only). */
+async function recordShot(): Promise<{ data: string; mime: string } | null> {
+  const agent = getAgent()
+  if (!agent) return null
+  const r = await commands
+    .capture(
+      agent,
+      { monitor: 'foreground', maxWidth: 1280, quality: 70 },
+      { timeoutMs: CAPTURE_TIMEOUT_MS }
+    )
+    .catch(() => null)
+  const f = r?.frames[0]
+  return f ? { data: f.data, mime: f.mime } : null
+}
+
+function installRecorder(base: string): void {
+  recorder = createRecorder({
+    now: () => Date.now(),
+    foreground: recordedApp,
+    subscribe: subscribeRecording,
+    capture: recordShot,
+    draftText: async (input, images) => {
+      const { llm, model, effort } = getProvider('fast')
+      const res = await llm.complete(
+        {
+          model,
+          system: [{ text: RECORD_PROMPT, cacheable: true }],
+          messages: [{ role: 'user', content: recordTurn(input) }],
+          images: images.length
+            ? images.map((i) => ({
+                base64: i.data,
+                mediaType: i.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const)
+              }))
+            : undefined,
+          maxTokens: 2000,
+          effort,
+          schema: draftTextSchema,
+          schemaName: 'lumen_recorded_lesson'
+        },
+        AbortSignal.timeout(DRAFT_TIMEOUT_MS)
+      )
+      log('plan', `record: lesson words written (${res.model})`)
+      return res.data ?? null
+    },
+    hotkey: () => loadConfig().hotkey,
+    showState: (text) =>
+      bus.emit({
+        type: 'lesson.state',
+        state: text ? { phase: 'waiting-user', statusText: text } : null
+      }),
+    showLine: (text) => bus.emit({ type: 'lesson.resume-offer', lessonId: 'record-draft', text }),
+    say: (text) => announce(text, { kind: 'answer' }),
+    lessonsDir: () => userLessonsDir(skillsRoot),
+    draftFile: () => join(base, 'teach', 'draft.lesson.json'),
+    reload: () => registry?.load(),
+    play: (lesson) => {
+      if (!runner) return false
+      offer = null
+      runner.start(lesson, {
+        skill: registry?.get(lesson.app) ?? null,
+        source: 'generated',
+        autoStart: true,
+        ...pacingFor(loadConfig().a11y)
+      })
+      return true
+    },
+    lessonRunning: () => !!runner?.running(),
+    appName: (id) => registry?.get(id)?.name ?? id,
+    log: (msg) => log('plan', msg),
+    handled: HANDLED
+  })
+  // Nothing is recorded while the user talks to Lumen.
+  bus.on('voice.started', () => recorder?.hold(true))
+  bus.on('voice.stopped', () => recorder?.hold(false))
+  bus.on('voice.cancelled', () => recorder?.hold(false))
+}
+
+export function recordAction(action: 'start' | 'stop' | 'cancel'): Promise<{
+  ok: boolean
+  error?: string
+}> {
+  if (!recorder) return Promise.resolve({ ok: false, error: 'not ready' })
+  if (action === 'start') return Promise.resolve(recorder.start())
+  if (action === 'stop') return recorder.stop()
+  return Promise.resolve(recorder.cancel())
+}
+
+export function recordStatus(): RecordingStatus {
+  return recorder?.status() ?? { phase: 'idle', events: 0, draft: null }
+}
+
+export function saveDraft(
+  edit: LessonDraftEdit
+): { id: string; title: string } | { error: string } {
+  if (!recorder) return { error: 'not ready' }
+  const r = recorder.save(edit)
+  return 'error' in r ? r : { id: r.id, title: r.title }
+}
+
+export function playDraft(): boolean {
+  return !!recorder?.playDraft()
+}
+
+export function discardDraft(): boolean {
+  return !!recorder?.discard()
+}
+
 // ---- Ports ----
 
 function realPorts(): Ports {
@@ -688,6 +841,11 @@ function resumeOffered(): boolean {
  */
 export function interceptLesson(utterance: string): unknown | undefined {
   if (!runner || !registry) return undefined
+  // Record my steps (T31): its commands while recording, "watch me …", draft review.
+  if (!runner.running()) {
+    const recorded = recorder?.intercept(utterance)
+    if (recorded !== undefined) return recorded
+  }
   const save = lastGenerated ? matchSaveLesson(utterance) : null
   if (save) {
     const saved = saveGeneratedLesson(save.name)
@@ -847,6 +1005,8 @@ export function installTeach(): void {
   app.on('before-quit', () => store?.flush())
   watchFocus()
   installLearning()
+  installRecorder(base)
+  installPackSupport({ registry: () => registry, skillsRoot: () => skillsRoot })
   installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
 
   // Passive resume offer once the bar can show it; nothing starts by itself.

@@ -17,6 +17,19 @@ export const lessonIdSchema = z
   .max(100)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
 export const lessonCommandSchema = z.enum(LESSON_COMMANDS)
+/** Record my steps (07 T31). */
+export const recordActionSchema = z.enum(['start', 'stop', 'cancel'])
+export const lessonDraftEditSchema = z
+  .object({
+    title: z.string().trim().min(1).max(80),
+    steps: z
+      .array(z.object({ id: z.string().max(80), say: z.string().trim().min(3).max(200) }).strict())
+      .min(1)
+      .max(40)
+  })
+  .strict()
+/** A GitHub link to a community pack (07 T32). */
+export const packUrlSchema = z.string().trim().url().max(500)
 
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])

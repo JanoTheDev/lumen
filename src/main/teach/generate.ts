@@ -68,7 +68,7 @@ function clip(s: string, max: number): string {
 }
 
 /** Spoken text: no "just"/"simply", no markdown. */
-function spoken(s: string, max: number): string {
+export function spoken(s: string, max: number): string {
   const t = clip(s.replace(BANNED, '').replace(/[*_`#]/g, ''), max)
   return t.charAt(0).toUpperCase() + t.slice(1)
 }

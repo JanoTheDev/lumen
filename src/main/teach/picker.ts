@@ -39,7 +39,8 @@ function lessonItem(
     ...(t.unit ? { unit: t.unit } : {}),
     status: t.status,
     ...(t.needs.length ? { needs: t.needs.map(title) } : {}),
-    ...(due.has(lesson.id) ? { reviewDue: true } : {})
+    ...(due.has(lesson.id) ? { reviewDue: true } : {}),
+    ...(skill.trust && source === 'pack' ? { community: true } : {})
   }
 }
 

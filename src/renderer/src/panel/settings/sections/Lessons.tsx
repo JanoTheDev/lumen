@@ -1,6 +1,7 @@
-// Lessons (07 T22, T27-T29, T33): the lesson picker. Progress per app (mastery, next lesson),
+// Lessons (07 T22, T27-T33): the lesson picker. Progress per app (mastery, next lesson),
 // due reviews, your own lessons, every app's lessons as a skill tree (units, done / up next /
-// locked), saving the last lesson, and the review reminder and opt-in idle hint settings.
+// locked), saving the last lesson, recording your steps, community packs, and the review
+// reminder and opt-in idle hint settings.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { LessonListItem, LessonProgressView } from '@shared/channels'
 import {
@@ -14,6 +15,8 @@ import {
   icons
 } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { CommunityPacks } from './CommunityPacks'
+import { RecordSteps } from './RecordSteps'
 
 function play(id: string): void {
   window.lumen.invoke('teach:start', id).catch(() => {})
@@ -38,6 +41,7 @@ function meta(l: LessonListItem): string {
   if (l.completed) parts.push(`done ${l.completed}×`)
   else if (l.status && STATUS_TEXT[l.status]) parts.push(STATUS_TEXT[l.status])
   if (l.reviewDue) parts.push('review due')
+  if (l.community) parts.push('community pack')
   if (l.needs?.length) parts.push(`first: ${l.needs.join(', ')}`)
   return parts.join(' · ')
 }
@@ -193,6 +197,8 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
         {msg && <p className="ui-hint">{msg}</p>}
       </Card>
 
+      <RecordSteps onSaved={refresh} />
+
       <Card
         title="Your lessons"
         description={
@@ -254,6 +260,8 @@ export function Lessons({ cfg, patch }: SectionProps): JSX.Element {
           </details>
         ))}
       </Card>
+
+      <CommunityPacks apps={apps} onChanged={refresh} />
 
       <Card title="Learning help">
         <Switch

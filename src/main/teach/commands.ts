@@ -357,3 +357,110 @@ export function matchCoach(utterance: string): boolean | null {
   if (COACH_OFF.test(norm)) return false
   return null
 }
+
+// ---- Record my steps (T31) ----
+
+const RECORD_START =
+  /^(?:watch me|record (?:me|my steps)|start recording my steps|learn from me)(?: (?:do|doing|while i|how to|how i))?(?: (?<title>.+))?$/
+const VAGUE_TITLE = new Set(['this', 'it', 'that', 'something', 'do this', 'do it', 'now'])
+
+/** "watch me do this", "watch me turn on dark mode" → { title? }; else null. */
+export function matchRecordStart(utterance: string): { title?: string } | null {
+  if (!utterance || utterance.length > 120) return null
+  const m = RECORD_START.exec(normalize(utterance))
+  if (!m) return null
+  const title = m.groups?.title?.trim()
+  return title && !VAGUE_TITLE.has(title) ? { title } : {}
+}
+
+const RECORDING_PHRASES: Record<'stop' | 'cancel' | 'shot', string[]> = {
+  stop: [
+    'stop recording',
+    'stop watching',
+    'done recording',
+    'finish recording',
+    'end recording',
+    'im done',
+    'i am done',
+    'thats it',
+    'that is it',
+    'done',
+    'stop',
+    'finished',
+    'all done'
+  ],
+  cancel: [
+    'cancel recording',
+    'cancel the recording',
+    'discard recording',
+    'discard the recording',
+    'forget it',
+    'never mind',
+    'cancel'
+  ],
+  shot: [
+    'screenshot',
+    'take a screenshot',
+    'take screenshot',
+    'capture this',
+    'capture this step',
+    'capture the screen',
+    'snapshot',
+    'take a snapshot',
+    'take a picture',
+    'remember this screen'
+  ]
+}
+
+const DRAFT_PHRASES: Record<'read' | 'play' | 'discard', string[]> = {
+  read: [
+    'read it back',
+    'read it',
+    'read the steps',
+    'read back the steps',
+    'read me the steps',
+    'what did you write',
+    'what are the steps'
+  ],
+  play: ['try it', 'play it', 'test it', 'try the lesson', 'play the draft', 'try the draft'],
+  discard: [
+    'discard it',
+    'discard the draft',
+    'delete it',
+    'delete the draft',
+    'throw it away',
+    'forget it'
+  ]
+}
+
+function phraseTable<K extends string>(t: Record<K, string[]>): Map<string, K> {
+  const m = new Map<string, K>()
+  for (const [k, list] of Object.entries(t) as [K, string[]][])
+    for (const p of list) if (!m.has(normalize(p))) m.set(normalize(p), k)
+  return m
+}
+const RECORDING_TABLE = phraseTable(RECORDING_PHRASES)
+const DRAFT_TABLE = phraseTable(DRAFT_PHRASES)
+
+/** While recording: "stop recording" / "cancel recording" / "take a screenshot". */
+export function matchRecordingCommand(utterance: string): 'stop' | 'cancel' | 'shot' | null {
+  if (!utterance || utterance.length > 60) return null
+  return RECORDING_TABLE.get(normalize(utterance)) ?? null
+}
+
+const SAVE_DRAFT_RE =
+  /^(?:please\s+)?(?:save|keep)\s+(?:it|this|that|the draft|the lesson|this lesson|my steps|the recording)(?:\s+as\s+(?<name>.{1,80}?))?[\s.!?]*$/i
+
+/** Reviewing a draft: "save it as dark mode", "read it back", "try it", "discard it". */
+export function matchDraftCommand(
+  utterance: string
+): { cmd: 'save'; name?: string } | { cmd: 'read' | 'play' | 'discard' } | null {
+  if (!utterance || utterance.length > 120) return null
+  const save = SAVE_DRAFT_RE.exec(utterance.trim())
+  if (save) {
+    const name = save.groups?.name?.replace(/[.!?,;:]+$/, '').trim()
+    return name ? { cmd: 'save', name } : { cmd: 'save' }
+  }
+  const cmd = DRAFT_TABLE.get(normalize(utterance))
+  return cmd ? { cmd } : null
+}
