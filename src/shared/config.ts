@@ -11,6 +11,18 @@ const KEY = [
 ].join('|')
 export const HOTKEY_RE = new RegExp(`^(?:(?:${MODIFIER})+(?:${KEY})|F(?:[1-9]|1[0-2]))$`, 'i')
 
+// One key, no modifiers: a switch key (06 T09). Names both the native hook and Electron's
+// globalShortcut fallback accept.
+const SWITCH_KEY_NAMES = [
+  'Space|Enter|Backspace|Delete|Insert|Home|End|PageUp|PageDown|Up|Down|Left|Right',
+  'Capslock|Numlock|Scrolllock|num[0-9]|numadd|numsub|nummult|numdiv|numdec',
+  'VolumeUp|VolumeDown|VolumeMute|MediaNextTrack|MediaPreviousTrack|MediaStop|MediaPlayPause'
+].join('|')
+export const SWITCH_KEY_RE = new RegExp(
+  `^(?:[A-Za-z0-9]|F(?:[1-9]|1[0-9]|2[0-4])|${SWITCH_KEY_NAMES})$`,
+  'i'
+)
+
 // Known model ids plus a conservative free-text pattern for custom ones.
 export const MODEL_ID_RE = /^[a-z0-9][a-z0-9.\-:/_]{0,79}$/i
 
@@ -130,7 +142,7 @@ const a11ySwitchSchema = z.object({
   /** Full passes over a group before auto-scan backs out. */
   loops: z.number().int().min(1).max(10).default(3),
   /** Key names used as switches (Space, Enter, F1-F12...): [select] or [next, select]. */
-  keys: z.array(z.string().max(20)).max(4).default(['Space'])
+  keys: z.array(z.string().max(20).regex(SWITCH_KEY_RE)).max(4).default(['Space'])
 })
 
 const a11yTimingsSchema = z.object({

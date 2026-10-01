@@ -14,14 +14,8 @@ import {
 } from '../../../ui'
 import type { SectionProps } from '../meta'
 import { FaceGestures } from './FaceGestures'
-
-// Keys a commercial switch interface usually sends; two keys = step scanning (move, pick).
-const SWITCH_KEYS = [
-  { value: 'Space', label: 'Space' },
-  { value: 'Enter', label: 'Enter' },
-  { value: 'F8', label: 'F8' },
-  { value: 'Space,Enter', label: 'Space + Enter' }
-] as const
+import { switchKeyClash } from './AccessibilitySwitch'
+import { SwitchKeyField } from './AccessibilitySwitchField'
 
 const SCAN_MODES = [
   { value: 'auto', label: 'Moves by itself' },
@@ -78,8 +72,21 @@ const TRISTATE = [
 export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
   const summary = profileSummary(cfg)
   const sw = cfg.a11y.switch
-  const switchKeys = sw.keys.join(',')
-  const keyChoice = SWITCH_KEYS.some((k) => k.value === switchKeys) ? switchKeys : 'Space'
+  const swKeys = sw.keys.length ? sw.keys : ['Space']
+  // One key: it picks (auto scan). Two: the first moves, the second picks (step scanning).
+  const setSwitchKeys = (keys: string[]): void =>
+    void patch({
+      a11y: { switch: { ...sw, keys, mode: keys.length > 1 ? sw.mode : 'auto' } }
+    })
+  const setSwitchKey = (i: number, key: string): string => {
+    const clash = switchKeyClash(
+      key,
+      cfg,
+      swKeys.filter((_, j) => j !== i)
+    )
+    if (!clash) setSwitchKeys(swKeys.map((k, j) => (j === i ? key : k)))
+    return clash
+  }
   const shortcuts = useShortcuts(cfg)
   // The whole object is patched (06 T17); '' = no shortcut.
   const setShortcut = (action: ShortcutStatus['action'], combo: string): void =>
@@ -355,17 +362,40 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           label="Use a switch"
           hint="Say “start scanning” or “stop scanning” to turn it on and off for now."
         />
-        <SegmentedControl
-          label="Switch keys"
-          value={keyChoice}
-          options={SWITCH_KEYS}
-          onChange={(v) => {
-            const keys = v.split(',')
-            patch({
-              a11y: { switch: { ...sw, keys, mode: keys.length > 1 ? 'step' : 'auto' } }
-            })
-          }}
+        <SwitchKeyField
+          label={swKeys.length > 1 ? 'Move switch' : 'Switch key'}
+          value={swKeys[0]}
+          onCommit={(key) => setSwitchKey(0, key)}
+          hint={
+            swKeys.length > 1
+              ? 'Moves the highlight. Any single key: what your switch interface sends.'
+              : 'Picks the highlighted choice. Any single key: what your switch interface sends.'
+          }
         />
+        {swKeys.length > 1 && (
+          <SwitchKeyField
+            label="Pick switch"
+            value={swKeys[1]}
+            onCommit={(key) => setSwitchKey(1, key)}
+            hint="Picks the highlighted choice."
+          />
+        )}
+        <div className="panel-row">
+          {swKeys.length > 1 ? (
+            <Button onClick={() => setSwitchKeys([swKeys[1]])}>Use one switch</Button>
+          ) : (
+            <Button
+              onClick={() => {
+                const move = swKeys[0].toLowerCase() === 'space' ? 'Enter' : 'Space'
+                void patch({
+                  a11y: { switch: { ...sw, keys: [move, swKeys[0]], mode: 'step' } }
+                })
+              }}
+            >
+              Add a second switch
+            </Button>
+          )}
+        </div>
         {sw.keys.length > 1 && (
           <SegmentedControl
             label="Highlight"
