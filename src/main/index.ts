@@ -73,6 +73,7 @@ import { registerConnectorsIpc } from './ipc/connectors'
 import { registerPluginsIpc } from './plugins'
 import { interceptStyles } from './ai/style-runtime'
 import { registerStylesIpc } from './ipc/styles'
+import { registerCardsIpc } from './ipc/cards'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
 import { registerSettingsIpc } from './ipc/settings'
@@ -155,6 +156,7 @@ function registerIpc(): void {
   registerConnectorsIpc()
   registerPluginsIpc()
   registerStylesIpc()
+  registerCardsIpc()
   registerMemoryIpc()
   registerUsageIpc()
   registerAgentIpc()

@@ -289,14 +289,18 @@ export function turnEnded(): void {
   close()
 }
 
-/** A different answer is a new card; it does not inherit the pin of the one before. */
-export function showAnswer(text: string): void {
+/**
+ * A different answer is a new card; it does not inherit the pin of the one before. `cardsId`:
+ * answer cards shown under the text (05 Phase R).
+ */
+export function showAnswer(text: string, cardsId?: string): void {
   const turnId = view.answer?.turnId ?? inFlight ?? `t${++turnSeq}`
-  const pinned = !!view.answer?.pinned && view.answer.markdown === text
+  const pinned =
+    !!view.answer?.pinned && view.answer.markdown === text && view.answer.cardsId === cardsId
   patch({
     phase: view.phase === 'error' ? 'error' : 'idle',
     statusText: undefined,
-    answer: { turnId, markdown: text, streaming: false, pinned }
+    answer: { turnId, markdown: text, streaming: false, pinned, ...(cardsId ? { cardsId } : {}) }
   })
 }
 

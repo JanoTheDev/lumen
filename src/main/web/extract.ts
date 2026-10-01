@@ -60,7 +60,8 @@ const DROP = [
   'button'
 ]
 
-function metaContent(html: string, key: string): string {
+/** A `<meta property|name=key content=…>` value, entities decoded; '' when absent. */
+export function metaContent(html: string, key: string): string {
   const k = key.replace(/[.:]/g, '\\$&')
   const a = new RegExp(
     `<meta[^>]+(?:property|name)=["']${k}["'][^>]*content=["']([^"']*)["']`,

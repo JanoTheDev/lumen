@@ -24,6 +24,15 @@ describe('safeGet', () => {
     expect(r).toMatchObject({ body: '', contentType: 'image/png', status: 200 })
   })
 
+  it('returns raw bytes of any type with binary', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff])
+    const impl: FetchImpl = async () =>
+      new Response(png, { status: 200, headers: { 'content-type': 'image/png' } })
+    const r = await safeGet('https://a.test/x.png', { fetch: impl, binary: true })
+    expect(r).toMatchObject({ body: '', contentType: 'image/png', status: 200, cut: false })
+    expect(r.bytes?.equals(png)).toBe(true)
+  })
+
   it('stops after five redirects', async () => {
     let n = 0
     const impl: FetchImpl = async () => res(302, '', { location: `/r${n++}` })

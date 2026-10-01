@@ -18,7 +18,14 @@ export interface AssistantState {
   caption?: string
   statusText?: string
   step?: { index: number; total: number; label: string }
-  answer?: { turnId: string; markdown: string; streaming: boolean; pinned: boolean }
+  answer?: {
+    turnId: string
+    markdown: string
+    streaming: boolean
+    pinned: boolean
+    /** Answer cards under the text (05 Phase R), read with `cards:get`. */
+    cardsId?: string
+  }
   confirm?: {
     actionId: string
     summary: string
@@ -229,5 +236,9 @@ export type AppEvent =
   | { type: 'claude.bar'; view: ClaudeBarView | null; show?: boolean; id?: string }
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' | 'gemini' | 'compatible' }
+  /** A card set changed (an image loaded): views re-read it with `cards:get`. */
+  | { type: 'cards.changed'; id: string }
+  /** A card's "do" button ("Book it"); the booking task (05 T41) handles it. */
+  | { type: 'cards.do'; id: string; cardId: string; label: string }
 
 export type AppEventType = AppEvent['type']

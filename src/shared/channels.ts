@@ -26,6 +26,7 @@ import type {
   PluginSource
 } from './plugins'
 import type { ActiveStyle, StyleInfo } from './styles'
+import type { CardActionRequest, CardActionResult, CardsView } from './cards'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
@@ -614,6 +615,9 @@ export interface InvokeChannels {
   /** Reply styles ("modes"): the installed ones and the one in use. */
   'styles:list': { args: []; result: { styles: StyleInfo[]; active: ActiveStyle | null } }
   'styles:set': { args: [style: ActiveStyle | null]; result: { ok: boolean; error?: string } }
+  /** Answer cards (05 Phase R): one stored card set, images as data URLs. */
+  'cards:get': { args: [id: string]; result: CardsView | null }
+  'cards:action': { args: [req: CardActionRequest]; result: CardActionResult }
 }
 
 /** renderer → main, fire and forget (`ipcRenderer.send`). */
@@ -1307,6 +1311,8 @@ export interface EventChannels {
   'tasks:changed': [tasks: BackgroundTask[]]
   /** New transcript entries / header of a chat the panel watches (tasks:watch). */
   'tasks:chat-delta': [delta: ChatDelta]
+  /** A card set changed (an image loaded): re-read it with `cards:get`. */
+  'cards:changed': [id: string]
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -1501,7 +1507,9 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'plugins:import',
   'plugins:cancel',
   'styles:list',
-  'styles:set'
+  'styles:set',
+  'cards:get',
+  'cards:action'
 ]
 
 export const SEND_CHANNELS: readonly SendChannel[] = [
@@ -1570,7 +1578,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'a11y:keyboard-state',
   'assistant:focus',
   'tasks:changed',
-  'tasks:chat-delta'
+  'tasks:chat-delta',
+  'cards:changed'
 ]
 
 /** A file dropped on the assistant bar (08 T21), as the bar shows it. */

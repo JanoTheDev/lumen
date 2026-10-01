@@ -176,9 +176,9 @@ async function readCapped(
   max: number,
   overflow: 'cut' | 'throw',
   url: string
-): Promise<{ body: string; cut: boolean }> {
+): Promise<{ bytes: Buffer; cut: boolean }> {
   const reader = res.body?.getReader()
-  if (!reader) return { body: '', cut: false }
+  if (!reader) return { bytes: Buffer.alloc(0), cut: false }
   const chunks: Uint8Array[] = []
   let size = 0
   let cut = false
@@ -195,7 +195,7 @@ async function readCapped(
     chunks.push(value)
     size += value.byteLength
   }
-  return { body: Buffer.concat(chunks).toString('utf8'), cut }
+  return { bytes: Buffer.concat(chunks), cut }
 }
 
 /** Remembered robots.txt per origin: its rules, or 'none' when it could not be read. */
@@ -226,7 +226,9 @@ async function robotsRules(
       }
       if (res.status >= 400 && res.status < 500) return []
       if (!res.ok) return 'none'
-      return parseRobots((await readCapped(res, ROBOTS_MAX_BYTES, 'cut', at.href)).body)
+      return parseRobots(
+        (await readCapped(res, ROBOTS_MAX_BYTES, 'cut', at.href)).bytes.toString('utf8')
+      )
     }
     return 'none'
   } catch (e) {
@@ -265,6 +267,8 @@ export interface SafeGetOptions {
   accept?: string
   timeoutMs?: number
   now?: () => number
+  /** Read any content type and return the raw bytes too (images). */
+  binary?: boolean
 }
 
 export interface SafeGetResult {
@@ -276,6 +280,8 @@ export interface SafeGetResult {
   /** The body as UTF-8; '' for a non-text type (not read). */
   body: string
   cut: boolean
+  /** The raw body, only with `binary`. */
+  bytes?: Buffer
 }
 
 const TEXTUAL = /^(text\/|application\/(json|xml|rss\+xml|atom\+xml|xhtml\+xml|feed\+json))/
@@ -315,16 +321,17 @@ export async function safeGet(raw: string, opts: SafeGetOptions = {}): Promise<S
       continue
     }
     const contentType = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase()
-    if (contentType && !TEXTUAL.test(contentType)) {
+    if (contentType && !TEXTUAL.test(contentType) && !opts.binary) {
       await res.body?.cancel().catch(() => {})
       return { url: url.toString(), status: res.status, contentType, body: '', cut: false }
     }
-    const { body, cut } = await readCapped(
+    const { bytes, cut } = await readCapped(
       res,
       opts.maxBytes ?? FETCH_MAX_BYTES,
       opts.overflow ?? 'cut',
       url.href
     )
-    return { url: url.toString(), status: res.status, contentType, body, cut }
+    const base = { url: url.toString(), status: res.status, contentType, cut }
+    return opts.binary ? { ...base, body: '', bytes } : { ...base, body: bytes.toString('utf8') }
   }
 }
