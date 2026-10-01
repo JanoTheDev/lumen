@@ -3,7 +3,7 @@
 // next to the destination (same volume) so the final move is a plain rename, and archives are
 // unpacked with the tar that ships with Windows, never one found on PATH.
 import { createHash } from 'crypto'
-import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync } from 'fs'
+import { createWriteStream, existsSync, mkdirSync, renameSync, rmSync, type WriteStream } from 'fs'
 import { request } from 'https'
 import { dirname, join } from 'path'
 import { spawn } from 'child_process'
@@ -74,6 +74,15 @@ function fetchTo(file: string, url: string, opts: DownloadOptions, hop: number):
       return reject(e)
     }
     if (opts.signal?.aborted) return reject(new Error('download cancelled'))
+    let out: WriteStream | null = null
+    // The .part file is removed right after this rejects: close its handle first (Windows
+    // cannot delete a file that is still open).
+    const fail = (e: Error): void => {
+      const o = out
+      if (!o || o.closed) return reject(e)
+      o.once('close', () => reject(e))
+      o.destroy()
+    }
     const req = request(target, { method: 'GET', signal: opts.signal }, (res) => {
       const status = res.statusCode ?? 0
       if (status >= 300 && status < 400 && res.headers.location) {
@@ -91,25 +100,24 @@ function fetchTo(file: string, url: string, opts: DownloadOptions, hop: number):
       }
       const total = Number(res.headers['content-length'] || 0)
       const hash = createHash('sha256')
-      const out = createWriteStream(file)
+      const stream = createWriteStream(file)
+      out = stream
       let bytes = 0
       res.on('data', (chunk: Buffer) => {
         bytes += chunk.length
         hash.update(chunk)
         opts.onProgress?.(bytes, total)
       })
-      res.on('error', reject)
-      res.on('aborted', () => reject(new Error('download interrupted')))
-      out.on('error', reject)
-      out.on('finish', () => out.close(() => resolve(hash.digest('hex'))))
-      res.pipe(out)
+      res.on('error', fail)
+      res.on('aborted', () => fail(new Error('download interrupted')))
+      stream.on('error', fail)
+      stream.on('finish', () => stream.close(() => resolve(hash.digest('hex'))))
+      res.pipe(stream)
     })
     req.setTimeout(opts.timeoutMs ?? IDLE_TIMEOUT_MS, () =>
       req.destroy(new Error('download timed out'))
     )
-    req.on('error', (e: Error) =>
-      reject(opts.signal?.aborted ? new Error('download cancelled') : e)
-    )
+    req.on('error', (e: Error) => fail(opts.signal?.aborted ? new Error('download cancelled') : e))
     req.end()
   })
 }
