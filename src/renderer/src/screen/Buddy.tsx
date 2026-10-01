@@ -192,6 +192,11 @@ class BuddyMotion {
   }
 
   hide(): void {
+    // A pending reduced-motion reappear would bring the buddy back after hiding.
+    if (this.reduceTimer) {
+      clearTimeout(this.reduceTimer)
+      this.reduceTimer = null
+    }
     this.phase = 'hidden'
     this.flight = null
     this.spring = null
