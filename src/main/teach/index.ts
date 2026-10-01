@@ -14,6 +14,7 @@ import { physRectToLogical, physToLogical, rectCenter } from '../actions/coords'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
 import { announce, wantFocusEvents } from '../a11y'
+import { LOCAL_HANDLED as HANDLED } from '../a11y/dispatch'
 import { decodeGray, diffRatio, type GrayImage } from '../ai/frames'
 import { verifyExpectation } from '../ai/verify'
 import { WHY_PROMPT, whyTurn } from '../ai/prompts/lesson'
@@ -45,9 +46,6 @@ import { lessonList, progressView } from './picker'
 import { PRACTICE_LESSON, PRACTICE_LESSON_ID } from './practice-lesson'
 import { makeShowMeHow } from './show-me'
 import { deleteUserLesson, freeLessonId, userLessonsDir, writeUserLesson } from './user-lessons'
-
-/** Same reply shape as 06's local grammar: handled, nothing for the renderer to show. */
-const HANDLED = { mode: 'answer', text: '', local: true, dictated: true } as const
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500

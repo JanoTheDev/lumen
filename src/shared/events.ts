@@ -59,25 +59,30 @@ export interface ScanScene {
   menu?: { title: string; items: string[]; index: number; at: Point }
 }
 
-/** Lesson navigation (07 T16): voice, keyboard and switch all map onto these. */
-export type LessonCommand =
-  | 'next'
-  | 'back'
-  | 'repeat'
-  | 'skip'
-  | 'stop'
-  | 'pause'
-  | 'resume'
-  | 'help'
-  | 'do-it'
-  | 'why'
-  | 'done'
-  | 'slower'
-  | 'faster'
-  | 'yes'
-  | 'no'
-  /** "click it" / "press it": Lumen performs the step's own click or keys (07 T21). */
-  | 'perform'
+/**
+ * Lesson navigation (07 T16): voice, keyboard and switch all map onto these. "perform" is
+ * "click it" / "press it": Lumen performs the step's own click or keys (07 T21).
+ */
+export const LESSON_COMMANDS = [
+  'next',
+  'back',
+  'repeat',
+  'skip',
+  'stop',
+  'pause',
+  'resume',
+  'help',
+  'do-it',
+  'why',
+  'done',
+  'slower',
+  'faster',
+  'yes',
+  'no',
+  'perform'
+] as const
+
+export type LessonCommand = (typeof LESSON_COMMANDS)[number]
 
 /** Summed cost of every model call made for one user turn. */
 export interface TurnCostSummary {

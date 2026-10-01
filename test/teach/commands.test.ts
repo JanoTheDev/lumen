@@ -9,7 +9,7 @@ import {
 } from '../../src/main/teach/commands'
 import { lessonContextLine } from '../../src/main/teach/context'
 import { lessonKeysAllowed, lessonUrlAllowed } from '../../src/main/teach/safety'
-import { LESSON_COMMANDS } from '../../src/main/teach/state'
+import { LESSON_COMMANDS } from '../../src/shared/events'
 
 describe('parseLessonCommand', () => {
   it.each([

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { LESSON_COMMANDS } from './events'
 
 // Payload validators for renderer → main channels. Anything that fails parsing is rejected
 // with E_INVALID before it reaches a handler.
@@ -15,24 +16,8 @@ export const lessonIdSchema = z
   .string()
   .max(100)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
-export const lessonCommandSchema = z.enum([
-  'next',
-  'back',
-  'repeat',
-  'skip',
-  'stop',
-  'pause',
-  'resume',
-  'help',
-  'do-it',
-  'why',
-  'done',
-  'slower',
-  'faster',
-  'yes',
-  'no',
-  'perform'
-])
+export const lessonCommandSchema = z.enum(LESSON_COMMANDS)
+
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()

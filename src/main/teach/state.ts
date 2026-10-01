@@ -25,25 +25,6 @@ export type Phase =
 
 export type { LessonCommand }
 
-export const LESSON_COMMANDS: readonly LessonCommand[] = [
-  'next',
-  'back',
-  'repeat',
-  'skip',
-  'stop',
-  'pause',
-  'resume',
-  'help',
-  'do-it',
-  'why',
-  'done',
-  'slower',
-  'faster',
-  'yes',
-  'no',
-  'perform'
-]
-
 export type LessonSource = 'pack' | 'user' | 'generated'
 
 export interface StepStats {
