@@ -49,6 +49,8 @@ export interface ConnectorsOptions {
 /** Settings + connections. One per app; tests make their own. */
 export class Connectors {
   private servers: ConnectorServer[]
+  /** The sign-in running per server (one at a time; an edit or remove aborts it). */
+  private signIns = new Map<string, AbortController>()
   readonly secrets: ConnectorSecrets
   readonly manager: McpManager
 
@@ -101,9 +103,11 @@ export class Connectors {
       const drop = Object.fromEntries((prev?.envNames ?? []).map((n) => [n, '']))
       this.secrets.set(r.server.id, input.bearer, drop)
     } else this.secrets.set(r.server.id, '', input.env)
-    // A sign-in belongs to one server address.
-    if (r.server.auth !== 'oauth' || (prev && prev.url !== r.server.url))
+    // A sign-in belongs to one server address; a new server never inherits one left behind.
+    if (!prev || r.server.auth !== 'oauth' || prev.url !== r.server.url) {
+      this.cancelSignIn(r.server.id)
       this.secrets.setOAuth(r.server.id, undefined)
+    }
     this.servers = prev
       ? this.servers.map((s) => (s.id === prev.id ? r.server : s))
       : [...this.servers, r.server]
@@ -114,6 +118,7 @@ export class Connectors {
 
   async remove(id: string): Promise<ConnectorResult> {
     if (!this.get(id)) return { ok: false, error: 'No connector with this id.' }
+    this.cancelSignIn(id)
     this.servers = this.servers.filter((s) => s.id !== id)
     this.save()
     this.secrets.remove(id)
@@ -133,10 +138,27 @@ export class Connectors {
   async signIn(id: string, deps: SignInDeps): Promise<ConnectorResult> {
     const s = this.get(id)
     if (!s || s.transport !== 'http') return { ok: false, error: 'Only web connectors sign in.' }
+    // A second click replaces the first sign-in (they would fight over the port and client).
+    this.cancelSignIn(id)
+    const ac = new AbortController()
+    this.signIns.set(id, ac)
+    const store = this.oauthStore(id)
+    // Nothing is written back once this sign-in was cancelled (edited, removed, replaced).
+    const guarded: OAuthStore = {
+      load: () => store.load(),
+      save: (next) => {
+        if (!ac.signal.aborted) store.save(next)
+      }
+    }
     try {
-      await signIn(s.url ?? '', this.oauthStore(id), deps)
+      await signIn(s.url ?? '', guarded, {
+        ...deps,
+        signal: deps.signal ? AbortSignal.any([deps.signal, ac.signal]) : ac.signal
+      })
+      const now = this.get(id)
+      if (ac.signal.aborted || !now || now.url !== s.url) throw new Error('Sign-in cancelled.')
       // From now on this server connects with its OAuth tokens.
-      if (s.auth !== 'oauth') {
+      if (now.auth !== 'oauth') {
         this.servers = this.servers.map((x) => (x.id === id ? { ...x, auth: 'oauth' as const } : x))
         this.save()
       }
@@ -147,11 +169,19 @@ export class Connectors {
       const msg = (e as Error).message.replace(/\s+/g, ' ').slice(0, 300)
       log('fail', `connector ${id}: sign-in failed: ${msg}`)
       return { ok: false, error: msg || 'The sign-in failed.' }
+    } finally {
+      if (this.signIns.get(id) === ac) this.signIns.delete(id)
     }
+  }
+
+  private cancelSignIn(id: string): void {
+    this.signIns.get(id)?.abort()
+    this.signIns.delete(id)
   }
 
   async signOut(id: string): Promise<ConnectorResult> {
     if (!this.get(id)) return { ok: false, error: 'No connector with this id.' }
+    this.cancelSignIn(id)
     this.secrets.setOAuth(id, undefined)
     await this.manager.disconnect(id)
     return { ok: true }

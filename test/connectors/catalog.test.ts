@@ -7,6 +7,7 @@ import { join } from 'path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CONNECTOR_CATALOG, catalogArgs, type CatalogEntry } from '@shared/connector-catalog'
 import { Connectors } from '../../src/main/connectors'
+import type { Loopback, LumenOAuthProvider } from '../../src/main/connectors/oauth'
 import { SERVER_ID_RE, applyInput, inputSchema, urlProblem } from '../../src/main/connectors/store'
 import { tempDir } from '../helpers/fixtures'
 
@@ -126,6 +127,40 @@ describe('OAuth connectors', () => {
     // Stored encrypted with the other secrets, not in connectors.json.
     expect(c.secrets.get('notion').oauth?.port).toBe(5000)
     expect(await c.signOut('notion')).toEqual({ ok: true })
+    expect(c.list()[0].signedIn).toBe(false)
+  })
+
+  it('a sign-in still open when the connector is removed or re-added leaves nothing behind', async () => {
+    const c = setup()
+    const input = {
+      id: 'late',
+      name: 'Late',
+      transport: 'http' as const,
+      url: 'https://a.example.com/mcp',
+      auth: 'oauth' as const
+    }
+    c.add(input)
+    let release = (): void => {}
+    const gateOpen = new Promise<void>((r) => (release = r))
+    const authFn = vi.fn(async (provider: LumenOAuthProvider) => {
+      await gateOpen
+      provider.saveClientInformation({ client_id: 'c' } as never)
+      provider.saveTokens({ access_token: 'x', token_type: 'Bearer' } as never)
+      return 'AUTHORIZED' as const
+    })
+    const listen = async (): Promise<Loopback> => ({
+      port: 4777,
+      wait: () => new Promise(() => {}),
+      close: () => {}
+    })
+    const pending = c.signIn('late', { open: vi.fn(), authFn: authFn as never, listen })
+    await vi.waitFor(() => expect(authFn).toHaveBeenCalled())
+    await c.remove('late')
+    release()
+    expect(await pending).toMatchObject({ ok: false })
+    expect(c.secrets.get('late').oauth).toBeUndefined()
+    // The same id added again starts signed out.
+    c.add(input)
     expect(c.list()[0].signedIn).toBe(false)
   })
 
