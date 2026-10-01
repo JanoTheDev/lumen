@@ -255,6 +255,43 @@ export function sessionForTask(taskId: string): string | null {
   return t?.claude && copilot?.get(t.claude.id) ? t.claude.id : null
 }
 
+// ---- dictation (04 T42) ----
+
+/** Folder of the session dictation would go to (the focused one). */
+export function focusedProject(): string | undefined {
+  return copilot?.focused()?.project
+}
+
+/** The known project whose folder name is in a window title ("x.ts - lumen - Visual Studio Code"). */
+export function projectForTitle(title: string): string | undefined {
+  const t = title.toLowerCase()
+  let best: ClaudeProject | undefined
+  for (const p of allProjects()) {
+    const name = basename(p.path).toLowerCase()
+    if (name.length < 3) continue
+    const at = t.indexOf(name)
+    if (
+      at < 0 ||
+      /[\p{L}\p{N}]/u.test(t[at - 1] ?? '') ||
+      /[\p{L}\p{N}]/u.test(t[at + name.length] ?? '')
+    )
+      continue
+    if (!best || name.length > basename(best.path).length) best = p
+  }
+  return best?.path
+}
+
+/** Dictated text to the focused session, the same way "tell Claude …" goes. */
+export function sendDictation(text: string): { ok: boolean; notice: string } {
+  const c = copilot
+  const f = c?.focused()
+  if (!c || !f)
+    return { ok: false, notice: 'No Claude session is open. Say “open <project> in Claude”.' }
+  if (f.pending?.kind === 'question') c.answerQuestion(f.id, text)
+  else c.send(f.id, text)
+  return { ok: true, notice: `Sent to Claude in ${f.projectName}.` }
+}
+
 /** Starts the hook endpoint and the copilot (no CLI process starts until a session opens). */
 export async function installClaudeCode(): Promise<void> {
   if (copilot) return
