@@ -1,5 +1,6 @@
 //! `capture` and `monitors` (plans CONTRACTS C2/C4) plus the full-res frame
-//! cache that `ocr` reuses (3 frames, 5 s).
+//! cache that `ocr` reuses (5 s; 3 frames, more while a larger multi-monitor
+//! capture is cached).
 
 #[cfg(windows)]
 pub mod dxgi;
@@ -35,28 +36,56 @@ pub struct Frame {
 }
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-static CACHE: Mutex<VecDeque<Arc<Frame>>> = Mutex::new(VecDeque::new());
+static CACHE: Mutex<Cache> = Mutex::new(Cache::new());
 
-fn prune(cache: &mut VecDeque<Arc<Frame>>) {
-    cache.retain(|f| f.t.elapsed() <= CACHE_TTL);
-    while cache.len() > CACHE_FRAMES {
-        cache.pop_front();
+/// Frames with the size of the capture batch each came from.
+struct Cache {
+    frames: VecDeque<(Arc<Frame>, usize)>,
+}
+
+impl Cache {
+    const fn new() -> Self {
+        Cache { frames: VecDeque::new() }
+    }
+
+    /// Drops expired frames, then the oldest beyond CACHE_FRAMES or the largest
+    /// batch still cached, so a multi-monitor capture never evicts its own frames.
+    fn prune(&mut self) {
+        self.frames.retain(|(f, _)| f.t.elapsed() <= CACHE_TTL);
+        loop {
+            let keep = self.frames.iter().map(|(_, b)| *b).max().unwrap_or(0).max(CACHE_FRAMES);
+            if self.frames.len() <= keep {
+                break;
+            }
+            self.frames.pop_front();
+        }
+    }
+
+    fn push(&mut self, f: Arc<Frame>, batch: usize) {
+        self.frames.push_back((f, batch));
+        self.prune();
+    }
+
+    fn get(&mut self, id: &str) -> Option<Arc<Frame>> {
+        self.prune();
+        self.frames.iter().find(|(f, _)| f.id == id).map(|(f, _)| f.clone())
     }
 }
 
 pub fn cache_frame(f: Frame) -> Arc<Frame> {
+    cache_batch_frame(f, 1)
+}
+
+/// Caches one frame of a `batch`-frame capture; every frame of the batch stays retrievable.
+pub fn cache_batch_frame(f: Frame, batch: usize) -> Arc<Frame> {
     let f = Arc::new(f);
-    let mut cache = CACHE.lock().unwrap();
-    cache.push_back(f.clone());
-    prune(&mut cache);
+    CACHE.lock().unwrap().push(f.clone(), batch);
     f
 }
 
 /// A cached full-res frame, or None once evicted/expired.
 pub fn get_frame(id: &str) -> Option<Arc<Frame>> {
-    let mut cache = CACHE.lock().unwrap();
-    prune(&mut cache);
-    cache.iter().find(|f| f.id == id).cloned()
+    CACHE.lock().unwrap().get(id)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -176,10 +205,12 @@ pub fn cmd_capture(args: &Args) -> CmdResult {
     };
     let (max_width, quality) = (max_width(args)?, quality(args)?);
     let mons = monitors::enumerate();
+    let targets = targets(&mons, &which, region)?;
+    let batch = targets.len();
     let mut frames = vec![];
-    for (mon, rect, is_region) in targets(&mons, &which, region)? {
+    for (mon, rect, is_region) in targets {
         let t0 = Instant::now();
-        let frame = cache_frame(grab_frame(&mon, rect)?);
+        let frame = cache_batch_frame(grab_frame(&mon, rect)?, batch);
         let t1 = Instant::now();
         let (data, w, h) = encode::encode(&frame.bgra, rect.w as u32, rect.h as u32, max_width, quality)?;
         tracing::debug!(
@@ -241,6 +272,35 @@ mod tests {
             targets(&mons, &Which::All, Some(Rect::new(-99999, -99999, 5, 5))).unwrap_err().code,
             "E_INVALID"
         );
+    }
+
+    fn frame(id: String) -> Arc<Frame> {
+        Arc::new(Frame {
+            id,
+            bgra: vec![],
+            rect: Rect::default(),
+            monitor: mon(0, 0, true),
+            via: "test",
+            t: Instant::now(),
+        })
+    }
+
+    #[test]
+    fn cache_keeps_a_whole_batch() {
+        let mut c = Cache::new();
+        let ids: Vec<String> = (0..5).map(|i| format!("b{i}")).collect();
+        for id in &ids {
+            c.push(frame(id.clone()), ids.len());
+        }
+        assert!(ids.iter().all(|id| c.get(id).is_some()));
+        c.push(frame("solo".into()), 1);
+        assert!(c.get("b0").is_none(), "only the oldest makes room");
+        assert!(ids[1..].iter().all(|id| c.get(id).is_some()));
+        for i in 0..5 {
+            c.push(frame(format!("s{i}")), 1);
+        }
+        assert_eq!(c.frames.len(), CACHE_FRAMES);
+        assert!(c.get("s4").is_some());
     }
 
     #[test]
