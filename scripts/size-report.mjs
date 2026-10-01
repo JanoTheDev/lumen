@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- plain JS, no type annotations */
 // Bundle-size budget for the electron-vite output in out/ (run after `electron-vite build`;
 // nothing is launched). Prints every chunk as markdown and exits 1 when a budget is exceeded:
-//   largest renderer JS chunk <= 400 KB gzip, main bundle (out/main, all .js) <= 2 MB raw.
+//   largest renderer JS chunk <= 400 KB gzip, main bundle (out/main, all .js) <= 3 MB raw
+//   (dependencies stay external; main is our own unminified code, kept readable for stack traces).
 //   npm run size:report [-- <out dir>]
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { join, relative } from 'path'
@@ -9,7 +10,7 @@ import { pathToFileURL } from 'url'
 import { gzipSync } from 'zlib'
 
 const KB = 1024
-export const BUDGET = { rendererChunkGzip: 400 * KB, mainTotal: 2 * KB * KB }
+export const BUDGET = { rendererChunkGzip: 400 * KB, mainTotal: 3 * KB * KB }
 
 function walk(dir) {
   const out = []

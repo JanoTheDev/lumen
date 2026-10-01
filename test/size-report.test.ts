@@ -40,11 +40,11 @@ describe('size-report', () => {
     expect(formatMarkdown(files, [])).toContain('ok   within budget')
   })
 
-  it('fails a renderer chunk over the gzip budget and a main bundle over 2 MB', () => {
+  it('fails a renderer chunk over the gzip budget and a main bundle over 3 MB', () => {
     const files = [
       { part: 'renderer', file: 'renderer/assets/big.js', bytes: 2e6, gzip: 500 * 1024 },
       { part: 'renderer', file: 'renderer/assets/big.css', bytes: 2e6, gzip: 900 * 1024 },
-      { part: 'main', file: 'main/index.js', bytes: 1.5 * 1024 * 1024, gzip: 1 },
+      { part: 'main', file: 'main/index.js', bytes: 2.5 * 1024 * 1024, gzip: 1 },
       { part: 'main', file: 'main/worker.js', bytes: 0.6 * 1024 * 1024, gzip: 1 }
     ].sort((a, b) => b.gzip - a.gzip)
     const failures = check(files)

@@ -141,7 +141,7 @@ Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/re
 Vitest in `test/` (`vitest.config.ts` sets the `@shared` alias). Rust unit tests in `native/` (`cargo test`); `native/conformance/` runs protocol tests against a built `lumen-native.exe`.
 
 - `npm run eval:grounding`: offline grounding eval (no model calls). Synthetic UIA/OCR fixtures in `eval/grounding/fixtures/`, cases in `eval/grounding/cases.jsonl`; strategies `mock`, `uia-text` and `auto` (the production `resolveTarget` on the case's `modelTarget`). Writes `eval/reports/<date>-<sha>.md` (gitignored). `test/eval/grounding.test.ts` runs it in `npm test`.
-- `npm run size:report` after `electron-vite build`: chunk sizes, fails over budget (largest renderer chunk 400 KB gzip, main bundle 2 MB). The CI build job runs it.
+- `npm run size:report` after `electron-vite build`: chunk sizes, fails over budget (largest renderer chunk 400 KB gzip, main bundle 3 MB). The CI build job runs it.
 - `it.fails` tests mark known gaps; each names the note in `plans/10-quality/tasks.md`.
 - No git hooks are installed. Optional local pre-commit: `npx prettier --check $(git diff --cached --name-only --diff-filter=ACM) && npx eslint $(git diff --cached --name-only --diff-filter=ACM -- '*.ts' '*.tsx')` in `.git/hooks/pre-commit`.
 
