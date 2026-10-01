@@ -17,7 +17,7 @@ import {
 import { PRESET_CARDS } from './presets'
 import { speak, stopSpeaking, useAutoScan, useDwellChoose } from './inputs'
 import { DoneStep, KeyStep, MemoryStep, ProfileStep, TryStep, VoiceStep } from './steps'
-import { NumbersStep, PointStep } from './practice'
+import { LessonStep, NumbersStep, PointStep } from './practice'
 
 const INTRO: Record<StepId, string> = {
   profile: 'How do you want to use your computer with Lumen?',
@@ -128,7 +128,10 @@ export function Onboarding(): JSX.Element {
       ? 'Finish'
       : step === 'key' && !keyReady
         ? 'Skip for now'
-        : (step === 'memory' && remember === null) || step === 'point' || step === 'numbers'
+        : (step === 'memory' && remember === null) ||
+            step === 'point' ||
+            step === 'numbers' ||
+            step === 'lesson'
           ? 'Skip'
           : 'Continue'
 
@@ -205,6 +208,8 @@ export function Onboarding(): JSX.Element {
             <PointStep cfg={cfg} />
           ) : step === 'numbers' ? (
             <NumbersStep cfg={cfg} patch={patch} />
+          ) : step === 'lesson' ? (
+            <LessonStep cfg={cfg} />
           ) : (
             <DoneStep cfg={cfg} changes={applied} />
           )}

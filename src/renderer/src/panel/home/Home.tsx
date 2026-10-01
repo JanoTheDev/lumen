@@ -1,6 +1,6 @@
 // Home flyout (tray): status, ask box, suggestions, recent questions and quick toggles.
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import type { HomeInfo } from '@shared/channels'
+import type { HomeInfo, LessonProgressView } from '@shared/channels'
 import { IconButton, Kbd, Switch, icons } from '../../ui'
 import { animateSpring } from '../../ui/motion'
 import { invoke, send, useIpc } from '../../lib/ipc'
@@ -18,6 +18,18 @@ function useHomeInfo(): [HomeInfo | null, () => void] {
   return [info, refresh]
 }
 
+/** The lesson to continue (07 T22); refreshed whenever Home opens. */
+function useLearning(): [LessonProgressView['active'], () => void] {
+  const [active, setActive] = useState<LessonProgressView['active']>(null)
+  const refresh = useCallback((): void => {
+    invoke('teach:progress')
+      .then((p) => setActive(p.active))
+      .catch(() => {})
+  }, [])
+  useEffect(refresh, [refresh])
+  return [active, refresh]
+}
+
 function run(text: string): void {
   const t = text.trim()
   if (t) send('home:run', t)
@@ -25,6 +37,7 @@ function run(text: string): void {
 
 export function Home(): JSX.Element {
   const [info, refresh] = useHomeInfo()
+  const [lesson, refreshLesson] = useLearning()
   const { cfg, patch } = useConfig()
   const [ask, setAsk] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
@@ -48,6 +61,7 @@ export function Home(): JSX.Element {
 
   useIpc('home:shown', () => {
     refresh()
+    refreshLesson()
     enter()
     setActive(0)
     cardRefs.current[0]?.focus()
@@ -142,6 +156,31 @@ export function Home(): JSX.Element {
           ))}
         </div>
       </section>
+
+      {lesson && (
+        <section className="home-section" aria-labelledby="home-learn">
+          <h2 id="home-learn" className="home-label">
+            Continue learning
+          </h2>
+          <button
+            type="button"
+            className="home-recent__item home-learn"
+            onClick={() => {
+              void invoke('teach:start', lesson.lessonId).catch(() => {})
+              send('panel:close')
+            }}
+          >
+            <icons.book />
+            <span className="home-learn__text">
+              <span className="home-learn__title">{lesson.title}</span>
+              <span className="home-learn__meta">
+                {lesson.appName} · {lesson.running ? 'now on' : 'stopped at'} step {lesson.step} of{' '}
+                {lesson.total}
+              </span>
+            </span>
+          </button>
+        </section>
+      )}
 
       {!!info?.recent.length && (
         <section className="home-section" aria-labelledby="home-recent">

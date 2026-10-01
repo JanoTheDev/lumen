@@ -15,11 +15,11 @@ export type StepId =
 export interface FlowFlags {
   /** Practice board: "watch me point" and "show numbers". */
   practice: boolean
-  /** Mini lesson on the practice board (needs the lesson engine). */
+  /** Mini lesson on the practice board (07 lesson engine). */
   lesson: boolean
 }
 
-export const FLOW_FLAGS: FlowFlags = { practice: true, lesson: false }
+export const FLOW_FLAGS: FlowFlags = { practice: true, lesson: true }
 
 export const STEP_TITLES: Record<StepId, string> = {
   profile: 'How you use your PC',

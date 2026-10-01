@@ -69,7 +69,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'lessons',
     label: 'Lessons',
     icon: icons.book,
-    keywords: 'lessons guides library saved replay learn'
+    keywords: 'lessons guides library saved replay learn teach tutorial show me how'
   },
   {
     id: 'privacy',

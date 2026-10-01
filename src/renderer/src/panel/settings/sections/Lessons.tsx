@@ -1,23 +1,46 @@
-import { useCallback, useEffect, useState } from 'react'
-import type { SavedGuide } from '@shared/types'
+// Lessons (07 T22): the lesson picker. Your own lessons (saved "show me how" lessons and old
+// saved guides) and every app's lessons, each playable; plus saving the last lesson.
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { LessonListItem } from '@shared/channels'
 import { Button, Card, IconButton, announce, icons } from '../../../ui'
 
+function play(l: LessonListItem): void {
+  window.lumen.invoke('teach:start', l.id).catch(() => {})
+  window.lumen.send('settings:window-minimize')
+}
+
+function meta(l: LessonListItem): string {
+  const steps = `${l.steps} ${l.steps === 1 ? 'step' : 'steps'}`
+  const done = l.completed ? ` · done ${l.completed}×` : ''
+  return `${l.level} · about ${l.minutes} min · ${steps}${done}`
+}
+
 export function Lessons(): JSX.Element {
-  const [guides, setGuides] = useState<SavedGuide[]>([])
+  const [lessons, setLessons] = useState<LessonListItem[]>([])
   const [name, setName] = useState('')
   const [msg, setMsg] = useState('')
 
   const refresh = useCallback(() => {
     window.lumen
-      .invoke('guides:list')
-      .then(setGuides)
+      .invoke('teach:list')
+      .then(setLessons)
       .catch(() => {})
   }, [])
   useEffect(refresh, [refresh])
 
+  const mine = lessons.filter((l) => l.source === 'user')
+  const byApp = useMemo(() => {
+    const groups = new Map<string, LessonListItem[]>()
+    for (const l of lessons) {
+      if (l.source !== 'pack') continue
+      groups.set(l.appName, [...(groups.get(l.appName) ?? []), l])
+    }
+    return [...groups.entries()]
+  }, [lessons])
+
   const save = async (): Promise<void> => {
-    const res = await window.lumen.invoke('guides:save-last', name.trim())
-    const text = 'error' in res ? res.error : `Saved “${res.name}”`
+    const res = await window.lumen.invoke('teach:save-last', name.trim())
+    const text = 'error' in res ? res.error : `Saved “${res.title}”`
     setMsg(text)
     announce(text, 'error' in res ? 'assertive' : 'polite')
     if (!('error' in res)) {
@@ -29,66 +52,58 @@ export function Lessons(): JSX.Element {
   return (
     <>
       <Card
-        title="Save the last guide"
-        description="After Lumen walks you through something, save it to replay later. You can also say “save guide as” and a name."
+        title="Save the last lesson"
+        description="Ask “show me how …” and Lumen makes a lesson on the spot. Save it here to play it again, or say “save this lesson”."
       >
         <div className="panel-row panel-row--end">
           <div className="ui-field">
-            <label htmlFor="guide-name" className="ui-field__label">
+            <label htmlFor="lesson-name" className="ui-field__label">
               Name
             </label>
             <input
-              id="guide-name"
+              id="lesson-name"
               className="ui-input"
               value={name}
-              placeholder="Compose in Gmail"
+              placeholder="Change display scaling"
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') save()
+                if (e.key === 'Enter') void save()
               }}
             />
           </div>
           <Button variant="primary" onClick={save}>
-            Save guide
+            Save lesson
           </Button>
         </div>
         {msg && <p className="ui-hint">{msg}</p>}
       </Card>
 
       <Card
-        title="Saved guides"
+        title="Your lessons"
         description={
-          guides.length
-            ? `${guides.length} saved. Say “play guide” and a name to run one.`
+          mine.length
+            ? `${mine.length} saved, including your old saved guides. Say “start lesson” and a name to play one.`
             : 'Nothing saved yet.'
         }
       >
-        {guides.length > 0 && (
+        {mine.length > 0 && (
           <ul className="panel-list">
-            {guides.map((g) => (
-              <li key={g.id} className="panel-list__item">
+            {mine.map((l) => (
+              <li key={l.id} className="panel-list__item">
                 <div className="panel-list__text">
-                  <span className="panel-list__title">{g.name}</span>
+                  <span className="panel-list__title">{l.title}</span>
                   <span className="ui-hint">
-                    {g.steps.length} {g.steps.length === 1 ? 'step' : 'steps'} ·{' '}
-                    {new Date(g.createdAt).toLocaleDateString()}
+                    {l.appName} · {meta(l)}
                   </span>
                 </div>
-                <IconButton
-                  icon={icons.play}
-                  label={`Play ${g.name}`}
-                  onClick={() => {
-                    window.lumen.invoke('guides:replay', g.id).catch(() => {})
-                    window.lumen.send('settings:window-minimize')
-                  }}
-                />
+                <IconButton icon={icons.play} label={`Play ${l.title}`} onClick={() => play(l)} />
                 <IconButton
                   icon={icons.trash}
-                  label={`Delete ${g.name}`}
+                  label={`Delete ${l.title}`}
                   variant="danger"
                   onClick={async () => {
-                    await window.lumen.invoke('guides:delete', g.id)
-                    announce(`Deleted ${g.name}`)
+                    await window.lumen.invoke('teach:delete', l.id)
+                    announce(`Deleted ${l.title}`)
                     refresh()
                   }}
                 />
@@ -96,6 +111,30 @@ export function Lessons(): JSX.Element {
             ))}
           </ul>
         )}
+      </Card>
+
+      <Card
+        title="Lessons by app"
+        description="Step-by-step lessons that watch what you do. Say “teach me” and an app name to hear its list."
+      >
+        {byApp.map(([app, list]) => (
+          <details key={app} className="panel-details">
+            <summary>
+              {app} ({list.length})
+            </summary>
+            <ul className="panel-list">
+              {list.map((l) => (
+                <li key={l.id} className="panel-list__item">
+                  <div className="panel-list__text">
+                    <span className="panel-list__title">{l.title}</span>
+                    <span className="ui-hint">{meta(l)}</span>
+                  </div>
+                  <IconButton icon={icons.play} label={`Play ${l.title}`} onClick={() => play(l)} />
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
       </Card>
     </>
   )
