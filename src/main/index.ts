@@ -63,6 +63,7 @@ import { registerAgentIpc } from './ipc/agent'
 import { flushOnQuit, startMemory } from './ai/memory/runtime'
 import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
+import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
 import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
@@ -184,6 +185,7 @@ app.whenReady().then(() => {
   installLessonOutput()
   installTeach()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
+  installLiveFeedback(announce)
   warmTts()
   prepareStt()
   // A conversation left open when the app last closed is summarized now (memory on only).

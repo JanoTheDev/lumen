@@ -8,6 +8,8 @@ import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { getAgent } from '../agent/instance'
 import { screenReaderActive } from '../a11y/at-state'
+import { reportError } from '../a11y/live-feedback'
+import { openEditor, submitEdit } from '../a11y/transcript'
 import * as assistant from '../windows/assistant'
 import * as layer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
@@ -16,10 +18,22 @@ import * as hud from '../windows/hud'
 
 const commandSchema = z
   .object({
-    type: z.enum(['repeat', 'pin', 'close', 'copy', 'cancel', 'confirm', 'deny', 'unmute']),
+    type: z.enum([
+      'repeat',
+      'pin',
+      'close',
+      'copy',
+      'cancel',
+      'confirm',
+      'deny',
+      'unmute',
+      'edit',
+      'edit-cancel'
+    ]),
     turnId: z.string().max(64).optional()
   })
   .strict()
+const errorSchema = z.string().trim().min(1).max(500)
 const sizeSchema = z.object({
   w: z.number().finite().min(0).max(10_000),
   h: z.number().finite().min(0).max(10_000)
@@ -62,11 +76,19 @@ export function registerUiIpc(deps: UiIpcDeps): void {
   getAgent()?.onEvent('agent-ready', () => (agentReady = true))
   getAgent()?.onEvent('agent-down', () => (agentReady = false))
   bus.on('query.started', (e) => remember(e.prompt))
-  assistant.setCommandDeps({ cancel: deps.cancel })
+  assistant.setCommandDeps({ cancel: deps.cancel, edit: openEditor })
 
   ipcMain.on('assistant:command', (_e, raw: unknown) => {
     const cmd = safeParse('assistant:command', commandSchema, raw)
     if (cmd) assistant.command(cmd)
+  })
+  ipcMain.on('assistant:error', (_e, raw: unknown) => {
+    const message = safeParse('assistant:error', errorSchema, raw)
+    if (message) reportError(message)
+  })
+  ipcMain.on('assistant:correct', (_e, raw: unknown) => {
+    const text = safeParse('assistant:correct', promptSchema, raw)
+    if (text) submitEdit(text)
   })
   ipcMain.on('assistant:resize', (_e, raw: unknown) => {
     const size = safeParse('assistant:resize', sizeSchema, raw)

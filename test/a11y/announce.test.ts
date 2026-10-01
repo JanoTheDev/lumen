@@ -47,7 +47,7 @@ describe('announce routing matrix', () => {
     expect(sr).toHaveBeenCalledTimes(via === 'sr' ? 1 : 0)
     // No double speech: TTS never runs alongside a screen reader that took the text.
     expect(speak).toHaveBeenCalledTimes(via === 'tts' ? 1 : 0)
-    expect(publish).toHaveBeenCalledWith('Opening Gmail', 'polite', via)
+    expect(publish).toHaveBeenCalledWith('Opening Gmail', 'polite', via, 'status')
   })
 
   it('falls back to TTS when the screen reader did not take the text', async () => {
@@ -71,6 +71,37 @@ describe('announce routing matrix', () => {
     a.announce('Done')
     await flush()
     expect(speak).not.toHaveBeenCalled()
+  })
+
+  it('tells the bar when nobody spoke it after all', async () => {
+    const unspoken = vi.fn()
+    const { a, speak } = setup({
+      screenReaderActive: () => true,
+      sendToScreenReader: async () => false,
+      unspoken
+    })
+    a.announce('Scrolled down', { kind: 'command' })
+    await flush()
+    expect(speak).not.toHaveBeenCalled()
+    expect(unspoken).toHaveBeenCalledWith('Scrolled down', 'polite', 'command')
+  })
+
+  it('phase changes go to a screen reader but never to TTS', async () => {
+    const { a, speak, publish } = setup({ ttsOn: () => true })
+    expect(a.announce('Thinking', { kind: 'phase' }).via).toBe('none')
+    expect(speak).not.toHaveBeenCalled()
+    expect(publish).toHaveBeenCalledWith('Thinking', 'polite', 'none', 'phase')
+    const unspoken = vi.fn()
+    const b = setup({
+      ttsOn: () => true,
+      screenReaderActive: () => true,
+      sendToScreenReader: async () => false,
+      unspoken
+    })
+    expect(b.a.announce('Thinking', { kind: 'phase' }).via).toBe('sr')
+    await flush()
+    expect(b.speak).not.toHaveBeenCalled()
+    expect(unspoken).toHaveBeenCalledOnce()
   })
 
   it('errors default to assertive', () => {

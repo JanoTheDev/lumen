@@ -5,14 +5,20 @@
 // and the bar animates inside it, because window bounds changes are not smooth on Windows.
 // The empty area is click-through: the renderer turns mouse capture on while the pointer is
 // over the card (`assistant:interactive`).
+//
+// Accessibility (06 T11): phase changes, steps, errors and confirms are announced here, once,
+// through the announce policy (screen reader, TTS or shown only). Announcements nobody voiced
+// are shown as a feedback line and announced by the bar's own live region.
 import { clipboard, screen, type BrowserWindow, type Rectangle } from 'electron'
 import type { AssistantCommand, AssistantView, EventChannel, EventChannels } from '@shared/channels'
-import type { AssistantPhase } from '@shared/events'
+import type { AppEvent, AssistantPhase } from '@shared/events'
 import { createWindow, loadRenderer } from './factory'
 import { currentZoom, live, registerWindow, sendTo } from './registry'
 import { bus } from '../bus'
 import { loadConfig } from '../config'
 import { PausableTimer, answerAutoCloseMs, captionHoldMs } from '../a11y/timings'
+import { screenReaderActive } from '../a11y/at-state'
+import type { AnnounceOptions } from '../a11y/announce'
 
 /** Bar max width (40rem) plus room for the shadow, in CSS px before zoom. */
 const BAR_WIDTH_CSS = 640 + 48
@@ -36,6 +42,8 @@ let hideTimer: ReturnType<typeof setTimeout> | null = null
 // Pauses while the pointer (or a dwell) is on the card; "longer" extends it.
 const statusTimer = new PausableTimer()
 const captionTimer = new PausableTimer()
+const liveTimer = new PausableTimer()
+let liveSeq = 0
 /** "Longer" multiplier for the answer auto-close; back to 1 on every new turn. */
 let closeFactor = 1
 let inFlight: string | null = null
@@ -82,8 +90,34 @@ function patch(next: Partial<AssistantView>): void {
   emit()
 }
 
+/** Captions on (deaf / hard of hearing): "I heard" keeps the bar open until dismissed. */
+function captionsKept(): boolean {
+  return !!view.caption && loadConfig().a11y.captions && captionHoldMs(loadConfig()) === 0
+}
+
 function hasContent(): boolean {
-  return !!(view.answer || view.confirm || view.notice)
+  return !!(view.answer || view.confirm || view.notice || view.captionEdit || captionsKept())
+}
+
+/** Nothing left to show and nothing running: the bar may close. */
+function idleNow(): boolean {
+  return !hasContent() && !statusTimer.running && !liveTimer.running && !inFlight
+}
+
+type Say = (text: string, opts: AnnounceOptions) => void
+let say: Say = () => {}
+
+/** The announce policy (a11y/index); set once at startup. */
+export function setAnnouncer(fn: Say): void {
+  say = fn
+}
+
+/** Which status lines are announced, and as what. Listening is not: the mic is open. */
+const STATUS_ANNOUNCE: Partial<Record<StatusKind, AnnounceOptions['kind']>> = {
+  thinking: 'phase',
+  acting: 'phase',
+  step: 'step',
+  error: 'error'
 }
 
 /** Bottom-centre of the work area of the display under the cursor. */
@@ -118,6 +152,7 @@ function reveal(): void {
 export function close(): void {
   statusTimer.clear()
   captionTimer.clear()
+  liveTimer.clear()
   closeFactor = 1
   if (pendingConfirm) resolveConfirm(false)
   view = empty()
@@ -134,8 +169,16 @@ export function close(): void {
 export function open(phase: AssistantPhase = view.phase): void {
   statusTimer.clear()
   captionTimer.clear()
+  liveTimer.clear()
   closeFactor = 1
-  view = { ...empty(), phase }
+  // A confirm still waiting (the user is about to say yes or no) and an open caption editor
+  // (spelling by voice) survive the new recording.
+  view = {
+    ...empty(),
+    phase,
+    confirm: pendingConfirm ? view.confirm : undefined,
+    captionEdit: view.captionEdit
+  }
   patch({})
 }
 
@@ -159,13 +202,20 @@ export function status(
 ): void {
   statusTimer.clear()
   const phase = kind === 'step' && inFlight ? 'acting' : PHASE[kind]
+  const announceAs = STATUS_ANNOUNCE[kind]
+  // "Error: x" after query.failed already announced x.
+  const known = kind === 'error' && !!view.error?.message && text.includes(view.error.message)
   patch({
     phase,
     statusText: text,
     step: kind === 'step' && step ? { ...step, label: text } : view.step,
-    error: kind === 'error' ? { message: text } : view.error
+    error:
+      kind === 'error'
+        ? { message: text, announced: known ? view.error?.announced : undefined }
+        : view.error
   })
   if (autoHideMs && autoHideMs > 0) statusTimer.start(autoHideMs, settle)
+  if (announceAs && !known) say(text, { kind: announceAs })
 }
 
 /** The status line is done: keep showing content, else close. */
@@ -178,7 +228,8 @@ export function settle(): void {
 
 /** The voice/query turn finished in the renderer (old `assistant:close`). */
 export function turnEnded(): void {
-  if (statusTimer.running || view.confirm || view.answer) return
+  if (statusTimer.running || liveTimer.running || view.confirm || view.answer) return
+  if (view.captionEdit || captionsKept()) return
   close()
 }
 
@@ -210,13 +261,30 @@ export function requestConfirm(
   return new Promise<boolean>((resolve) => {
     pendingConfirm = { actionId, gatesExecute, resolve }
     patch({ phase: 'confirm', confirm: { actionId, ...c } })
+    say(`Needs OK. ${c.summary}. Say yes or stop.`, { kind: 'confirm', priority: 'assertive' })
+    // Screen reader users answer with the keyboard: focus moves into the confirm.
+    if (screenReaderActive()) focusBar()
   })
+}
+
+/** A confirm is waiting for yes or no. */
+export function confirmPending(): boolean {
+  return !!pendingConfirm
+}
+
+/** Says no to a waiting confirm without cancelling anything (a new request replaced it). */
+export function dropConfirm(): void {
+  if (!pendingConfirm) return
+  resolveConfirm(false)
+  if (view.visible) patch({})
 }
 
 function resolveConfirm(ok: boolean): void {
   const p = pendingConfirm
   if (!p) return
   pendingConfirm = null
+  // The action that follows goes to the user's window, not to the bar.
+  releaseFocus()
   if (!ok && p.gatesExecute) deniedExecute = true
   view = { ...view, confirm: undefined, phase: ok ? 'acting' : 'idle' }
   p.resolve(ok)
@@ -246,8 +314,10 @@ export function copyText(text: string): void {
 
 export interface CommandDeps {
   cancel: () => void
-  /** Speaks the answer again; without it Repeat only re-shows it. */
+  /** Speaks the answer again; without it Repeat goes through the announce policy. */
   speak?: (text: string) => void
+  /** Opens (true) or closes the caption editor (T14 "correct that"). */
+  edit?: (open: boolean) => void
 }
 
 let unmuteHandler: () => void = () => {}
@@ -272,13 +342,23 @@ export function command(cmd: AssistantCommand): void {
       if (view.answer) patch({ answer: { ...view.answer, pinned: !view.answer.pinned } })
       break
     case 'copy':
-      if (view.answer?.markdown) clipboard.writeText(view.answer.markdown)
+      if (view.answer?.markdown) {
+        clipboard.writeText(view.answer.markdown)
+        say('Copied', { kind: 'command' })
+      }
       break
     case 'repeat':
       if (view.answer) {
-        deps.speak?.(view.answer.markdown)
+        if (deps.speak) deps.speak(view.answer.markdown)
+        else say(plainText(view.answer.markdown), { kind: 'answer' })
         patch({})
       }
+      break
+    case 'edit':
+      deps.edit?.(true)
+      break
+    case 'edit-cancel':
+      deps.edit?.(false)
       break
     case 'unmute':
       unmuteHandler()
@@ -295,6 +375,90 @@ export function command(cmd: AssistantCommand): void {
       else close()
       break
   }
+}
+
+/** Markdown to a line a screen reader can read. */
+export function plainText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_`#>~|]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// ---- T14 caption ("I heard: …") ----
+
+/** Shows what was heard; it stays until the next utterance unless captionHoldMs is set. */
+export function setCaption(text: string): void {
+  captionTimer.clear()
+  patch({ caption: text })
+  const hold = captionHoldMs(loadConfig())
+  if (hold > 0)
+    captionTimer.start(hold, () => {
+      if (!view.visible || !view.caption) return
+      patch({ caption: undefined })
+      if (idleNow()) close()
+    })
+}
+
+/** Opens, updates or (undefined) closes the caption editor. */
+export function setCaptionEdit(edit: AssistantView['captionEdit']): void {
+  if (!edit && !view.captionEdit) return
+  patch({ captionEdit: edit })
+  if (edit) {
+    focusBar()
+    return
+  }
+  releaseFocus()
+  if (idleNow()) close()
+}
+
+// ---- T11 feedback line ----
+
+/** Kinds that already have their own row, so they never become a feedback line. */
+const OWN_ROW = new Set(['error', 'confirm', 'phase'])
+
+/**
+ * An announcement (a11y.announce). It becomes the feedback line when nobody voiced it or the
+ * user wants captions of what Lumen says; an error marks the error row as announced.
+ */
+export function onAnnounce(e: Extract<AppEvent, { type: 'a11y.announce' }>): void {
+  const audible = e.via !== undefined && e.via !== 'none'
+  const kind = e.kind ?? 'status'
+  if (kind === 'error' && view.error && view.visible) {
+    if (!!view.error.announced !== audible) patch({ error: { ...view.error, announced: audible } })
+    return
+  }
+  const cfg = loadConfig()
+  if (OWN_ROW.has(kind) || (audible && !cfg.a11y.captions)) return
+  // Switch scanning moves every second or two; its highlight is on screen already.
+  if (kind === 'scan' && !cfg.a11y.captions) return
+  if (kind === 'answer' && view.answer) return
+  // The same line again: the screen reader declined it, so the bar announces it now.
+  if (view.live && view.live.text === e.text && view.visible) {
+    if (view.live.audible && !audible) patch({ live: { ...view.live, audible: false } })
+    return
+  }
+  liveTimer.clear()
+  const status = view.statusText?.replace(/…$/, '')
+  patch({
+    live: {
+      id: ++liveSeq,
+      text: e.text,
+      kind,
+      assertive: e.priority === 'assertive',
+      audible,
+      echo: status === e.text.replace(/…$/, '') || undefined
+    }
+  })
+  liveTimer.start(cfg.a11y.timings.statusHoldMs, clearLive)
+}
+
+function clearLive(): void {
+  if (!view.visible || !view.live) return
+  patch({ live: undefined })
+  if (idleNow() && view.phase === 'idle') close()
 }
 
 export function setCard(size: { w: number; h: number }): void {
@@ -324,7 +488,7 @@ export function answerShown(): boolean {
 
 /** Dwell / hover on the card pauses timed dismissal (renderer pauses its own countdowns). */
 export function holdTimers(reason: string, on: boolean): void {
-  for (const t of [statusTimer, captionTimer]) {
+  for (const t of [statusTimer, captionTimer, liveTimer]) {
     if (on) t.pause(reason)
     else t.resume(reason)
   }
@@ -355,6 +519,14 @@ export function focusBar(): boolean {
     w.setIgnoreMouseEvents(true, { forward: true })
   })
   return true
+}
+
+/** Gives keyboard focus back (to the window below) when the bar has it. */
+export function releaseFocus(): void {
+  const w = get()
+  if (!w || !w.isFocused()) return
+  w.blur()
+  w.setFocusable(false)
 }
 
 /** Screen rect of the visible card, for dwell suppression. */
@@ -392,15 +564,9 @@ bus.on('query.started', (e) => {
   inFlight = e.turnId
   // A deny belongs to the turn it was given in; never skip a later turn's execute.
   deniedExecute = false
-  if (!view.visible) return
-  if (view.caption) return
-  patch({ caption: e.prompt })
-  // captionHoldMs 0 = the caption stays until the next utterance.
-  const hold = captionHoldMs(loadConfig())
-  if (hold > 0)
-    captionTimer.start(hold, () => {
-      if (view.visible && view.caption) patch({ caption: undefined })
-    })
+  // The query IPC captions what was heard; this covers turns started elsewhere.
+  if (!view.visible || view.caption) return
+  setCaption(e.prompt)
 })
 bus.on('query.delta', (e) => {
   if (!view.visible) return
@@ -434,6 +600,7 @@ bus.on('query.failed', (e) => {
   if (inFlight === e.turnId) inFlight = null
   if (e.cancelled) return
   patch({ phase: 'error', error: { message: e.error } })
+  say(e.error, { kind: 'error' })
 })
 bus.on('query.cancelled', (e) => {
   if (inFlight === e.turnId) inFlight = null

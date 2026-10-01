@@ -70,7 +70,10 @@ function createAnnouncer(): Announcer {
       return r.spoken
     },
     speak: (text) => void speakAnswer(text).catch(() => {}),
-    publish: (text, priority) => bus.emit({ type: 'a11y.announce', text, priority })
+    publish: (text, priority, via, kind) =>
+      bus.emit({ type: 'a11y.announce', text, priority, via, kind }),
+    unspoken: (text, priority, kind) =>
+      bus.emit({ type: 'a11y.announce', text, priority, via: 'none', kind })
   })
 }
 

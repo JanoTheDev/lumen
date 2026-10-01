@@ -20,6 +20,7 @@ import { setStatus } from '../windows/status'
 import * as assistant from '../windows/assistant'
 import { uiV2 } from '../windows/ui-mode'
 import { confirmCountdownMs } from '../a11y/timings'
+import { beforeUtterance, confirmActions, explainBeforeDo } from '../a11y/transcript'
 
 const CANCELLED = { mode: 'answer', text: 'Cancelled.', cancelled: true } as const
 
@@ -42,9 +43,16 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
   })
 
   ipcMain.handle('assistant:query', async (_event, rawPrompt: unknown, rawOpts: unknown) => {
-    const prompt = safeParse('assistant:query', promptSchema, rawPrompt)
+    const heard = safeParse('assistant:query', promptSchema, rawPrompt)
     const opts: CallOptions = safeParse('assistant:query', queryOptsSchema, rawOpts) ?? {}
-    if (prompt === undefined) return INVALID
+    if (heard === undefined) return INVALID
+    // The user's own words (follow-ups are lowDetail): caption, confirm answers, corrections.
+    let prompt = heard
+    if (!opts.lowDetail) {
+      const u = beforeUtterance(heard)
+      if ('handled' in u) return u.handled
+      prompt = u.prompt
+    }
 
     const intercepted = deps.intercept(prompt)
     if (intercepted !== undefined) return intercepted
@@ -90,16 +98,10 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       const conf = (confidence ?? 'high') as 'high' | 'medium' | 'low'
       if (uiV2() && cfg.explainBeforeDo) {
         // The bar asks with a countdown; Stop skips the execute that follows.
-        await assistant.requestConfirm(
-          {
-            summary: summary.trim(),
-            risk: conf === 'low' ? 'medium' : 'low',
-            countdownMs: confirmCountdownMs(
-              cfg,
-              conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000
-            )
-          },
-          { gatesExecute: true }
+        await explainBeforeDo(
+          summary.trim(),
+          conf === 'low' ? 'medium' : 'low',
+          confirmCountdownMs(cfg, conf === 'low' ? 4000 : conf === 'medium' ? 3000 : 2000)
         )
         return { delayMs: 0 }
       }
@@ -126,6 +128,8 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       log('skip', 'execute skipped: the user stopped it')
       return { done: false, cancelled: true }
     }
+    // a11y.confirmTranscript: always / risky batches wait for an explicit yes.
+    if (!(await confirmActions(actions))) return { done: false, cancelled: true }
     const scope = beginScope()
     armEscape()
     const execTimer = startTimer(`execute-action [${actions.map((a) => a.type).join(', ')}]`)

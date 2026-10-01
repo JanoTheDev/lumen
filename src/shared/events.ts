@@ -24,7 +24,21 @@ export interface AssistantState {
     risk: 'low' | 'medium' | 'high'
     countdownMs?: number
   }
-  error?: { message: string; hint?: string }
+  error?: { message: string; hint?: string; announced?: boolean }
+  /**
+   * A short feedback line (voice command result, focus, lesson line) for users who get no
+   * speech. `audible`: the screen reader or TTS already said it; `echo`: same as statusText.
+   */
+  live?: {
+    id: number
+    text: string
+    kind: string
+    assertive: boolean
+    audible: boolean
+    echo?: boolean
+  }
+  /** The caption is open for a correction ("correct that" / "spell that" / Edit). */
+  captionEdit?: { mode: 'edit' | 'spell'; draft: string }
   /** A short notice with an optional action button (muted output → Unmute). */
   notice?: { text: string; action?: 'unmute' }
   model?: string
@@ -135,7 +149,15 @@ export type AppEvent =
   | { type: 'lesson.command'; command: LessonCommand }
   /** Passive "Resume Blender: Add an object, step 3?" at startup. */
   | { type: 'lesson.resume-offer'; lessonId: string; text: string }
-  | { type: 'a11y.announce'; text: string; priority: 'polite' | 'assertive' }
+  | {
+      type: 'a11y.announce'
+      text: string
+      priority: 'polite' | 'assertive'
+      /** answer, status, step, error, confirm, focus, command, scan, phase (a11y/announce). */
+      kind?: string
+      /** Who voiced it: the screen reader, Lumen's TTS, or nobody (shown only). */
+      via?: 'sr' | 'tts' | 'none'
+    }
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
 

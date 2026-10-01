@@ -128,6 +128,10 @@ export interface SendChannels {
   /** The user talked over a spoken answer (playback already stopped): start listening. */
   'voice:barge-in': []
   'assistant:command': [cmd: AssistantCommand]
+  /** A voice error in the renderer (microphone, transcription): shown in the bar's error row. */
+  'assistant:error': [message: string]
+  /** The corrected caption text: replaces the last utterance and runs it. */
+  'assistant:correct': [text: string]
   /** Card size in CSS px, for dwell suppression over the bar. */
   'assistant:resize': [size: { w: number; h: number }]
   /** Pointer is over the card: stop forwarding clicks through the window. */
@@ -280,7 +284,18 @@ export interface BridgeStatus {
 }
 
 export type AssistantCommand = {
-  type: 'repeat' | 'pin' | 'close' | 'copy' | 'cancel' | 'confirm' | 'deny' | 'unmute'
+  type:
+    | 'repeat'
+    | 'pin'
+    | 'close'
+    | 'copy'
+    | 'cancel'
+    | 'confirm'
+    | 'deny'
+    | 'unmute'
+    /** Open / close the caption for a correction. */
+    | 'edit'
+    | 'edit-cancel'
   turnId?: string
 }
 
@@ -625,6 +640,8 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'voice:wake-pcm',
   'voice:barge-in',
   'assistant:command',
+  'assistant:error',
+  'assistant:correct',
   'assistant:resize',
   'assistant:interactive',
   'screen:user-drawing',
