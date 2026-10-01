@@ -46,7 +46,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'Accessibility',
     icon: icons.accessibility,
     keywords:
-      'scale size text zoom motion animation contrast timings auto-close dwell click narrate confidence switch scanning shortcuts keyboard'
+      'scale size text zoom motion animation contrast timings auto-close dwell click narrate confidence switch scanning shortcuts keyboard captions deaf hearing screen reader announce i heard confirm focus'
   },
   {
     id: 'look',

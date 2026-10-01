@@ -21,6 +21,7 @@ describe('settings search', () => {
   it('matches labels and keywords, all words required', () => {
     expect(filterSections('wake').map((s) => s.id)).toEqual(['voice'])
     expect(filterSections('dwell click').map((s) => s.id)).toEqual(['accessibility'])
+    expect(filterSections('captions').map((s) => s.id)).toEqual(['accessibility'])
     expect(filterSections('').length).toBeGreaterThan(5)
     expect(filterSections('zzz')).toEqual([])
   })

@@ -10,6 +10,7 @@ import { getAgent } from '../agent/instance'
 import { screenReaderActive } from '../a11y/at-state'
 import { reportError } from '../a11y/live-feedback'
 import { openEditor, submitEdit } from '../a11y/transcript'
+import { announce } from '../a11y'
 import * as assistant from '../windows/assistant'
 import * as layer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
@@ -50,6 +51,7 @@ const drawingSchema = z.object({
 })
 const routeSchema = z.string().regex(/^(settings(\/[a-z-]{1,32})?|onboarding|home)$/)
 
+const TRY_ANNOUNCE = 'This is how Lumen tells you what it is doing.'
 const RECENT_MAX = 5
 const recent: string[] = []
 
@@ -107,6 +109,9 @@ export function registerUiIpc(deps: UiIpcDeps): void {
     deps.onUserDrawing?.({ points, rect: { ...d.rect, x: o.x, y: o.y } })
   })
   ipcMain.on('screen:capture-end', () => layer.setCapture(false))
+  ipcMain.on('a11y:try', (_e, raw: unknown) => {
+    if (raw === 'announce') announce(TRY_ANNOUNCE, { kind: 'status', priority: 'assertive' })
+  })
 
   ipcMain.on('panel:open', (_e, raw: unknown) => {
     const route = safeParse('panel:open', routeSchema, raw)

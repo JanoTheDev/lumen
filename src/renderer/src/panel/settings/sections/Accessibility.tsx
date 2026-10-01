@@ -36,6 +36,17 @@ function useShortcuts(cfg: SectionProps['cfg']): ShortcutStatus[] {
   return list
 }
 
+const ANNOUNCE = [
+  { value: 'auto', label: 'On' },
+  { value: 'off', label: 'Off' }
+] as const
+
+const CONFIRM_TRANSCRIPT = [
+  { value: 'always', label: 'Always' },
+  { value: 'risky', label: 'Only for risky actions' },
+  { value: 'off', label: 'Never' }
+] as const
+
 const TRISTATE = [
   { value: 'system', label: 'Match Windows' },
   { value: 'on', label: 'On' },
@@ -48,6 +59,9 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
   const switchKeys = sw.keys.join(',')
   const keyChoice = SWITCH_KEYS.some((k) => k.value === switchKeys) ? switchKeys : 'Space'
   const shortcuts = useShortcuts(cfg)
+  // Timings are patched as a whole object (saveConfig merges one level deep).
+  const patchTimings = (next: Partial<typeof cfg.a11y.timings>): Promise<boolean> =>
+    patch({ a11y: { timings: { ...cfg.a11y.timings, ...next } } })
   return (
     <>
       <Card
@@ -85,11 +99,55 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           options={TRISTATE}
           onChange={(contrast) => patch({ a11y: { contrast } })}
         />
+        <Switch
+          checked={cfg.a11y.focusNarration}
+          onChange={(focusNarration) => patch({ a11y: { focusNarration } })}
+          label="Read out what has focus"
+          hint="Says the name of whatever the keyboard lands on. Off while a screen reader runs."
+        />
+      </Card>
+
+      <Card title="Hearing" description="See what Lumen hears and says, not only hear it.">
+        <Switch
+          checked={cfg.a11y.captions}
+          onChange={(captions) => patch({ a11y: { captions } })}
+          label="Show captions"
+          hint="Everything Lumen says out loud also shows as text in the bar."
+        />
+        <NumberField
+          label="Keep “I heard” on screen"
+          value={Math.round(cfg.a11y.timings.captionHoldMs / 1000)}
+          min={0}
+          max={600}
+          unit="s"
+          hint="0 keeps it until you speak again or close it."
+          onCommit={(s) => patchTimings({ captionHoldMs: s * 1000 })}
+        />
+        <SegmentedControl
+          label="Spoken updates"
+          value={cfg.a11y.announce}
+          options={ANNOUNCE}
+          onChange={(announce) => patch({ a11y: { announce } })}
+          hint="Lumen tells your screen reader, or says it out loud, what it is doing."
+        />
+        <div className="panel-row">
+          <Button onClick={() => window.lumen.send('a11y:try', 'announce')}>Try it</Button>
+        </div>
+      </Card>
+
+      <Card title="Speaking" description="When Lumen checks it heard you right.">
+        <SegmentedControl
+          label="Check what I said before acting"
+          value={cfg.a11y.confirmTranscript}
+          options={CONFIRM_TRANSCRIPT}
+          onChange={(confirmTranscript) => patch({ a11y: { confirmTranscript } })}
+          hint="Lumen shows “I heard: …” and waits for “yes”. Say “no, I said …” to fix it."
+        />
       </Card>
 
       <Card
-        title="Understanding"
-        description="Help when learning or when you want to stay in control."
+        title="Thinking and focus"
+        description="More time, fewer surprises, and Lumen explains itself."
       >
         <Switch
           checked={cfg.explainBeforeDo}
@@ -103,31 +161,34 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
           label="Say when Lumen isn’t sure"
           hint="Gives you time to say “stop”."
         />
-      </Card>
-
-      <Card title="Timings" description="How long things stay on screen.">
         <NumberField
-          label="Answer card"
-          value={cfg.answerAutoCloseMs}
-          min={2000}
-          max={120000}
-          step={1000}
-          unit="ms"
-          onCommit={(answerAutoCloseMs) => patch({ answerAutoCloseMs })}
+          label="Keep status lines on screen"
+          value={Math.round(cfg.a11y.timings.statusHoldMs / 1000)}
+          min={4}
+          max={600}
+          unit="s"
+          hint="The shortest time a line like “Step 2 of 5” stays."
+          onCommit={(s) => patchTimings({ statusHoldMs: s * 1000 })}
         />
         <NumberField
-          label="Listening pill"
-          value={cfg.hudAutoCloseMs}
-          min={1000}
-          max={30000}
-          step={500}
-          unit="ms"
-          onCommit={(hudAutoCloseMs) => patch({ hudAutoCloseMs })}
+          label="Keep answers on screen"
+          value={Math.round(cfg.answerAutoCloseMs / 1000)}
+          min={2}
+          max={120}
+          unit="s"
+          hint="Pin an answer to keep it open for as long as you like."
+          onCommit={(s) => patch({ answerAutoCloseMs: s * 1000 })}
+        />
+        <Switch
+          checked={cfg.a11y.timings.confirmCountdownMs === 0}
+          onChange={(wait) => patchTimings({ confirmCountdownMs: wait ? 0 : undefined })}
+          label="Wait for me before acting"
+          hint="Lumen never acts on its own after a countdown; it waits for “yes”."
         />
       </Card>
 
       <Card
-        title="Dwell click"
+        title="Moving: dwell click"
         description="Click by holding the pointer still. For people who can move a pointer but find clicking hard."
       >
         <Switch
@@ -157,7 +218,7 @@ export function Accessibility({ cfg, patch }: SectionProps): JSX.Element {
       </Card>
 
       <Card
-        title="Switch scanning"
+        title="Moving: switch scanning"
         description="Lumen moves through choices and you press your switch to pick one. Your switch key stops typing in other apps while this is on."
       >
         <Switch

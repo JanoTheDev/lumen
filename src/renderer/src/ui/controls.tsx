@@ -461,6 +461,7 @@ export interface SegmentedControlProps<T extends string> {
   onChange: (v: T) => void
   /** Hide the group label visually (it stays the accessible name). */
   hideLabel?: boolean
+  hint?: ReactNode
 }
 
 export function SegmentedControl<T extends string>({
@@ -468,7 +469,8 @@ export function SegmentedControl<T extends string>({
   value,
   options,
   onChange,
-  hideLabel
+  hideLabel,
+  hint
 }: SegmentedControlProps<T>): JSX.Element {
   const id = useId()
   const refs = useRef<Array<HTMLButtonElement | null>>([])
@@ -482,7 +484,12 @@ export function SegmentedControl<T extends string>({
       <span id={`${id}-label`} className={hideLabel ? 'visually-hidden' : 'ui-field__label'}>
         {label}
       </span>
-      <div role="radiogroup" aria-labelledby={`${id}-label`} className="ui-seg">
+      <div
+        role="radiogroup"
+        aria-labelledby={`${id}-label`}
+        aria-describedby={hint ? `${id}-hint` : undefined}
+        className="ui-seg"
+      >
         {options.map((o, i) => {
           const selected = o.value === value
           return (
@@ -519,6 +526,11 @@ export function SegmentedControl<T extends string>({
           )
         })}
       </div>
+      {hint && (
+        <span id={`${id}-hint`} className="ui-hint">
+          {hint}
+        </span>
+      )}
     </div>
   )
 }

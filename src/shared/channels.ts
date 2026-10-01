@@ -162,6 +162,8 @@ export interface SendChannels {
   'a11y:dwell-pick': [pick: DwellPaletteButton | 'keyboard']
   /** Scan keyboard key clicked or dwelled on (ScanKeyboardKey id). */
   'a11y:keyboard-key': [id: string]
+  /** Settings "Try it": a sample announcement through the user's announce settings. */
+  'a11y:try': [what: 'announce']
 }
 
 /**
@@ -730,7 +732,8 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'memory:open-folder',
   'a11y:sheet-close',
   'a11y:dwell-pick',
-  'a11y:keyboard-key'
+  'a11y:keyboard-key',
+  'a11y:try'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
