@@ -171,6 +171,24 @@ function choose(
   return { rect: ordered[0], confidence: conf.ambiguous, notes: [`${ordered.length} matches`] }
 }
 
+/** Rows of a list or table: their names hold several fields (sender, subject, time, preview). */
+const ROW_ROLES = new Set(['listitem', 'dataitem', 'treeitem'])
+
+/**
+ * The one interactive element the text names loosely, or null: a name with a shortcut hint
+ * ("Send (Ctrl-Enter)" for "Send"), or a list row containing the words ("Lumen Billing" in an
+ * inbox row). Two or more candidates is no match: the caller falls back to OCR.
+ */
+function looseNameMatch(uia: UiaSnapshotResult, q: string): ElementNode | null {
+  const hits = [...elementIndex(uia).values()].filter((n) => {
+    if (!isInteractive(n) || n.rect.w <= 0 || n.rect.h <= 0 || !n.name) return false
+    const bare = normText(n.name.replace(/\s*\([^()]*\)\s*$/, ''))
+    if (bare === q) return true
+    return ROW_ROLES.has(n.role) && ` ${normText(n.name)} `.includes(` ${q} `)
+  })
+  return hits.length === 1 ? hits[0] : null
+}
+
 async function resolveText(
   t: Extract<Target, { kind: 'text' }>,
   ctx: GroundingContext
@@ -195,16 +213,22 @@ async function resolveText(
           }))
     )
     const ordered = sortReading(named, (n) => n.rect)
+    const loose = ordered.length ? null : looseNameMatch(ctx.uia, q)
     const node: ElementNode | undefined =
       t.nth !== undefined && t.nth !== 0
         ? pickNth(ordered, t.nth)
         : ordered.length === 1
           ? ordered[0]
-          : undefined
+          : (loose ?? undefined)
     if (node) {
       const hit: Hit = {
         rect: node.rect,
-        confidence: ordered.length === 1 ? CONFIDENCE.textUnique : CONFIDENCE.textNth,
+        confidence:
+          node === loose
+            ? CONFIDENCE.textFuzzy
+            : ordered.length === 1
+              ? CONFIDENCE.textUnique
+              : CONFIDENCE.textNth,
         elementId: node.id,
         monitorId: node.monitorId
       }
