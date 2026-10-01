@@ -6,7 +6,13 @@ import { CARD_ACTIONS, CARDS_ID_RE } from '@shared/cards'
 import { announce } from '../a11y'
 import { executeActions } from '../actions/executor'
 import { onSessionEnd } from '../ai/memory/runtime'
-import { cardAction, cardsView, endCardsConversation, setCardsPorts } from '../cards'
+import {
+  cardAction,
+  endCardsConversation,
+  installCardsDisk,
+  loadCardsView,
+  setCardsPorts
+} from '../cards'
 import { installBooking } from '../cards/book-install'
 import { noteSaver } from '../web/notes'
 import * as assistant from '../windows/assistant'
@@ -46,12 +52,13 @@ export function registerCardsIpc(): void {
     runQuery: (text) => assistant.send('assistant:run-query', text),
     say: (text) => announce(text, { kind: 'command' })
   })
+  installCardsDisk()
   onSessionEnd(() => endCardsConversation())
   installBooking()
 
-  ipcMain.handle('cards:get', (_e, raw: unknown) => {
+  ipcMain.handle('cards:get', async (_e, raw: unknown) => {
     const id = safeParse('cards:get', idSchema, raw)
-    return id === undefined ? null : cardsView(id)
+    return id === undefined ? null : loadCardsView(id)
   })
   ipcMain.handle('cards:action', async (_e, raw: unknown) => {
     const req = safeParse('cards:action', actionSchema, raw)

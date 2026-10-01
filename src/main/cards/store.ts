@@ -1,7 +1,31 @@
 // Card sets shown in this conversation (05 T37). The newest 10 stay readable by id for the
 // panel's #/answer/<id>; follow-ups ("the second one", T40) see only the current conversation.
-// Remote image refs stay here; views carry resolved data URLs only. Pure.
+// Remote image refs stay here; views carry resolved data URLs only. Pure; an optional disk port
+// (cards/persist) keeps the newest sets across restarts.
 import type { AnswerCards, CardImage, CardView, CardsView } from '@shared/cards'
+
+/** What is kept on disk: the set without its resolved pictures (refs only). */
+export interface CardsSnapshot {
+  id: string
+  text: string
+  cards: AnswerCards
+  createdAt: number
+  request?: string
+}
+
+/** Disk port: save is fire-and-forget; load reads one saved set (validated) or null. */
+export interface CardsDisk {
+  save(snap: CardsSnapshot): void
+  load(id: string): Promise<CardsSnapshot | null>
+}
+
+export const snapshotOf = (set: StoredCards): CardsSnapshot => ({
+  id: set.id,
+  text: set.text,
+  cards: set.cards,
+  createdAt: set.createdAt,
+  ...(set.request ? { request: set.request } : {})
+})
 
 export const KEEP_SETS = 10
 
@@ -21,7 +45,49 @@ export class CardsStore {
   private conversation: string[] = []
   private seq = 0
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private disk: CardsDisk | null = null
+  ) {}
+
+  setDisk(disk: CardsDisk | null): void {
+    this.disk = disk
+  }
+
+  /** Saves the set again (pictures or summaries were found). */
+  persist(id: string): void {
+    const set = this.sets.get(id)
+    if (set) this.disk?.save(snapshotOf(set))
+  }
+
+  /**
+   * The set by id, from memory or else from disk (a background task's results after a
+   * restart). A set read from disk is kept by id only (no follow-ups); its pictures are
+   * pending until the caller resolves them again.
+   */
+  async load(id: string): Promise<{ set: StoredCards; fromDisk: boolean } | null> {
+    const hit = this.sets.get(id)
+    if (hit) return { set: hit, fromDisk: false }
+    const snap = this.disk ? await this.disk.load(id).catch(() => null) : null
+    if (!snap || snap.id !== id) return null
+    const again = this.sets.get(id)
+    if (again) return { set: again, fromDisk: false }
+    const images = new Map<string, CardImage | null | 'pending'>()
+    for (const c of snap.cards.cards) images.set(c.id, c.image ? 'pending' : null)
+    const set: StoredCards = { ...snap, images }
+    this.sets.set(id, set)
+    this.trim()
+    return { set, fromDisk: true }
+  }
+
+  private trim(): void {
+    while (this.sets.size > KEEP_SETS) {
+      const oldest = this.sets.keys().next().value
+      if (oldest === undefined) break
+      this.sets.delete(oldest)
+      this.conversation = this.conversation.filter((id) => id !== oldest)
+    }
+  }
 
   private newId(): string {
     const stamp = this.now().toString(36)
@@ -43,12 +109,8 @@ export class CardsStore {
     if (opts.request) set.request = opts.request
     this.sets.set(set.id, set)
     if (opts.conversation !== false) this.conversation.push(set.id)
-    while (this.sets.size > KEEP_SETS) {
-      const oldest = this.sets.keys().next().value
-      if (oldest === undefined) break
-      this.sets.delete(oldest)
-      this.conversation = this.conversation.filter((id) => id !== oldest)
-    }
+    this.trim()
+    this.disk?.save(snapshotOf(set))
     return set
   }
 

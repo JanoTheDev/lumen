@@ -6,8 +6,9 @@ import { bus } from '../bus'
 import { log } from '../logger'
 import { cardImages, type CardImages } from './images'
 import { rememberAnswer } from './answer-link'
+import { CardsFiles } from './persist'
 import { validateCards } from './schema'
-import { CardsStore, type StoredCards } from './store'
+import { CardsStore, type CardsDisk, type StoredCards } from './store'
 
 export { validateCards } from './schema'
 export { cardsForAnswer } from './answer-link'
@@ -93,6 +94,24 @@ export function cardsView(id: string): CardsView | null {
   return store.view(id)
 }
 
+/** Keeps card sets in ~/.ai-overlay/cards/ (newest 30, not in private mode). */
+export function installCardsDisk(disk: CardsDisk | null = new CardsFiles()): void {
+  store.setDisk(disk)
+}
+
+/** A card set from memory, else from disk; pictures of a reopened set load again. */
+export async function loadCards(id: string): Promise<StoredCards | null> {
+  const r = await store.load(id)
+  if (!r) return null
+  if (r.fromDisk) void loadImages(r.set)
+  return r.set
+}
+
+/** `cards:get`: the view of a set, reopening a saved one after a restart. */
+export async function loadCardsView(id: string): Promise<CardsView | null> {
+  return (await loadCards(id)) ? store.view(id) : null
+}
+
 /** The newest card set of this conversation, for follow-ups ("the second one", T40). */
 export function currentCards(): StoredCards | null {
   return store.latest()
@@ -121,7 +140,7 @@ const ORDINALS = [
 ]
 
 export async function cardAction(req: CardActionRequest): Promise<CardActionResult> {
-  const set = store.get(req.id)
+  const set = store.get(req.id) ?? (await loadCards(req.id))
   if (!set) return { ok: false, message: 'Those results are gone. Ask again to see them.' }
   if (!ports) return { ok: false, message: 'Not ready yet.' }
   if (req.action === 'show-all' || req.action === 'compare') {

@@ -1,4 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, readdirSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 vi.mock('../../src/main/windows/assistant', () => ({ showAnswer: vi.fn(), send: vi.fn() }))
@@ -12,12 +15,22 @@ vi.mock('../../src/main/actions/executor', () => ({
 vi.mock('../../src/main/ai/memory/runtime', () => ({ onSessionEnd: vi.fn() }))
 
 import { invokeHandler } from '../helpers/electron-mock'
+import { setConfigDir } from '../../src/main/config'
 import { presentCards } from '../../src/main/cards'
 import { registerCardsIpc } from '../../src/main/ipc/cards'
 import * as settingsWin from '../../src/main/windows/settings'
 import { hotelCards } from './fixture'
 
-beforeAll(() => registerCardsIpc())
+// registerCardsIpc keeps card sets on disk: point it at a temp folder.
+const home = mkdtempSync(join(tmpdir(), 'lumen-cards-ipc-'))
+beforeAll(() => {
+  setConfigDir(home)
+  registerCardsIpc()
+})
+afterAll(() => {
+  setConfigDir(null)
+  rmSync(home, { recursive: true, force: true })
+})
 
 describe('cards IPC', () => {
   it('refuses bad ids and actions', async () => {
@@ -38,5 +51,6 @@ describe('cards IPC', () => {
     expect(view.cards).toHaveLength(3)
     await invokeHandler('cards:action', { id: r.id, cardId: 'h2', action: 'compare' })
     expect(settingsWin.create).toHaveBeenCalledWith(`answer/${r.id}/table`)
+    await vi.waitFor(() => expect(readdirSync(join(home, 'cards'))).toContain(`${r.id}.json`))
   })
 })
