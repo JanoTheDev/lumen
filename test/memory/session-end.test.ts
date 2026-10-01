@@ -14,7 +14,10 @@ const SUMMARY: SessionSummary = {
     openThreads: ['try chamfer'],
     refs: [
       { kind: 'url', value: 'https://docs.blender.org' },
-      { kind: 'file', value: 'key sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123' }
+      {
+        kind: 'file',
+        value: `key ${['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz0123'].join('-')}`
+      }
     ]
   },
   facts: [

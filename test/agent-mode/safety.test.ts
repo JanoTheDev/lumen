@@ -203,7 +203,7 @@ describe('evaluate: terminal detection', () => {
 describe('evaluate: typing', () => {
   it('a secret in typed text is medium with the masked value', () => {
     const d = evaluate(
-      { type: 'type', text: `key ${'sk-ant-'}abcdef0123456789` },
+      { type: 'type', text: `key ${['sk', 'ant', 'abcdef0123456789'].join('-')}` },
       { ...agent, activeWindow: { title: 'Notepad' } }
     )
     expect(d.risk).toBe('medium')

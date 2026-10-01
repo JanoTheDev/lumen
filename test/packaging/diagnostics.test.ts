@@ -18,8 +18,8 @@ describe('diagnostics', () => {
 
   it('redacts API-key-shaped strings', () => {
     const text = [
-      'key sk-ant-api03-abcdefghijklmnopqrstuvwxyz',
-      'openai sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ012345',
+      'key ' + ['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz'].join('-'),
+      'openai ' + ['sk', 'proj', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ012345'].join('-'),
       'Authorization: Bearer abcdefghijklmnopqrstuvwxyz',
       '{"apiKey":"abcdef0123456789"}'
     ].join('\n')
@@ -46,7 +46,10 @@ describe('diagnostics', () => {
       hotkey: 'Ctrl+Shift+Space',
       wakeWord: { enabled: true, phrase: 'hey lumen' },
       dictation: { dictionary: ['Jano', 'Lumen'] },
-      models: { provider: 'auto', note: 'sk-ant-api03-abcdefghijklmnopqrstuv' },
+      models: {
+        provider: 'auto',
+        note: ['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuv'].join('-')
+      },
       legacy: { apiKey: 'abc123456789', a11y: { shortcuts: { repeat: 'Ctrl+Shift+F3' } } }
     }
     const out = JSON.stringify(redactConfig(cfg))

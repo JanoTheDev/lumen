@@ -8,12 +8,16 @@ import { format } from 'util'
 import { log } from '../src/main/logger'
 import { redact as redactFile } from '../src/main/diagnostics/log-file'
 
-const ANTHROPIC = 'sk-ant-api03-Zx9_abcDEF0123456789ghiJKLmnopQRSTuvwxYZ-AA'
-const OPENAI = 'sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789'
-const OPENAI_OLD = 'sk-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd'
+// Built from pieces so no committed literal looks like a real key to secret scanners.
+const ANTHROPIC = ['sk', 'ant', 'api03', 'Zx9_abcDEF0123456789ghiJKLmnopQRSTuvwxYZ', 'AA'].join('-')
+const OPENAI = ['sk', 'proj', 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789'].join('-')
+const OPENAI_OLD = ['sk', 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcd'].join('-')
 const BEARER = 'abcdefghijklmnopqrstuvwxyz012345'
-const JWT =
-  'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
+const JWT = [
+  'eyJhbGciOiJIUzI1NiJ9',
+  'eyJzdWIiOiIxMjM0NTY3ODkwIn0',
+  'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
+].join('.')
 const SECRETS = [ANTHROPIC, OPENAI, OPENAI_OLD, BEARER, JWT]
 
 /** Lines shaped like real log output that happen to carry a secret. */

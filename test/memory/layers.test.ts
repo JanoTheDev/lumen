@@ -104,7 +104,8 @@ describe('session layer', () => {
 
   it('redacts secrets and password-field text before keeping a turn', () => {
     h = harness()
-    h.mem.session.add({ utterance: 'type sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123 here' })
+    const key = ['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz0123'].join('-')
+    h.mem.session.add({ utterance: `type ${key} here` })
     h.mem.session.add({ utterance: 'Tr0ub4dor&3', sensitive: true })
     const disk = readFileSync(join(h.dir, 'sessions/current.jsonl'), 'utf8')
     expect(disk).not.toContain('sk-ant')

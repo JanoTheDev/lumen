@@ -7,11 +7,15 @@ import {
 } from '../../src/main/actions/redact'
 
 // Built from pieces so the fixtures do not look like real keys to secret scanners.
-const KEY = `${'sk-'}proj-AbCdEfGhIjKlMnOpQrSt`
-const AWS = `${'AKIA'}IOSFODNN7EXAMPLE`
-const GH = `${'ghp_'}${'a1B2'.repeat(9)}`
-const SLACK = `${'xox'}b-123456789012-abcdefghij`
-const JWT = `${'eyJ'}hbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U`
+const KEY = ['sk', 'proj', 'AbCdEfGhIjKlMnOpQrSt'].join('-')
+const AWS = ['AKIA', 'IOSFODNN7EXAMPLE'].join('')
+const GH = ['ghp', 'a1B2'.repeat(9)].join('_')
+const SLACK = ['xoxb', '123456789012', 'abcdefghij'].join('-')
+const JWT = [
+  'eyJhbGciOiJIUzI1NiJ9',
+  'eyJzdWIiOiIxMjM0NTY3ODkwIn0',
+  'dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U'
+].join('.')
 const PEM = `-----BEGIN ${'RSA PRIVATE'} KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----`
 const CARD = '4242 4242 4242 4242'
 const IBAN = 'DE89 3704 0044 0532 0130 00'

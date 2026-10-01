@@ -9,10 +9,13 @@ import {
 
 describe('sensitive filter', () => {
   it.each([
-    ['my key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345', 'api-key'],
-    ['use sk-proj-ABCDEFGHIJKLMNOPQRSTUVWX1234', 'api-key'],
-    ['AKIAIOSFODNN7EXAMPLE', 'api-key'],
-    ['token ghp_abcdefghijklmnopqrstuvwxyz0123456789', 'api-key'],
+    [
+      'my key is ' + ['sk', 'ant', 'api03', 'abcdefghijklmnopqrstuvwxyz012345'].join('-'),
+      'api-key'
+    ],
+    ['use ' + ['sk', 'proj', 'ABCDEFGHIJKLMNOPQRSTUVWX1234'].join('-'), 'api-key'],
+    [['AKIA', 'IOSFODNN7EXAMPLE'].join(''), 'api-key'],
+    ['token ' + ['ghp', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('_'), 'api-key'],
     ['api key = 9f8e7d6c5b4a39281706f5e4d3c2b1a0', 'api-key'],
     ['card 4111 1111 1111 1111 expires soon', 'card'],
     ['5500-0000-0000-0004', 'card'],
@@ -23,7 +26,10 @@ describe('sensitive filter', () => {
     ['the verification code is 482913', 'one-time-code'],
     ['ssn 123-45-6789', 'government-id'],
     ['passport number is X1234567', 'government-id'],
-    ['-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----', 'private-key']
+    [
+      `-----BEGIN ${'RSA PRIVATE'} KEY-----\nMIIabc\n-----END ${'RSA PRIVATE'} KEY-----`,
+      'private-key'
+    ]
   ])('flags %s', (text, kind) => {
     expect(findSensitive(text).map((h) => h.kind)).toContain(kind)
   })
