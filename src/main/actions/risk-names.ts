@@ -20,6 +20,17 @@ const HIGH_RISK_NAMES = [
   'check out',
   'confirm payment',
   'delete',
+  'delete forever',
+  'permanently delete',
+  'move to trash',
+  'discard',
+  'discard draft',
+  'report spam',
+  'report junk',
+  'report phishing',
+  'block sender',
+  'empty folder',
+  'empty trash',
   'remove',
   'erase',
   'empty recycle bin',
@@ -39,8 +50,10 @@ const HIGH_RISK_NAMES = [
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 // Whole words only ("Sender" or "Signal" are not "Send" / "Sign"); spaces match any gap.
+// Longest first, so "Discard draft" is reported as that rather than as "discard".
+const BY_LENGTH = [...HIGH_RISK_NAMES].sort((a, b) => b.length - a.length)
 const NAME_RE = new RegExp(
-  `(?:^|[^\\p{L}\\p{N}])(${HIGH_RISK_NAMES.map((n) => escape(n).replace(/ /g, '[\\s_-]+')).join('|')})(?=$|[^\\p{L}\\p{N}])`,
+  `(?:^|[^\\p{L}\\p{N}])(${BY_LENGTH.map((n) => escape(n).replace(/ /g, '[\\s_-]+')).join('|')})(?=$|[^\\p{L}\\p{N}])`,
   'iu'
 )
 

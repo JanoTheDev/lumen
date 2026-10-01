@@ -311,6 +311,52 @@ export function isMessaging(w: WindowInfo | undefined): boolean {
   return MESSAGING_PROCESSES.has(lower(w.process)) || MESSAGING_TITLE_RE.test(w.title ?? '')
 }
 
+const MAIL_PROCESSES = new Set(['outlook.exe', 'olk.exe', 'thunderbird.exe', 'mailspring.exe'])
+const MAIL_TITLE_RE = /\b(gmail|outlook|inbox|compose|new message|untitled message)\b/i
+
+/** An email app or webmail tab: Gmail, new or classic Outlook, Outlook on the web, Thunderbird. */
+export function isMail(w: WindowInfo | undefined): boolean {
+  if (!w) return false
+  return MAIL_PROCESSES.has(lower(w.process)) || MAIL_TITLE_RE.test(w.title ?? '')
+}
+
+/** To / Cc / Bcc boxes: Gmail "To recipients", Outlook "To", "Cc", "Bcc". */
+const RECIPIENT_FIELD_RE = /^(to|cc|bcc)\b|\brecipients?\b/i
+/** Fields where Enter does not send: recipients, subject, search. */
+const NON_SEND_FIELD_RE = /^(to|cc|bcc)\b|\brecipients?\b|\bsubject\b|\bsearch\b/i
+
+export function isRecipientField(name: string | undefined): boolean {
+  return !!name && RECIPIENT_FIELD_RE.test(name.trim())
+}
+
+/** The focused element takes text (an edit box or a document), so a key edits rather than acts. */
+function focusTakesText(w: WindowInfo | undefined): boolean {
+  if (!w) return false
+  if (/^(edit|document|combobox|text)$/i.test(w.focusRole ?? '')) return true
+  return /edit|textarea|richedit/i.test(w.className ?? '')
+}
+
+function focusIsButton(w: WindowInfo | undefined): boolean {
+  return /button|menuitem|hyperlink|^link$/i.test(w?.focusRole ?? '')
+}
+
+/** Message-list keys that delete, or report spam (Gmail "#" and "!", Outlook Del / Ctrl+D). */
+const MAIL_DELETE_COMBOS = new Set(['del', 'shift+del', 'ctrl+d', '#', 'shift+3'])
+const MAIL_SPAM_COMBOS = new Set(['!', 'shift+1'])
+/** Classic Outlook sends with Alt+S (Ctrl+Enter is caught for every messaging app). */
+const MAIL_SEND_COMBOS = new Set(['alt+s'])
+
+/** The user's own words name this text (the address, or the name typed for autocomplete). */
+function userNamed(text: string, userText: string | undefined): boolean {
+  const t = text.trim().toLowerCase()
+  if (!t || !userText) return false
+  const said = userText.toLowerCase()
+  return t
+    .split(/[;,]\s*/)
+    .filter(Boolean)
+    .every((part) => said.includes(part.trim()))
+}
+
 function isExplorer(w: WindowInfo | undefined): boolean {
   return lower(w?.process) === 'explorer.exe' || /\bfile explorer\b/i.test(w?.title ?? '')
 }
@@ -561,8 +607,37 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
     out.push({ risk: 'high', reason: 'deletes files' })
     return
   }
+  const sendRisk: Risk = ctx.allowSendWithoutReview ? 'medium' : 'high'
+  // Enter or Space on a focused Send / Delete / Pay button presses it (list rows are left out:
+  // their names hold arbitrary subject text).
+  const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
+  const focusWord = pressed ? riskyName(w?.focusName) : null
+  if (focusWord) {
+    const send = SEND_NAMES.has(focusWord)
+    out.push({ risk: send ? sendRisk : 'high', reason: `presses “${focusWord}”` })
+    return
+  }
+  if (isMail(w)) {
+    if (MAIL_SEND_COMBOS.has(combo)) {
+      out.push({ risk: sendRisk, reason: 'sends the email' })
+      return
+    }
+    if (!focusTakesText(w) && MAIL_DELETE_COMBOS.has(combo)) {
+      out.push({ risk: 'high', reason: 'deletes the email' })
+      return
+    }
+    if (!focusTakesText(w) && MAIL_SPAM_COMBOS.has(combo)) {
+      out.push({ risk: 'high', reason: 'reports the email as spam' })
+      return
+    }
+  }
   const afterType = ctx.prevType === 'type'
-  if (isMessaging(w) && (combo === 'ctrl+enter' || (combo === 'enter' && afterType))) {
+  // Enter in a To, Subject or search box picks a suggestion or searches; it does not send.
+  const fieldEnter = combo === 'enter' && NON_SEND_FIELD_RE.test(w?.focusName?.trim() ?? '')
+  if (
+    isMessaging(w) &&
+    (combo === 'ctrl+enter' || (combo === 'enter' && afterType && !fieldEnter))
+  ) {
     out.push({ risk: ctx.allowSendWithoutReview ? 'medium' : 'high', reason: 'sends the message' })
     return
   }
@@ -579,7 +654,8 @@ function typeFindings(
   ctx: PolicyCtx,
   out: Finding[],
   redactions: string[],
-  password = false
+  password = false,
+  fieldName?: string
 ): void {
   const w = ctx.activeWindow
   if (w?.isPassword || password) {
@@ -607,6 +683,7 @@ function typeFindings(
     }
     if (w?.focusKnown === false)
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
+    if (isMail(w)) mailTypeFindings(text, fieldName ?? w?.focusName, ctx, out)
   }
   const secrets = findSecrets(text)
   if (secrets.length) {
@@ -615,6 +692,34 @@ function typeFindings(
     out.push({ risk: 'medium', reason: `types a secret (${masked.join(', ')})` })
   }
   if (text.length > 200) out.push({ risk: 'medium', reason: `types ${text.length} characters` })
+}
+
+/**
+ * Agent typing in an email app: a recipient always shows on the confirm card (high when the user
+ * never said it, so a guessed address cannot slip in), and a lone "#" or "!" typed into the
+ * message list is Gmail's delete / spam shortcut.
+ */
+function mailTypeFindings(
+  text: string,
+  field: string | undefined,
+  ctx: PolicyCtx,
+  out: Finding[]
+): void {
+  const shown = text.trim().slice(0, 120)
+  if (isRecipientField(field)) {
+    out.push(
+      userNamed(text, ctx.userText)
+        ? { risk: 'medium', reason: `fills the recipient “${shown}”` }
+        : { risk: 'high', reason: `fills a recipient you did not name: “${shown}”` }
+    )
+    return
+  }
+  const t = text.trim()
+  if ((t === '#' || t === '!') && !focusTakesText(ctx.activeWindow))
+    out.push({
+      risk: 'high',
+      reason: t === '#' ? 'deletes the email' : 'reports the email as spam'
+    })
 }
 
 // ---- clicks ----
@@ -709,7 +814,15 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
       clickFindings(nameOf(a), ctx, out, { spot: SPOT_KINDS.has(a.target?.kind ?? '') })
       break
     case 'uia_act':
-      if (a.action === 'set_value') typeFindings(a.value ?? '', ctx, out, redactions, a.password)
+      if (a.action === 'set_value')
+        typeFindings(
+          a.value ?? '',
+          ctx,
+          out,
+          redactions,
+          a.password,
+          a.elementName ?? a.description
+        )
       else if (a.action !== 'focus' && a.action !== 'scroll_into_view')
         clickFindings(nameOf(a), ctx, out)
       break

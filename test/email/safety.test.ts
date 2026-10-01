@@ -1,0 +1,207 @@
+// Email safety (08 email): Send, delete and spam always confirm in Gmail, new Outlook and
+// classic Outlook, by name, by shortcut or by a focused button; a recipient always shows on the
+// card, and one the user never said is high risk.
+import { describe, expect, it } from 'vitest'
+import {
+  evaluate,
+  isMail,
+  isRecipientField,
+  type Decision,
+  type EvalAction,
+  type PolicyCtx,
+  type WindowInfo
+} from '../../src/main/actions/safety'
+import { riskyName } from '../../src/main/actions/risk-names'
+
+const GMAIL: WindowInfo = {
+  title: 'Inbox (3) - jip@example.com - Gmail - Google Chrome',
+  process: 'chrome.exe',
+  focusKnown: true
+}
+const NEW_OUTLOOK: WindowInfo = {
+  title: 'Mail - Jan Om - Outlook',
+  process: 'olk.exe',
+  focusKnown: true
+}
+const CLASSIC: WindowInfo = {
+  title: 'Untitled - Message (HTML)',
+  process: 'OUTLOOK.EXE',
+  focusKnown: true
+}
+const SURFACES = { gmail: GMAIL, 'new outlook': NEW_OUTLOOK, 'classic outlook': CLASSIC }
+
+const agent = (
+  w: WindowInfo,
+  focus: Partial<WindowInfo> = {},
+  more: Partial<PolicyCtx> = {}
+): PolicyCtx => ({ origin: 'agent', activeWindow: { ...w, ...focus }, ...more }) as PolicyCtx
+const rate = (a: EvalAction, ctx: PolicyCtx): Decision => evaluate(a, ctx)
+const keys = (combo: string, ctx: PolicyCtx): Decision => rate({ type: 'hotkey', keys: combo }, ctx)
+
+describe('email windows', () => {
+  it('tells mail apps from other windows', () => {
+    for (const w of Object.values(SURFACES)) expect(isMail(w)).toBe(true)
+    expect(isMail({ title: 'Mail - Jan - Outlook - Google Chrome', process: 'chrome.exe' })).toBe(
+      true
+    )
+    expect(isMail({ title: 'general | Slack', process: 'slack.exe' })).toBe(false)
+    expect(isMail({ title: 'Untitled - Notepad', process: 'notepad.exe' })).toBe(false)
+  })
+
+  it('knows the recipient boxes of each app', () => {
+    for (const n of ['To recipients', 'To', 'Cc', 'Bcc', 'Cc recipients'])
+      expect(isRecipientField(n)).toBe(true)
+    for (const n of ['Subject', 'Add a subject', 'Message Body', 'Search mail', 'Today'])
+      expect(isRecipientField(n)).toBe(false)
+  })
+
+  it('rates the email control names', () => {
+    expect(riskyName('Send (Ctrl-Enter)')).toBe('send')
+    expect(riskyName('Discard draft (Ctrl-Shift-D)')).toBe('discard draft')
+    expect(riskyName('Delete forever')).toBe('delete forever')
+    expect(riskyName('Report spam')).toBe('report spam')
+    expect(riskyName('Move to Trash')).toBe('move to trash')
+    expect(riskyName('Sender')).toBeNull()
+    expect(riskyName('Archive')).toBeNull()
+    expect(riskyName('Mark as read')).toBeNull()
+  })
+})
+
+describe.each(Object.entries(SURFACES))('%s', (_name, w) => {
+  it('clicking Send always confirms, even with a grant', () => {
+    const d = rate(
+      { type: 'uia_act', action: 'invoke', description: 'Send' },
+      { ...agent(w), grants: { has: () => true } }
+    )
+    expect(d).toMatchObject({ risk: 'high', needsConfirm: true })
+  })
+
+  it('Ctrl+Enter sends and confirms', () => {
+    expect(
+      keys('ctrl+enter', agent(w, { focusRole: 'edit', focusName: 'Message Body' }))
+    ).toMatchObject({
+      risk: 'high',
+      reason: 'sends the message'
+    })
+  })
+
+  it('Enter on a focused Send button confirms; Enter in the body does not', () => {
+    expect(keys('enter', agent(w, { focusRole: 'button', focusName: 'Send' })).risk).toBe('high')
+    expect(keys('space', agent(w, { focusRole: 'button', focusName: 'Send' })).risk).toBe('high')
+    expect(keys('enter', agent(w, { focusRole: 'edit', focusName: 'Message Body' })).risk).toBe(
+      'low'
+    )
+  })
+
+  it('Enter in To, Subject or Search picks or searches: not a send', () => {
+    for (const focusName of ['To recipients', 'To', 'Subject', 'Add a subject', 'Search mail'])
+      expect(
+        rate(
+          { type: 'hotkey', keys: 'enter' },
+          { ...agent(w, { focusRole: 'edit', focusName }), prevType: 'type' }
+        ).risk
+      ).not.toBe('high')
+  })
+
+  it('delete keys on the message list confirm; in a text box they edit', () => {
+    const list = { focusRole: 'dataitem', focusName: 'From Anna Berg Subject Lunch' }
+    for (const combo of ['delete', 'shift+delete', 'ctrl+d'])
+      expect(keys(combo, agent(w, list))).toMatchObject({
+        risk: 'high',
+        reason: 'deletes the email'
+      })
+    expect(keys('delete', agent(w, { focusRole: 'edit', focusName: 'Subject' })).risk).toBe('low')
+  })
+
+  it('a recipient the user named shows on the card; a guessed one is high', () => {
+    const to = { focusRole: 'edit', focusName: w === GMAIL ? 'To recipients' : 'To' }
+    const named = rate(
+      { type: 'type', text: 'Anna' },
+      agent(w, to, { userText: 'email Anna about lunch' })
+    )
+    expect(named).toMatchObject({ risk: 'medium', needsConfirm: true })
+    expect(named.reason).toContain('fills the recipient “Anna”')
+    const guessed = rate(
+      { type: 'type', text: 'anna.berg@acme-corp.example' },
+      agent(w, to, { userText: 'email Anna about lunch' })
+    )
+    expect(guessed).toMatchObject({ risk: 'high', needsConfirm: true })
+    expect(guessed.reason).toContain('did not name')
+    // The same rule for set_value on the To element (the policy reads its name).
+    const set = rate(
+      { type: 'uia_act', action: 'set_value', value: 'bob@example.com', description: to.focusName },
+      agent(w, {}, { userText: 'email Anna' })
+    )
+    expect(set.risk).toBe('high')
+  })
+
+  it('the body and subject are not recipients', () => {
+    const d = rate(
+      { type: 'type', text: 'Hi Anna, lunch on Friday works.' },
+      agent(w, { focusRole: 'edit', focusName: 'Message Body' }, { userText: 'email Anna' })
+    )
+    expect(d.risk).toBe('low')
+  })
+})
+
+describe('per app', () => {
+  it('Gmail: # deletes and ! reports spam on the list, typed or pressed', () => {
+    const row = { focusRole: 'dataitem', focusName: 'unread, Anna Berg, Lunch on Friday' }
+    expect(keys('#', agent(GMAIL, row)).reason).toBe('deletes the email')
+    expect(keys('shift+3', agent(GMAIL, row)).risk).toBe('high')
+    expect(keys('!', agent(GMAIL, row)).reason).toBe('reports the email as spam')
+    expect(rate({ type: 'type', text: '#' }, agent(GMAIL, row)).risk).toBe('high')
+    expect(
+      rate(
+        { type: 'type', text: '#' },
+        agent(GMAIL, { focusRole: 'edit', focusName: 'Message Body' })
+      ).risk
+    ).toBe('low')
+    // Archive (e) and reply (r) stay low.
+    expect(keys('e', agent(GMAIL, row)).risk).toBe('low')
+    expect(keys('r', agent(GMAIL, row)).risk).toBe('low')
+  })
+
+  it('classic Outlook: Alt+S sends', () => {
+    expect(
+      keys('alt+s', agent(CLASSIC, { focusRole: 'document', focusName: 'Message' }))
+    ).toMatchObject({
+      risk: 'high',
+      reason: 'sends the email'
+    })
+    expect(keys('alt+s', agent({ title: 'Untitled - Notepad', process: 'notepad.exe' })).risk).toBe(
+      'low'
+    )
+  })
+
+  it('allowSendWithoutReview: sending is medium with a countdown, still on the card; delete stays high', () => {
+    const ctx = agent(
+      CLASSIC,
+      { focusRole: 'document', focusName: 'Message' },
+      { allowSendWithoutReview: true }
+    )
+    expect(keys('alt+s', ctx)).toMatchObject({ risk: 'medium', needsConfirm: true })
+    expect(rate({ type: 'uia_act', action: 'invoke', description: 'Send' }, ctx).risk).toBe(
+      'medium'
+    )
+    expect(rate({ type: 'uia_act', action: 'invoke', description: 'Delete' }, ctx).risk).toBe(
+      'high'
+    )
+  })
+
+  it('the user dictating into a mail app is never second-guessed on recipients', () => {
+    const d = rate(
+      { type: 'type', text: 'bob@example.com' },
+      {
+        origin: 'user-direct',
+        activeWindow: { ...GMAIL, focusRole: 'edit', focusName: 'To recipients' }
+      }
+    )
+    expect(d.risk).toBe('low')
+  })
+
+  it('Enter on a list row never counts as pressing its subject words', () => {
+    const row = { focusRole: 'listitem', focusName: 'Unread Anna Berg Please delete the old files' }
+    expect(keys('enter', agent(NEW_OUTLOOK, row)).risk).toBe('low')
+  })
+})
