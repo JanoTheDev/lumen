@@ -10,6 +10,7 @@ import type {
 } from './connectors'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { BackgroundTask } from './types'
+import type { RoutineUpdate, RoutineView } from './routines'
 import type {
   GuideStep,
   LocateItem,
@@ -124,6 +125,11 @@ export interface InvokeChannels {
   'tasks:answer': { args: [id: string, answer: string]; result: { ok: boolean } }
   /** Starts an interrupted, failed or cancelled task again as a new task. */
   'tasks:run-again': { args: [id: string]; result: { ok: boolean; id?: string } }
+  /** Routines (08 T22): Settings list, on/off, rename, mouse pre-approval, remove, run now. */
+  'routines:list': { args: []; result: RoutineView[] }
+  'routines:update': { args: [update: RoutineUpdate]; result: { ok: boolean } }
+  'routines:remove': { args: [id: string]; result: { ok: boolean } }
+  'routines:run-now': { args: [id: string]; result: { ok: boolean } }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
   /** Learning journal (11 T23): days with a note, newest first; one day's markdown. */
@@ -892,6 +898,10 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'tasks:open',
   'tasks:answer',
   'tasks:run-again',
+  'routines:list',
+  'routines:update',
+  'routines:remove',
+  'routines:run-now',
   'audit:list',
   'helpers:journal-days',
   'helpers:journal-read',

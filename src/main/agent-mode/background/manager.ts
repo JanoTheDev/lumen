@@ -14,6 +14,8 @@ export interface StartInput {
   origin: BackgroundTask['origin']
   /** spawn_task child of this task. */
   parentId?: string
+  /** A routine's run. */
+  routineId?: string
   /** Skip the queue (a parent waits on it: queueing could deadlock the slots). */
   immediate?: boolean
 }
@@ -134,7 +136,8 @@ export class BackgroundManager {
       phase: 'queued',
       progress: [],
       counters: { modelCalls: 0, costUsd: 0, startedAt: this.deps.now() },
-      ...(input.parentId ? { parentId: input.parentId } : {})
+      ...(input.parentId ? { parentId: input.parentId } : {}),
+      ...(input.routineId ? { routineId: input.routineId } : {})
     }
     this.newEntry(task)
     this.changed(task.id)
@@ -185,7 +188,13 @@ export class BackgroundManager {
   runAgain(id: string): BackgroundTask | null {
     const t = this.get(id)
     if (!t || isOpen(t)) return null
-    return this.start({ prompt: t.prompt, title: t.title, skill: t.skill, origin: t.origin })
+    return this.start({
+      prompt: t.prompt,
+      title: t.title,
+      skill: t.skill,
+      origin: t.origin,
+      routineId: t.routineId
+    })
   }
 
   /** On quit: every open task becomes interrupted (no resume after a restart). */

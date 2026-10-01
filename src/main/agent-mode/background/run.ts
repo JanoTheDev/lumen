@@ -36,6 +36,31 @@ export interface BgRunEnv {
     skill?: { name: string; text?: string }
   }
   log?(tag: string, msg: string): void
+  /**
+   * Checked before every tool call: a reason refuses the call (E_DENIED, audited). Routines
+   * skip high-risk calls they did not pre-approve.
+   */
+  guard?(tool: string, input: Record<string, unknown>): string | null
+}
+
+/** Every handler behind `guard`. */
+export function guarded(
+  handlers: Record<string, ToolHandler>,
+  guard: NonNullable<BgRunEnv['guard']>,
+  audit: BgPorts['audit']
+): Record<string, ToolHandler> {
+  const out: Record<string, ToolHandler> = {}
+  for (const [name, h] of Object.entries(handlers))
+    out[name] = (input, ctx) => {
+      const deny = guard(name, input)
+      if (!deny) return h(input, ctx)
+      audit({ type: name }, 'denied', deny)
+      return Promise.resolve({
+        content: [{ type: 'text', text: `E_DENIED: ${deny}` }],
+        isError: true
+      })
+    }
+  return out
 }
 
 const KEEP_GOING_RE = /^(keep going|yes|go on|continue|carry on|sure|ok|okay)\b/i
@@ -55,7 +80,8 @@ export function capsFor(c: BackgroundCaps): Partial<Caps> {
 export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<RunOutcome> {
   const task = ctl.task()
   const skills = env.skills
-  const handlers = { ...createBackgroundHandlers(env.ports), ...skills?.handlers }
+  const all = { ...createBackgroundHandlers(env.ports), ...skills?.handlers }
+  const handlers = env.guard ? guarded(all, env.guard, env.ports.audit) : all
   const startedAt = task.counters.startedAt
 
   const deps: RunnerDeps = {

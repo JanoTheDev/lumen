@@ -272,6 +272,8 @@ export interface BackgroundTask {
   question?: { text: string; choices?: string[] }
   /** spawn_task child: the parent's id (children cannot spawn). */
   parentId?: string
+  /** A routine's run (08 T22): the routine's id (its pre-approved shapes apply). */
+  routineId?: string
   endedAt?: number
   /** Finished and not looked at yet (the tray badge counts these). */
   unseen?: boolean

@@ -397,7 +397,27 @@ export const configV2Schema = z.object({
         maxWallMin: 15,
         readFolders: [],
         quiet: false
+      }),
+    /**
+     * Proactive mode (08 T23): opt-in, local only. `rules`: "when I open <app>, say <text>"
+     * (the foreground app is watched only while enabled and a rule exists).
+     */
+    proactive: z
+      .object({
+        enabled: z.boolean(),
+        rules: z
+          .array(
+            z
+              .object({
+                id: z.string().regex(/^pr_[a-z0-9]{4,40}$/),
+                app: z.string().trim().min(2).max(60),
+                say: z.string().trim().min(1).max(200)
+              })
+              .strict()
+          )
+          .max(20)
       })
+      .default({ enabled: false, rules: [] })
   }),
   privacy: z.object({ saveScreenshots: z.boolean(), telemetry: z.boolean() }),
   teach: z.object({
@@ -519,7 +539,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
       maxWallMin: 15,
       readFolders: [],
       quiet: false
-    }
+    },
+    proactive: { enabled: false, rules: [] }
   },
   privacy: { saveScreenshots: false, telemetry: false },
   teach: {

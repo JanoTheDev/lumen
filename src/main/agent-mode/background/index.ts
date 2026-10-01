@@ -4,6 +4,7 @@
 import { app, powerMonitor } from 'electron'
 import { randomBytes } from 'crypto'
 import { dirname, join } from 'path'
+import type { ActionShape } from '@shared/routines'
 import type { BackgroundTask } from '@shared/types'
 import { usageCost } from '../../ai/pricing'
 import { getProvider } from '../../ai/providers'
@@ -17,6 +18,7 @@ import { bus } from '../../bus'
 import { configPath, loadConfig } from '../../config'
 import { log, type LogTag } from '../../logger'
 import { windowOnlyContext } from '../../query/context'
+import { allowsForeground, routineGuard } from '../../routines/preapproval'
 import * as assistant from '../../windows/assistant'
 import { inputLane } from '../input-lane'
 import { raced, type ToolHandler, type ToolOutcome } from '../runner'
@@ -35,6 +37,7 @@ const TURN_MAX_TOKENS = 2048
 const FOREGROUND_ASK_MS = 60_000
 
 let store: TaskStore | null = null
+let routineShapes: (routineId: string) => ActionShape[] | null = () => null
 let turnActive = false
 let afterTurn: string[] = []
 
@@ -68,6 +71,11 @@ export function startBackgroundTask(input: StartInput): BackgroundTask {
   return t
 }
 
+/** Routines (08 T22) tell the runner which tool calls a routine pre-approved. */
+export function setRoutineShapes(fn: (routineId: string) => ActionShape[] | null): void {
+  routineShapes = fn
+}
+
 // ---- notices (presence rule) ----
 
 function idleMs(): number {
@@ -78,7 +86,8 @@ function idleMs(): number {
   }
 }
 
-function notice(text: string): void {
+/** A spoken line under the presence rule (now, after the user's turn, or list only). */
+export function notice(text: string): void {
   const v = noticeVerdict({
     idleMs: idleMs(),
     quiet: settings().quiet,
@@ -86,6 +95,11 @@ function notice(text: string): void {
   })
   if (v === 'now') announce(text, { kind: 'status', priority: 'polite' })
   else if (v === 'after-turn') afterTurn.push(text)
+}
+
+/** The user is in a turn of their own, a confirm, or a foreground agent task. */
+export function userBusy(): boolean {
+  return turnActive || agentRunning() || assistant.confirmPending()
 }
 
 function turnEnded(): void {
@@ -102,12 +116,14 @@ async function requestForeground(
   ctl: TaskControl,
   reason: string,
   steps: string[],
-  signal: AbortSignal
+  signal: AbortSignal,
+  preapproved = false
 ): Promise<ForegroundAnswer> {
   const title = ctl.task().title
   const what = `Task “${title}” wants to use the mouse for ~${steps.length} ${steps.length === 1 ? 'step' : 'steps'}: ${reason}`
-  let now = false
-  if (!turnActive && !agentRunning() && !assistant.confirmPending()) {
+  // A routine that may use the mouse without asking still gets the countdown below.
+  let now = preapproved
+  if (!now && !turnActive && !agentRunning() && !assistant.confirmPending()) {
     ctl.update({ phase: 'needs-foreground' })
     let timer: NodeJS.Timeout | null = null
     const timeout = new Promise<boolean>((resolve) => {
@@ -215,6 +231,8 @@ async function runTask(
   if (skills.missing) return { status: 'failed', summary: skills.missing }
   const cfg = settings()
   const role: Role = skills.skill?.role ?? 'fast'
+  // A routine run: high-risk calls only when pre-approved (a run whose routine is gone: none).
+  const shapes = task.origin === 'routine' ? (routineShapes(task.routineId ?? '') ?? []) : null
   const network = skills.skill?.network
   const ports: BgPorts = {
     taskId: id,
@@ -239,7 +257,8 @@ async function runTask(
       notice(`Task “${task.title}” has a question. It waits in the Tasks list.`)
       return raced(ctl.ask(question, choices), signal)
     },
-    requestForeground: (reason, steps, signal) => requestForeground(ctl, reason, steps, signal),
+    requestForeground: (reason, steps, signal) =>
+      requestForeground(ctl, reason, steps, signal, !!shapes && allowsForeground(shapes)),
     spawn: (input, signal) => spawnChild(id, input, signal),
     childCount: () => manager.childCount(id),
     progress: (line) => ctl.progress(line),
@@ -266,7 +285,8 @@ async function runTask(
       ...skills,
       ...(skills.skill ? { skill: { name: skills.skill.name, text: skills.skill.text } } : {})
     },
-    log: (tag, msg) => log(tag as LogTag, `[${id}] ${msg}`)
+    log: (tag, msg) => log(tag as LogTag, `[${id}] ${msg}`),
+    ...(shapes ? { guard: routineGuard(shapes) } : {})
   })
 }
 
