@@ -21,9 +21,7 @@ export default defineConfig({
       minify: true,
       rollupOptions: {
         input: {
-          highlight: resolve('src/renderer/highlight.html'),
           settings: resolve('src/renderer/settings.html'),
-          dwellring: resolve('src/renderer/dwellring.html'),
           assistant: resolve('src/renderer/assistant.html'),
           screen: resolve('src/renderer/screen.html'),
           panel: resolve('src/renderer/panel.html'),

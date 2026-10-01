@@ -4,10 +4,8 @@
 import type { AssistantState, ScreenScene } from '@shared/events'
 import { bus } from '../bus'
 import * as assistant from './assistant'
-import * as highlight from './highlight'
 import * as screenLayer from './screen-layer'
 import { hideStatus, setStatus } from './status'
-import { uiV2 } from './ui-mode'
 
 type Scene = Omit<ScreenScene, 'monitorId'>
 
@@ -17,7 +15,7 @@ const RESUME_OFFER_MS = 15_000
 let confirmSeq = 0
 let drew = false
 
-function drawV2(scene: Scene | null): void {
+function draw(scene: Scene | null): void {
   if (!scene) {
     if (drew) screenLayer.setScene({ highlights: [], buddy: undefined, annotations: undefined })
     drew = false
@@ -31,23 +29,6 @@ function drawV2(scene: Scene | null): void {
   })
 }
 
-/** v1 windows: ring/target highlights and the pointer bubble. */
-function drawV1(scene: Scene | null): void {
-  if (!scene || (!scene.highlights.length && !scene.buddy)) {
-    if (drew) highlight.clear()
-    drew = false
-    return
-  }
-  drew = true
-  highlight.send(
-    'screen:highlights',
-    scene.highlights.map((h) => ({ label: h.label ?? '', target_hint: '', bbox: h.rect }))
-  )
-  if (scene.buddy)
-    highlight.send('screen:pointer', { ...scene.buddy.to, text: scene.buddy.label ?? '' })
-  highlight.show()
-}
-
 function showState(state: AssistantState | null): void {
   // A newer state replaces an open do-it offer; its late answer is ignored.
   const seq = ++confirmSeq
@@ -55,7 +36,7 @@ function showState(state: AssistantState | null): void {
     hideStatus()
     return
   }
-  if (state.confirm && uiV2()) {
+  if (state.confirm) {
     void assistant
       .requestConfirm({
         summary: state.statusText ?? state.confirm.summary,
@@ -66,13 +47,13 @@ function showState(state: AssistantState | null): void {
       })
     return
   }
-  if (uiV2() && assistant.state().confirm) assistant.close()
+  if (assistant.state().confirm) assistant.close()
   const kind = state.phase === 'acting' ? 'acting' : state.phase === 'idle' ? 'answer' : 'step'
   setStatus(kind, state.statusText ?? '', state.step, kind === 'answer' ? 4000 : undefined)
 }
 
 export function installLessonOutput(): void {
-  bus.on('lesson.scene', (e) => (uiV2() ? drawV2(e.scene) : drawV1(e.scene)))
+  bus.on('lesson.scene', (e) => draw(e.scene))
   bus.on('lesson.state', (e) => showState(e.state))
   bus.on('lesson.resume-offer', (e) => setStatus('answer', e.text, undefined, RESUME_OFFER_MS))
 }
