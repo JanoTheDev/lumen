@@ -142,7 +142,7 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'about',
     label: 'About',
     icon: icons.info,
-    keywords: 'about version licence license help',
+    keywords: 'about version licence license help third-party notices attribution parakeet',
     essential: true
   }
 ]

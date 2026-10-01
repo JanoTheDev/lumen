@@ -3,6 +3,7 @@ Lumen third-party notices
 
 Lumen is licensed under the GNU AGPL v3 (LICENSE.txt in this folder).
 It ships or downloads the following third-party components.
+Settings > About > Third-party licences shows the same list.
 
 Bundled with the installer
 --------------------------
@@ -16,7 +17,7 @@ sherpa-onnx / sherpa-onnx-node (Apache-2.0) - https://github.com/k2-fsa/sherpa-o
 ONNX Runtime (MIT) - https://github.com/microsoft/onnxruntime
   onnxruntime.dll, shipped inside the sherpa-onnx-win-x64 package.
 
-NVDA Controller Client 2.0 (GNU LGPL 2.1) - https://www.nvaccess.org/
+NVDA Controller Client 2.0 (GNU LGPL-2.1) - https://www.nvaccess.org/
   native/nvdaControllerClient.dll, unmodified. License and source in nvda/.
   You may replace this DLL with any compatible build or delete it; announcements
   then fall back to Lumen's own voice.
@@ -25,16 +26,32 @@ Rust crates in lumen-native.exe (MIT / Apache-2.0), including windows-rs, serde,
   serde_json, crossbeam-channel, libloading, tracing, fast_image_resize, base64,
   jpeg-encoder and cpal.
 
-npm packages in the app bundle (MIT / Apache-2.0 / ISC), including @anthropic-ai/sdk,
-  openai, zod, dotenv, react, react-dom, lucide-react (ISC), roughjs and
-  perfect-freehand.
+npm packages in the app bundle (MIT / Apache-2.0 / ISC / BSD-2-Clause), including
+  @anthropic-ai/sdk, openai, @modelcontextprotocol/client, zod, dotenv,
+  electron-updater, mammoth (BSD-2-Clause), react, react-dom, lucide-react (ISC),
+  roughjs, perfect-freehand and @mediapipe/tasks-vision (Apache-2.0).
 
 Downloaded on first use (not in the installer)
 ----------------------------------------------
-Parakeet TDT-CTC 110M English, int8 (CC-BY-4.0) - NVIDIA NeMo, converted by the
-  sherpa-onnx project. Local speech-to-text model.
+Parakeet TDT-CTC 110M English (CC-BY-4.0) - NVIDIA
+  https://huggingface.co/nvidia/parakeet-tdt_ctc-110m
+  License: https://creativecommons.org/licenses/by/4.0/
+  Changes: converted to ONNX and quantized to int8 by the sherpa-onnx project
+  (sherpa-onnx-nemo-parakeet_tdt_ctc_110m-en-36000-int8). Local speech-to-text model.
+
+Canary 180M Flash (CC-BY-4.0) - NVIDIA
+  https://huggingface.co/nvidia/canary-180m-flash
+  License: https://creativecommons.org/licenses/by/4.0/
+  Changes: converted to ONNX and quantized to int8 by the sherpa-onnx project
+  (sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8). Downloaded only when the
+  voice language is Spanish, German or French.
 
 sherpa-onnx KWS zipformer GigaSpeech 3.3M (Apache-2.0) - wake-word model.
+  https://github.com/k2-fsa/sherpa-onnx
 
 Vosk small English model 0.15 (Apache-2.0) - https://alphacephei.com/vosk/
   Only downloaded when the wake-word fallback is used.
+
+MediaPipe Face Landmarker model and Tasks Vision WebAssembly (Apache-2.0) - Google
+  https://github.com/google-ai-edge/mediapipe
+  Downloaded only when face gestures are turned on.
