@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { audioSchema, textSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
-import { onRecordingEnded } from '../speech/hotkey'
+import { onRecordingEnded, onSpeakingChanged, onTurnEnded } from '../speech/hotkey'
 import { sttStatus } from '../speech/stt'
 import { installLocalModel } from '../speech/stt/local-model'
 import { onWakePcm, wakeFeedWanted } from '../speech/wake'
@@ -44,6 +44,11 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
   ipcMain.on('voice:ended', () => onRecordingEnded())
   ipcMain.on('voice:wake-pcm', (_e, raw: unknown) => onWakePcm(raw))
   ipcMain.on('voice:barge-in', () => handleBargeIn())
+  ipcMain.on('voice:speaking', (_e, raw: unknown) => {
+    if (typeof raw === 'boolean') onSpeakingChanged(raw)
+  })
+  // Also handled by ipc/hud (the bar); here a conversation listens again.
+  ipcMain.on('assistant:close', () => onTurnEnded())
   ipcMain.handle('voice:wake-state', () => ({ listen: wakeFeedWanted() }))
   ipcMain.handle('voice:stt-status', () => sttStatus())
   ipcMain.handle('voice:stt-install', async () => {

@@ -5,7 +5,29 @@ import { holdEscape, keepEscapeWhile } from '../agent/escape'
 import { startSpeculativeCapture } from '../query/context'
 import { captureContext } from '../query/capture'
 import * as assistant from '../windows/assistant'
-import { AssistantActivation } from './activation'
+import { AssistantActivation, realTimers } from './activation'
+import { Conversation } from './conversation'
+
+let recordingOpen = false
+
+const conversation = new Conversation(
+  {
+    listen() {
+      holdEscape('hud')
+      bus.emit({ type: 'voice.started', handsFree: true })
+      assistant.setStatus('listening', 'Listening… (conversation)')
+    },
+    recording: () => recordingOpen || activation.current !== 'idle',
+    cancel() {
+      bus.emit({ type: 'voice.cancelled' })
+    },
+    status(text) {
+      console.log(`[voice] conversation ${text ? 'on' : 'off'}`)
+      if (text) assistant.setStatus('listening', text)
+    }
+  },
+  realTimers
+)
 
 const activation = new AssistantActivation(
   {
@@ -23,9 +45,14 @@ const activation = new AssistantActivation(
       assistant.setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
       // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
       startSpeculativeCapture(() => captureContext(true))
+    },
+    doubleTap() {
+      return conversation.toggle()
     }
   },
-  () => (loadConfig().handsFreeMode ? 'tap' : 'hold')
+  () => (loadConfig().handsFreeMode ? 'tap' : 'hold'),
+  realTimers,
+  () => loadConfig().voice.conversation
 )
 
 // Setup's hotkey test: while it waits, a press only answers the test and starts no turn.
@@ -74,7 +101,35 @@ export function onRecordingEnded(): void {
   bus.emit({ type: 'voice.stopped', ended: true })
 }
 
-keepEscapeWhile(() => activation.current !== 'idle')
+keepEscapeWhile(() => activation.current !== 'idle' || conversation.active)
 
-bus.on('voice.cancelled', () => activation.reset())
-bus.on('query.started', () => activation.reset())
+/** The voice renderer finished a turn (`assistant:close`): a conversation listens again. */
+export function onTurnEnded(): void {
+  conversation.turnEnded()
+}
+
+/** Spoken reply started or stopped in the voice renderer. */
+export function onSpeakingChanged(speaking: boolean): void {
+  conversation.setSpeaking(speaking)
+}
+
+export function conversationActive(): boolean {
+  return conversation.active
+}
+
+bus.on('voice.started', () => {
+  recordingOpen = true
+})
+bus.on('voice.stopped', () => {
+  recordingOpen = false
+})
+bus.on('voice.cancelled', () => {
+  recordingOpen = false
+  activation.reset()
+  conversation.end()
+})
+bus.on('dictation.started', () => conversation.end())
+bus.on('query.started', () => {
+  activation.reset()
+  conversation.touch()
+})

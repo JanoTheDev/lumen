@@ -114,8 +114,11 @@ export function startSpeaker(): () => void {
     else if (msg.op === 'say') sayWindows(msg).catch(() => {})
     else void player.enqueue(base64ToBytes(msg.data))
   })
+  // Main waits for quiet before a conversation listens again.
+  const offState = onSpeakingChange((state) => window.lumen.send('voice:speaking', state !== null))
   return () => {
     off()
+    offState()
     stopSpeaking()
   }
 }

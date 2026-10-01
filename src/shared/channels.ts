@@ -107,31 +107,6 @@ export interface InvokeChannels {
     args: [name?: string]
     result: { id: string; title: string } | { error: string }
   }
-  /** Record my steps (07 T31): start / stop / cancel watching the user's clicks and shortcuts. */
-  'teach:record': {
-    args: [action: 'start' | 'stop' | 'cancel']
-    result: { ok: boolean; error?: string }
-  }
-  /** Whether a recording runs and the draft lesson waiting for review. */
-  'teach:record-status': { args: []; result: RecordingStatus }
-  /** Saves the reviewed draft (edited say lines, dropped steps) as a user lesson. */
-  'teach:draft-save': {
-    args: [edit: LessonDraftEdit]
-    result: { id: string; title: string } | { error: string }
-  }
-  /** Plays the draft once to try it, without saving it. */
-  'teach:draft-play': { args: []; result: { ok: boolean } }
-  'teach:draft-discard': { args: []; result: { ok: boolean } }
-  /** Community packs (07 T32): installed `.lumen` packs, install from a file or GitHub link. */
-  'teach:pack-list': { args: []; result: CommunityPackInfo[] }
-  'teach:pack-install-file': { args: []; result: PackInstallResult }
-  'teach:pack-install-url': { args: [url: string]; result: PackInstallResult }
-  'teach:pack-remove': { args: [id: string]; result: { ok: boolean } }
-  /** Saves any pack as a `.lumen` file (save dialog). */
-  'teach:pack-export': {
-    args: [id: string]
-    result: { ok: boolean; path?: string; error?: string }
-  }
   /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
   'bridges:status': { args: []; result: BridgeStatus[] }
   'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
@@ -162,6 +137,8 @@ export interface SendChannels {
   'voice:wake-pcm': [pcm: ArrayBuffer]
   /** The user talked over a spoken answer (playback already stopped): start listening. */
   'voice:barge-in': []
+  /** Spoken reply started (true) or finished (false) in the voice renderer. */
+  'voice:speaking': [speaking: boolean]
   'assistant:command': [cmd: AssistantCommand]
   /** A voice error in the renderer (microphone, transcription): shown in the bar's error row. */
   'assistant:error': [message: string]
@@ -552,55 +529,8 @@ export interface LearningApp {
   mastery: number
   completed: number
   total: number
-  /** From a community pack the user installed (07 T32): untrusted, no "do it for me". */
-  community?: boolean
-}
-
-/** One step of a recorded draft lesson (07 T31). */
-export interface LessonDraftStep {
-  id: string
-  say: string
-  /** What the step waits for, in words ("a click on Save"). */
-  waitsFor: string
-}
-
-export interface LessonDraftView {
-  title: string
-  appId: string
-  appName: string
-  steps: LessonDraftStep[]
-}
-
-export interface RecordingStatus {
-  phase: 'idle' | 'recording' | 'drafting' | 'draft'
-  /** Steps seen so far (recording). */
-  events: number
-  draft: LessonDraftView | null
-}
-
-export interface LessonDraftEdit {
-  title: string
-  /** The steps to keep, in order, with their (edited) say lines. */
-  steps: { id: string; say: string }[]
   /** The next unlocked lesson; null when all are done. */
   next: { lessonId: string; title: string } | null
-/** An installed community pack (07 T32). */
-export interface CommunityPackInfo {
-  id: string
-  name: string
-  version: string
-  lessons: number
-  /** File name or URL it was installed from. */
-  source: string
-  installedAt: string
-  /** False when the folder is there but did not load (see the log). */
-  loaded: boolean
-}
-
-export type PackInstallResult =
-  | { ok: true; installed: { id: string; name: string; updated: boolean }[] }
-  | { ok: false; error: string; problems?: string[] }
-
 }
 
 export interface LessonProgressView {
@@ -780,16 +710,6 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
 export const SEND_CHANNELS: readonly SendChannel[] = [
   'assistant:show',
   'assistant:close',
-  'teach:record',
-  'teach:record-status',
-  'teach:draft-save',
-  'teach:draft-play',
-  'teach:draft-discard',
-  'teach:pack-list',
-  'teach:pack-install-file',
-  'teach:pack-install-url',
-  'teach:pack-remove',
-  'teach:pack-export',
   'assistant:cancel',
   'assistant:open-link',
   'answer:show',
@@ -800,6 +720,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'voice:ended',
   'voice:wake-pcm',
   'voice:barge-in',
+  'voice:speaking',
   'assistant:command',
   'assistant:error',
   'assistant:correct',
