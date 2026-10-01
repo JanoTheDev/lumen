@@ -44,6 +44,7 @@ import * as settingsWin from './windows/settings'
 import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
+import { registerSkillsIpc } from './ipc/skills'
 import { registerBridgesIpc } from './ipc/bridges'
 import { registerHudIpc } from './ipc/hud'
 import { registerQueryIpc } from './ipc/query'
@@ -58,6 +59,7 @@ import { registerUiIpc } from './ipc/ui'
 import { announce, installA11y } from './a11y'
 import { installLiveFeedback } from './a11y/live-feedback'
 import { installTeach } from './teach'
+import { installSkills } from './skills'
 import { installLessonOutput } from './windows/lesson'
 import { loadVault } from './keys/vault'
 import { registerKeysIpc } from './keys/ipc'
@@ -107,6 +109,7 @@ function registerIpc(): void {
   registerVoiceIpc({ speak: speakAnswer, transcribe, dictate })
   registerGuidesIpc({ saveLast: saveLastAsGuide, replay: replaySavedGuide })
   registerTeachIpc()
+  registerSkillsIpc()
   registerBridgesIpc()
   registerMemoryIpc()
   registerUsageIpc()
@@ -172,6 +175,7 @@ app.whenReady().then(() => {
   installA11y()
   installLessonOutput()
   installTeach()
+  installSkills()
   setAnswerAnnouncer((text) => announce(text, { kind: 'answer' }))
   installLiveFeedback(announce)
   warmTts()
