@@ -161,6 +161,15 @@ describe('csv', () => {
     expect(csv.slice(1)).toBe('Item,Cost\r\nTrain,120.5\r\n"Food, drinks",\'=SUM(B2)\r\n')
     expect(csvSafe('-5')).toBe('-5')
     expect(csvSafe('-cmd')).toBe("'-cmd")
+    // Review M1: a leading digit does not make a formula safe.
+    expect(csvSafe('-1+1')).toBe("'-1+1")
+    expect(csvSafe("-2+3+cmd|' /C calc'!A0")).toBe("'-2+3+cmd|' /C calc'!A0")
+    expect(csvSafe('-.5+A1')).toBe("'-.5+A1")
+    expect(csvSafe('-12.5')).toBe('-12.5')
+    expect(csvSafe('-1,234')).toBe('-1,234')
+    expect(csvSafe('-.5')).toBe('-.5')
+    expect(csvSafe('-3e5')).toBe('-3e5')
+    expect(csvSafe('-')).toBe("'-")
     expect(csvSafe('@x')).toBe("'@x")
   })
 

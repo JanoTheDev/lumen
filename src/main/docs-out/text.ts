@@ -61,11 +61,15 @@ export function toText(doc: DocContent): string {
 // ---- CSV ----
 
 /**
- * A cell as Excel would not run it: text starting with = + @ (or - not followed by a number),
- * tab or CR gets a leading apostrophe, so a formula from a shared document stays text.
+ * A cell as Excel would not run it: text starting with = + @, tab or CR, or - unless the whole
+ * cell is a plain negative number ("-1+1" is a formula), gets a leading apostrophe, so a
+ * formula from a shared document stays text.
  */
 export function csvSafe(cell: string): string {
-  return /^[=+@\t\r]/.test(cell) || /^-(?![\d.])/.test(cell) ? `'${cell}` : cell
+  if (/^[=+@\t\r]/.test(cell)) return `'${cell}`
+  if (cell.startsWith('-') && !/^-(?=[\d.])\d*(,\d{3})*(\.\d+)?(e[+-]?\d+)?%?$/i.test(cell))
+    return `'${cell}`
+  return cell
 }
 
 export function csvField(cell: string, safe = true): string {
