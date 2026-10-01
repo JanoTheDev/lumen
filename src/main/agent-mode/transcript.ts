@@ -61,7 +61,11 @@ function oneLine(text: string, max: number): string {
   return clip(text.replace(/\s+/g, ' '), max)
 }
 
-function host(url: string): string {
+// Secrets are redacted in the whole text before it is cut: a key cut in half no longer matches.
+const red = (s: string): string => redactForLog(s)
+
+function host(raw: string): string {
+  const url = red(raw)
   try {
     const u = new URL(url)
     const path = u.pathname === '/' ? '' : u.pathname
@@ -73,7 +77,7 @@ function host(url: string): string {
 
 const baseName = (p: string): string => p.split(/[\\/]/).filter(Boolean).pop() ?? p
 
-const quoted = (s: string): string => `“${oneLine(s, 60)}”`
+const quoted = (s: string): string => `“${oneLine(red(s), 60)}”`
 
 /** "Clicked “Reply”", "Pressed ctrl+s", "Read example.com/page": one line per tool call. */
 export function toolLabel(name: string, input: Obj): string {
@@ -106,19 +110,19 @@ export function toolLabel(name: string, input: Obj): string {
       }
     }
     case 'keys':
-      return `Pressed ${oneLine(String(input.combo ?? ''), 40)}`
+      return `Pressed ${oneLine(red(String(input.combo ?? '')), 40)}`
     case 'navigate':
       return `Opened ${host(String(input.url ?? ''))}`
     case 'fetch_url':
       return `Read ${host(String(input.url ?? ''))}`
     case 'launch_app':
-      return `Started ${oneLine(String(input.app ?? 'an app'), 60)}`
+      return `Started ${oneLine(red(String(input.app ?? 'an app')), 60)}`
     case 'wait_for': {
       const c = input.condition as { value?: string } | undefined
       return `Waited for ${quoted(c?.value ?? '')}`
     }
     case 'read_file':
-      return `Read ${str(input.path) ? baseName(String(input.path)) : 'a file'}`
+      return `Read ${str(input.path) ? red(baseName(String(input.path))) : 'a file'}`
     case 'memory_search':
       return `Searched memory${str(input.query) ? ` for ${quoted(String(input.query))}` : ''}`
     case 'memory_write':
@@ -128,7 +132,7 @@ export function toolLabel(name: string, input: Obj): string {
     case 'request_foreground':
       return 'Asked to use the mouse'
     case 'spawn_task':
-      return `Started a helper: ${oneLine(String(input.prompt ?? ''), 60)}`
+      return `Started a helper: ${oneLine(red(String(input.prompt ?? '')), 60)}`
     case 'use_skill':
       return `Used the skill ${quoted(String(input.name ?? ''))}`
     case 'read_skill_file':
@@ -154,7 +158,7 @@ export function argsSummary(name: string, input: Obj): string | undefined {
       parts.push(`value: ${String(v).length} chars`)
       continue
     }
-    const s = typeof v === 'string' ? oneLine(v, 80) : oneLine(JSON.stringify(v) ?? '', 80)
+    const s = oneLine(red(typeof v === 'string' ? v : (JSON.stringify(v) ?? '')), 80)
     parts.push(`${k}: ${s}`)
   }
   const out = oneLine(parts.join(', '), ARGS_MAX)
@@ -167,10 +171,12 @@ export function resultSummary(content: readonly ToolContent[], max = RESULT_MAX)
     c.type === 'text' ? c.text : c.type === 'image' ? '[screenshot]' : '[document]'
   )
   return oneLine(
-    parts
-      .join(' ')
-      .replace(/<\/?observed[^>]*>/g, ' ')
-      .replace(/<\/?untrusted[^>]*>/g, ' '),
+    red(
+      parts
+        .join(' ')
+        .replace(/<\/?observed[^>]*>/g, ' ')
+        .replace(/<\/?untrusted[^>]*>/g, ' ')
+    ),
     max
   )
 }

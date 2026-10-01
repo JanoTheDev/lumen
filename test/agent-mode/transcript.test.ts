@@ -11,6 +11,7 @@ import {
   TranscriptRecorder
 } from '../../src/main/agent-mode/transcript'
 import { withSteer } from '../../src/main/agent-mode/runner'
+import { applyClaudeEvent } from '../../src/main/agent-mode/transcript-claude'
 
 // Built at runtime: a key-shaped literal in the repo trips secret scanning.
 const KEY = ['sk', 'proj', 'AbCdEfGhIjKlMnOpQrStUv'].join('-')
@@ -35,6 +36,61 @@ describe('TranscriptRecorder', () => {
     const json = JSON.stringify(r.data())
     expect(json).not.toContain(KEY)
     expect(json).toContain('[redacted:api-key]')
+  })
+
+  it('redacts secrets before cutting results, args and labels short', () => {
+    const { r } = recorder()
+    const google = ['AIza', 'SyD'.padEnd(35, 'x')].join('')
+    const gh = ['ghp', 'a1B2'.repeat(9)].join('_')
+    r.toolStart({
+      id: 'c1',
+      name: 'fetch_url',
+      input: { url: 'https://x.com', note: `${'n'.repeat(75)} ${gh}` }
+    })
+    r.toolEnd(
+      { id: 'c1', name: 'fetch_url', input: {} },
+      { content: [{ type: 'text', text: `${'f'.repeat(590)} ${google}` }] }
+    )
+    applyClaudeEvent(r, {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'u2',
+            name: 'Bash',
+            input: { command: `${'e'.repeat(90)} ${gh}` }
+          }
+        ]
+      }
+    })
+    const json = JSON.stringify(r.data())
+    for (const leak of ['AIza', 'ghp_']) expect(json).not.toContain(leak)
+  })
+
+  it('redacts config secrets in a Claude tool result (DB_PASSWORD=, URL passwords)', () => {
+    const { r } = recorder()
+    const pw = ['hunter2', 'hunter2'].join('')
+    applyClaudeEvent(r, {
+      type: 'assistant',
+      message: {
+        content: [{ type: 'tool_use', id: 'u1', name: 'Read', input: { file_path: '.env' } }]
+      }
+    })
+    applyClaudeEvent(r, {
+      type: 'user',
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'u1',
+            content: `DB_PASSWORD=${pw}
+DATABASE_URL=postgres://app:${pw}@localhost/db`
+          }
+        ]
+      }
+    })
+    expect(JSON.stringify(r.data())).not.toContain(pw)
   })
 
   it('keeps typed text only as its length', () => {

@@ -3,6 +3,7 @@
 import type { ClaudeSessionView } from '@shared/claude-code'
 import type { ChatPhase } from '@shared/task-chat'
 import type { ToolContent } from '../ai/providers/types'
+import { redactForLog } from '../actions/redact'
 import { describeTool } from '../claude-code/events'
 import type { ChatMeta, TranscriptRecorder } from './transcript'
 
@@ -40,9 +41,13 @@ export function applyClaudeEvent(rec: TranscriptRecorder, ev: Obj): void {
       if (b.type === 'tool_use') {
         const name = str(b.name) ?? 'tool'
         const input = (b.input && typeof b.input === 'object' ? b.input : {}) as Obj
+        // The label cuts long commands short: secrets go before the cut.
+        const shown = Object.fromEntries(
+          Object.entries(input).map(([k, v]) => [k, typeof v === 'string' ? redactForLog(v) : v])
+        )
         rec.toolStart(
           { id: str(b.id) ?? `${name}-${Date.now()}`, name, input },
-          describeTool(name, input)
+          describeTool(name, shown)
         )
       }
     }
