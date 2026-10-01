@@ -33,9 +33,6 @@ const ROLE_EFFORT: Record<Role, Effort> = {
   'vision-refine': 'low'
 }
 
-/** Pinned for the per-click Computer Use call; the 5.5 models reject that tool version. */
-export const COMPUTER_USE_MODEL = 'claude-sonnet-4-6'
-
 export interface RoleModel {
   role: Role
   provider: ProviderId

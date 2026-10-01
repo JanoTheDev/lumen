@@ -13,12 +13,20 @@ vi.mock('electron', () => ({
 vi.mock('../src/main/util', () => ({ sleep: async () => {} }))
 vi.mock('../src/main/windows/highlight', () => ({ send: vi.fn(), show: vi.fn(), hide: vi.fn() }))
 vi.mock('../src/main/windows/status', () => ({ setStatus: vi.fn() }))
-const findClickCoordinates = vi.fn(async () => null as { x: number; y: number } | null)
-vi.mock('../src/main/ai/computer-use', () => ({
-  findClickCoordinates: (...args: unknown[]) => findClickCoordinates(...(args as []))
+type Refine = typeof import('../src/main/query/refine')
+const refineTarget = vi.fn<Refine['refineTarget']>(async (target) => ({
+  target,
+  outcome: 'skipped',
+  ms: 0
+}))
+let refineAvailable = false
+vi.mock('../src/main/query/refine', () => ({
+  needsRefine: (r: { confidence: number; source: string }) =>
+    r.confidence < 0.6 || r.source === 'point',
+  canRefine: () => refineAvailable,
+  refineTarget: (...args: Parameters<Refine['refineTarget']>) => refineTarget(...args)
 }))
 vi.mock('../src/main/ai/app-context', () => ({ isBrowser: () => true }))
-vi.mock('../src/main/query/capture', () => ({ captureScreenshot: async () => 'img' }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../src/main/actions/executor'
@@ -63,8 +71,8 @@ const executed = (m: MockAgent): Array<Record<string, unknown> | undefined> =>
 describe('executeActions', () => {
   beforeEach(() => {
     openExternal.mockClear()
-    findClickCoordinates.mockClear()
-    delete process.env.ANTHROPIC_API_KEY
+    refineTarget.mockClear()
+    refineAvailable = false
   })
   afterEach(() => {
     setAgent(null)
@@ -96,27 +104,59 @@ describe('executeActions', () => {
       { type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }
     ])
     expect(executed(m)).toEqual([{ type: 'click', x: 60, y: 40, button: 'left' }])
-    expect(findClickCoordinates).not.toHaveBeenCalled()
+    expect(refineTarget).not.toHaveBeenCalled()
   })
 
-  it('refines click_bbox with Computer Use when a key is set', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test'
-    findClickCoordinates.mockResolvedValueOnce({ x: 5, y: 6 })
+  it('refines a low-confidence click_bbox with the zoom crop when a key is set', async () => {
+    refineAvailable = true
+    refineTarget.mockImplementationOnce(async (target) => ({
+      target: { ...target, physRect: { x: 0, y: 2, w: 10, h: 10 }, confidence: 0.75 },
+      outcome: 'moved',
+      ms: 5
+    }))
     const m = mockAgent()
     await executeActions([
       { type: 'click_bbox', bbox: { x: 10, y: 20, w: 100, h: 40 }, description: 'button' }
     ])
-    expect(executed(m)).toEqual([{ type: 'click', x: 5, y: 6, button: 'left' }])
+    expect(refineTarget.mock.calls[0][0]).toMatchObject({ source: 'rect', confidence: 0.55 })
+    expect(refineTarget.mock.calls[0][1]).toBe('button')
+    expect(executed(m)).toEqual([{ type: 'click', x: 5, y: 7, button: 'left' }])
   })
 
-  it('skips refinement when refine is false', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test'
+  it('asks before clicking when the target stays uncertain after refine', async () => {
+    refineAvailable = true
+    refineTarget.mockImplementationOnce(async (target) => ({
+      target: { ...target, confidence: 0.35 },
+      outcome: 'not-found',
+      ms: 5
+    }))
+    const { setStatus } = await import('../src/main/windows/status')
+    const m = mockAgent()
+    await executeActions(
+      [{ type: 'click', x: 100, y: 50 }].map((a) => ({
+        ...a,
+        type: 'click_target' as const,
+        target: { kind: 'point' as const, x: 100, y: 50, frame: '1' },
+        description: 'bell icon'
+      }))
+    )
+    expect(setStatus).toHaveBeenCalledWith(
+      'acting',
+      expect.stringContaining('is it this one?'),
+      undefined,
+      expect.any(Number)
+    )
+    expect(executed(m)).toEqual([{ type: 'click', x: 100, y: 50, button: 'left' }])
+  })
+
+  it('does not refine a confident target, or when refine is off', async () => {
+    refineAvailable = true
     mockAgent()
     await executeActions(
       [{ type: 'click_bbox', bbox: { x: 0, y: 0, w: 10, h: 10 }, description: 'x' }],
       { refine: false }
     )
-    expect(findClickCoordinates).not.toHaveBeenCalled()
+    expect(refineTarget).not.toHaveBeenCalled()
   })
 
   it('stops the batch when the policy blocks an action', async () => {

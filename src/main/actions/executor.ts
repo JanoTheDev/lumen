@@ -3,14 +3,13 @@
 // preview, safety policy and cancellation.
 import { shell } from 'electron'
 import type { Action, Target } from '@shared/types'
-import { currentFrame, imageToPhys, physToLogical, rectCenter } from './coords'
+import { currentFrame, physToLogical, rectCenter } from './coords'
 import { toAgentAction, type AgentAction } from './agent-action'
 import { assertSafeUrl } from './safety'
 import { passesPolicy } from './policy'
 import { requireAgent } from '../agent/instance'
 import type { AgentBridge } from '../agent/bridge'
-import { findClickCoordinates } from '../ai/computer-use'
-import { captureScreenshot } from '../query/capture'
+import { canRefine, needsRefine, refineTarget } from '../query/refine'
 import {
   describeResolved,
   groundingNow,
@@ -22,10 +21,14 @@ import {
 } from '../query/resolve-target'
 import { log } from '../logger'
 import * as highlight from '../windows/highlight'
+import { setStatus } from '../windows/status'
 import { sleep } from '../util'
 
+// How long an uncertain target stays on screen before the click (cancel window).
+const CONFIRM_MS = 2500
+
 export interface ExecuteOptions {
-  /** Refine click targets with Computer Use when an Anthropic key is set. Default true. */
+  /** Zoom-crop refine for low-confidence and point click targets (T14). Default true. */
   refine?: boolean
   /** Show the target highlight / pointer before clicking. Default true. */
   preview?: boolean
@@ -47,15 +50,25 @@ function canPauseDwell(agent: AgentBridge): boolean {
   return agent.protocol === 2 && agent.hasCapability('dwell')
 }
 
-async function refineClick(
-  description: string,
-  signal: AbortSignal | undefined
-): Promise<{ x: number; y: number } | null> {
-  // Same monitor + geometry as the turn's frame (currentFrame follows the capture).
-  const freshShot = await captureScreenshot(signal)
-  const frame = currentFrame()
-  const refined = await findClickCoordinates(freshShot, description, frame.imgW, frame.imgH, signal)
-  return refined ? imageToPhys(frame, refined) : null
+/** Shows the uncertain target and gives the user a moment to cancel (Esc / "cancel"). */
+async function confirmLowConfidence(
+  r: ResolvedTarget,
+  label: string,
+  signal?: AbortSignal
+): Promise<void> {
+  log('step', `low confidence ${r.confidence} for "${label}", asking before the click`)
+  highlight.send('screen:highlights', [
+    { label: 'Is it this one?', target_hint: label, bbox: r.logicalRect }
+  ])
+  highlight.show()
+  setStatus(
+    'acting',
+    `Not sure: is it this one? Say "cancel" to stop.`,
+    undefined,
+    CONFIRM_MS + 600
+  )
+  await sleep(CONFIRM_MS)
+  if (!signal?.aborted) highlight.hide()
 }
 
 /** How a click action is found on screen: its targets in priority order. */
@@ -129,19 +142,21 @@ async function resolve(
     return null
   }
   log('step', `${action.type} "${(plan.label ?? '').slice(0, 40)}": ${describeResolved(r)}`)
-  let target = rectCenter(r.physRect)
-
-  const canRefine = opts.refine && !!process.env.ANTHROPIC_API_KEY && !!plan.label
-  if (canRefine && (r.confidence < LOW_CONFIDENCE || r.source === 'point')) {
-    const refined = await refineClick(plan.label!, opts.signal)
-    if (refined) {
-      target = refined
-      log('step', `refined → (${target.x},${target.y})`)
+  let resolved = r
+  if (opts.refine && plan.label && needsRefine(r) && canRefine()) {
+    const out = await refineTarget(r, plan.label, opts.signal)
+    resolved = out.target
+    log('step', `refine ${out.outcome} in ${out.ms}ms: ${describeResolved(resolved)}`)
+    if (opts.signal?.aborted) return null
+    if (out.outcome !== 'skipped' && resolved.confidence < LOW_CONFIDENCE) {
+      await confirmLowConfidence(resolved, plan.label, opts.signal)
+      if (opts.signal?.aborted) return null
     }
   }
+  const target = rectCenter(resolved.physRect)
   if (opts.preview) {
     highlight.send('screen:highlights', [
-      { label: 'Clicking here', target_hint: '', bbox: r.logicalRect }
+      { label: 'Clicking here', target_hint: '', bbox: resolved.logicalRect }
     ])
     highlight.show()
     await sleep(600)
