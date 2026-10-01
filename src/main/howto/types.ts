@@ -39,6 +39,8 @@ export interface AppIdentity {
   appId: string
   /** File / product version ("11.2402.22.0"), '' when unknown. */
   version: string
+  /** A web browser (or a site in one): tab names are page titles, not UI labels. */
+  browser?: boolean
 }
 
 /** 'auto': free sources, then paid provider search when the user allowed it; caps apply. */

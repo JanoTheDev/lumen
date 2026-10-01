@@ -458,10 +458,13 @@ export async function readDropped(input: ReadFileInput, env: TaskEnv): Promise<T
 
 // ---- app notes (05 T36): what worked is kept per app, what failed twice is dropped ----
 
-/** The goal a call works on: its plan step, else the task. */
+/**
+ * The goal a call works on: its plan step's label. Without a plan step nothing is learned: the
+ * prompt holds what the user asked to write or send, which an app note never keeps.
+ */
 function goalOf(ctx: ToolCtx): string {
   const t = ctx.task()
-  return t.steps.find((s) => s.i === ctx.step)?.label ?? t.prompt
+  return t.steps.find((s) => s.i === ctx.step)?.label ?? ''
 }
 
 /** The name / automation id of an act target in the snapshot the model saw. */

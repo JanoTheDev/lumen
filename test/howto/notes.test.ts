@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { HowtoCache, PAID_PER_DAY, PAID_PER_TASK } from '../../src/main/howto/cache'
 import { createLearner } from '../../src/main/howto/learn'
 import { AppNotesStore, FAILS_TO_DROP, MAX_FILE_BYTES, goalMatch } from '../../src/main/howto/notes'
+import { noteGoal } from '../../src/main/howto/goal'
 import type { AppIdentity, HowtoResult } from '../../src/main/howto/types'
 
 const root = mkdtempSync(join(tmpdir(), 'lumen-notes-'))
@@ -138,5 +139,48 @@ describe('task learner', () => {
   it('does nothing while memory is off', async () => {
     const learner = createLearner({ notes: () => null, identify: async () => PAINT })
     await expect(learner.acted('x', 'click', { name: 'File' })).resolves.toBeUndefined()
+  })
+})
+
+describe('app notes keep the task, not its content (review 4)', () => {
+  it('drops addresses, quoted text and what to write from the goal', () => {
+    const dir = fresh()
+    const s = new AppNotesStore(dir)
+    expect(
+      s.recordSuccess(PAINT, 'email anna@clinic.example that my test results are positive', {
+        ui: ['New mail']
+      })
+    ).toBe(true)
+    s.recordSuccess(PAINT, 'Reply to Sarah saying "I am resigning on Friday"', { ui: ['Reply'] })
+    s.recordSuccess(PAINT, 'Attach report-Q3.pdf: the numbers', { ui: ['Attach'] })
+    const file = readFileSync(join(dir, 'paintdotnet.json'), 'utf8')
+    for (const secret of ['anna@clinic', 'positive', 'resigning', 'report-Q3', 'numbers'])
+      expect(file).not.toContain(secret)
+    expect(noteGoal('Reply to Sarah that I am resigning')).toBe('Reply to Sarah')
+    expect(noteGoal('anna@clinic.example')).toBeNull()
+    expect(noteGoal('Change the default font')).toBe('Change the default font')
+  })
+
+  it('drops UI names that are addresses or file names', () => {
+    const dir = fresh()
+    const s = new AppNotesStore(dir)
+    s.recordSuccess(PAINT, 'attach a file', {
+      ui: ['Attach files', 'report-Q3.pdf', 'Anna <anna@clinic.example>', 'Open']
+    })
+    expect(s.find(PAINT, 'attach a file')?.path.ui).toEqual(['Attach files', 'Open'])
+  })
+
+  it('learns nothing without a goal (no plan step) and no browser tab titles', async () => {
+    const store = new AppNotesStore(fresh())
+    const CHROME: AppIdentity = { app: 'Gmail', appId: 'gmail', version: '', browser: true }
+    const learner = createLearner({ notes: () => store, identify: async () => CHROME })
+    await learner.acted('', 'click', { name: 'Compose', role: 'button' })
+    expect(store.list('gmail')).toEqual([])
+    await learner.acted('Write a new email', 'click', {
+      name: 'Inbox - jane - Gmail',
+      role: 'tabitem'
+    })
+    await learner.acted('Write a new email', 'click', { name: 'Compose', role: 'button' })
+    expect(store.find(CHROME, 'write a new email')?.path.ui).toEqual(['Compose'])
   })
 })

@@ -19,6 +19,8 @@ const PATH_OPS = new Set([
   'focus'
 ])
 const MAX_GOALS = 12
+/** In a browser these roles hold page titles, not labels. */
+const BROWSER_CONTENT_ROLES = new Set(['tabitem', 'tab'])
 
 /**
  * Control roles whose names are UI labels. List items, links, documents and text are content
@@ -84,15 +86,23 @@ export function createLearner(ports: LearnerPorts): TaskLearner {
   const watched: { id: AppIdentity; note: Pick<AppNote, 'goal' | 'path'> }[] = []
   /** UI names a lookup returned in this task (documented labels, safe to keep). */
   const known = new Set<string>()
-  const isLabel = (t: LearnedTarget): boolean =>
-    CONTROL_ROLES.has((t.role ?? '').toLowerCase()) || (!!t.name && known.has(normLabel(t.name)))
+  const isLabel = (t: LearnedTarget, id: AppIdentity): boolean => {
+    const role = (t.role ?? '').toLowerCase()
+    // A browser's tabs are named after their pages ("Inbox - jane@x.com - Gmail"): content.
+    const control = CONTROL_ROLES.has(role) && !(id.browser && BROWSER_CONTENT_ROLES.has(role))
+    return control || (!!t.name && known.has(normLabel(t.name)))
+  }
 
-  async function grow(goal: string, add: (p: AppNotePath) => void): Promise<void> {
+  async function grow(
+    goal: string,
+    add: (p: AppNotePath) => void,
+    target?: LearnedTarget
+  ): Promise<void> {
     const store = ports.notes()
     const g = goal.trim()
     if (!store || !g) return
     const id = await ports.identify()
-    if (!id) return
+    if (!id || (target && !isLabel(target, id))) return
     let entry = paths.get(g)
     if (!entry || entry.appId !== id.appId) {
       if (!entry && paths.size >= MAX_GOALS) return
@@ -111,15 +121,23 @@ export function createLearner(ports: LearnerPorts): TaskLearner {
       watched.push({ id, note: { goal: r.goal, path: { ui: r.steps.flatMap((s) => s.ui) } } })
     },
     acted: (goal, op, target) =>
-      PATH_OPS.has(op) && (target.name || target.automationId) && isLabel(target)
-        ? grow(goal, (p) => {
-            const last = p.ui[p.ui.length - 1]
-            if (target.name && p.ui.length < MAX_PATH && (!last || !same(last, target.name)))
-              p.ui.push(target.name)
-            const ids = p.automationIds ?? []
-            if (target.automationId && ids.length < MAX_PATH && !ids.includes(target.automationId))
-              p.automationIds = [...ids, target.automationId]
-          })
+      PATH_OPS.has(op) && (target.name || target.automationId)
+        ? grow(
+            goal,
+            (p) => {
+              const last = p.ui[p.ui.length - 1]
+              if (target.name && p.ui.length < MAX_PATH && (!last || !same(last, target.name)))
+                p.ui.push(target.name)
+              const ids = p.automationIds ?? []
+              if (
+                target.automationId &&
+                ids.length < MAX_PATH &&
+                !ids.includes(target.automationId)
+              )
+                p.automationIds = [...ids, target.automationId]
+            },
+            target
+          )
         : Promise.resolve(),
     pressed: (goal, combo) =>
       /\b(ctrl|alt|win|shift)\b/i.test(combo)

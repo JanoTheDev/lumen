@@ -6,7 +6,8 @@
 // own preferences in markdown, these are machine paths with counters. No Electron.
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { isSensitive, redact } from '../ai/memory/sensitive'
+import { isSensitive } from '../ai/memory/sensitive'
+import { isContentName, noteGoal } from './goal'
 import { majorOf } from './version'
 import type { AppIdentity } from './types'
 
@@ -72,7 +73,7 @@ export function goalMatch(a: string, b: string): number {
 
 function safeName(s: string): string | null {
   const t = s.replace(/\s+/g, ' ').trim()
-  if (!t || t.length > MAX_NAME || isSensitive(t)) return null
+  if (!t || t.length > MAX_NAME || isSensitive(t) || isContentName(t)) return null
   return t
 }
 
@@ -171,9 +172,10 @@ export class AppNotesStore {
     path: AppNotePath,
     source: AppNote['source'] = 'learned'
   ): boolean {
-    const g = redact(goal.replace(/\s+/g, ' ').trim()).slice(0, MAX_GOAL)
+    // The task, never its content: no recipients, quoted text or what to write.
+    const g = noteGoal(goal)?.slice(0, MAX_GOAL)
     const p = cleanPath(path)
-    if (!g || !p || isSensitive(goal)) return false
+    if (!g || !p) return false
     const f = this.load(id)
     const same = f.notes.find((n) => goalMatch(n.goal, g) >= 0.9)
     const at = this.now()
