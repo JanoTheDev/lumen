@@ -41,11 +41,33 @@ export interface ClaudeSessionView {
   lastActive: number
   autopilot: AutopilotLevel
   /** A permission or a question waiting for the user. */
-  pending?: { kind: 'permission' | 'question'; text: string; command?: string }
+  pending?: {
+    kind: 'permission' | 'question'
+    text: string
+    command?: string
+    /** Options Claude listed with its question (answer buttons). */
+    choices?: string[]
+    /** The permission bridge's id (claude:permission-answer). */
+    permId?: string
+  }
   autoAnswers: ClaudeAutoAnswer[]
   /** Commands from the session's init event. */
   commands: string[]
   error?: string
+}
+
+/** The focused-session view on the assistant bar (08 T39). */
+export interface ClaudeBarView {
+  id: string
+  title: string
+  projectName: string
+  phase: ClaudePhase
+  /** "Claude in x is thinking." (the spoken status line). */
+  status: string
+  /** What Claude did lately, oldest first. */
+  lines: string[]
+  pending?: ClaudeSessionView['pending']
+  costUsd: number
 }
 
 export interface ClaudeProject {
@@ -99,7 +121,18 @@ export const claudeCodeSettingsSchema = z.object({
   /** --model for new sessions; empty = the user's own default. */
   model: z.string().max(80),
   /** Autopilot answers only at or above this confidence. */
-  confidence: z.number().min(0.5).max(1)
+  confidence: z.number().min(0.5).max(1),
+  /** Per task (one stretch of work in the Tasks list): USD cap, 0 = none (the plan pays). */
+  taskMaxCostUsd: z.number().min(0).max(1000),
+  /** Per task: minutes before Lumen interrupts it, 0 = none. */
+  taskMaxMin: z.number().int().min(0).max(1440),
+  /**
+   * Global hooks also send PermissionRequest (sessions started by hand): Lumen asks on the bar
+   * and by voice, and Claude shows its own prompt when nobody answers in time.
+   */
+  hooksPermissions: z.boolean(),
+  /** Seconds Lumen waits for that answer before handing back to Claude's prompt. */
+  hooksPermissionWaitS: z.number().int().min(10).max(300)
 })
 
 export type ClaudeCodeSettings = z.infer<typeof claudeCodeSettingsSchema>
@@ -111,7 +144,11 @@ export const CLAUDE_CODE_DEFAULTS: ClaudeCodeSettings = {
   projects: [],
   hooksObserver: false,
   model: '',
-  confidence: 0.8
+  confidence: 0.8,
+  taskMaxCostUsd: 0,
+  taskMaxMin: 0,
+  hooksPermissions: false,
+  hooksPermissionWaitS: 45
 }
 
 export const claudeSettingsPatchSchema = claudeCodeSettingsSchema

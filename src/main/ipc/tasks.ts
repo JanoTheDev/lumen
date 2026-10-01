@@ -4,6 +4,7 @@ import { ipcMain } from 'electron'
 import { bgTaskAnswerSchema, bgTaskIdSchema } from '@shared/ipc'
 import type { BackgroundTask } from '@shared/types'
 import { backgroundManager } from '../agent-mode/background'
+import { showSessionOnBar } from '../claude-code'
 import { bus } from '../bus'
 import * as assistant from '../windows/assistant'
 import * as home from '../windows/home'
@@ -53,6 +54,8 @@ export function registerTasksIpc(): void {
     const t = m.get(id)
     if (!t) return { ok: false }
     m.markSeen(id)
+    // A Claude session opens its live view on the bar (status, activity, waiting prompt).
+    if (t.claude && showSessionOnBar(t.claude.id)) return { ok: true }
     assistant.showAnswer(taskCard(t))
     return { ok: true }
   })

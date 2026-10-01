@@ -13,12 +13,26 @@ export interface TaskRow {
   canOpen: boolean
   question?: { text: string; choices: string[] }
   unseen: boolean
+  /** A Claude Code session: Stop instead of Cancel, Open shows it on the bar. */
+  claude: boolean
 }
 
 const OPEN = new Set(['queued', 'running', 'asking', 'needs-foreground'])
 
 function cost(usd: number): string {
   return usd >= 0.01 ? ` · $${usd.toFixed(2)}` : ''
+}
+
+/** Claude's live phase in words (08 T39): thinking / running a tool / waiting for you. */
+export function claudeStatus(t: BackgroundTask): string | null {
+  const c = t.claude
+  if (!c || (t.phase !== 'running' && t.phase !== 'asking')) return null
+  const last = t.progress[t.progress.length - 1]
+  if (t.phase === 'asking' || c.phase === 'waiting-permission' || c.phase === 'waiting-answer')
+    return 'Waiting for you'
+  if (c.phase === 'running-tool') return last ?? 'Running a tool'
+  if (c.phase === 'starting') return 'Starting'
+  return last && last !== 'Thinking' ? `Thinking · ${last}` : 'Thinking'
 }
 
 export function taskRow(t: BackgroundTask): TaskRow {
@@ -50,19 +64,24 @@ export function taskRow(t: BackgroundTask): TaskRow {
       status = 'Stopped when Lumen closed'
       break
   }
+  status = claudeStatus(t) ?? status
   const open = OPEN.has(t.phase)
+  // Claude's cost is the user's plan: shown whenever the CLI reported one.
+  const showCost = t.phase === 'running' || (!!t.claude && t.phase !== 'queued')
   return {
     id: t.id,
     title: t.title,
-    status: `${status}${t.phase === 'running' ? cost(t.counters.costUsd) : ''}`,
+    status: `${status}${showCost ? cost(t.counters.costUsd) : ''}`,
     phase: t.phase,
     canCancel: open,
-    canRunAgain: t.phase === 'interrupted' || t.phase === 'failed' || t.phase === 'cancelled',
-    canOpen: !!t.result || t.phase === 'running',
+    canRunAgain:
+      !t.claude && (t.phase === 'interrupted' || t.phase === 'failed' || t.phase === 'cancelled'),
+    canOpen: !!t.result || t.phase === 'running' || (!!t.claude && open),
     ...(t.question && (t.phase === 'asking' || t.phase === 'needs-foreground')
       ? { question: { text: t.question.text, choices: t.question.choices ?? [] } }
       : {}),
-    unseen: !!t.unseen
+    unseen: !!t.unseen,
+    claude: !!t.claude
   }
 }
 

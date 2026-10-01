@@ -20,6 +20,7 @@ import { Button, IconButton, icons, type IconComponent } from '../ui'
 import { animateSpring, fadeOut, prefersReducedMotion } from '../ui/motion'
 import { send, useIpc } from '../lib/ipc'
 import { BarLive, CaptionEditor, CaptionRow, FeedbackLine } from './Caption'
+import { ClaudeSession } from './ClaudeSession'
 import { Confirm } from './Confirm'
 import { MorphSurface } from './MorphSurface'
 import { errorHint, simpleRow, statusLine, type BarRow } from './model'
@@ -250,7 +251,8 @@ export function AssistantApp(): JSX.Element {
   // A new non-streamed answer in the same turn restarts the countdown too.
   const answerKey = v.answer?.streaming ? '' : v.answer?.markdown
   const resetKey = `${v.answer?.turnId}|${v.answer?.streaming}|${answerKey}|${v.error?.message}`
-  const taskBusy = !!v.agentTask && !TASK_ENDED.has(v.agentTask.phase)
+  // A Claude session on the bar stays until closed (it is the session's live view).
+  const taskBusy = (!!v.agentTask && !TASK_ENDED.has(v.agentTask.phase)) || !!v.claude
   const lineRef = useAutoClose(
     view.visible && closable && !BUSY.has(v.phase) && !pinned && !taskBusy,
     v.autoCloseMs,
@@ -370,6 +372,10 @@ export function AssistantApp(): JSX.Element {
 
                 <Fade show={!!v.agentTask && showRow('task')}>
                   {v.agentTask && <StepList task={v.agentTask} simple={simple} />}
+                </Fade>
+
+                <Fade show={!!v.claude && showRow('claude')}>
+                  {v.claude && <ClaudeSession s={v.claude} confirmShown={!!v.confirm} />}
                 </Fade>
 
                 <Fade show={!!v.step && !v.agentTask && showRow('step')}>

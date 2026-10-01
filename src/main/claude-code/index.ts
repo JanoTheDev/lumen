@@ -15,7 +15,12 @@ import { configPath, loadConfig } from '../config'
 import { log } from '../logger'
 import * as assistant from '../windows/assistant'
 import { noticeVerdict, PRESENT_MS } from '../agent-mode/background/presence'
-import { DECISION_SYSTEM, decisionPrompt, decisionSchema } from './autopilot'
+import { isOpen } from '../agent-mode/background/manager'
+import { backgroundManager, startBackgroundTask } from '../agent-mode/background'
+import { memory } from '../ai/memory/runtime'
+import { bus } from '../bus'
+import { DECISION_SYSTEM, decisionPrompt, decisionSchema, profileForDecision } from './autopilot'
+import { barView, pushLine, runClaudeTurn, sessionBusy, taskTitleFor } from './background'
 import { PermissionBridge, permissionSummary, type PendingPermission } from './bridge'
 import { findClaude } from './cli'
 import { ClaudeCopilot, statusLine, type NoticeKind } from './copilot'
@@ -112,6 +117,12 @@ async function onHook(call: HookCall): Promise<Record<string, unknown>> {
   // Global hooks: only sessions Lumen did not start (its own report through stream-json).
   const sid = call.payload.session_id
   if (c.list().some((v) => v.sessionId === sid)) return {}
+  const st = copilotStore().settings()
+  if (call.event === 'PermissionRequest') {
+    // Opt-in (T38): answered on the bar / by voice, else Claude's own prompt after the wait.
+    if (!bridge || !st.hooksObserver || !st.hooksPermissions) return {}
+    return bridge.handleObserved(call.payload, call.signal, st.hooksPermissionWaitS * 1000)
+  }
   const where = basename(String(call.payload.cwd ?? '')) || 'a project'
   if (call.event === 'Notification') {
     const msg = String(call.payload.message ?? '').slice(0, 200)
@@ -124,15 +135,34 @@ export function hookBase(): string | null {
   return server?.port ? `http://127.0.0.1:${server.port}` : null
 }
 
+function globalHookOptions(): { permissions: boolean; waitS: number } {
+  const s = copilotStore().settings()
+  return { permissions: s.hooksPermissions, waitS: s.hooksPermissionWaitS }
+}
+
 export function hooksPreview(install: boolean): ReturnType<typeof previewHooks> {
   const base = hookBase() ?? 'http://127.0.0.1:0'
-  return previewHooks(install, base, copilotStore().hook().token, server?.port ?? 0)
+  return previewHooks(
+    install,
+    base,
+    copilotStore().hook().token,
+    server?.port ?? 0,
+    undefined,
+    globalHookOptions()
+  )
 }
 
 export function hooksApply(install: boolean, hash: string): { ok: boolean; error?: string } {
   const base = hookBase()
   if (install && !base) return { ok: false, error: 'Lumen’s hook endpoint is not running.' }
-  const r = applyHooks(install, hash, base ?? '', copilotStore().hook().token)
+  const r = applyHooks(
+    install,
+    hash,
+    base ?? '',
+    copilotStore().hook().token,
+    undefined,
+    globalHookOptions()
+  )
   if (r.ok) {
     const s = copilotStore().settings()
     copilotStore().saveSettings({ ...s, hooksObserver: install })
@@ -153,6 +183,76 @@ export function getCopilot(): ClaudeCopilot | null {
 
 export function getBridge(): PermissionBridge | null {
   return bridge
+}
+
+// ---- Tasks list + bar view (T39) ----
+
+/** Lumen session id → its open background task. */
+const sessionTasks = new Map<string, string>()
+/** Recent activity lines per session (the bar's list). */
+const recentLines = new Map<string, string[]>()
+
+/** Memory profile facts for the autopilot decision (T36): profile layer only, redacted. */
+function profileFacts(): string[] {
+  try {
+    const m = memory()
+    return m.isEnabled() ? profileForDecision(m.profile.facts()) : []
+  } catch {
+    return []
+  }
+}
+
+function sessionPort(id: string): Parameters<typeof runClaudeTurn>[1] {
+  return {
+    view: () => copilot?.get(id) ?? null,
+    onChange: (fn) => onSessionChange((v) => v.id === id && fn(v)),
+    answer: (text) => void copilot?.answerQuestion(id, text),
+    permission: (answer, permId) => void bridge?.answer(answer, permId),
+    interrupt: () => void copilot?.interrupt(id)
+  }
+}
+
+/** A busy session without an open task gets one (one per stretch of work). */
+function syncTask(v: ClaudeSessionView): void {
+  if (!sessionBusy(v)) return
+  const open = sessionTasks.get(v.id)
+  const t = open ? backgroundManager().get(open) : null
+  if (t && isOpen(t)) return
+  const s = copilotStore().settings()
+  const task = startBackgroundTask({
+    prompt: v.title,
+    title: taskTitleFor(v),
+    origin: 'voice',
+    claude: { id: v.id, projectName: v.projectName, phase: v.phase },
+    run: (ctl) =>
+      runClaudeTurn(ctl, sessionPort(v.id), {
+        maxCostUsd: s.taskMaxCostUsd,
+        maxWallMs: s.taskMaxMin * 60_000
+      })
+  })
+  sessionTasks.set(v.id, task.id)
+}
+
+function syncBar(v: ClaudeSessionView): void {
+  const lines = pushLine(recentLines.get(v.id) ?? [], v.lastLine)
+  recentLines.set(v.id, lines)
+  bus.emit({ type: 'claude.bar', view: barView(v, lines) })
+}
+
+/** Puts the session (default: the focused one) on the assistant bar. */
+export function showSessionOnBar(id?: string): boolean {
+  const c = copilot
+  const v = id ? c?.get(id) : c?.focused()
+  if (!c || !v) return false
+  c.focus(v.id)
+  bus.emit({ type: 'claude.bar', view: barView(v, recentLines.get(v.id) ?? []), show: true })
+  return true
+}
+
+/** The Claude session behind a Tasks-list row, if it is one. */
+export function sessionForTask(taskId: string): string | null {
+  const t = backgroundManager().get(taskId)
+  return t?.claude && copilot?.get(t.claude.id) ? t.claude.id : null
 }
 
 /** Starts the hook endpoint and the copilot (no CLI process starts until a session opens). */
@@ -202,11 +302,16 @@ export async function installClaudeCode(): Promise<void> {
       return d
     },
     claudeMd,
+    profile: profileFacts,
     notify: (text, kind) => notify(text, kind),
     audit: writeAudit,
     saved: () => st.sessions(),
     remember: (s) => st.remember(s),
-    changed: (v) => listeners.forEach((l) => l(v)),
+    changed: (v) => {
+      listeners.forEach((l) => l(v))
+      syncTask(v)
+      syncBar(v)
+    },
     now: () => Date.now(),
     newId: () => `cc_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`,
     log: (m) => log('step', `[claude-code] ${m}`)
@@ -226,7 +331,7 @@ export async function installClaudeCode(): Promise<void> {
     onPending: (key, p) =>
       c.setPending(
         key,
-        p ? { kind: 'permission', text: permissionSummary(p), command: p.what } : null
+        p ? { kind: 'permission', text: permissionSummary(p), command: p.what, permId: p.id } : null
       ),
     audit: writeAudit,
     now: () => Date.now()
@@ -265,7 +370,10 @@ function handle(i: ClaudeIntent): ReturnType<typeof reply> | undefined {
         return reply(
           `I don’t know a project called “${i.project}”. Add its folder in Settings → Claude Code.`
         )
-      c.open(p, { prompt: i.prompt }).catch((e: Error) => notify(e.message, 'needs-you'))
+      c.open(p, { prompt: i.prompt }).then(
+        (v) => showSessionOnBar(v.id),
+        (e: Error) => notify(e.message, 'needs-you')
+      )
       return reply(`Opening Claude in ${p.name}.`)
     }
     case 'tell': {
@@ -275,6 +383,7 @@ function handle(i: ClaudeIntent): ReturnType<typeof reply> | undefined {
       return reply(`Sent to Claude in ${f.projectName}.`)
     }
     case 'status':
+      if (f) showSessionOnBar(f.id)
       return reply(statusLine(f))
     case 'read-last':
       return reply(f?.lastAnswer ? spokenAnswer(f.lastAnswer) : 'Claude has not answered yet.')

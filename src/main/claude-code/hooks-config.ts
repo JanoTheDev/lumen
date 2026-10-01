@@ -14,6 +14,14 @@ import { claudeHome } from './projects'
 export const HOOK_MARK = '/lumen-hook/'
 const SESSION_EVENTS = ['PermissionRequest', 'Notification', 'Stop'] as const
 const GLOBAL_EVENTS = ['Notification', 'Stop', 'SubagentStop'] as const
+/** Extra seconds the global PermissionRequest hook waits beyond Lumen's own wait. */
+const GLOBAL_PERMISSION_SLACK_S = 15
+
+/** Opt-in: the global hooks also carry PermissionRequest, answered within `waitS` seconds. */
+export interface GlobalHookOptions {
+  permissions?: boolean
+  waitS?: number
+}
 /** A permission waits for the user's voice answer; the CLI default is 600 s. */
 const PERMISSION_TIMEOUT_S = 600
 const NOTICE_TIMEOUT_S = 10
@@ -82,10 +90,16 @@ export function withoutLumenHooks(settings: Json): Json {
   return out
 }
 
-export function withLumenHooks(settings: Json, base: string, token: string): Json {
+export function withLumenHooks(
+  settings: Json,
+  base: string,
+  token: string,
+  opts: GlobalHookOptions = {}
+): Json {
   const out = withoutLumenHooks(settings)
   const hooks = ((out.hooks as Json | undefined) ?? {}) as Record<string, unknown[]>
-  for (const event of GLOBAL_EVENTS) {
+  const events: string[] = [...GLOBAL_EVENTS, ...(opts.permissions ? ['PermissionRequest'] : [])]
+  for (const event of events) {
     const groups = Array.isArray(hooks[event]) ? hooks[event] : []
     hooks[event] = [
       ...groups,
@@ -96,7 +110,10 @@ export function withLumenHooks(settings: Json, base: string, token: string): Jso
             type: 'http',
             url: `${base}${HOOK_MARK}g/${event}`,
             headers: { 'X-Lumen-Token': token },
-            timeout: NOTICE_TIMEOUT_S
+            timeout:
+              event === 'PermissionRequest'
+                ? (opts.waitS ?? 45) + GLOBAL_PERMISSION_SLACK_S
+                : NOTICE_TIMEOUT_S
           }
         ]
       }
@@ -108,6 +125,11 @@ export function withLumenHooks(settings: Json, base: string, token: string): Jso
 
 export function hasLumenHooks(settings: Json): boolean {
   return JSON.stringify(withoutLumenHooks(settings)) !== JSON.stringify(settings)
+}
+
+function hasPermissionHook(settings: Json): boolean {
+  const groups = (settings.hooks as Json | undefined)?.PermissionRequest
+  return JSON.stringify(groups ?? []).includes(`${HOOK_MARK}g/`)
 }
 
 /** The port the installed global hooks point at, if any. */
@@ -168,10 +190,11 @@ export function previewHooks(
   base: string,
   token: string,
   port: number,
-  path = userSettingsPath()
+  path = userSettingsPath(),
+  opts: GlobalHookOptions = {}
 ): ClaudeHooksPreview {
   const { raw, json } = readSettings(path)
-  const next = install ? withLumenHooks(json, base, token) : withoutLumenHooks(json)
+  const next = install ? withLumenHooks(json, base, token, opts) : withoutLumenHooks(json)
   const installed = hasLumenHooks(json)
   const at = installedPort(json)
   return {
@@ -180,7 +203,11 @@ export function previewHooks(
     // Against the raw file: a re-format by the write shows up too (the exact change).
     diff: lineDiff(raw, pretty(next)),
     hash: sha(raw),
-    ...(installed && at !== null && at !== port ? { stale: true } : {})
+    // Another port, or the PermissionRequest opt-in changed since the install.
+    ...(installed &&
+    ((at !== null && at !== port) || hasPermissionHook(json) !== !!opts.permissions)
+      ? { stale: true }
+      : {})
   }
 }
 
@@ -190,7 +217,8 @@ export function applyHooks(
   hash: string,
   base: string,
   token: string,
-  path = userSettingsPath()
+  path = userSettingsPath(),
+  opts: GlobalHookOptions = {}
 ): { ok: boolean; error?: string } {
   let cur: { raw: string; json: Json }
   try {
@@ -200,7 +228,7 @@ export function applyHooks(
   }
   if (sha(cur.raw) !== hash)
     return { ok: false, error: 'The file changed since the preview. Look at the new diff.' }
-  const next = install ? withLumenHooks(cur.json, base, token) : withoutLumenHooks(cur.json)
+  const next = install ? withLumenHooks(cur.json, base, token, opts) : withoutLumenHooks(cur.json)
   mkdirSync(dirname(path), { recursive: true })
   if (cur.raw) copyFileSync(path, `${path}.lumen-bak`)
   const tmp = `${path}.lumen-tmp`

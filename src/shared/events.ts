@@ -1,5 +1,6 @@
 // Internal bus events (CONTRACTS C6). Features publish; window modules subscribe.
 import type { Action, BackgroundTask, ModelResponse, Point, Rect } from './types'
+import type { ClaudeBarView } from './claude-code'
 
 export type AssistantPhase =
   | 'idle'
@@ -44,6 +45,8 @@ export interface AssistantState {
   model?: string
   /** The running agent-mode task: plan, step list and counters (08 T13). */
   agentTask?: AgentTask
+  /** The focused Claude Code session (08 T39). */
+  claude?: ClaudeBarView
 }
 
 export type AgentStepStatus = 'pending' | 'running' | 'done' | 'failed' | 'skipped'
@@ -210,6 +213,11 @@ export type AppEvent =
   | { type: 'agent.task'; task: AgentTask | null }
   /** A background task changed (CONTRACTS C11). */
   | { type: 'task.changed'; task: BackgroundTask }
+  /**
+   * The focused Claude Code session on the bar (08 T39): `show` puts it up, otherwise only a
+   * view already shown is updated; null takes session `id` (or any) down.
+   */
+  | { type: 'claude.bar'; view: ClaudeBarView | null; show?: boolean; id?: string }
   /** A key was pasted or removed in the app (never carries the key). */
   | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }
 

@@ -43,6 +43,8 @@ export interface CopilotDeps {
   removeSettings(key: string): void
   decide(input: DecisionInput, signal?: AbortSignal): Promise<AutopilotDecision>
   claudeMd(project: string): string | undefined
+  /** The user's memory profile facts, redacted (T36). */
+  profile?(): string[]
   notify(text: string, kind: NoticeKind, session: ClaudeSessionView): void
   audit(entry: AuditEntry): void
   saved(): SavedSession[]
@@ -57,6 +59,8 @@ interface Entry {
   s: ClaudeSession
   recentUser: string[]
   streak: number
+  /** Bumped on every user turn: a decision made before it is stale. */
+  sent: number
   /** The last auto-answer while it can still be taken back. */
   lastAuto?: ClaudeAutoAnswer & { question: string }
 }
@@ -138,7 +142,7 @@ export class ClaudeCopilot {
       },
       { spawn: this.deps.spawn, now: this.deps.now, log: this.deps.log }
     )
-    const entry: Entry = { s, recentUser: [], streak: 0 }
+    const entry: Entry = { s, recentUser: [], streak: 0, sent: 0 }
     this.entries.set(id, entry)
     this.focusedId = id
     s.on('change', (v: ClaudeSessionView) => {
@@ -167,6 +171,7 @@ export class ClaudeCopilot {
     if (!e) throw new Error('No such Claude session.')
     const turn = this.asCommand(e, text)
     e.recentUser = [...e.recentUser, text].slice(-RECENT_USER)
+    e.sent++
     e.streak = 0
     e.lastAuto = undefined
     this.focusedId = id
@@ -265,14 +270,20 @@ export class ClaudeCopilot {
       return
     }
     const level = v.autopilot
+    const sent = e.sent
     if (level !== 'off' && e.streak < MAX_AUTO_STREAK) {
+      // Busy while the decision runs: the Tasks list keeps this stretch of work open.
+      e.s.update({ phase: 'thinking', lastLine: 'Lumen is choosing an answer' })
       try {
+        const profile = this.deps.profile?.() ?? []
         const d = await this.deps.decide({
           question: q,
           claudeMd: this.deps.claudeMd(v.project),
           notes: this.deps.projects().find((p) => samePath(p.path, v.project))?.notes,
-          recent: e.recentUser
+          recent: e.recentUser,
+          ...(profile.length ? { profile } : {})
         })
+        if (e.sent !== sent || !this.entries.has(v.id)) return
         if (shouldAutoAnswer(level, d, this.deps.settings().confidence)) {
           const a: ClaudeAutoAnswer = {
             question: oneLine(q.question, 300),
@@ -295,10 +306,17 @@ export class ClaudeCopilot {
       } catch (err) {
         this.deps.log(`autopilot decision failed: ${(err as Error).message}`)
       }
+      // The user moved on (a new turn, a stop) while the decision ran.
+      if (e.sent !== sent || !e.s.alive) return
     }
     e.s.update({
       phase: 'waiting-answer',
-      pending: { kind: 'question', text: oneLine(q.question, 600) }
+      lastLine: v.lastLine,
+      pending: {
+        kind: 'question',
+        text: oneLine(q.question, 600),
+        ...(q.options.length ? { choices: q.options.slice(0, 4).map((o) => oneLine(o, 60)) } : {})
+      }
     })
     this.deps.notify(
       `Claude asks in ${v.projectName}: ${oneLine(q.question, 200)}`,

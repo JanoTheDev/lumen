@@ -32,19 +32,28 @@ export function revealText(text: string, streaming: boolean): string {
 }
 
 /** The rows the bar can show; simple mode shows one of them at a time. */
-export type BarRow = 'confirm' | 'answer' | 'task' | 'step' | 'notice' | 'live' | 'caption'
+export type BarRow =
+  | 'confirm'
+  | 'answer'
+  | 'task'
+  | 'claude'
+  | 'step'
+  | 'notice'
+  | 'live'
+  | 'caption'
 
 /** Simple mode (06 T18): the one row that matters most right now, or null for the bar only. */
 export function simpleRow(
   v: Pick<
     AssistantView,
     'confirm' | 'answer' | 'error' | 'agentTask' | 'step' | 'notice' | 'live' | 'caption'
-  > & { captionEdit?: unknown }
+  > & { captionEdit?: unknown; claude?: unknown }
 ): BarRow | null {
   if (v.confirm) return 'confirm'
   if (v.captionEdit) return 'caption'
   if (v.answer || v.error) return 'answer'
   if (v.agentTask) return 'task'
+  if (v.claude) return 'claude'
   if (v.step) return 'step'
   if (v.notice) return 'notice'
   if (v.live && !v.live.echo) return 'live'

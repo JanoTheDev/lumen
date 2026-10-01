@@ -133,6 +133,28 @@ describe('ClaudeCopilot', () => {
     expect(h.c.undoAnswer(v.id)).toBe(false)
   })
 
+  it('stops a turn and takes a follow-up on the same session', async () => {
+    const h = harness()
+    const v = await h.c.open(project, { prompt: 'SLOW' })
+    await waitFor(() => h.c.get(v.id)?.phase === 'running-tool')
+    expect(await h.c.interrupt(v.id)).toBe(true)
+    await waitFor(() => h.c.get(v.id)?.lastLine === 'Interrupted')
+    h.c.send(v.id, 'carry on')
+    await waitFor(() => h.notices.find((n) => n.kind === 'done'))
+    expect(h.c.get(v.id)!.lastAnswer).toBe('done: carry on')
+    // The interrupted turn is not reported as a problem.
+    expect(h.notices.some((n) => n.text.includes('problem'))).toBe(false)
+  })
+
+  it('feeds the memory profile into the decision', async () => {
+    const h = harness()
+    const deps = (h.c as unknown as { deps: CopilotDeps }).deps
+    deps.profile = () => ['Prefers spaces']
+    await h.c.open(project, { prompt: 'ASK' })
+    await waitFor(() => h.decide.mock.calls.length)
+    expect(h.decide.mock.calls[0][0]).toMatchObject({ profile: ['Prefers spaces'] })
+  })
+
   it('relays the question when the model is unsure', async () => {
     const h = harness({ confidence: 0.3 })
     await h.c.open(project, { prompt: 'ASK' })

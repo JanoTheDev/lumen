@@ -89,7 +89,17 @@ function TextSetting({
   )
 }
 
-function HooksCard({ enabled, refresh }: { enabled: boolean; refresh: () => void }): JSX.Element {
+function HooksCard({
+  enabled,
+  answer,
+  waitS,
+  refresh
+}: {
+  enabled: boolean
+  answer: boolean
+  waitS: number
+  refresh: () => void
+}): JSX.Element {
   const [preview, setPreview] = useState<(ClaudeHooksPreview & { install: boolean }) | null>(null)
   const [msg, setMsg] = useState('')
 
@@ -117,6 +127,13 @@ function HooksCard({ enabled, refresh }: { enabled: boolean; refresh: () => void
     refresh()
   }
 
+  // The PermissionRequest hook is part of the installed hooks: a change is a new diff to confirm.
+  const setAnswer = async (patch: ClaudeSettingsPatch): Promise<void> => {
+    await invoke('claude:settings-set', patch)
+    refresh()
+    if (enabled) await show(true)
+  }
+
   return (
     <Card
       title="Sessions you start yourself"
@@ -128,6 +145,25 @@ function HooksCard({ enabled, refresh }: { enabled: boolean; refresh: () => void
         hint="You see the exact change before anything is written. Turning it off removes only Lumen’s entries."
         onChange={(on) => void show(on)}
       />
+      <Switch
+        checked={answer}
+        label="Let me answer their permission prompts by voice"
+        hint="Claude waits for your “approve” or “deny” on Lumen’s bar; if you do not answer in time, or you are away, Claude shows its own prompt in the terminal."
+        onChange={(on) => void setAnswer({ hooksPermissions: on })}
+      />
+      {answer && (
+        <Select
+          label="Wait for my answer"
+          value={String(waitS)}
+          options={[
+            { value: '20', label: '20 seconds' },
+            { value: '45', label: '45 seconds' },
+            { value: '90', label: '90 seconds' },
+            { value: '180', label: '3 minutes' }
+          ]}
+          onChange={(v) => void setAnswer({ hooksPermissionWaitS: Number(v) })}
+        />
+      )}
       {preview && (
         <div className="panel-stack">
           <p className="ui-hint">
@@ -288,6 +324,30 @@ export function ClaudeCode(): JSX.Element {
           ]}
           onChange={(v) => set({ confidence: Number(v) })}
         />
+        <Select
+          label="Stop one task after it costs"
+          hint="Claude’s cost comes from your Claude plan and shows in the Tasks list. Lumen only stops a task at a limit you set."
+          value={String(s.taskMaxCostUsd)}
+          options={[
+            { value: '0', label: 'No limit' },
+            { value: '1', label: '$1' },
+            { value: '5', label: '$5' },
+            { value: '20', label: '$20' }
+          ]}
+          onChange={(v) => set({ taskMaxCostUsd: Number(v) })}
+        />
+        <Select
+          label="Stop one task after"
+          value={String(s.taskMaxMin)}
+          options={[
+            { value: '0', label: 'No limit' },
+            { value: '15', label: '15 minutes' },
+            { value: '30', label: '30 minutes' },
+            { value: '60', label: '1 hour' },
+            { value: '120', label: '2 hours' }
+          ]}
+          onChange={(v) => set({ taskMaxMin: Number(v) })}
+        />
         <TextSetting
           key={`tools:${s.allowedTools.join(',')}`}
           label="Always allowed tools"
@@ -428,7 +488,12 @@ export function ClaudeCode(): JSX.Element {
         {msg && <p className="ui-hint">{msg}</p>}
       </Card>
 
-      <HooksCard enabled={s.hooksObserver} refresh={refresh} />
+      <HooksCard
+        enabled={s.hooksObserver}
+        answer={s.hooksPermissions}
+        waitS={s.hooksPermissionWaitS}
+        refresh={refresh}
+      />
     </>
   )
 }

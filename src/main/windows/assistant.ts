@@ -104,6 +104,7 @@ function hasContent(): boolean {
     view.notice ||
     view.captionEdit ||
     view.agentTask ||
+    view.claude ||
     captionsKept()
   )
 }
@@ -189,7 +190,8 @@ export function open(phase: AssistantPhase = view.phase): void {
     confirm: pendingConfirm ? view.confirm : undefined,
     captionEdit: view.captionEdit,
     // A running agent task stays on the bar while the user answers or says stop.
-    agentTask: view.agentTask
+    agentTask: view.agentTask,
+    claude: view.claude
   }
   patch({})
 }
@@ -251,7 +253,7 @@ export function settle(): void {
 /** The voice/query turn finished in the renderer (old `assistant:close`). */
 export function turnEnded(): void {
   if (statusTimer.running || liveTimer.running || view.confirm || view.answer) return
-  if (view.agentTask) return
+  if (view.agentTask || view.claude) return
   if (view.captionEdit || captionsKept()) return
   close()
 }
@@ -693,6 +695,20 @@ bus.on('agent.task', (e) => {
   }
   if (!view.agentTask) return
   view = { ...view, agentTask: undefined }
+  if (!view.visible) return
+  emit()
+  if (idleNow() && view.phase === 'idle') close()
+})
+
+// ---- 08 T39 focused Claude Code session ----
+
+bus.on('claude.bar', (e) => {
+  if (e.view) {
+    if (e.show || view.claude?.id === e.view.id) patch({ claude: e.view })
+    return
+  }
+  if (!view.claude || (e.id && e.id !== view.claude.id)) return
+  view = { ...view, claude: undefined }
   if (!view.visible) return
   emit()
   if (idleNow() && view.phase === 'idle') close()

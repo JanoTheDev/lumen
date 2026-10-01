@@ -93,8 +93,8 @@ export function Tasks(): JSX.Element | null {
               </button>
               {r.canCancel && (
                 <IconButton
-                  icon={icons.close}
-                  label={`Cancel ${r.title}`}
+                  icon={r.claude ? icons.square : icons.close}
+                  label={`${r.claude ? 'Stop' : 'Cancel'} ${r.title}`}
                   onClick={() => void invoke('tasks:cancel', r.id).catch(() => {})}
                 />
               )}

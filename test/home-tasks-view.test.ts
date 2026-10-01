@@ -48,4 +48,29 @@ describe('Home tasks view', () => {
     ])
     expect(rows.map((r) => r.id)).toEqual(['bg_run001', 'bg_done01'])
   })
+
+  it('shows a Claude session’s phase, last line and cost, with Stop and no Run again', () => {
+    const claude = (phase: 'thinking' | 'running-tool' | 'waiting-answer'): BackgroundTask =>
+      t({
+        title: 'Claude: proj',
+        phase: phase === 'waiting-answer' ? 'asking' : 'running',
+        progress: ['Running npm test'],
+        counters: { modelCalls: 1, costUsd: 0.12, startedAt: 0 },
+        claude: { id: 'cc_abcd', projectName: 'proj', phase },
+        ...(phase === 'waiting-answer' ? { question: { text: 'Tabs or spaces?' } } : {})
+      })
+    expect(taskRow(claude('running-tool')).status).toBe('Running npm test · $0.12')
+    expect(taskRow(claude('thinking')).status).toBe('Thinking · Running npm test · $0.12')
+    const asking = taskRow(claude('waiting-answer'))
+    expect(asking.status).toBe('Waiting for you · $0.12')
+    expect(asking.question?.text).toBe('Tabs or spaces?')
+    expect(asking).toMatchObject({ claude: true, canCancel: true, canOpen: true })
+    const done = taskRow({
+      ...claude('thinking'),
+      phase: 'cancelled',
+      claude: { id: 'cc_abcd', projectName: 'proj', phase: 'stopped' }
+    })
+    expect(done.canRunAgain).toBe(false)
+    expect(done.status).toBe('Cancelled · $0.12')
+  })
 })

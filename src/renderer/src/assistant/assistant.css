@@ -516,6 +516,11 @@ body,
   flex-basis: 100%;
 }
 
+.as-claude__hint {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
 .as-steps__sr {
   position: absolute;
   width: 1px;
