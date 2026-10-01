@@ -25,6 +25,7 @@ import {
   pausePresetOf,
   sensitivityText
 } from './voice-options'
+import { LANGUAGE_OPTIONS, dictionaryFromText, languageHint } from './voice-language'
 import { MicTest } from './MicTest'
 import { useMicDevices } from './use-mic-devices'
 
@@ -73,6 +74,12 @@ function Microphone({ cfg, patch }: SectionProps): JSX.Element {
           ? 'Tap once and speak; Lumen stops after a pause. Tap again to send early.'
           : 'Hold while you speak and let go to send. A quick tap also works and stops after a pause.'}
       </p>
+      <Switch
+        checked={cfg.voice.conversation}
+        onChange={(conversation) => patch({ voice: { conversation } })}
+        label="Double-tap for a conversation"
+        hint="Double-tap the shortcut and keep talking: Lumen listens again after each answer. Double-tap again, press Escape or say “stop” to end. Ends by itself after 5 minutes without a request."
+      />
     </Card>
   )
 }
@@ -409,6 +416,14 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
           onCommit={(voiceVocab) => patch({ voiceVocab })}
           hint="Separate with commas or new lines, for example: Kubernetes, DaVinci Resolve."
         />
+        <TextField
+          label="Personal dictionary"
+          multiline
+          value={cfg.dictation.dictionary.join(', ')}
+          onCommit={(text) => patch({ dictation: { dictionary: dictionaryFromText(text) } })}
+          commitOnBlurOnly
+          hint="Spellings dictation always uses. Lumen adds a name here when you correct it the same way twice; remove it to undo."
+        />
       </Card>
 
       <SilenceDetection cfg={cfg} patch={patch} />
@@ -417,6 +432,13 @@ export function Voice({ cfg, patch }: SectionProps): JSX.Element {
         title="Speech recognition"
         description="Turns what you say into text. On this PC it’s free and audio never leaves your computer."
       >
+        <Select
+          label="Language you speak"
+          value={cfg.voice.language}
+          options={LANGUAGE_OPTIONS}
+          onChange={(language) => patch({ voice: { language } })}
+          hint={languageHint(cfg.voice.language)}
+        />
         <Select
           label="Recognise speech"
           value={cfg.voice.stt === 'local' ? 'local' : 'cloud-batch'}
