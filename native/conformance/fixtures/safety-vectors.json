@@ -1,0 +1,60 @@
+{
+  "combos": [
+    { "keys": "win+r", "denied": true },
+    { "keys": "Win+X", "denied": true },
+    { "keys": "win+i", "denied": true },
+    { "keys": "win", "denied": true },
+    { "keys": "win+shift+s", "denied": true },
+    { "keys": "win+d", "denied": false },
+    { "keys": "win+tab", "denied": false },
+    { "keys": "win+left", "denied": false },
+    { "keys": "winleft+up", "denied": false },
+    { "keys": "super+down", "denied": false },
+    { "keys": "win+d+tab", "denied": true },
+    { "keys": "ctrl+alt+delete", "denied": true },
+    { "keys": "ctrl+alt+t", "denied": true },
+    { "keys": "control+option+a", "denied": true },
+    { "keys": "ctrl+shift+esc", "denied": true },
+    { "keys": "ctrl+shift+escape", "denied": true },
+    { "keys": "ctrl+shift+t", "denied": false },
+    { "keys": "ctrl+l", "denied": false },
+    { "keys": "alt+f4", "denied": false },
+    { "keys": "alt+tab", "denied": false },
+    { "keys": "enter", "denied": false }
+  ],
+  "urls": [
+    { "url": "https://example.com", "allowed": true },
+    { "url": "http://localhost:3000/x?y=1", "allowed": true },
+    { "url": "HTTPS://EXAMPLE.COM", "allowed": true },
+    { "url": "  https://example.com  ", "allowed": true },
+    { "url": "file:///C:/Windows/System32/cmd.exe", "allowed": false },
+    { "url": "javascript:alert(1)", "allowed": false },
+    { "url": "ms-settings:display", "allowed": false },
+    { "url": "C:\\Windows\\notepad.exe", "allowed": false },
+    { "url": "https://", "allowed": false },
+    { "url": "http:example.com", "allowed": false },
+    { "url": "//example.com", "allowed": false },
+    { "url": "example.com", "allowed": false },
+    { "url": "", "allowed": false }
+  ],
+  "targets": [
+    { "exe": "cmd.exe", "cls": "ConsoleWindowClass", "children": [], "denied": true },
+    {
+      "exe": "windowsterminal.exe",
+      "cls": "CASCADIA_HOSTING_WINDOW_CLASS",
+      "children": [],
+      "denied": true
+    },
+    { "exe": "pwsh.exe", "cls": "ConsoleWindowClass", "children": [], "denied": true },
+    {
+      "exe": "explorer.exe",
+      "cls": "#32770",
+      "children": ["ComboBox", "Edit", "Button"],
+      "denied": true
+    },
+    { "exe": "explorer.exe", "cls": "#32770", "children": ["Button"], "denied": false },
+    { "exe": "explorer.exe", "cls": "CabinetWClass", "children": [], "denied": false },
+    { "exe": "notepad.exe", "cls": "Notepad", "children": ["Edit"], "denied": false },
+    { "exe": "chrome.exe", "cls": "Chrome_WidgetWin_1", "children": [], "denied": false }
+  ]
+}

@@ -4,10 +4,14 @@
 
 mod app;
 mod dpi;
+mod geom;
 mod hotkey;
+mod input;
 mod logging;
+mod monitors;
 mod proto;
 mod stdio;
+mod window;
 
 use std::io::BufRead;
 use std::time::{Duration, Instant};
