@@ -52,6 +52,8 @@ export interface ToolOutcome {
   label?: string
   /** Money the tool spent itself (a paid web search), added to the task's cost. */
   costUsd?: number
+  /** The call ends the task like finish (present_cards): its summary and card set. */
+  end?: { summary: string; cardsId?: string }
 }
 
 export interface ToolCtx {
@@ -62,6 +64,8 @@ export interface ToolCtx {
   step?: number
   /** This step's check already failed once: this is its one retry. */
   retry: boolean
+  /** The conversation so far (what the task observed: present_cards checks its sources). */
+  messages?(): readonly AgentMessage[]
 }
 
 export type ToolHandler = (input: Record<string, unknown>, ctx: ToolCtx) => Promise<ToolOutcome>
@@ -156,6 +160,8 @@ export interface RunResult {
   needsUserAction?: string
   /** finish report: markdown findings with sources (research), shown not spoken. */
   report?: string
+  /** present_cards: the card set shown with the summary. */
+  cardsId?: string
   task: AgentTask
   saved?: SavedRun
 }
@@ -249,9 +255,9 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
   const usesInput = opts.tools.some((t) => INPUT_TOOLS.includes(t))
   const verifyFails: Record<number, number> = { ...opts.resume?.verifyFails }
   let release: (() => void) | null = null
+  let messages: AgentMessage[] = []
 
   try {
-    let messages: AgentMessage[]
     if (opts.resume) {
       messages = opts.resume.messages
       update({ phase: 'running', question: undefined })
@@ -355,6 +361,8 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           continue
         }
         const outcome = await runCall(call)
+        if (outcome.end && !outcome.isError)
+          return finish(outcome.end.summary, undefined, undefined, outcome.end.cardsId)
         if (outcome.noAnswer) {
           // ask_user timed out: keep the run (this call first) for "resume the task".
           update({ phase: 'paused' })
@@ -428,7 +436,14 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     let outcome: ToolOutcome
     try {
       outcome = await raced(
-        handler(call.input, { task: () => task, update, signal, step, retry: fails === 1 }),
+        handler(call.input, {
+          task: () => task,
+          update,
+          signal,
+          step,
+          retry: fails === 1,
+          messages: () => messages
+        }),
         signal
       )
     } catch (e) {
@@ -460,12 +475,24 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     return outcome
   }
 
-  function finish(summary: string, needsUserAction?: string, report?: string): RunResult {
+  function finish(
+    summary: string,
+    needsUserAction?: string,
+    report?: string,
+    cardsId?: string
+  ): RunResult {
     task = { ...closeSteps(task, true), phase: 'done', needsUserAction }
     publish()
     if (opts.speakSummary !== false)
       deps.speak(needsUserAction ? `${summary} ${needsUserAction}.`.replace(/\.\.$/, '.') : summary)
-    return { status: 'done', summary, needsUserAction, report, task }
+    return {
+      status: 'done',
+      summary,
+      needsUserAction,
+      report,
+      task,
+      ...(cardsId ? { cardsId } : {})
+    }
   }
 
   function stop(summary: string): RunResult {

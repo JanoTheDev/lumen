@@ -106,14 +106,14 @@ describe('card actions', () => {
     expect(p.openUrl).not.toHaveBeenCalled()
   })
 
-  it('do emits cards.do and says booking is not ready', async () => {
+  it('do emits cards.do (the booking starts there)', async () => {
     const { id, p } = await shown()
     const seen = vi.fn()
     const off = bus.on('cards.do', seen)
     const r = await cardAction({ id, cardId: 'h1', action: 'do' })
     off()
-    expect(r).toEqual({ ok: false, message: "Booking isn't ready yet." })
-    expect(p.say).toHaveBeenCalledWith("Booking isn't ready yet.")
+    expect(r).toEqual({ ok: true })
+    expect(p.say).not.toHaveBeenCalled()
     expect(seen).toHaveBeenCalledWith({ type: 'cards.do', id, cardId: 'h1', label: 'Book it' })
   })
 

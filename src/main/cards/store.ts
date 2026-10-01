@@ -12,6 +12,8 @@ export interface StoredCards {
   /** Per card id: the resolved image, null (failed / none) or 'pending'. */
   images: Map<string, CardImage | null | 'pending'>
   createdAt: number
+  /** The request the cards answer (follow-ups re-run it with a filter, T40). */
+  request?: string
 }
 
 export class CardsStore {
@@ -29,12 +31,18 @@ export class CardsStore {
     return `c_${stamp}${(++this.seq).toString(36)}${rand}`
   }
 
-  add(text: string, cards: AnswerCards): StoredCards {
+  /** `conversation: false`: kept by id only (a background task's results), no follow-ups. */
+  add(
+    text: string,
+    cards: AnswerCards,
+    opts: { request?: string; conversation?: boolean } = {}
+  ): StoredCards {
     const images = new Map<string, CardImage | null | 'pending'>()
     for (const c of cards.cards) images.set(c.id, c.image ? 'pending' : null)
     const set: StoredCards = { id: this.newId(), text, cards, images, createdAt: this.now() }
+    if (opts.request) set.request = opts.request
     this.sets.set(set.id, set)
-    this.conversation.push(set.id)
+    if (opts.conversation !== false) this.conversation.push(set.id)
     while (this.sets.size > KEEP_SETS) {
       const oldest = this.sets.keys().next().value
       if (oldest === undefined) break
@@ -46,6 +54,14 @@ export class CardsStore {
 
   get(id: string): StoredCards | null {
     return this.sets.get(id) ?? null
+  }
+
+  /** A picture is being looked up for a card that had none (shown as pending). */
+  markPending(id: string, cardId: string): boolean {
+    const set = this.sets.get(id)
+    if (!set || set.images.get(cardId) !== null) return false
+    set.images.set(cardId, 'pending')
+    return true
   }
 
   setImage(id: string, cardId: string, image: CardImage | null): boolean {

@@ -299,7 +299,7 @@ export class TranscriptRecorder {
     if (t) this.add({ k: 'error', text: t })
   }
 
-  result(text: string, ok: boolean, report?: string): void {
+  result(text: string, ok: boolean, report?: string, cardsId?: string): void {
     const t = this.clean(text, TEXT_MAX)
     const r = report ? this.clean(report, REPORT_MAX) : ''
     const last = this.last()
@@ -308,7 +308,8 @@ export class TranscriptRecorder {
       k: 'result',
       text: t || (ok ? 'Done.' : 'It stopped.'),
       ok,
-      ...(r ? { report: r } : {})
+      ...(r ? { report: r } : {}),
+      ...(cardsId ? { cardsId } : {})
     })
   }
 

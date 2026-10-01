@@ -5,10 +5,12 @@ import type { AnswerCards, CardActionRequest, CardActionResult, CardsView } from
 import { bus } from '../bus'
 import { log } from '../logger'
 import { cardImages, type CardImages } from './images'
+import { rememberAnswer } from './answer-link'
 import { validateCards } from './schema'
 import { CardsStore, type StoredCards } from './store'
 
 export { validateCards } from './schema'
+export { cardsForAnswer } from './answer-link'
 export type { StoredCards } from './store'
 
 export interface CardsPorts {
@@ -39,18 +41,31 @@ export function setCardsPorts(
 
 export type PresentResult = { ok: true; id: string } | { ok: false; error: string }
 
+export interface PresentOptions {
+  /** false: stored only (a background task's results open from the Tasks list). */
+  show?: boolean
+  /** false: not part of this conversation's follow-ups. */
+  conversation?: boolean
+  /** The request the cards answer ("cheaper ones" re-runs it). */
+  request?: string
+}
+
 /**
  * Shows `text` with cards on the bar. Invalid cards are refused (the caller shows the text
  * alone); images load afterwards and the views are refreshed through `cards.changed`.
  */
-export function presentCards(text: string, raw: unknown): PresentResult {
+export function presentCards(text: string, raw: unknown, opts: PresentOptions = {}): PresentResult {
   const check = validateCards(raw)
   if (!check.ok) {
     log('fail', `cards refused: ${check.error}`)
     return { ok: false, error: check.error }
   }
-  const set = store.add(text, check.cards)
-  ports?.showAnswer(text, set.id)
+  const set = store.add(text, check.cards, {
+    ...(opts.request ? { request: opts.request } : {}),
+    ...(opts.conversation === false ? { conversation: false } : {})
+  })
+  rememberAnswer(text, set.id)
+  if (opts.show !== false) ports?.showAnswer(text, set.id)
   void loadImages(set)
   return { ok: true, id: set.id }
 }
@@ -69,6 +84,11 @@ async function loadImages(set: StoredCards): Promise<void> {
   )
 }
 
+/** The installed ports (card follow-ups use the same ones), or null before startup. */
+export function cardsPorts(): CardsPorts | null {
+  return ports
+}
+
 export function cardsView(id: string): CardsView | null {
   return store.view(id)
 }
@@ -84,6 +104,21 @@ export function endCardsConversation(): void {
 
 const sourceUrl = (cards: AnswerCards, id?: string): string | undefined =>
   id ? cards.sources.find((s) => s.id === id)?.url : undefined
+
+const ORDINALS = [
+  'first',
+  'second',
+  'third',
+  'fourth',
+  'fifth',
+  'sixth',
+  'seventh',
+  'eighth',
+  'ninth',
+  'tenth',
+  'eleventh',
+  'twelfth'
+]
 
 export async function cardAction(req: CardActionRequest): Promise<CardActionResult> {
   const set = store.get(req.id)
@@ -112,16 +147,22 @@ export async function cardAction(req: CardActionRequest): Promise<CardActionResu
       ports.say(message)
       return { ok, message }
     }
-    case 'more':
-      ports.runQuery(`Tell me more about ${card.title}`)
+    case 'more': {
+      // The newest set's cards go through the follow-ups ("the second one", T40).
+      const i = set.cards.cards.indexOf(card)
+      const latest = store.latest()?.id === set.id
+      ports.runQuery(
+        latest && i < 12
+          ? `Tell me more about the ${ORDINALS[i]} one`
+          : `Tell me more about ${card.title}`
+      )
       return { ok: true }
+    }
     case 'do': {
-      // Booking runs as an agent task in the user's browser (T41); until then it only says so.
+      // Booking runs as an agent task in the user's browser (T41, cards/book-install).
       const label = card.actions.find((a) => a.kind === 'do')?.label ?? 'Do it'
       bus.emit({ type: 'cards.do', id: set.id, cardId: card.id, label })
-      const message = "Booking isn't ready yet."
-      ports.say(message)
-      return { ok: false, message }
+      return { ok: true }
     }
   }
   return { ok: false }

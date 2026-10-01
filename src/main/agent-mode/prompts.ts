@@ -1,6 +1,7 @@
 // Agent-mode prompts. The system prompt is byte-identical for every task (prompt cache):
 // no dates, window titles or app names in it. Everything volatile goes in the first user turn.
 import { z } from 'zod'
+import { CARDS_RULE_FOREGROUND } from '../cards/research'
 
 /** safety-policy §6, verbatim. */
 export const INJECTION_RULE =
@@ -23,6 +24,7 @@ Rules:
 - When a tool fails, read the reason and try another way once. If it fails again, call finish and say what blocked you.
 - Put the plan step number in "step" when a call works on a plan step.
 - Research (find, compare, list information): search with navigate (https://www.google.com/search?q=...), open the best results, read them with observe, at most 8 pages. Finish with a short spoken summary and the findings with their source URLs in "report".
+- ${CARDS_RULE_FOREGROUND}
 - Always end with finish. Its summary is spoken: one or two short sentences, no markdown, no URLs.`
 
 export const PLAN_SYSTEM = `You plan one task for a desktop assistant that operates the user's Windows PC. Reply with JSON only: {"summary": "...", "steps": ["...", ...], "risk": "low"|"medium"|"high"}.

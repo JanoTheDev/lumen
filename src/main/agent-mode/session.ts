@@ -59,6 +59,10 @@ import { CancelledError } from '../query/cancel'
 import { takeFilesFor } from '../files/attach'
 import { transcripts } from './transcript-hub'
 import { askOwned } from './confirm'
+import { presentCardsHandler } from '../cards/present-tool'
+import { browserPageUrl } from '../cards/browser-url'
+import { FETCH_URL_TOOL, fetchUrlHandler } from '../cards/fetch-tool'
+import { PRESENT_CARDS_TOOL } from '../cards/research'
 
 const PAUSE_KEEP_MS = 10 * 60_000
 const TURN_MAX_TOKENS = 2048
@@ -328,7 +332,12 @@ function deps(
       if (!q.success) return { content: [{ type: 'text', text: 'Invalid input.' }], isError: true }
       return { content: [{ type: 'text', text: observed('memory', memorySearchFor(q.data)) }] }
     },
-    ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {})
+    ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {}),
+    // Research → cards (05 T39).
+    present_cards: presentCardsHandler({ background: false, pageUrl: browserPageUrl }),
+    fetch_url: fetchUrlHandler({
+      onText: (t) => (env.observedText = `${env.observedText}\n${t}`.slice(-20_000))
+    })
   }
   // A skill's permissions (11 T04) in front of every call; successful UI calls are traced for
   // "save that as a skill" (11 T09).
@@ -449,7 +458,10 @@ async function run(
             MEMORY_SEARCH_TOOL,
             ...skills.defs,
             ...mcpDefs,
-            ...(noSpawn ? [] : [BG_TOOLS.spawn_task])
+            ...(noSpawn ? [] : [BG_TOOLS.spawn_task]),
+            PRESENT_CARDS_TOOL,
+            // A skill run reaches only its own sites (no fetch_url outside its envelope).
+            ...(envelope ? [] : [FETCH_URL_TOOL])
           ].filter((d) => !envelope || envelope.offers(d.name)),
           parallelTools: ['spawn_task'],
           ...(skills.index ? { systemExtra: skills.index } : {}),

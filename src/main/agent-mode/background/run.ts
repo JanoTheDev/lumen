@@ -17,6 +17,7 @@ import { createBackgroundHandlers, type BgPorts } from './handlers'
 import type { RunOutcome, TaskControl } from './manager'
 import { BACKGROUND_SYSTEM, backgroundTurn } from './prompts'
 import { backgroundToolDefs } from './tools'
+import { presentCardsHandler } from '../../cards/present-tool'
 
 export interface BackgroundCaps {
   maxModelCalls: number
@@ -207,7 +208,13 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
   const more = env.moreTools
     ? await env.moreTools().catch(() => ({ defs: [] as ToolDef[], handlers: {} }))
     : { defs: [] as ToolDef[], handlers: {} }
-  const own = { ...createBackgroundHandlers(env.ports), ...skills?.handlers, ...more.handlers }
+  const own = {
+    ...createBackgroundHandlers(env.ports),
+    // Research → cards (05 T39): the results wait for "View results" in the Tasks list.
+    ...(task.parentId ? {} : { present_cards: presentCardsHandler({ background: true }) }),
+    ...skills?.handlers,
+    ...more.handlers
+  }
   const base = env.observe ? observing(own, env.observe) : own
   const skillRun = !!task.skill || !!env.toolGuard
   // A helper inside a skill run goes by its parent's skill too (it has none of its own).
@@ -299,7 +306,8 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     return {
       status: 'done',
       summary: r.needsUserAction ? `${r.summary} ${r.needsUserAction}` : r.summary,
-      ...(r.report ? { report: r.report } : {})
+      ...(r.report ? { report: r.report } : {}),
+      ...(r.cardsId ? { cardsId: r.cardsId } : {})
     }
   return { status: 'failed', summary: r.summary }
 }

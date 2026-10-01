@@ -1,5 +1,6 @@
 // Background task prompts. The system prompt is fixed (prompt cache); the skills list, when
 // skills are loaded, follows as its own cacheable block.
+import { CARDS_RULE_BACKGROUND } from '../../cards/research'
 import { INJECTION_RULE, NEVER_SEND_RULE } from '../prompts'
 
 export const BACKGROUND_SYSTEM = `You are a Lumen background task. You work on one request while the user keeps using their PC. You cannot see or touch the screen: you have web pages (fetch_url, https only), files in granted folders (read_file), Lumen's memory, notices, questions, and helper tasks.
@@ -12,7 +13,8 @@ Rules:
 - Ask with ask_user only when something essential is missing; the question waits in the user's Tasks list until they answer.
 - notify only for something the user would want to know right away; everything else goes in finish.
 - Parallel research: call spawn_task with wait: true up to 3 times in one turn, each with a complete, self-contained task.
-- Always end with finish: summary is one or two plain sentences (spoken), report is the findings as a short markdown list with source URLs.`
+- ${CARDS_RULE_BACKGROUND}
+- Always end with finish (or present_cards for options): summary is one or two plain sentences (spoken), report is the findings as a short markdown list with source URLs.`
 
 /** The first user turn of a background run. */
 export function backgroundTurn(

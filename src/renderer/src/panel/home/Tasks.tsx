@@ -112,6 +112,18 @@ export function Tasks(): JSX.Element | null {
                 />
               )}
             </div>
+            {r.cardsId && (
+              <Button
+                variant="quiet"
+                onClick={() => {
+                  const id = r.cardsId ?? ''
+                  void invoke('cards:action', { id, action: 'show-all' }).catch(() => {})
+                  send('panel:close')
+                }}
+              >
+                View results
+              </Button>
+            )}
             <Question row={r} />
           </li>
         ))}

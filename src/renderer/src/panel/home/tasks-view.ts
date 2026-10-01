@@ -15,6 +15,8 @@ export interface TaskRow {
   unseen: boolean
   /** A Claude Code session: Stop instead of Cancel, Open shows the session's chat. */
   claude: boolean
+  /** Answer cards of a finished research task ("View results"). */
+  cardsId?: string
 }
 
 const OPEN = new Set(['queued', 'running', 'asking', 'needs-foreground'])
@@ -82,7 +84,8 @@ export function taskRow(t: BackgroundTask): TaskRow {
       ? { question: { text: t.question.text, choices: t.question.choices ?? [] } }
       : {}),
     unseen: !!t.unseen,
-    claude: !!t.claude
+    claude: !!t.claude,
+    ...(t.phase === 'done' && t.result?.cardsId ? { cardsId: t.result.cardsId } : {})
   }
 }
 

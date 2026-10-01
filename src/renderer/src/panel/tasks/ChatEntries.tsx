@@ -173,6 +173,11 @@ function Entry({
           </p>
           <Markdown source={e.text} />
           {e.report && <Markdown source={e.report} className="chat-result__report" />}
+          {e.cardsId && (
+            <Button variant="quiet" onClick={() => (location.hash = `#/answer/${e.cardsId}`)}>
+              View results
+            </Button>
+          )}
         </div>
       )
   }

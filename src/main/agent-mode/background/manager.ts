@@ -62,6 +62,8 @@ export interface RunOutcome {
   summary: string
   report?: string
   artifacts?: BackgroundArtifact[]
+  /** present_cards: the card set ("View results"). */
+  cardsId?: string
 }
 
 export interface ManagerDeps {
@@ -405,7 +407,8 @@ export class BackgroundManager {
             result: {
               summary: r.summary,
               ...(r.report ? { report: r.report } : {}),
-              ...(r.artifacts?.length ? { artifacts: r.artifacts } : {})
+              ...(r.artifacts?.length ? { artifacts: r.artifacts } : {}),
+              ...(r.cardsId ? { cardsId: r.cardsId } : {})
             }
           })
         },

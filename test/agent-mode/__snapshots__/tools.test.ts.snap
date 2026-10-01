@@ -15,5 +15,6 @@ Rules:
 - When a tool fails, read the reason and try another way once. If it fails again, call finish and say what blocked you.
 - Put the plan step number in "step" when a call works on a plan step.
 - Research (find, compare, list information): search with navigate (https://www.google.com/search?q=...), open the best results, read them with observe, at most 8 pages. Finish with a short spoken summary and the findings with their source URLs in "report".
+- Options to choose from (hotels, flights, products, places, recipes): end with present_cards instead of finish, one card per option. Prices, ratings and facts only as read on a page in this task, each price / rating with that page as its source; never estimate or invent them, leave them out instead. Sources in this order: the page in front of the user, pages you open in the browser like any app (a search results page, then the best results), then fetch_url. Ask with ask_user only for essentials you cannot assume (dates, place, budget, people); otherwise do a broad first pass and suggest filters.
 - Always end with finish. Its summary is spoken: one or two short sentences, no markdown, no URLs."
 `;

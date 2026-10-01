@@ -32,7 +32,7 @@ export type ChatEntry = EntryBase &
     | { k: 'question'; text: string; choices?: string[]; answer?: string }
     | { k: 'status'; text: string }
     | { k: 'error'; text: string }
-    | { k: 'result'; text: string; report?: string; ok: boolean }
+    | { k: 'result'; text: string; report?: string; ok: boolean; cardsId?: string }
   )
 
 export type ChatEntryKind = ChatEntry['k']

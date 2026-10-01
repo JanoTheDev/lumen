@@ -325,7 +325,12 @@ export class TranscriptHub {
   foregroundEnd(
     id: string,
     end:
-      | { status: 'done' | 'failed' | 'stopped' | 'paused'; summary: string; report?: string }
+      | {
+          status: 'done' | 'failed' | 'stopped' | 'paused'
+          summary: string
+          report?: string
+          cardsId?: string
+        }
       | { error: string; cancelled: boolean }
   ): void {
     const r = this.recs.get(id)
@@ -344,7 +349,7 @@ export class TranscriptHub {
       r.status(end.summary)
     } else {
       phase = end.status === 'done' ? 'done' : 'failed'
-      r.result(end.summary, end.status === 'done', end.report)
+      r.result(end.summary, end.status === 'done', end.report, end.cardsId)
     }
     if (r.meta)
       r.meta = { ...r.meta, phase, ...(phase === 'paused' ? {} : { endedAt: this.deps.now() }) }
@@ -411,7 +416,7 @@ function endBackground(r: TranscriptRecorder, t: BackgroundTask): void {
   switch (t.phase) {
     case 'done':
     case 'failed':
-      r.result(t.result?.summary ?? '', t.phase === 'done', t.result?.report)
+      r.result(t.result?.summary ?? '', t.phase === 'done', t.result?.report, t.result?.cardsId)
       break
     case 'cancelled':
       r.status('Cancelled.')

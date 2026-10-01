@@ -292,7 +292,13 @@ export interface BackgroundTask {
   phase: BackgroundTaskPhase
   /** Newest last, capped. */
   progress: string[]
-  result?: { summary: string; report?: string; artifacts?: BackgroundArtifact[] }
+  /** cardsId: answer cards of a research task (05 T39), opened at #/answer/<id>. */
+  result?: {
+    summary: string
+    report?: string
+    artifacts?: BackgroundArtifact[]
+    cardsId?: string
+  }
   counters: { modelCalls: number; costUsd: number; startedAt: number }
   /** A queued question (ask_user, a cap reached, request_foreground declined for later). */
   question?: { text: string; choices?: string[] }

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { ToolDef } from '../../ai/providers/types'
 import { MEMORY_SEARCH_TOOL } from '../../ai/memory/search'
 import { LOOKUP_HOWTO_TOOL } from '../../howto/tool'
+import { PRESENT_CARDS_TOOL } from '../../cards/research'
 
 export const fetchUrlInput = z.object({
   url: z.string().describe('Full https URL of a public web page or JSON endpoint.')
@@ -83,7 +84,8 @@ export const BG_TOOLS = {
     description:
       'Starts a helper task in the background with the non-screen tools. wait: true returns its result (several calls in one turn run in parallel, at most 3); otherwise it runs on and shows up in the Tasks list.',
     schema: spawnTaskInput
-  }
+  },
+  present_cards: PRESENT_CARDS_TOOL
 } satisfies Record<string, ToolDef>
 
 export type BgToolName = keyof typeof BG_TOOLS
@@ -101,6 +103,6 @@ export function backgroundToolDefs(opts: { child: boolean }): ToolDef[] {
     'notify',
     'request_foreground'
   ]
-  if (!opts.child) names.push('spawn_task')
+  if (!opts.child) names.push('spawn_task', 'present_cards')
   return names.map((n) => BG_TOOLS[n])
 }
