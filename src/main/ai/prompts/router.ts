@@ -16,6 +16,7 @@ mode, the one the main assistant will use:
 
 needsScreen: true when the request refers to the screen ("this", "that", "here", "the button", the current page or app, a visible list or email) or for guide, locate, action, text_insert, plan, describe. False for general questions (weather, facts, time, maths) and for opening a named app or site.
 needsUia: true when exact control names would help (click/locate a button, field, menu item, tab).
+needsAllScreens: true only when the request is about another monitor or every monitor ("on my other screen", "on the left monitor", "both screens"). Omit otherwise.
 targetApp: the app or site the request names, when it is not the foreground one ({name, url when it is a web app, process when it is a desktop program}). Omit when none is named or it is already in front.
 appSwitch: true when the user wants to go to that other app first ("go back to gmail", "open slack and…").
 parallelSplit: only for 2–4 independent questions that can each be answered alone, in words ("what's the weather and what time is it in Tokyo"). Copy each question as a full sentence. Never split actions, guides or steps that depend on each other. Omit otherwise.
@@ -41,6 +42,7 @@ Examples (utterance [foreground] -> mode, notes):
 "scroll down" -> action, needsScreen false
 "click compose" [Gmail] -> action, needsUia true
 "what's the shortcut for bold in Word" -> answer, needsScreen false
+"what's on my other screen" -> describe, needsScreen true, needsAllScreens true
 "do the thing" -> clarify, confidence 0.3`
 
 export interface RouterInput {

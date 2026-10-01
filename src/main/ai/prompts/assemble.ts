@@ -19,6 +19,8 @@ export interface TurnContext {
   activeWindow: string
   /** Size of screenshot frame "1" in image px, or null when no screenshot is sent. */
   frame: { w: number; h: number } | null
+  /** Every frame sent, in image order, when more than one monitor is captured. */
+  screens?: { label: string; name: string; w: number; h: number }[]
   /** Mode chosen before the call (router or pipeline); the model does not re-decide it. */
   routedMode?: string
   /** App to switch to first (router appSwitch); url when it is a known web app. */
@@ -54,7 +56,11 @@ export function userTurn(ctx: TurnContext): string {
   const lines = [
     `time: ${formatNow(ctx.now ?? new Date())}`,
     `foreground: ${ctx.activeWindow || 'unknown'}`,
-    ctx.frame ? `screen: frame "1", ${ctx.frame.w}x${ctx.frame.h} px` : 'screen: none sent'
+    ctx.screens && ctx.screens.length > 1
+      ? `screens: ${ctx.screens.map((s) => `frame "${s.label}" = ${s.name}, ${s.w}x${s.h} px`).join('; ')}. Images are in frame order; frame "1" has the foreground window. Point and rect targets name the frame they are on.`
+      : ctx.frame
+        ? `screen: frame "1", ${ctx.frame.w}x${ctx.frame.h} px`
+        : 'screen: none sent'
   ]
   if (ctx.routedMode) lines.push(`routed_mode: ${ctx.routedMode}`)
   if (ctx.targetApp)

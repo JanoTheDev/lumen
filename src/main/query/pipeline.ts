@@ -15,6 +15,7 @@ import {
   describeRoute,
   isContinuation,
   mainModeFor,
+  mentionsOtherScreen,
   MIN_ROUTE_CONFIDENCE,
   routeWithLlm,
   type Route
@@ -190,8 +191,13 @@ async function planRouted(
   if (route) log('plan', `route: ${describeRoute(route)}`)
 
   const needsScreen = route ? route.needsScreen : true
-  const ctx =
-    needsScreen || activeWindow === null
+  // Another monitor named: capture every monitor (the speculative capture has only the
+  // foreground one).
+  const allScreens = route ? !!route.needsAllScreens : mentionsOtherScreen(utterance)
+  if (allScreens) log('plan', 'capturing every monitor')
+  const ctx = allScreens
+    ? await captureContext(true, { allScreens: true, signal: scope.signal })
+    : needsScreen || activeWindow === null
       ? await screenContext(pending, scope.signal)
       : windowOnlyContext(activeWindow)
   if (!opts.lowDetail && route) lastTask = { prompt: utterance, route }

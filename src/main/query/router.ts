@@ -142,6 +142,8 @@ export const routeSchema = z.object({
   mode: z.enum(ROUTE_MODES),
   needsScreen: z.boolean(),
   needsUia: z.boolean(),
+  /** Capture every monitor, not only the foreground one. */
+  needsAllScreens: z.boolean().optional(),
   targetApp: z
     .object({
       name: z.string(),
@@ -160,6 +162,15 @@ export const ROUTER_MAX_TOKENS = 200
 export const ROUTER_TIMEOUT_MS = 3000
 const MAX_SPLIT = 4
 
+/** "other screen", "second monitor", "both displays", "left screen", ... */
+const OTHER_SCREEN_RE =
+  /\b(other|second|2nd|third|left|right|top|bottom|both|all|every|each|external|main|primary)( of my| my)? (screens?|monitors?|displays?)\b/i
+
+/** The utterance names another or every monitor (backs up the router's needsAllScreens). */
+export function mentionsOtherScreen(utterance: string): boolean {
+  return OTHER_SCREEN_RE.test(utterance)
+}
+
 // These modes always look at the screen, whatever the router said.
 const SCREEN_MODES = new Set<RouteMode>(['guide', 'locate', 'text_insert', 'describe', 'plan'])
 
@@ -168,8 +179,9 @@ export function normalizeRoute(raw: Route): Route {
   const route: Route = {
     ...raw,
     confidence: Math.min(1, Math.max(0, Number.isFinite(raw.confidence) ? raw.confidence : 0)),
-    needsScreen: raw.needsScreen || SCREEN_MODES.has(raw.mode)
+    needsScreen: raw.needsScreen || SCREEN_MODES.has(raw.mode) || !!raw.needsAllScreens
   }
+  if (!raw.needsAllScreens) delete route.needsAllScreens
   const split = raw.parallelSplit?.map((s) => s.trim()).filter(Boolean) ?? []
   if (raw.mode === 'answer' && split.length >= 2 && split.length <= MAX_SPLIT)
     route.parallelSplit = split
@@ -242,6 +254,7 @@ export async function routeWithLlm(
 export function describeRoute(r: Route): string {
   const parts = [`${r.mode} ${r.confidence.toFixed(2)}`, r.needsScreen ? 'screen' : 'no-screen']
   if (r.needsUia) parts.push('uia')
+  if (r.needsAllScreens) parts.push('all-screens')
   if (r.targetApp) parts.push(`app=${r.targetApp.name}${r.appSwitch ? ' (switch)' : ''}`)
   if (r.parallelSplit) parts.push(`split=${r.parallelSplit.length}`)
   return parts.join(', ')

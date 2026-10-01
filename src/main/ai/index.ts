@@ -5,6 +5,7 @@ import { serializeElements } from '../query/uia-list'
 import { log } from '../logger'
 import { bus } from '../bus'
 import { currentFrame } from '../actions/coords'
+import { screenNames } from '../query/screens'
 import { historyMessages } from './history'
 import { estimateTokens, logPrefixSize, systemBlocks, userTurn } from './prompts/assemble'
 import { parseReplyText, replySchema, toModelResponse, type Reply } from './schema'
@@ -78,6 +79,19 @@ export async function callModel(
     ? memoryContextFor(prompt, skill?.name ?? appNameOf(ctx?.foreground.process))
     : ''
   if (memoryText) log('plan', `memory: ~${estimateTokens(memoryText)} tokens`)
+  // More than one monitor captured (router needsAllScreens): frame "1" (the image passed in,
+  // marks drawn) first, then the other monitors' frames.
+  const extra = screenshotBase64 && ctx && ctx.frames.length > 1 ? ctx.frames.slice(1) : []
+  const names = extra.length ? screenNames(ctx!.frames) : null
+  const screens = names
+    ? ctx!.frames.map((f) => ({
+        label: f.label,
+        name: names.get(f.label) ?? `Screen ${f.label}`,
+        w: f.geometry.imgW,
+        h: f.geometry.imgH
+      }))
+    : undefined
+  const detail: 'low' | 'high' = opts.lowDetail ? 'low' : 'high'
   const { llm, model, effort } = getProvider('main')
   logPrefixSize()
   const req: StructuredRequest<Reply> = {
@@ -91,6 +105,7 @@ export async function callModel(
           prompt,
           activeWindow,
           frame: screenshotBase64 ? { w: imgW, h: imgH } : null,
+          screens,
           routedMode: opts.routedMode,
           targetApp: opts.targetApp,
           elements: elements?.text,
@@ -102,7 +117,14 @@ export async function callModel(
       }
     ],
     images: screenshotBase64
-      ? [{ base64: screenshotBase64, detail: opts.lowDetail ? 'low' : 'high' }]
+      ? [
+          { base64: screenshotBase64, detail },
+          ...extra.map((f) => ({
+            base64: f.data,
+            mediaType: f.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const),
+            detail
+          }))
+        ]
       : [],
     maxTokens: opts.lowDetail ? 2048 : 4096,
     effort,

@@ -19,6 +19,7 @@ import {
 import { buildMarks, type MarksTable } from './marks'
 import { matchSkill } from '../ai/skills'
 import { nodesOnFrame, uiaQuality, type UiaQuality } from './uia-list'
+import { orderFrames } from './screens'
 
 export interface CaptureOptions {
   /** Every monitor instead of the foreground one (router needsAllScreens). */
@@ -120,7 +121,7 @@ export async function captureContext(
     await sleep(32)
   }
   const started = Date.now()
-  const [foreground, frames, uia] = await Promise.all([
+  const [foreground, captured, uia] = await Promise.all([
     foregroundOf(agent, signal),
     framesOf(agent, !!opts.allScreens, signal),
     commands
@@ -131,6 +132,8 @@ export async function captureContext(
       )
       .catch(() => undefined)
   ])
+  // Foreground monitor = frame "1" (marks, UIA list); the others follow by position.
+  const frames = orderFrames(captured, foreground.monitorId)
   const first = frames[0]
   if (!foreground.rect && uia) foreground.rect = uia.root.rect
   const skill = matchSkill(foreground) ?? undefined
@@ -177,6 +180,7 @@ export async function captureContext(
       `context: frame ${first.label} ${g.imgW}x${g.imgH} ← phys ${g.width}x${g.height} @(${g.originX},${g.originY})` +
         `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ' (v1 screenshot)'}` +
         ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote}` +
+        `${frames.length > 1 ? ` | +${frames.length - 1} more screens` : ''}` +
         `${skill ? ` | skill ${skill.id}` : ''} | ${Date.now() - started}ms`
     )
     setCurrentFrame(g)
