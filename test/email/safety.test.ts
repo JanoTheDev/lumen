@@ -324,3 +324,40 @@ describe('recipient autocomplete and paste', () => {
     expect(d.risk).toBe('low')
   })
 })
+
+describe('message-list typing and Outlook bulk deletes', () => {
+  const row = { focusRole: 'row', focusName: 'Anna Berg, Lunch' }
+  it('typing into the Gmail list: any # or ! is high, other keys medium', () => {
+    for (const text of ['x#', 'invoice #3', 'wow!'])
+      expect(rate({ type: 'type', text }, agent(GMAIL, row)).risk).toBe('high')
+    expect(rate({ type: 'type', text: 'invoice' }, agent(GMAIL, row)).risk).toBe('medium')
+    // In the search box the same text is just a query.
+    expect(
+      rate(
+        { type: 'type', text: 'invoice #3' },
+        agent(GMAIL, { focusRole: 'edit', focusName: 'Search mail' })
+      ).risk
+    ).toBe('low')
+  })
+
+  it('Outlook: Ctrl+Del (Ignore conversation), Ignore and Sweep confirm', () => {
+    for (const w of [CLASSIC, NEW_OUTLOOK]) {
+      expect(keys('ctrl+del', agent(w, { focusRole: 'dataitem', focusName: 'Lunch' })).risk).toBe(
+        'high'
+      )
+      for (const elementName of ['Ignore', 'Sweep', 'Clean Up', 'Negeren', 'Opruimen'])
+        expect(rate({ type: 'click_element', elementName }, agent(w)).risk).toBe('high')
+      expect(keys('enter', agent(w, { focusRole: 'button', focusName: 'Sweep' })).risk).toBe('high')
+    }
+    // Ctrl+Del in a text box deletes a word; Ignore outside mail is not risky.
+    expect(
+      keys('ctrl+del', agent(CLASSIC, { focusRole: 'document', focusName: 'Message' })).risk
+    ).toBe('low')
+    expect(
+      rate(
+        { type: 'click_element', elementName: 'Ignore' },
+        agent({ title: 'Problems - Visual Studio Code', process: 'Code.exe', focusKnown: true })
+      ).risk
+    ).not.toBe('high')
+  })
+})

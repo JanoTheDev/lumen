@@ -5,7 +5,13 @@
 import { domainToUnicode } from 'url'
 import type { InputStep } from '@shared/types'
 import { findSecrets, maskSecrets } from './redact'
-import { isNoSendFieldName, isRecipientName, isSendName, riskyName } from './risk-names'
+import {
+  isNoSendFieldName,
+  isRecipientName,
+  isSendName,
+  mailRiskyName,
+  riskyName
+} from './risk-names'
 
 export class SafetyError extends Error {
   readonly code = 'E_DENIED'
@@ -336,8 +342,9 @@ function focusIsButton(w: WindowInfo | undefined): boolean {
   return /button|menuitem|hyperlink|^link$/i.test(w?.focusRole ?? '')
 }
 
-/** Message-list keys that delete, or report spam (Gmail "#" and "!", Outlook Del / Ctrl+D). */
-const MAIL_DELETE_COMBOS = new Set(['del', 'shift+del', 'ctrl+d', '#', 'shift+3'])
+/** Message-list keys that delete, or report spam (Gmail "#" and "!", Outlook Del / Ctrl+D, and
+ * Ctrl+Del: Ignore conversation, which deletes the thread and every later message in it). */
+const MAIL_DELETE_COMBOS = new Set(['del', 'shift+del', 'ctrl+d', 'ctrl+del', '#', 'shift+3'])
 const MAIL_SPAM_COMBOS = new Set(['!', 'shift+1'])
 /** Classic Outlook sends with Alt+S (Ctrl+Enter is caught for every messaging app). */
 const MAIL_SEND_COMBOS = new Set(['alt+s'])
@@ -631,7 +638,9 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   // Enter or Space on a focused Send / Delete / Pay button presses it (list rows are left out:
   // their names hold arbitrary subject text).
   const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
-  const focusWord = pressed ? riskyName(w?.focusName) : null
+  const focusWord = pressed
+    ? (riskyName(w?.focusName) ?? (isMail(w) ? mailRiskyName(w?.focusName) : null))
+    : null
   if (focusWord) {
     const send = isSendName(focusWord)
     out.push({ risk: send ? sendRisk : 'high', reason: `presses “${focusWord}”` })
@@ -746,12 +755,19 @@ function mailTypeFindings(
     )
     return
   }
+  const w = ctx.activeWindow
+  if (focusTakesText(w)) return
   const t = text.trim()
-  if ((t === '#' || t === '!') && !focusTakesText(ctx.activeWindow))
+  // The focus is on the message list (a row, not a text box): each typed key is a shortcut
+  // there (Gmail: x selects, # deletes, ! reports spam, e archives).
+  const onList = !!w?.focusRole
+  if (t === '#' || t === '!' || (onList && /[#!]/.test(t)))
     out.push({
       risk: 'high',
-      reason: t === '#' ? 'deletes the email' : 'reports the email as spam'
+      reason: t.includes('#') ? 'deletes the email' : 'reports the email as spam'
     })
+  else if (onList && t)
+    out.push({ risk: 'medium', reason: 'types into the message list, keys act as shortcuts' })
 }
 
 // ---- clicks ----
@@ -779,7 +795,8 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
   }
   if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
-  const word = riskyName(name)
+  const mailWord = isMail(ctx.activeWindow) ? mailRiskyName(name) : null
+  const word = riskyName(name) ?? mailWord
   if (!word) return recipientPickFindings(name, ctx, out)
   const send = ctx.allowSendWithoutReview && isSendName(word)
   out.push({ risk: send ? 'medium' : 'high', reason: `clicks “${word}”` })
