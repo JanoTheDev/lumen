@@ -13,12 +13,11 @@ import {
   startOrResume
 } from '../teach'
 
-const appIdSchema = lessonIdSchema.optional()
-
 export function registerTeachIpc(): void {
   ipcMain.handle('teach:list', (_e, raw: unknown) => {
-    const appId = safeParse('teach:list', appIdSchema, raw)
-    return listLessons(appId ?? undefined)
+    const appId = raw === undefined ? undefined : safeParse('teach:list', lessonIdSchema, raw)
+    if (raw !== undefined && !appId) return INVALID
+    return listLessons(appId)
   })
   ipcMain.handle('teach:start', (_e, raw: unknown) => {
     const id = safeParse('teach:start', lessonIdSchema, raw)
@@ -35,8 +34,9 @@ export function registerTeachIpc(): void {
     return { ok: !!id && deleteLesson(id) }
   })
   ipcMain.handle('teach:save-last', (_e, raw: unknown) => {
-    const name = safeParse('teach:save-last', nameSchema.optional(), raw)
-    const saved = saveGeneratedLesson(name ?? undefined)
+    const name = raw === undefined ? undefined : safeParse('teach:save-last', nameSchema, raw)
+    if (raw !== undefined && name === undefined) return INVALID
+    const saved = saveGeneratedLesson(name)
     return saved
       ? { id: saved.id, title: saved.title }
       : { error: 'no lesson to save — ask "show me how" first' }
