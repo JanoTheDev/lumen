@@ -128,3 +128,5 @@ export type AppEvent =
   | { type: 'a11y.announce'; text: string; priority: 'polite' | 'assertive' }
 
 export type AppEventType = AppEvent['type']
+  /** A key was pasted or removed in the app (never carries the key). */
+  | { type: 'keys.changed'; provider: 'anthropic' | 'openai' }

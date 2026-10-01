@@ -7,7 +7,8 @@ import { join } from 'path'
 import { electronMock, invokeHandler, resetElectronMock } from './helpers/electron-mock'
 import { tempDir } from './helpers/fixtures'
 import { invalidateConfig, setConfigDir } from '../src/main/config'
-import { loadVault, keyStatus, testKey } from '../src/main/keys/vault'
+import { bus } from '../src/main/bus'
+import { getKey, hasKey, loadVault, keyStatus, testKey } from '../src/main/keys/vault'
 import { registerKeysIpc } from '../src/main/keys/ipc'
 
 const KEY = 'sk-ant-test-0123456789abcdefWXYZ'
@@ -96,5 +97,18 @@ describe('key vault', () => {
     const bad = vi.fn(async () => new Response('{}', { status: 401 }))
     expect((await testKey('anthropic', bad)).ok).toBe(false)
     expect((await testKey('openai', fetchFn)).ok).toBe(false)
+  })
+
+  it('exposes the active key to main and announces changes', async () => {
+    const changed: string[] = []
+    const off = bus.on('keys.changed', (e) => changed.push(e.provider))
+    expect(hasKey('anthropic')).toBe(false)
+    await invokeHandler('keys:set', { provider: 'anthropic', key: KEY })
+    expect(getKey('anthropic')).toBe(KEY)
+    expect(hasKey('anthropic')).toBe(true)
+    await invokeHandler('keys:clear', 'anthropic')
+    expect(getKey('anthropic')).toBeUndefined()
+    off()
+    expect(changed).toEqual(['anthropic', 'anthropic'])
   })
 })

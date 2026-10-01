@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { safeStorage } from 'electron'
 import type { KeyProvider, KeySetResult, KeyStatus } from '@shared/channels'
+import { bus } from '../bus'
 import { configPath } from '../config'
 import { log } from '../logger'
 
@@ -67,6 +68,17 @@ export function loadVault(): void {
     const key = vault[p]
     if (key && !fromEnv.has(p)) process.env[ENV[p]] = key
   }
+  const sources = keyStatus().map((k) => `${k.provider} ${k.set ? k.source : 'none'}`)
+  log('step', `api keys: ${sources.join(', ')}`)
+}
+
+/** The key main should use for `provider` (.env first, then the vault), or undefined. */
+export function getKey(provider: KeyProvider): string | undefined {
+  return process.env[ENV[provider]] || undefined
+}
+
+export function hasKey(provider: KeyProvider): boolean {
+  return !!getKey(provider)
 }
 
 export function keyStatus(): KeyStatus[] {
@@ -88,13 +100,16 @@ export function setKey(provider: KeyProvider, key: string): KeySetResult {
   process.env[ENV[provider]] = key
   fromEnv.delete(provider)
   const persisted = writeVault()
+  bus.emit({ type: 'keys.changed', provider })
   return { ok: true, persisted }
 }
 
 export function clearKey(provider: KeyProvider): boolean {
   delete vault[provider]
   if (!fromEnv.has(provider)) delete process.env[ENV[provider]]
-  return writeVault()
+  const saved = writeVault()
+  bus.emit({ type: 'keys.changed', provider })
+  return saved
 }
 
 const TEST_URL: Record<KeyProvider, string> = {
@@ -107,7 +122,7 @@ export async function testKey(
   provider: KeyProvider,
   fetchFn: typeof fetch = fetch
 ): Promise<{ ok: boolean; error?: string }> {
-  const key = process.env[ENV[provider]]
+  const key = getKey(provider)
   if (!key) return { ok: false, error: 'No key yet.' }
   const headers: Record<string, string> =
     provider === 'anthropic'
