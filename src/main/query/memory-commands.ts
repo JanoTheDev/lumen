@@ -7,7 +7,8 @@ import { addToHistory, history } from '../ai/history'
 import { endSession, memory } from '../ai/memory/runtime'
 import { classifyProfileFact } from '../ai/memory/profile'
 import type { Episode } from '../ai/memory'
-import { loadConfig, saveConfig, type AppConfig } from '../config'
+import type { ConfigPatch } from '@shared/config'
+import { loadConfig, saveConfig } from '../config'
 import { log } from '../logger'
 
 export type MemoryWhen = 'yesterday' | 'today' | 'last-week' | 'last-time'
@@ -123,13 +124,16 @@ export const spokenAnswer = (text: string): Extract<ModelResponse, { mode: 'answ
 // ---- handlers ----
 
 interface MemoryHooks {
-  /** A config change made by voice (private mode) for the open windows. */
-  configSaved: (cfg: AppConfig) => void
+  /**
+   * Saves a config change made by voice (private mode). Wired to the settings patch path so
+   * windows and config listeners see it; it must save synchronously before its first await.
+   */
+  patchConfig: (patch: ConfigPatch) => unknown
   /** Memory files changed (the Memory page and review chip refresh). */
   changed: () => void
 }
 
-const noHooks: MemoryHooks = { configSaved: () => {}, changed: () => {} }
+const noHooks: MemoryHooks = { patchConfig: (p) => saveConfig(p), changed: () => {} }
 let hooks = noHooks
 
 export function setMemoryHooks(h: Partial<MemoryHooks>): void {
@@ -208,8 +212,7 @@ function recallProfile(): string {
 function setPrivate(on: boolean): string {
   const prev = loadConfig().memory.privateMode
   if (prev !== on) {
-    const cfg = saveConfig({ memory: { privateMode: on } })
-    hooks.configSaved(cfg)
+    void hooks.patchConfig({ memory: { privateMode: on } })
   }
   // Turns from this session are not summarized either way: they were said before (or during)
   // private mode.

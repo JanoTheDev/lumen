@@ -14,7 +14,7 @@ import type {
   MemoryResult
 } from '@shared/channels'
 import { INVALID, safeParse } from './validate'
-import { broadcastConfig } from './settings'
+import { patchConfig } from './settings'
 import { loadConfig } from '../config'
 import { log } from '../logger'
 import { broadcast } from '../windows/registry'
@@ -181,7 +181,7 @@ function changed(): void {
 }
 
 export function registerMemoryIpc(): void {
-  setMemoryHooks({ configSaved: broadcastConfig, changed })
+  setMemoryHooks({ patchConfig, changed })
   onSessionEnd((r) => {
     if (r.status === 'saved') changed()
   })
