@@ -148,8 +148,9 @@ export function useVoice(
 
   const start = useCallback(
     async (opts: VoiceStartOptions = {}): Promise<void> => {
-      const prev = sessionRef.current
-      if (prev && !prev.finished && prev.recorder?.state !== 'inactive') abortSession(prev)
+      // Any unfinished session is dropped, including one still transcribing: its transcript
+      // must not land in the new session (dictation would type the old query).
+      abortSession(sessionRef.current)
       holdMic('record')
 
       const s: Session = {
@@ -226,12 +227,12 @@ export function useVoice(
               )) ?? ''
           } catch (err) {
             console.error('[voice] transcription failed:', err)
-            if (s.discarded) return
+            if (s.discarded || sessionRef.current !== s) return
             finish(s)
             onErrorRef.current?.(`Transcription failed: ${errorReason(err)}`)
             return
           }
-          if (s.discarded) return
+          if (s.discarded || sessionRef.current !== s) return
           console.log('[voice] transcript:', text)
           finish(s)
           setTranscript(text)
