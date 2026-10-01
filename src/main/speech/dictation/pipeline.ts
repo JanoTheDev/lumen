@@ -7,6 +7,7 @@ import { getAgent } from '../../agent/instance'
 import { bus } from '../../bus'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
+import { patchConfig } from '../../ipc/settings'
 import { beginScope, CancelledError, endScope, isAbortError } from '../../query/cancel'
 import { setStatus, showAnswer } from '../../windows/assistant'
 import { DictationActivation } from './activation'
@@ -18,6 +19,7 @@ import {
 } from './autodetect'
 import { cleanupDictation } from './cleanup'
 import { insertDictation, readFocus } from './insert'
+import { watchCorrections, type LearnDeps } from './learn-watch'
 import {
   archivePending,
   clearPending,
@@ -74,6 +76,16 @@ export function onDictationUp(): void {
   activation.up()
 }
 
+const learnDeps: LearnDeps = {
+  dictionary: () => loadConfig().dictation.dictionary,
+  learned(dictionary, added) {
+    void patchConfig({ dictation: { ...loadConfig().dictation, dictionary } })
+    const names = added.map((w) => `“${w}”`).join(', ')
+    log('step', `dictionary learned: ${added.join(', ')}`)
+    setStatus('answer', `Added ${names} to your dictionary (Settings, Voice)`, undefined, 5000)
+  }
+}
+
 /** Types already-cleaned text; on failure the text is kept in recovered.txt and shown. */
 async function finishInsert(
   agent: AgentBridge,
@@ -86,6 +98,7 @@ async function finishInsert(
   if (res.ok) {
     clearPending(pendingId)
     log('done', `dictation typed (${text.length} chars${res.terminal ? ', terminal' : ''})`)
+    if (!res.terminal) watchCorrections(agent, text, learnDeps)
     if (res.notice) setStatus('answer', res.notice, undefined, 5000)
     else setStatus('answer', 'Typed', undefined, 1200)
     return { ok: true, notice: res.notice }
