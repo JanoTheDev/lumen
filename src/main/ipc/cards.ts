@@ -7,6 +7,7 @@ import { announce } from '../a11y'
 import { executeActions } from '../actions/executor'
 import { onSessionEnd } from '../ai/memory/runtime'
 import { cardAction, cardsView, endCardsConversation, setCardsPorts } from '../cards'
+import { installBooking } from '../cards/book-install'
 import { noteSaver } from '../web/notes'
 import * as assistant from '../windows/assistant'
 import '../windows/cards'
@@ -46,6 +47,7 @@ export function registerCardsIpc(): void {
     say: (text) => announce(text, { kind: 'command' })
   })
   onSessionEnd(() => endCardsConversation())
+  installBooking()
 
   ipcMain.handle('cards:get', (_e, raw: unknown) => {
     const id = safeParse('cards:get', idSchema, raw)
