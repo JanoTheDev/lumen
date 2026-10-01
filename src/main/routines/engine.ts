@@ -226,7 +226,14 @@ export class AutomationScheduler {
     const a = this.get(id)
     // Only what a wake task exists for: a time automation with "wake Lumen" on.
     if (!a || !a.wake || !isTimeTrigger(a.trigger)) return false
-    if (!a.enabled || this.running.has(id) || this.duplicate(a)) return false
+    if (!a.enabled || this.running.has(id)) return false
+    if (this.duplicate(a)) {
+      if (a.trigger.kind === 'once') {
+        this.finishOnce(a, this.deps.now())
+        this.commit()
+      }
+      return false
+    }
     this.trigger(a, 'wake')
     return true
   }
@@ -340,6 +347,12 @@ export class AutomationScheduler {
       }
       const late = now - d.at > STALE_MS
       if (a.trigger.kind === 'once') {
+        if (!late && (this.running.has(a.id) || this.duplicate(a))) {
+          // "Run now" a moment before its time: that was the run, so it is done.
+          this.finishOnce(a, now)
+          dirty = true
+          continue
+        }
         if (late) {
           this.patch(a.id, {
             enabled: false,
@@ -372,7 +385,8 @@ export class AutomationScheduler {
       lastRunAt: now,
       ...(a.trigger.kind === 'once' && via !== 'manual' ? { enabled: false } : {})
     })
-    if (a.trigger.kind === 'once') this.due.delete(a.id)
+    // A manual run keeps its time planned; fire() then turns it off (finishOnce).
+    if (a.trigger.kind === 'once' && via !== 'manual') this.due.delete(a.id)
     this.deps.save(this.items)
     this.deps.changed?.()
     let run: Promise<RunEnd>
@@ -397,6 +411,20 @@ export class AutomationScheduler {
           } else this.pending.delete(a.id)
         }
       })
+  }
+
+  /** A one-off at its time that already ran (manually) a moment ago: off, nothing run. */
+  private finishOnce(a: Automation, now: number): void {
+    this.due.delete(a.id)
+    this.patch(a.id, {
+      enabled: false,
+      runs: this.withRun(a, {
+        at: now,
+        result: 'skipped',
+        via: 'time',
+        summary: 'Ran a moment ago.'
+      })
+    })
   }
 
   private withRun(a: Automation, run: AutomationRun): AutomationRun[] {

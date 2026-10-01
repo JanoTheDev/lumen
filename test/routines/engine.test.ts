@@ -152,6 +152,36 @@ describe('AutomationScheduler: time triggers', () => {
     expect(runs).toHaveLength(1)
   })
 
+  it('a one-off run by hand just before its time turns off at its time', async () => {
+    const { s, runs, external } = setup()
+    s.start([])
+    const a = s.add({
+      name: 'Once',
+      trigger: { kind: 'once', at: Date.now() + 20 * MIN },
+      action: { kind: 'remind', say: 'Stretch.' }
+    })!
+    await vi.advanceTimersByTimeAsync(19 * MIN)
+    expect(s.runNow(a.id)).toBe(true)
+    await vi.advanceTimersByTimeAsync(MIN)
+    expect(runs).toEqual([`${a.id}:manual`])
+    expect(s.get(a.id)!.enabled).toBe(false)
+    expect(s.get(a.id)!.runs?.at(-1)).toMatchObject({ result: 'skipped' })
+    // The same through a wake task.
+    const b = s.add({
+      name: 'Once 2',
+      trigger: { kind: 'once', at: Date.now() + 20 * MIN },
+      action: { kind: 'remind', say: 'Water.' },
+      wake: true
+    })!
+    external.add(b.id)
+    s.replan()
+    await vi.advanceTimersByTimeAsync(19 * MIN)
+    s.runNow(b.id)
+    await vi.advanceTimersByTimeAsync(MIN)
+    expect(s.runWake(b.id)).toBe(false)
+    expect(s.get(b.id)!.enabled).toBe(false)
+  })
+
   it('a time run far too late (sleep) waits for the next turn', async () => {
     const { s, runs } = setup()
     s.start([])
