@@ -201,13 +201,47 @@ export class SkillRegistry {
     return out
   }
 
+  /**
+   * Loose user lessons: generated ones for apps without a pack and migrated guides get a
+   * lessons-only skill of their own (no match rules, so it never matches a window).
+   */
   private loadLooseLessons(dir: string): void {
     for (const lesson of this.loadLessons(dir)) {
-      const skill = this.skills.get(lesson.app)
-      if (skill) skill.lessons = mergeLessons(skill.lessons, [lesson])
-      else this.problem(join(dir, `${lesson.id}${LESSON_SUFFIX}`), `no skill pack "${lesson.app}"`)
+      const skill = this.skills.get(lesson.app) ?? this.lessonsOnlySkill(lesson.app, dir)
+      skill.lessons = mergeLessons(skill.lessons, [lesson])
     }
   }
+
+  private lessonsOnlySkill(id: string, dir: string): Skill {
+    const skill: Skill = {
+      id,
+      name: appDisplayName(id),
+      version: '0.0.0',
+      dir,
+      match: {},
+      regions: {},
+      source: 'user',
+      lessons: []
+    }
+    this.skills.set(id, skill)
+    return skill
+  }
+}
+
+/** Whether a skill can match a window (lessons-only user skills cannot). */
+export function hasMatchRules(skill: Skill): boolean {
+  const m = skill.match
+  return !!(m.process?.length || m.title?.length || m.url?.length)
+}
+
+const APP_NAMES: Record<string, string> = { general: 'Your guides' }
+
+/** "my-app" → "My app"; "general" (migrated guides) → "Your guides". */
+export function appDisplayName(id: string): string {
+  const named = APP_NAMES[id]
+  if (named) return named
+  const words = id.replace(/-/g, ' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
 /** Later lessons replace earlier ones with the same id; order is kept. */

@@ -268,3 +268,40 @@ export function checkTypes(c: CheckSpec, out = new Set<CheckSpec['type']>()): Se
   if (c.type === 'anyOf' || c.type === 'allOf') for (const x of c.checks) checkTypes(x, out)
   return out
 }
+
+/** The stored (C9) form of a lesson, for writing user lessons; parseLesson reads it back. */
+export function toStoredLesson(l: Lesson): StoredLesson {
+  return {
+    id: l.id,
+    app: l.app,
+    title: l.title,
+    ...(l.summary ? { summary: l.summary } : {}),
+    level: l.level,
+    minutes: l.minutes,
+    prereqs: l.prereqs,
+    appVersion: l.appVersion,
+    ...(l.tags ? { tags: l.tags } : {}),
+    steps: l.steps.map((s) => ({
+      id: s.id,
+      say: s.say,
+      target: s.target,
+      ...(s.check.type === 'manual' ? {} : { expect: { type: 'user-action', check: s.check } }),
+      hints: s.hints,
+      ...(s.why ? { why: s.why } : {}),
+      ...(s.doItForMe ? { doItForMe: s.doItForMe } : {}),
+      ...(s.timeoutSec ? { timeoutSec: s.timeoutSec } : {})
+    }))
+  }
+}
+
+/** "Change display scaling!" → "change-display-scaling" (lesson and step ids). */
+export function slug(s: string, max = 48): string {
+  return (
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, max)
+      .replace(/-+$/, '') || 'lesson'
+  )
+}
