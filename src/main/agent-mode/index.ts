@@ -16,7 +16,6 @@ import { installBackground, notice } from './background'
 import { PRESENT_MS } from './background/presence'
 import { registerTasksIpc } from '../ipc/tasks'
 import { installTranscripts, interceptTaskChat } from './transcript-wire'
-import { installTranscripts, interceptTaskChat } from './transcript-wire'
 import { installSkillCreation, interceptSkillCreation, recordedSkill } from '../skills/creation'
 import { setSkillRecordingSink, startSkillRecording } from '../teach'
 
@@ -28,7 +27,6 @@ export function installAgentMode(): void {
   installAudit(join(root, 'audit'), audit.retentionDays)
   onBroadcast('settings:changed', () => setAuditStoreTypedText(loadConfig().audit.storeTypedText))
   installBackground(join(root, 'tasks'))
-  installTranscripts(join(root, 'tasks', 'transcripts'))
   installTranscripts(join(root, 'tasks', 'transcripts'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
@@ -71,8 +69,6 @@ const WHAT_DID_YOU_DO_RE =
 export function interceptAgentMode(prompt: string): unknown | undefined {
   const skill = interceptSkillCreation(prompt)
   if (skill !== undefined) return skill
-  const chat = interceptTaskChat(prompt)
-  if (chat !== undefined) return chat
   const chat = interceptTaskChat(prompt)
   if (chat !== undefined) return chat
   const words = prompt
