@@ -58,7 +58,7 @@ Pure TS imported by main, preload and renderer (ESLint forbids electron/node imp
 
 - `index.ts` — lifecycle and wiring only.
 - `bus.ts` — typed event bus. Features emit; `windows/*` subscribe. Only `windows/*` call `webContents.send`.
-- `windows/` — `factory` (secure prefs, `loadRenderer`, navigation guards), `registry`, one module per window: `assistant` (bar state `AssistantView`, status, answer, confirm, caption), `screen-layer`, `settings` (panel window), `home`, `tray`, `command-sheet`, `dwell-palette`, `scan-keyboard`. `hud` (voice start/stop), `status` (`setStatus`), `answer`, `highlight` and `dwell-ring` are entry points that forward to the assistant bar and the screen layer; `lesson` draws lesson scenes.
+- `windows/` — `factory` (secure prefs, `loadRenderer`, navigation guards), `registry`, one module per window: `assistant` (bar state `AssistantView`, status, answer, confirm, caption), `screen-layer`, `settings` (panel window), `home`, `tray`, `command-sheet`, `dwell-palette`, `scan-keyboard`. The assistant module also owns voice start/stop and `setStatus`; the screen layer owns highlight channels and the dwell ring. `status`, `answer`, `highlight`, `dwell-ring` and `ui-mode` are deprecated re-exports kept for a few importers; `lesson` draws lesson scenes.
 - `ipc/` — one `registerXxxIpc()` per area; every payload validated (`validate.ts`). Invalid payload → `{ error: 'E_INVALID' }`.
 - `query/` — `pipeline` (runQuery), `context` (speculative capture as a promise cache), `overrides` (pure prompt steering, composes flags), `present` (guide/locate output), `research`, `cancel` (`CancelScope` per turn; Escape / voice cancel / `assistant:cancel` cancel all), planner (`task-planner`, `step-verifier`, `task-queue`, `task-splitter`, `query-classifier`, `nth`).
 - `actions/` — `executor` (single `executeActions` for renderer, plan and research paths), `coords` (the only image ↔ physical ↔ logical conversions), `agent-action` (model action → agent wire format), `safety` (`evaluate(action, ctx)` → low / medium / high / blocked per origin `user-direct|agent|lesson|routine|mcp`: URL schemes, hotkey denylist, terminal and password typing, element-name risk, injection bump), `risk-names`, `redact` (secret detection for typed text, logs and model input), `policy` (`gate`: evaluate → confirm → audit; the executor and lesson do-it call it for every action).
@@ -96,7 +96,7 @@ Wake word: agent emits `wake-detected` → same recording flow with client-side 
 
 ## Settings
 
-Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/renderer/src/panel/settings/`, sections registered in `meta.ts` + `SettingsPage.tsx`): General, Voice, Accessibility (grouped Seeing / Hearing / Speaking / Thinking and focus / Moving, plus shortcuts), Buddy & look, Models & keys, Memory, Lessons, App helpers, Privacy, About. Text and number fields save on blur / Enter. Config `ui.v2` is retired (accepted in old files, ignored).
+Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/renderer/src/panel/settings/`, sections registered in `meta.ts` + `SettingsPage.tsx`): General, Voice, Accessibility (grouped Seeing / Hearing / Speaking / Thinking and focus / Moving, plus shortcuts), Buddy & look, Models & keys, Memory, Lessons, App helpers, Privacy, About. Text and number fields save on blur / Enter. Retired config fields (`ui.v2`, `hudAutoCloseMs`, `statusBubble`) are dropped when an old file loads.
 
 ## Config
 
@@ -109,7 +109,7 @@ Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/re
   "hotkey": "Ctrl+Shift+Space",
   "models": { "provider": "auto" },
   "voice": { "stt": "cloud-batch", "tts": "off", "ttsVoice": "alloy" },
-  "a11y": { "uiScale": 1 },
+  "a11y": { "announce": "auto", "uiScale": 1 }, // auto: speaks through a detected screen reader
   "wakeWord": { "enabled": false, "phrase": "hey lumen" },
   "privacy": { "saveScreenshots": false, "telemetry": false }
   // ...see configV2Schema for every field
