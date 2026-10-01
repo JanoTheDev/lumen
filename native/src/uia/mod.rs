@@ -9,6 +9,7 @@
 //! without moving the pointer. Browser/Electron windows are scoped to their
 //! web content child.
 
+pub mod text;
 pub mod tree;
 
 use std::cell::RefCell;

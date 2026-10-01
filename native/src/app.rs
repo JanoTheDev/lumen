@@ -34,6 +34,7 @@ pub const CAPABILITIES: &[&str] = &[
     "uia-events",
     "key-combo",
     "switch",
+    "uia-text",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -204,6 +205,9 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("uia_snapshot", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_snapshot(args, token));
     app.cmd("uia_find", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_find(args, token));
     app.cmd("uia_act", Lane::Input, None, |_, args, token| crate::uia::cmd_act(args, token));
+    app.cmd("uia_text", Lane::Uia, Some(crate::uia::text::TIMEOUT_MS), |_, args, token| {
+        crate::uia::text::cmd_text(args, token)
+    });
     app.cmd("focus_info", Lane::Read, Some(crate::uia::FOCUS_INFO_TIMEOUT_MS), |_, _, token| {
         crate::uia::cmd_focus_info(token)
     });
