@@ -1,0 +1,185 @@
+{
+  "id": "photoshop-basics-05-export-web",
+  "app": "photoshop",
+  "title": "Export a photo for the web",
+  "summary": "Save a light JPG copy for websites and email with Export As.",
+  "level": "beginner",
+  "minutes": 4,
+  "prereqs": ["photoshop-basics-01-crop-resize"],
+  "appVersion": ">=26",
+  "tags": ["export"],
+  "steps": [
+    {
+      "id": "check-photo-open",
+      "say": "Open a photo with Control O, or make sure one is already showing in the middle of the window.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a photo open and visible in the middle of the Photoshop window?"
+        }
+      },
+      "hints": [
+        "Use File, then Open, and pick any JPG from your Pictures folder.",
+        "Dragging a photo file onto the Photoshop window opens it too."
+      ],
+      "why": "Every edit needs an open document to act on."
+    },
+    {
+      "id": "open-export",
+      "say": "Press Control Alt Shift W to open Export As.",
+      "target": {
+        "shortcut": "Ctrl+Alt+Shift+W"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Export As$"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Export As"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Export As window open with a large preview of the image?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is under File, then Export, then Export As.",
+        "Click on the photo first so Photoshop has focus, then try the keys again."
+      ],
+      "why": "Export As makes a flat copy for sharing and keeps your original intact.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Alt+Shift+W"
+          }
+        ]
+      }
+    },
+    {
+      "id": "set-format",
+      "say": "On the right, under File Settings, set Format to JPG.",
+      "target": {
+        "text": "Format"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Format set to JPG in the Export As window?"
+        }
+      },
+      "hints": [
+        "Pick PNG instead if your image has see-through areas.",
+        "The Format menu is near the top of the right column."
+      ],
+      "why": "JPG is the usual choice for photos on websites."
+    },
+    {
+      "id": "set-quality",
+      "say": "Set Quality to around 80 and watch the file size under the preview.",
+      "target": {
+        "text": "Quality"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Is the JPG quality setting around 80, between 60 and 90?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Lower quality makes a smaller file but can add blocky patches.",
+        "Say done when the size looks reasonable."
+      ],
+      "why": "Quality trades file size against image detail."
+    },
+    {
+      "id": "set-size",
+      "say": "Under Image Size, type 1600 in the Width box if the photo is wider than that.",
+      "target": {
+        "element": {
+          "name": "Width"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Does the Image Size section show a width of 1600 or less?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Skip this if the photo is already smaller.",
+        "Height updates by itself to keep the shape."
+      ],
+      "why": "Most web pages never show photos wider than this, so extra pixels only slow loading."
+    },
+    {
+      "id": "export",
+      "say": "Click Export at the bottom right, pick a folder, and click Save.",
+      "target": {
+        "element": {
+          "name": "Export",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Save",
+                "role": "Button"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the Export As window closed and the normal Photoshop workspace returned?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "If nothing happens, check whether a save window opened behind Photoshop.",
+        "Pictures is a good folder to find the file later."
+      ],
+      "why": "The exported file is ready to upload or attach to an email."
+    }
+  ]
+}

@@ -1,0 +1,155 @@
+{
+  "id": "photoshop-basics-03-selection-mask",
+  "app": "photoshop",
+  "title": "Select a subject and mask it",
+  "summary": "Use Select Subject, turn the selection into a layer mask and refine it.",
+  "level": "beginner",
+  "minutes": 7,
+  "prereqs": ["photoshop-basics-02-layers-basics"],
+  "appVersion": ">=26",
+  "tags": ["selection", "mask"],
+  "steps": [
+    {
+      "id": "pick-photo-layer",
+      "say": "In the Layers panel, click the photo layer so it is highlighted.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the layer that holds the photo highlighted in the Layers panel?"
+        }
+      },
+      "hints": [
+        "It is usually the bottom row, named Background.",
+        "A lock on the Background layer is fine for this lesson."
+      ],
+      "why": "Selections and masks act on the highlighted layer."
+    },
+    {
+      "id": "select-subject",
+      "say": "Open the Select menu at the top and choose Subject.",
+      "target": {
+        "text": "Select"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": {
+                "name": "Subject"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is there a moving dashed outline around the main subject of the photo?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Give it a few seconds; Photoshop studies the photo before the outline appears.",
+        "With the Object Selection tool, key W, the options bar has a Select Subject button too."
+      ],
+      "why": "Select Subject finds the main person or object for you."
+    },
+    {
+      "id": "add-mask",
+      "say": "Click Add layer mask at the bottom of the Layers panel. It looks like a rectangle with a circle.",
+      "target": {
+        "region": "layers-buttons"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the photo layer now have a second black and white thumbnail, with the background hidden?"
+        }
+      },
+      "hints": [
+        "Or use Layer, then Layer Mask, then Reveal Selection.",
+        "Photoshop turns a locked Background into a normal layer when you add a mask."
+      ],
+      "why": "A mask hides the background without deleting any pixels."
+    },
+    {
+      "id": "pick-mask",
+      "say": "Click the black and white mask thumbnail so it gets a white frame.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the mask thumbnail in the Layers panel have a highlight frame around it?"
+        }
+      },
+      "hints": [
+        "It is the second thumbnail on the photo layer's row.",
+        "If the frame is on the photo thumbnail instead, painting would change the photo."
+      ],
+      "why": "With the mask active, painting edits what is hidden or shown."
+    },
+    {
+      "id": "paint-mask",
+      "say": "Press B, press X until white is the front color, and paint over any missing edges of the subject.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Has more of the subject been revealed than at the start of this step?"
+        }
+      },
+      "hints": [
+        "White paint shows the layer, black paint hides it.",
+        "Use the bracket keys to change the brush size."
+      ],
+      "why": "Painting the mask lets you fix the automatic selection by hand."
+    },
+    {
+      "id": "disable-mask",
+      "say": "Hold Shift and click the mask thumbnail to switch the mask off.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a red cross shown over the mask thumbnail and the full photo visible again?"
+        }
+      },
+      "hints": [
+        "Hold Shift first, then click once on the mask thumbnail.",
+        "Layer, then Layer Mask, then Disable does the same."
+      ],
+      "why": "Switching a mask off shows that nothing was deleted."
+    },
+    {
+      "id": "enable-mask",
+      "say": "Shift click the mask thumbnail again to switch it back on.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the background hidden again and the red cross gone from the mask thumbnail?"
+        }
+      },
+      "hints": ["Click the thumbnail with Shift held, the same way as before."],
+      "why": "The mask can be turned on and off or repainted at any time."
+    }
+  ]
+}

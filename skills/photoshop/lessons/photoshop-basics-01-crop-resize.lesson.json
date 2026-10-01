@@ -1,0 +1,187 @@
+{
+  "id": "photoshop-basics-01-crop-resize",
+  "app": "photoshop",
+  "title": "Crop and resize a photo",
+  "summary": "Trim a photo with the Crop tool, then change its pixel size with Image Size.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": [],
+  "appVersion": ">=26",
+  "tags": ["crop", "resize"],
+  "steps": [
+    {
+      "id": "check-photo-open",
+      "say": "Open a photo with Control O, or make sure one is already showing in the middle of the window.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a photo open and visible in the middle of the Photoshop window?"
+        }
+      },
+      "hints": [
+        "Use File, then Open, and pick any JPG from your Pictures folder.",
+        "Dragging a photo file onto the Photoshop window opens it too."
+      ],
+      "why": "Every edit needs an open document to act on."
+    },
+    {
+      "id": "pick-crop",
+      "say": "Press C to pick the Crop tool.",
+      "target": {
+        "shortcut": "C"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "C"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a crop box with corner handles now shown around the photo?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The Crop tool is the square icon with overlapping corners in the toolbar on the left.",
+        "If another tool appears, press Shift C until the Crop tool is active."
+      ],
+      "why": "The Crop tool trims away the outer parts of an image.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "C"
+          }
+        ]
+      }
+    },
+    {
+      "id": "drag-crop",
+      "say": "Drag a corner handle of the crop box inward to frame the part you want to keep.",
+      "target": {
+        "region": "canvas"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the crop box smaller than the photo, with the area outside it darkened?"
+        }
+      },
+      "hints": [
+        "Grab the small corner marks of the box, not the middle of the photo.",
+        "Choose a ratio such as 1 to 1 in the options bar if you want a square."
+      ],
+      "why": "Framing first lets you see exactly what stays before anything is removed."
+    },
+    {
+      "id": "apply-crop",
+      "say": "Press Enter to apply the crop.",
+      "target": {
+        "shortcut": "Enter"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "keypress",
+              "combo": "Enter"
+            },
+            {
+              "type": "vision",
+              "prompt": "Has the photo been trimmed so the crop box and darkened border are gone?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "You can also click the check mark at the right end of the options bar.",
+        "Changed your mind? Control Z undoes the crop."
+      ],
+      "why": "A crop is only a preview until you confirm it.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Enter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-image-size",
+      "say": "Press Control Alt I to open the Image Size dialog.",
+      "target": {
+        "shortcut": "Ctrl+Alt+I"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^Image Size$"
+            },
+            {
+              "type": "uia-event",
+              "event": "window-opened",
+              "match": {
+                "name": "Image Size"
+              }
+            },
+            {
+              "type": "vision",
+              "prompt": "Is the Image Size dialog open, showing Width and Height boxes?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "It is also in the Image menu at the top, called Image Size.",
+        "Click on the photo first if the shortcut does nothing, so Photoshop has focus."
+      ],
+      "why": "Image Size changes how many pixels the photo has.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Alt+I"
+          }
+        ]
+      }
+    },
+    {
+      "id": "set-width",
+      "say": "Make sure the unit says Pixels, type 1200 in the Width box, then click OK.",
+      "target": {
+        "element": {
+          "name": "Width"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Image Size dialog closed, and does the document look smaller or show a lower pixel size than before?"
+        }
+      },
+      "hints": [
+        "Keep the link icon between Width and Height turned on so the photo does not stretch.",
+        "Leave Resample ticked; that is what changes the pixel count."
+      ],
+      "why": "A smaller pixel size makes the file lighter for email and the web."
+    }
+  ]
+}

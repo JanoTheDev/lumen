@@ -1,0 +1,143 @@
+{
+  "id": "photoshop-basics-02-layers-basics",
+  "app": "photoshop",
+  "title": "Layers basics",
+  "summary": "Add, rename, paint on and hide a layer.",
+  "level": "beginner",
+  "minutes": 6,
+  "prereqs": ["photoshop-basics-01-crop-resize"],
+  "appVersion": ">=26",
+  "tags": ["layers"],
+  "steps": [
+    {
+      "id": "show-layers",
+      "say": "Make sure the Layers panel is showing at the lower right. If it is not, press F7.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is the Layers panel visible on the right side, listing at least one layer?"
+        }
+      },
+      "hints": [
+        "F7 shows and hides the panel, so press it again if it disappeared.",
+        "Window, then Layers, in the menu bar also opens it."
+      ],
+      "why": "The Layers panel is where you see and control every part of the image.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "F7"
+          }
+        ]
+      }
+    },
+    {
+      "id": "new-layer",
+      "say": "Press Control Shift N to make a new layer, then click OK.",
+      "target": {
+        "shortcut": "Ctrl+Shift+N"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a new layer, such as Layer 1, above the photo in the Layers panel?"
+        }
+      },
+      "hints": [
+        "Or click the plus button at the bottom of the Layers panel; that skips the dialog.",
+        "Layer, then New, then Layer in the menu bar does the same."
+      ],
+      "why": "New strokes go on their own layer so the photo below stays untouched.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "keys",
+            "combo": "Ctrl+Shift+N"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rename-layer",
+      "say": "Double-click the new layer's name and type Sketch, then press Enter.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is there a layer named Sketch in the Layers panel?"
+        }
+      },
+      "hints": [
+        "Double-click the name text itself, not the thumbnail, or a settings window opens.",
+        "Layer, then Rename Layer in the menu bar works too."
+      ],
+      "why": "Clear names make it quick to find layers later."
+    },
+    {
+      "id": "paint-strokes",
+      "say": "Press B for the Brush, then paint a few strokes across the photo.",
+      "target": {
+        "shortcut": "B"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are there new brush strokes on the image that were not there before?"
+        }
+      },
+      "hints": [
+        "Press D first to set black as the paint color.",
+        "Press the right bracket key to make the brush bigger if strokes are too thin."
+      ],
+      "why": "Painting on the Sketch layer keeps your marks separate from the photo."
+    },
+    {
+      "id": "hide-layer",
+      "say": "Click the eye icon to the left of Sketch to hide that layer.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are the brush strokes now hidden, with the eye icon next to Sketch turned off?"
+        }
+      },
+      "hints": [
+        "The eye sits in the first column of each row in the Layers panel.",
+        "Make sure you click the eye on the Sketch row, not on the photo row."
+      ],
+      "why": "Hiding a layer lets you compare with and without it without deleting anything."
+    },
+    {
+      "id": "show-layer",
+      "say": "Click the same spot again to bring the strokes back.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Are the brush strokes visible again on the photo?"
+        }
+      },
+      "hints": [
+        "The empty box where the eye was is still clickable.",
+        "Control Z also brings back the last change."
+      ],
+      "why": "Layers can be switched on and off as often as you like."
+    }
+  ]
+}

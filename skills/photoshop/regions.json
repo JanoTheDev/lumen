@@ -1,0 +1,70 @@
+{
+  "window": "main",
+  "layout": "Essentials workspace",
+  "notes": "Estimated on a 1920x1080 window with the default Essentials workspace. Custom workspaces or floating panels break these; the engine falls back to OCR or vision.",
+  "regions": {
+    "menu-bar": {
+      "x": 0.0,
+      "y": 0.0,
+      "w": 1.0,
+      "h": 0.03,
+      "desc": "Menu bar along the top edge"
+    },
+    "options-bar": {
+      "x": 0.0,
+      "y": 0.03,
+      "w": 1.0,
+      "h": 0.04,
+      "desc": "Tool settings strip under the menu bar"
+    },
+    "toolbar": {
+      "x": 0.0,
+      "y": 0.07,
+      "w": 0.03,
+      "h": 0.9,
+      "desc": "Tool icons, narrow column on the far left"
+    },
+    "document-tabs": {
+      "x": 0.03,
+      "y": 0.07,
+      "w": 0.77,
+      "h": 0.025,
+      "desc": "Open document tabs above the canvas"
+    },
+    "canvas": {
+      "x": 0.03,
+      "y": 0.095,
+      "w": 0.77,
+      "h": 0.865,
+      "desc": "The image, center of the window"
+    },
+    "status-bar": {
+      "x": 0.03,
+      "y": 0.96,
+      "w": 0.77,
+      "h": 0.04,
+      "desc": "Zoom and document size, bottom of the image"
+    },
+    "properties-panel": {
+      "x": 0.8,
+      "y": 0.07,
+      "w": 0.2,
+      "h": 0.45,
+      "desc": "Properties and Adjustments panels, upper right"
+    },
+    "layers-panel": {
+      "x": 0.8,
+      "y": 0.52,
+      "w": 0.2,
+      "h": 0.44,
+      "desc": "Layers panel, lower right"
+    },
+    "layers-buttons": {
+      "x": 0.8,
+      "y": 0.96,
+      "w": 0.2,
+      "h": 0.04,
+      "desc": "Icon row at the bottom of the Layers panel"
+    }
+  }
+}

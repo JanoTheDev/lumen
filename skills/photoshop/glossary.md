@@ -1,0 +1,24 @@
+# Photoshop glossary
+
+- **Layer** — one sheet in the stack that makes up the image; you can hide, move or change it alone.
+- **Background layer** — the locked bottom layer a photo opens with; double-click it to make it a normal layer.
+- **Active layer** — the highlighted layer in the Layers panel; most edits go to it.
+- **Adjustment layer** — a layer that changes color or tone of the layers below without touching their pixels.
+- **Selection** — the outlined area (marching ants) where edits are allowed to happen.
+- **Marching ants** — the moving dashed line that shows a selection edge.
+- **Layer mask** — a black-and-white map on a layer: white shows the layer, black hides it.
+- **Feather** — softening of a selection edge so changes blend in.
+- **Crop** — trimming the outer parts of the image.
+- **Resample** — changing the number of pixels, which Image Size does when the Resample box is ticked.
+- **Canvas** — the image area; Canvas Size changes it without scaling the picture.
+- **Resolution** — pixels per inch; matters for print, not for screens.
+- **Opacity** — how see-through a layer is, from 0 to 100 percent.
+- **Blend mode** — the rule that mixes a layer with the ones below (Normal, Multiply, Screen).
+- **Smart Object** — a layer that keeps its original data so scaling and filters stay editable.
+- **Options bar** — the strip under the menu with settings for the current tool.
+- **Contextual Task Bar** — a small floating bar that suggests next steps for the current selection or layer.
+- **PSD** — Photoshop's own file format that keeps layers.
+- **Export** — writing a flat copy (JPG, PNG, WebP) for the web or sharing.
+- **JPG quality** — compression level; lower quality gives a smaller file with more artifacts.
+- **Generative Fill** — cloud feature that creates or removes content from a text prompt; needs an Adobe account.
+- **History** — the list of recent steps you can go back to.

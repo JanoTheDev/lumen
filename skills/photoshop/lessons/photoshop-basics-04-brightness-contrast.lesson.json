@@ -1,0 +1,158 @@
+{
+  "id": "photoshop-basics-04-brightness-contrast",
+  "app": "photoshop",
+  "title": "Brighten a photo with an adjustment",
+  "summary": "Add a Brightness/Contrast adjustment layer and compare before and after.",
+  "level": "beginner",
+  "minutes": 5,
+  "prereqs": ["photoshop-basics-02-layers-basics"],
+  "appVersion": ">=26",
+  "tags": ["adjustment", "color"],
+  "steps": [
+    {
+      "id": "check-photo",
+      "say": "Make sure a photo is open and its layer is highlighted in the Layers panel.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a photo open with its layer highlighted in the Layers panel?"
+        }
+      },
+      "hints": [
+        "Click the photo's row in the Layers panel to highlight it.",
+        "Open a photo with Control O if none is showing."
+      ],
+      "why": "The new adjustment goes right above the highlighted layer."
+    },
+    {
+      "id": "new-adjustment",
+      "say": "Open the Layer menu, choose New Adjustment Layer, then Brightness/Contrast.",
+      "target": {
+        "text": "Layer"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "window-title",
+              "regex": "^New Layer$"
+            },
+            {
+              "type": "vision",
+              "prompt": "Is a New Layer dialog open, or a Brightness/Contrast layer listed in the Layers panel?"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "The half black, half white circle at the bottom of the Layers panel opens the same list.",
+        "The Adjustments panel on the right has a Brightness/Contrast button too."
+      ],
+      "why": "An adjustment layer changes the look without altering the photo itself."
+    },
+    {
+      "id": "confirm-layer",
+      "say": "If a New Layer dialog appears, click OK.",
+      "target": {
+        "element": {
+          "name": "OK",
+          "role": "Button"
+        }
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Is a Brightness/Contrast adjustment layer listed in the Layers panel?"
+        }
+      },
+      "hints": [
+        "The dialog only appears when you use the menu; the panel button skips it.",
+        "Press Enter to click OK from the keyboard."
+      ],
+      "why": "The dialog only names the new layer.",
+      "doItForMe": {
+        "actions": [
+          {
+            "t": "invoke",
+            "element": {
+              "name": "OK",
+              "role": "Button"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "raise-brightness",
+      "say": "In the Properties panel, drag the Brightness slider to the right until the photo looks lighter.",
+      "target": {
+        "region": "properties-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the photo look brighter than it did at the start of this step?"
+        }
+      },
+      "hints": [
+        "You can type a number such as 30 in the box next to Brightness.",
+        "If the Properties panel is hidden, double-click the adjustment layer's icon."
+      ],
+      "why": "Brightness lifts the middle tones of the whole photo."
+    },
+    {
+      "id": "raise-contrast",
+      "say": "Now drag the Contrast slider a little to the right for punchier colors.",
+      "target": {
+        "region": "properties-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "vision",
+          "prompt": "Does the photo show stronger contrast than it did at the start of this step?"
+        }
+      },
+      "hints": [
+        "Small changes, around 10 to 20, usually look best.",
+        "Typing a value in the Contrast box works too."
+      ],
+      "why": "Contrast spreads lights and darks further apart."
+    },
+    {
+      "id": "compare",
+      "say": "Click the eye icon next to the adjustment layer to compare before and after.",
+      "target": {
+        "region": "layers-panel"
+      },
+      "expect": {
+        "type": "user-action",
+        "check": {
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "vision",
+              "prompt": "Has the adjustment been switched off so the photo looks like the original again?"
+            },
+            {
+              "type": "manual"
+            }
+          ]
+        }
+      },
+      "hints": [
+        "Click the eye again to turn the adjustment back on.",
+        "Say done when you have compared both versions."
+      ],
+      "why": "Adjustment layers can be switched off or changed later, which keeps the original safe."
+    }
+  ]
+}

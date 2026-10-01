@@ -1,0 +1,15 @@
+{
+  "id": "photoshop",
+  "name": "Adobe Photoshop",
+  "version": "1.0.0",
+  "description": "Photo editing basics in Photoshop: crop and resize, layers, selections and masks, adjustments and export.",
+  "match": {
+    "process": ["Photoshop.exe"]
+  },
+  "uiaQuality": "partial",
+  "appVersion": ">=26",
+  "appVersionTested": "Photoshop 2026 (27.x), Windows",
+  "lastVerified": "2026-10-01",
+  "verifiedBy": "docs",
+  "notes": "UIA quality is an estimate: menus and modal dialogs are exposed, panels and canvas are custom-drawn. Regions are estimates for the Essentials workspace."
+}
