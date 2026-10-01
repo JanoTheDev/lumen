@@ -18,6 +18,7 @@ import {
   looksLikeRequest
 } from './autodetect'
 import { cleanupDictation } from './cleanup'
+import { handleNoteCommand } from './notes'
 import { insertDictation, readFocus } from './insert'
 import { watchCorrections, type LearnDeps } from './learn-watch'
 import {
@@ -161,6 +162,8 @@ ${text}`)
  * dictation; false sends it on to the assistant as usual.
  */
 export async function maybeAutoDictate(prompt: string, signal?: AbortSignal): Promise<boolean> {
+  // "take a note …" (04 T45) is saved to Home Notes, whatever is focused.
+  if (await handleNoteCommand(prompt)) return true
   const cfg = loadConfig().dictation
   if (!cfg.enabled || !cfg.autoDetect || looksLikeRequest(prompt)) return false
   const agent = getAgent()
