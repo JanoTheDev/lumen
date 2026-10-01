@@ -4,8 +4,8 @@ import { join } from 'path'
 import type { KeywordSpotter, OnlineStream } from 'sherpa-onnx-node'
 import { parseSentencepieceModel, type PieceVocab } from './sentencepiece'
 import { buildKeywords, EnergyGate, type KeywordPhrases, type SpottedPhrase } from './keywords'
-import { KWS_MODEL } from './kws-model'
-import type { Sherpa } from '../sherpa'
+import { KWS_FILES } from './kws-files'
+import type { Sherpa } from '../sherpa-engine'
 
 const SAMPLE_RATE = 16000
 const HISTORY_BLOCKS = 25 // 2.5 s of recent audio for confirming a cancel hit
@@ -22,7 +22,7 @@ function vocabOf(dir: string): PieceVocab {
   if (vocabCache?.dir !== dir) {
     vocabCache = {
       dir,
-      vocab: parseSentencepieceModel(readFileSync(join(dir, KWS_MODEL.files.pieces)))
+      vocab: parseSentencepieceModel(readFileSync(join(dir, KWS_FILES.pieces)))
     }
   }
   return vocabCache.vocab
@@ -42,7 +42,7 @@ export class Spotter {
     this.unusable = list.unusable
     this.byTag = list.byTag
     if (!list.byTag.size) throw new Error('no usable wake or cancel phrase')
-    const f = KWS_MODEL.files
+    const f = KWS_FILES
     this.kws = new lib.KeywordSpotter({
       featConfig: { sampleRate: SAMPLE_RATE, featureDim: 80 },
       modelConfig: {

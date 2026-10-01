@@ -1,20 +1,27 @@
-// Wake word + voice-cancel engine: sherpa-onnx keyword spotting here in main, fed by the voice
-// renderer's mic stream (the same stream recording uses: one mic open, echo cancelled). When
-// the engine cannot load, the wake word reports itself unavailable.
+// Wake word + voice-cancel engine: sherpa-onnx keyword spotting in the speech worker, fed by
+// the voice renderer's mic stream (the same stream recording uses: one mic open, echo
+// cancelled). When the engine cannot load, the wake word reports itself unavailable.
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { splitPhrases } from '../../agent/state'
 import type { WakeStatus } from '@shared/channels'
 import * as hud from '../../windows/hud'
 import { broadcast } from '../../windows/registry'
-import { loadSherpa } from '../sherpa'
+import {
+  loadSherpa,
+  onSherpaRestart,
+  onSpotterHits,
+  sherpaDropSpotter,
+  sherpaFeed,
+  sherpaRequest
+} from '../sherpa'
+import type { SpotterBuilt } from '../sherpa-engine'
 import { localSttReady, transcribeLocal } from '../stt/local'
 import { cancelArmed } from './arm'
 import { confirmsCancel } from './confirm'
 import { handleVoiceCancel, handleWake } from './handlers'
 import { installKwsModel, KWS_MODEL, kwsModelDir, kwsModelInstalled } from './kws-model'
-import type { KeywordPhrases } from './keywords'
-import { Spotter } from './spotter'
+import type { KeywordPhrases, SpottedPhrase } from './keywords'
 
 export type WakeEngine = 'kws' | 'off'
 
@@ -28,7 +35,6 @@ const MAX_PCM_BYTES = 64_000
 export const ENGINE_UNAVAILABLE = 'The offline wake word engine could not load on this PC.'
 
 let engine: WakeEngine = 'off'
-let spotter: Spotter | null = null
 /** Phrases + sensitivity the current spotter was built for; unchanged settings reuse it. */
 let spotterKey = ''
 let applySeq = 0
@@ -65,7 +71,7 @@ function phrasesOf(cfg: AppConfig): Phrases {
 
 function switchTo(next: WakeEngine): void {
   if (next !== 'kws') {
-    spotter = null
+    if (spotterKey) sherpaDropSpotter()
     spotterKey = ''
     unusable = []
   }
@@ -82,8 +88,7 @@ export function applyWakeState(cfg: AppConfig): void {
   spotterError = null
   if (!p.wake && !p.cancel.length) return switchTo('off')
 
-  const lib = loadSherpa()
-  if (!lib) {
+  if (!loadSherpa()) {
     log('fail', 'wake word unavailable: the sherpa-onnx engine did not load')
     return switchTo('off')
   }
@@ -96,28 +101,39 @@ export function applyWakeState(cfg: AppConfig): void {
     return switchTo('off')
   }
   const key = JSON.stringify(p)
-  if (spotter && engine === 'kws' && key === spotterKey) return switchTo('kws')
-  try {
-    const next = new Spotter(lib, kwsModelDir(), p)
-    for (const phrase of next.unusable)
-      log('fail', `wake: "${phrase}" can't be spelled by the model`)
-    spotter = next
-    spotterKey = key
-    unusable = next.unusable
-    switchTo('kws')
-  } catch (e) {
-    spotterError = `The wake word spotter failed to start: ${(e as Error).message}`
-    log('fail', spotterError)
-    switchTo('off')
-  }
+  if (engine === 'kws' && key === spotterKey) return switchTo('kws')
+  // The worker keeps feeding the previous spotter (if any) until this one is built.
+  sherpaRequest<SpotterBuilt>({ t: 'spotter', dir: kwsModelDir(), phrases: p }).then(
+    (built) => {
+      if (seq !== applySeq) return
+      for (const phrase of built.unusable)
+        log('fail', `wake: "${phrase}" can't be spelled by the model`)
+      spotterKey = key
+      unusable = built.unusable
+      switchTo('kws')
+    },
+    (e: Error) => {
+      if (seq !== applySeq) return
+      spotterError = `The wake word spotter failed to start: ${e.message}`
+      log('fail', spotterError)
+      switchTo('off')
+    }
+  )
 }
+
+// A crashed worker took its spotter with it: build a new one (or report the engine gone).
+onSherpaRestart(() => {
+  if (!spotterKey) return
+  spotterKey = ''
+  applyWakeState(loadConfig())
+})
 
 async function confirmCancel(phrase: string): Promise<void> {
   if (confirming) return
   confirming = true
   try {
     await new Promise((r) => setTimeout(r, CONFIRM_TAIL_MS))
-    const audio = spotter?.recentAudio()
+    const audio = await sherpaRequest<Float32Array | null>({ t: 'recent' })
     if (!audio || !cancelArmed()) return
     if (!localSttReady()) return handleVoiceCancel(phrase)
     const text = await transcribeLocal(audio, 16000)
@@ -135,9 +151,16 @@ async function confirmCancel(phrase: string): Promise<void> {
 
 /** 16 kHz mono Int16 audio from the voice renderer. */
 export function onWakePcm(raw: unknown): void {
-  if (engine !== 'kws' || !spotter) return
+  if (engine !== 'kws') return
   if (!(raw instanceof ArrayBuffer) || raw.byteLength > MAX_PCM_BYTES || raw.byteLength % 2) return
-  for (const hit of spotter.feed(new Int16Array(raw))) {
+  sherpaFeed(raw)
+}
+
+onSpotterHits(onHits)
+
+function onHits(hits: SpottedPhrase[]): void {
+  if (engine !== 'kws') return
+  for (const hit of hits) {
     if (hit.kind === 'wake') {
       const now = Date.now()
       if (now - lastWakeAt < REFRACTORY_MS) continue

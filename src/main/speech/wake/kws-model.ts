@@ -6,6 +6,7 @@ import { homedir } from 'os'
 import { join } from 'path'
 import { broadcast } from '../../windows/registry'
 import { log } from '../../logger'
+import { KWS_FILES } from './kws-files'
 import {
   hasFiles,
   installArchive,
@@ -19,24 +20,12 @@ export const KWS_MODEL = {
   id: 'kws-zipformer-gigaspeech-3.3M',
   sizeMb: 18,
   license: 'Apache-2.0',
-  files: {
-    encoder: 'encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx',
-    decoder: 'decoder-epoch-12-avg-2-chunk-16-left-64.onnx',
-    joiner: 'joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx',
-    tokens: 'tokens.txt',
-    pieces: 'bpe.model'
-  },
+  files: KWS_FILES,
   archive: {
     url: `https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${ROOT}.tar.bz2`,
     sha256: 'f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a',
     rootInArchive: ROOT,
-    requiredFiles: [
-      'encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx',
-      'decoder-epoch-12-avg-2-chunk-16-left-64.onnx',
-      'joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx',
-      'tokens.txt',
-      'bpe.model'
-    ]
+    requiredFiles: Object.values(KWS_FILES)
   } satisfies ArchiveSpec
 }
 

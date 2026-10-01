@@ -2,8 +2,11 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { describe, expect, it } from 'vitest'
-import { localSttReady, transcribeLocal } from '../../src/main/speech/stt/local'
+import { setSherpaWorkerFactory } from '../../src/main/speech/sherpa'
+import { localModelInstalled } from '../../src/main/speech/stt/local-model'
+import { transcribeLocal } from '../../src/main/speech/stt/local'
 import { parseWav } from '../../src/main/speech/stt/wav'
+import { InThreadWorker, loadAddon } from './sherpa-inthread'
 
 const fixture = (name: string): ArrayBuffer => {
   const b = readFileSync(join(__dirname, '../fixtures/audio', name))
@@ -15,7 +18,10 @@ const words = (s: string): string =>
     .replace(/[^a-z ]/g, '')
     .trim()
 
-describe.skipIf(!localSttReady())('local stt', () => {
+const addon = loadAddon()
+setSherpaWorkerFactory(() => new InThreadWorker(addon))
+
+describe.skipIf(!addon || !localModelInstalled())('local stt', () => {
   it('transcribes short commands', { timeout: 30_000 }, async () => {
     const short = parseWav(fixture('scroll-down.wav'))!
     expect(words(await transcribeLocal(short.samples, short.sampleRate))).toBe('scroll down')
