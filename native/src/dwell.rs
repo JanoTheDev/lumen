@@ -473,6 +473,7 @@ fn snap_element(x: i32, y: i32) -> Option<Value> {
 /// `mouse-moved {x, y}` (physical px) while subscribed: every cursor change, polled at ~60 Hz
 /// while the cursor moves and 20 Hz once it has been still for a moment. Nothing is sent while
 /// it rests. Consumers apply their own thresholds (main dismisses guides after 12 px).
+/// A stalled reader gets only the latest position (one queued line, see `Out::emit_latest`).
 pub struct MouseWatch {
     out: Out,
     stop: Mutex<Option<Arc<AtomicBool>>>,
@@ -516,7 +517,7 @@ impl MouseWatch {
                 if cur != last {
                     last = cur;
                     moved_at = Instant::now();
-                    out.try_emit("mouse-moved", json!({"x": cur.0, "y": cur.1}));
+                    out.emit_latest("mouse-moved", json!({"x": cur.0, "y": cur.1}));
                 }
             }
         });

@@ -337,7 +337,7 @@ impl HookCtx {
 }
 
 fn emit_switch(out: &Out, index: usize, down: bool) {
-    if !out.try_emit("switch", json!({"index": index, "down": down})) {
+    if !out.try_emit_edge("switch", json!({"index": index, "down": down})) {
         tracing::warn!("dropped switch event: writer queue full");
     }
 }
@@ -345,7 +345,7 @@ fn emit_switch(out: &Out, index: usize, down: bool) {
 /// Mouse push-to-talk acts like the dictation hotkey (hold, double-tap hands-free).
 fn emit_ptt(out: &Out, down: bool) {
     let event = if down { "dictation-down" } else { "dictation-up" };
-    if !out.try_emit(event, json!({"source": "mouse"})) {
+    if !out.try_emit_edge(event, json!({"source": "mouse"})) {
         tracing::warn!("dropped {event}: writer queue full");
     }
 }
@@ -354,7 +354,7 @@ fn deliver(out: &Out, outputs: Vec<Output>) {
     for o in outputs {
         match o {
             Output::Emit(event) => {
-                if !out.try_emit(event, json!({})) {
+                if !out.try_emit_edge(event, json!({})) {
                     tracing::warn!("dropped {event}: writer queue full");
                 }
             }
