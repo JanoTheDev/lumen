@@ -15,7 +15,7 @@ describe('protocol', () => {
     const first = JSON.parse(agent.raw[0])
     expect(first.v).toBe(2)
     expect(first.event).toBe('ready')
-    expect(['python', 'native']).toContain(agent.ready.impl)
+    expect(agent.ready.impl).toBe('native')
     expect(agent.ready.version).toMatch(/^\d+\.\d+\.\d+/)
     expect(Array.isArray(agent.ready.capabilities)).toBe(true)
   })
@@ -53,11 +53,11 @@ describe('protocol', () => {
     expect((ev.data?.line as string).length).toBe(200)
   })
 
-  it('accepts flat v1-framed requests and answers in v2', async () => {
+  it('rejects flat v1-framed requests as a protocol error', async () => {
     agent = await Agent.start()
     agent.send({ id: 1, cmd: 'ping' })
-    const f = await agent.waitFor((m) => m.id === 1)
-    expect(f).toMatchObject({ v: 2, id: 1, ok: true })
+    const ev = await agent.waitFor((f) => f.event === 'protocol-error')
+    expect(ev.data?.line).toBe('{"id":1,"cmd":"ping"}')
   })
 
   it('preserves non-ascii text in frames', async () => {
@@ -114,7 +114,6 @@ describe('protocol', () => {
     agent = await Agent.start()
     const ok = await agent.request('init', {
       hotkey: '',
-      wake: { enabled: false, phrase: 'hey lumen', cancelPhrases: [] },
       dwell: { enabled: false, ms: 1400, cooldownMs: 1500 },
       logLevel: 'info'
     })

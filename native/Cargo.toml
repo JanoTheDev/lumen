@@ -25,7 +25,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 fast_image_resize = "6"
 base64 = "0.22"
 jpeg-encoder = { version = "0.7", features = ["simd"] }
-cpal = "0.18.2"
 
 [target.'cfg(windows)'.dependencies]
 windows-core = "0.62"

@@ -21,7 +21,6 @@ mod proto;
 mod stdio;
 #[cfg(windows)]
 mod uia;
-mod wake;
 mod window;
 
 use std::io::BufRead;

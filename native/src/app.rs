@@ -11,7 +11,6 @@ use crate::hotkey::{self, accel};
 use crate::logging;
 use crate::proto::router::{CancelToken, Lane, Router};
 use crate::proto::{AgentError, Args, CmdResult, arg};
-use crate::wake;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -25,7 +24,6 @@ pub const CAPABILITIES: &[&str] = &[
     "uia",
     "dwell",
     "announce",
-    "wake",
     "execute",
     "a11y-state",
 ];
@@ -66,7 +64,6 @@ pub struct App {
     pub opts: Opts,
     pub hotkeys: hotkey::Service,
     pub dwell: Dwell,
-    pub wake: wake::Service,
     pub mouse: MouseWatch,
     log: logging::Handle,
     subscribable: Mutex<BTreeMap<&'static str, SubscribeFn>>,
@@ -80,12 +77,10 @@ impl App {
         let dwell =
             Dwell::new(router.out().clone(), move || r.lane_busy(Lane::Input, dwell::AUTO_PAUSE_GRACE));
         let mouse = MouseWatch::new(router.out().clone());
-        let wake = wake::Service::new(router.out().clone());
         Arc::new(App {
             router,
             hotkeys,
             dwell,
-            wake,
             mouse,
             opts,
             log,
@@ -216,22 +211,6 @@ pub fn register_core(app: &Arc<App>) {
         app.dwell.set_paused(false);
         Ok(json!({"paused": false}))
     });
-    // v1 aliases kept for the current bridge wrappers.
-    app.cmd("dwell_enable", Lane::Inline, None, |app, args, _| {
-        let mut cfg = args.clone();
-        cfg.insert("enabled".into(), json!(true));
-        let c = app.dwell.configure(&cfg);
-        Ok(json!({"ok": true, "dwell_ms": c.ms, "cooldown_ms": c.cooldown_ms}))
-    });
-    app.cmd("dwell_disable", Lane::Inline, None, |app, _, _| {
-        app.dwell.configure(json!({"enabled": false}).as_object().unwrap());
-        Ok(json!({"ok": true}))
-    });
-    app.cmd("dwell_set_ms", Lane::Inline, None, |app, args, _| {
-        let ms = args.get("dwell_ms").or_else(|| args.get("ms")).cloned().unwrap_or(json!(1400));
-        app.dwell.configure(json!({"ms": ms}).as_object().unwrap());
-        Ok(json!({"ok": true}))
-    });
     let weak = Arc::downgrade(app);
     app.add_subscribable("mouse-moved", move |on| {
         if let Some(app) = weak.upgrade() {
@@ -241,28 +220,6 @@ pub fn register_core(app: &Arc<App>) {
 
     app.cmd("announce", Lane::Read, None, |_, args, _| crate::announce::cmd_announce(args));
     app.cmd("a11y_state", Lane::Read, Some(2000), |_, _, _| crate::a11y_state::cmd_a11y_state());
-
-    app.cmd("wake_enable", Lane::Inline, None, |app, args, _| {
-        let phrase = arg::opt_str(args, "phrase")?.unwrap_or("");
-        let cancel = wake::cancel_list(args.get("cancel_phrases").or_else(|| args.get("cancelPhrases")));
-        let map =
-            wake::phrase_map(phrase, &cancel).ok_or_else(|| AgentError::invalid("no phrases provided"))?;
-        app.wake.start(map, wake::energy_floor(args))?;
-        Ok(json!({"ok": true, "phrase": phrase, "cancel_phrases": cancel}))
-    });
-    app.cmd("wake_disable", Lane::Inline, None, |app, _, _| {
-        app.wake.stop();
-        Ok(json!({"ok": true}))
-    });
-    app.cmd("wake_status", Lane::Inline, None, |app, _, _| Ok(app.wake.status()));
-    app.cmd("wake_arm_cancel", Lane::Inline, None, |app, args, _| {
-        let armed = match args.get("armed") {
-            Some(Value::Bool(b)) => *b,
-            _ => return Err(AgentError::invalid("wake_arm_cancel needs armed: bool")),
-        };
-        app.wake.set_cancel_armed(armed);
-        Ok(json!({"armed": armed}))
-    });
 
     app.cmd("set_hotkey", Lane::Inline, None, |app, args, _| {
         let combo = arg::opt_str(args, "combo")
@@ -336,15 +293,6 @@ fn cmd_init(app: &Arc<App>, args: &Args, _: &CancelToken) -> CmdResult {
         dictation = "";
     }
     app.hotkeys.apply(hotkey::Update { dictation: Some(dictation), ..hotkeys })?;
-    let wake_cfg = arg::obj(args, "wake").cloned().unwrap_or_default();
-    let wake_phrase = match (wake_cfg.get("enabled"), wake_cfg.get("phrase")) {
-        (Some(Value::Bool(true)), Some(Value::String(p))) => p.trim().to_owned(),
-        _ => String::new(),
-    };
-    match wake::phrase_map(&wake_phrase, &wake::cancel_list(wake_cfg.get("cancelPhrases"))) {
-        Some(map) => app.wake.start(map, wake::energy_floor(&wake_cfg))?,
-        None => app.wake.stop(),
-    }
     let mut dwell_cfg = arg::obj(args, "dwell").cloned().unwrap_or_default();
     let enabled = dwell_cfg.get("enabled") == Some(&Value::Bool(true));
     dwell_cfg.insert("enabled".into(), json!(enabled));

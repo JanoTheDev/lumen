@@ -32,7 +32,6 @@ export const REQUIRED_NATIVE_CAPABILITIES = [
   'ocr',
   'uia',
   'dwell',
-  'wake',
   'announce',
   'execute'
 ] as const
