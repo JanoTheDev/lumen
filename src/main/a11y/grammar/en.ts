@@ -17,6 +17,8 @@ export type Gate =
   | 'autoscroll'
   | 'busy-target'
   | 'answer'
+  /** Help sheet only: guide voice navigation (guides/voice-nav.ts) runs before the grammar. */
+  | 'guide'
 
 export type Category =
   | 'numbers'
@@ -27,6 +29,7 @@ export type Category =
   | 'navigation'
   | 'windows'
   | 'lumen'
+  | 'guide'
 
 export interface GrammarEntry {
   id: string
@@ -709,5 +712,44 @@ export const GRAMMAR: GrammarEntry[] = [
     patterns: ['(click on|tap on|click) <text>'],
     say: 'click Compose',
     does: 'Click a control by its exact name'
+  }
+]
+
+/**
+ * Commands handled outside this grammar that the help sheet still lists: guide navigation
+ * (guides/voice-nav.ts, whole utterance only, while a guide runs).
+ */
+export const SHEET_EXTRAS: GrammarEntry[] = [
+  {
+    id: 'guide.next',
+    category: 'guide',
+    patterns: [],
+    gate: 'guide',
+    say: 'next',
+    does: 'Go to the next step'
+  },
+  {
+    id: 'guide.prev',
+    category: 'guide',
+    patterns: [],
+    gate: 'guide',
+    say: 'back',
+    does: 'Go to the previous step'
+  },
+  {
+    id: 'guide.repeat',
+    category: 'guide',
+    patterns: [],
+    gate: 'guide',
+    say: 'repeat',
+    does: 'Say the step again'
+  },
+  {
+    id: 'guide.done',
+    category: 'guide',
+    patterns: [],
+    gate: 'guide',
+    say: 'done',
+    does: 'Close the guide'
   }
 ]

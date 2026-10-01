@@ -91,9 +91,13 @@ describe('routing (T04)', () => {
     expect(calls.input).toEqual([])
   })
 
-  it('"what can I say" answers with the command sheet', async () => {
-    const { say } = setup()
-    const r = (await say('what can I say')) as { response: { mode: string; text: string } }
+  it('"what can I say" opens the command sheet; text when it cannot', async () => {
+    const { say, calls } = setup()
+    expect(await say('what can I say')).toEqual({ response: LOCAL_HANDLED })
+    expect(calls.help).toBe(1)
+    const r = (await setup({ help: false }).say('what can I say')) as {
+      response: { mode: string; text: string }
+    }
     expect(r.response.mode).toBe('answer')
     expect(r.response.text).toMatch(/scroll/i)
   })

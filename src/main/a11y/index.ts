@@ -12,6 +12,7 @@ import * as commands from '../agent/commands'
 import { getAgent, requireAgent } from '../agent/instance'
 import { applyListenerState } from '../agent/sync'
 import { guideState } from '../guides/session'
+import { registerA11yIpc } from '../ipc/a11y'
 import { broadcastConfig } from '../ipc/settings'
 import { onBroadcast } from '../windows/registry'
 import { currentContext } from '../query/context'
@@ -19,6 +20,7 @@ import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
 import { speakAnswer } from '../speech/tts'
 import * as assistant from '../windows/assistant'
+import * as commandSheet from '../windows/command-sheet'
 import * as screenLayer from '../windows/screen-layer'
 import * as settingsWin from '../windows/settings'
 import { setStatus } from '../windows/status'
@@ -27,6 +29,9 @@ import { Announcer, type AnnounceOptions } from './announce'
 import { screenReaderActive, setAtState } from './at-state'
 import { FocusNarrator } from './focus-narration'
 import { A11yCommands, type A11yIo, type A11yScene } from './dispatch'
+import { dwellController } from './dwell'
+import { commandSheetData, helpShortcut, installHelpShortcut } from './help'
+import { installDwell } from './install-dwell'
 
 const SNAPSHOT_TIMEOUT_MS = 2500
 const OCR_TIMEOUT_MS = 4000
@@ -88,18 +93,9 @@ function displaysPhys(): Rect[] {
     )
 }
 
+/** "Pause dwell" / "resume dwell": a user pause in the dwell controller (corner and palette stay live). */
 function setDwellPaused(paused: boolean): boolean {
-  const agent = getAgent()
-  const cfg = loadConfig()
-  if (!agent || !cfg.dwellClick.enabled) return false
-  if (agent.protocol === 2 && agent.hasCapability('dwell')) {
-    agent.request(paused ? 'dwell_pause' : 'dwell_resume').catch(() => {})
-  } else if (paused) {
-    agent.disableDwell().catch(() => {})
-  } else {
-    agent.enableDwell(cfg.dwellClick.dwellMs, cfg.dwellClick.cooldownMs).catch(() => {})
-  }
-  return true
+  return dwellController()?.setPaused(paused) ?? false
 }
 
 function saveAndBroadcast(patch: Parameters<typeof saveConfig>[0]): void {
@@ -181,6 +177,10 @@ export function createIo(): A11yIo {
     },
     appUrl,
     openSettings: () => settingsWin.create(),
+    openHelp: () => {
+      commandSheet.show()
+      return true
+    },
     setDwellPaused,
     setScanning: () => false,
     setWakeWord: (on) => {
@@ -268,6 +268,20 @@ export function installA11y(): void {
     loadConfig().a11y.voiceCommands ? commandsImpl.tryHandle(utterance) : null
   )
   // Escape / voice cancel also takes numbers and the grid away and stops auto-scroll.
-  bus.on('voice.cancelled', () => commandsImpl.reset())
+  bus.on('voice.cancelled', () => {
+    commandsImpl.reset()
+    dwellController()?.reset()
+  })
   installFocusNarration()
+  const dwell = installDwell({
+    announce: (text) => announce(text, { kind: 'command' }),
+    wantFocusEvents
+  })
+  installHelpShortcut()
+  registerA11yIpc({
+    commands: () => commandSheetData(commandsImpl.context(), helpShortcut()),
+    closeSheet: () => commandSheet.hide(),
+    dwellState: () => dwell.state(),
+    dwellPick: (pick) => dwell.choose(pick)
+  })
 }

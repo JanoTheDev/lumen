@@ -1,0 +1,204 @@
+/* Command sheet and dwell palette windows. Theme tokens throughout; forced-colors falls back
+   to system colours with visible borders and focus rings. */
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-text);
+}
+
+/* ---- Command sheet ---- */
+
+.cs-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem 1rem 0;
+  border: 1px solid var(--border);
+}
+
+.cs-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  -webkit-app-region: drag;
+}
+
+.cs-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+}
+
+.cs-close,
+.cs-jump button {
+  -webkit-app-region: no-drag;
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cs-close:hover,
+.cs-jump button:hover {
+  border-color: var(--accent);
+}
+
+.cs-hint {
+  margin: 0.25rem 0 0.75rem;
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+}
+
+.cs-search {
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+  color: var(--fg);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.cs-jump {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.cs-jump button {
+  min-height: 2.5rem;
+  padding: 0 0.75rem;
+  font-size: var(--text-sm);
+}
+
+.cs-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+}
+
+.cs-section__title {
+  margin: 1rem 0 0.25rem;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+
+.cs-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-row {
+  display: grid;
+  grid-template-columns: minmax(9rem, 40%) 1fr;
+  gap: 0.75rem;
+  padding: 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0.4rem;
+}
+
+.cs-say {
+  font-weight: var(--weight-strong);
+}
+
+.cs-row.is-later .cs-say,
+.cs-when,
+.cs-empty {
+  color: var(--fg-muted);
+}
+
+.cs-root :focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- Dwell palette ---- */
+
+.dp-root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 0.35rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.dp-root.is-paused {
+  border-color: var(--fg-muted);
+}
+
+.dp-grip {
+  height: 1rem;
+  border-radius: 0.3rem;
+  background: repeating-linear-gradient(90deg, var(--border) 0 2px, transparent 2px 6px);
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.dp-btn {
+  -webkit-app-region: no-drag;
+  flex: 1;
+  min-height: 3.25rem;
+  border: 2px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface-raised);
+  color: var(--fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.dp-btn.is-on {
+  background: var(--accent);
+  border-color: var(--fg);
+  color: var(--on-accent);
+}
+
+.dp-glyph {
+  font-size: 1.35rem;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+}
+
+.dp-status {
+  margin: 0;
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--fg-muted);
+}
+
+.dp-root :focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (forced-colors: active) {
+  .cs-row,
+  .dp-btn,
+  .cs-close,
+  .cs-jump button {
+    border: 1px solid CanvasText;
+  }
+  .dp-btn.is-on {
+    background: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+}

@@ -18,6 +18,7 @@ export type RendererEntry =
   | 'assistant'
   | 'screen'
   | 'panel'
+  | 'a11y'
 
 /** Locked-down webPreferences shared by every Lumen window. */
 export function securePrefs(): WebPreferences {

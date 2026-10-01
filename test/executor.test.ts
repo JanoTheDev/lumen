@@ -37,6 +37,7 @@ import { frameGeometryOf } from '../src/main/actions/coords'
 import { setCurrentContext, type QueryContext } from '../src/main/query/context'
 import { setAgent } from '../src/main/agent/instance'
 import type { AgentBridge } from '../src/main/agent/bridge'
+import { DwellController, setDwellController, type DwellIo } from '../src/main/a11y/dwell'
 
 interface MockAgent {
   protocol: 1 | 2
@@ -221,10 +222,18 @@ describe('executeActions', () => {
     expect(executed(m)).toHaveLength(1)
   })
 
-  it('pauses dwell around the batch on a v2 agent with the dwell capability', async () => {
+  it('holds dwell (a11y dwell controller) around the batch', async () => {
     const m = mockAgent({ protocol: 2, caps: ['dwell'] })
-    await executeActions([{ type: 'click', x: 1, y: 1 }])
-    expect(m.calls.map((c) => c.cmd)).toEqual(['dwell_pause', 'execute', 'dwell_resume'])
+    const holds: string[] = []
+    const io = { holdAgent: (on: boolean) => holds.push(on ? 'hold' : 'release') }
+    setDwellController(new DwellController(io as unknown as DwellIo))
+    try {
+      await executeActions([{ type: 'click', x: 1, y: 1 }])
+    } finally {
+      setDwellController(null)
+    }
+    expect(holds).toEqual(['hold', 'release'])
+    expect(m.calls.map((c) => c.cmd)).toEqual(['execute'])
   })
 
   it('does not pause dwell on a v1 agent', async () => {

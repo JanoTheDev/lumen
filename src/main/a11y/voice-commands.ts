@@ -1,6 +1,6 @@
 // Local voice-control grammar (06 T01): a table-driven, anchored matcher that runs before any
 // LLM. Pure: no Electron imports. The dispatcher (dispatch.ts) executes what this returns.
-import { GRAMMAR, type Category, type Gate, type GrammarEntry } from './grammar/en'
+import { GRAMMAR, SHEET_EXTRAS, type Category, type Gate, type GrammarEntry } from './grammar/en'
 import { parseKeys } from './grammar/keys'
 import { NUMBER_SLOT, parseNumber } from './grammar/numbers'
 
@@ -141,6 +141,8 @@ function gateHolds(gate: Gate | undefined, ctx: CommandContext): boolean {
       return ctx.autoScrolling
     case 'answer':
       return !!ctx.answerShown
+    case 'guide':
+      return ctx.guideActive
     case 'busy-target':
       return false
   }
@@ -290,6 +292,50 @@ export function commandSheet(
     if (seen.has(e.say)) continue
     seen.add(e.say)
     out.push({ category: e.category, say: e.say, does: e.does })
+  }
+  return out
+}
+
+/** When a gated command applies, in words for the help sheet. */
+export const GATE_WHEN: Record<Gate, string> = {
+  marks: 'while numbers are shown',
+  grid: 'while the grid is shown',
+  'grid-drag': 'after "drag" in the grid',
+  // Ordinary commands that a running guide takes over ("back"); not worth a note.
+  'no-guide': '',
+  autoscroll: 'while scrolling',
+  'busy-target': 'while Lumen is busy',
+  answer: 'while an answer is shown',
+  guide: 'during a guide'
+}
+
+export interface SheetRow {
+  category: Category
+  say: string
+  does: string
+  when?: string
+  /** Applies in `ctx` right now. */
+  now: boolean
+}
+
+/**
+ * Every command for the "what can I say" sheet (T21), generated from the grammar table so the
+ * sheet never drifts from what is matched. One row per phrase and gate.
+ */
+export function commandSheetRows(ctx: CommandContext): SheetRow[] {
+  const seen = new Set<string>()
+  const out: SheetRow[] = []
+  for (const e of [...GRAMMAR, ...SHEET_EXTRAS]) {
+    const key = `${e.say}|${e.gate ?? ''}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      category: e.category,
+      say: e.say,
+      does: e.does,
+      ...(e.gate && GATE_WHEN[e.gate] ? { when: GATE_WHEN[e.gate] } : {}),
+      now: gateHolds(e.gate, ctx)
+    })
   }
   return out
 }

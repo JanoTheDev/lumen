@@ -257,7 +257,9 @@ export const configV2Schema = z.object({
     confirmTranscript: z.enum(['always', 'risky', 'off']).default('risky'),
     simpleMode: z.boolean().default(false),
     /** Profiles picked in onboarding / Settings (06 profiles.md ids). */
-    profiles: z.array(z.string().max(30)).max(12).default([])
+    profiles: z.array(z.string().max(30)).max(12).default([]),
+    /** Opens the "what can I say" sheet; "" = no shortcut. Filled from the defaults on load. */
+    helpHotkey: z.union([z.literal(''), z.string().regex(HOTKEY_RE)]).optional()
   }),
   buddy: z.object({
     enabled: z.boolean(),
@@ -355,7 +357,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     focusNarration: false,
     confirmTranscript: 'risky',
     simpleMode: false,
-    profiles: []
+    profiles: [],
+    helpHotkey: 'Ctrl+Shift+F1'
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: { confirm: 'risky', cancelWindowMs: 3000 },

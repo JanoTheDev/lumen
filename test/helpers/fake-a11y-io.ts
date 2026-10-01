@@ -22,6 +22,8 @@ export interface FakeA11yOptions {
   uiaOk?: boolean
   /** An answer card is showing. */
   answer?: boolean
+  /** openHelp result (false = the sheet cannot open, a text answer is used). */
+  help?: boolean
 }
 
 export interface FakeA11yCalls {
@@ -119,6 +121,10 @@ export function fakeA11yIo(opts: FakeA11yOptions = {}): FakeA11y {
     appUrl: (name) => (name.toLowerCase() === 'gmail' ? 'https://mail.google.com' : null),
     openSettings: () => {
       calls.settings++
+    },
+    openHelp: () => {
+      calls.help++
+      return opts.help ?? true
     },
     setDwellPaused: (paused) => {
       calls.dwellPaused.push(paused)

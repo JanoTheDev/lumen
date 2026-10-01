@@ -25,6 +25,7 @@ import { setStatus } from '../windows/status'
 import { sleep } from '../util'
 import { waitForSettle } from '../ai/observe'
 import { armCancel } from '../speech/wake/arm'
+import { holdDwell } from '../a11y/dwell'
 
 // How long an uncertain target stays on screen before the click (cancel window).
 const CONFIRM_MS = 2500
@@ -49,11 +50,6 @@ export interface ExecuteResult {
   reachedBottom: boolean
   /** Physical rects of the click targets, in order (the verifier diffs around them). */
   targets: Rect[]
-}
-
-// Only a v2 agent that advertises dwell understands dwell_pause/dwell_resume.
-function canPauseDwell(agent: AgentBridge): boolean {
-  return agent.protocol === 2 && agent.hasCapability('dwell')
 }
 
 /** Shows the uncertain target and gives the user a moment to cancel (Esc / "cancel"). */
@@ -214,8 +210,8 @@ export async function executeActions(
     `execute: ${actions.map((a) => a.type).join(', ')} | image ${frame.imgW}x${frame.imgH} → phys ${frame.width}x${frame.height}`
   )
 
-  const pauseDwell = canPauseDwell(agent)
-  if (pauseDwell) await agent.request('dwell_pause').catch(() => {})
+  // No dwell may fire while Lumen moves the mouse (a user pause is kept separately).
+  const releaseDwell = holdDwell('automation')
   const disarmCancel = armCancel()
 
   let firstClick = true
@@ -300,7 +296,7 @@ export async function executeActions(
   } finally {
     disarmCancel()
     if (preview) highlight.hide()
-    if (pauseDwell) await agent.request('dwell_resume').catch(() => {})
+    releaseDwell()
   }
 
   result.cancelled = !!signal?.aborted

@@ -3,6 +3,7 @@ import type { ScreenScene } from '@shared/events'
 import { useIpc } from '../lib/ipc'
 import { GridLayer } from '../a11y/GridLayer'
 import { MarksLayer } from '../a11y/MarksLayer'
+import { DwellRing, DwellUi } from '../a11y/DwellRing'
 import '../a11y/a11y-layer.css'
 
 export function ScreenApp(): JSX.Element {
@@ -24,6 +25,8 @@ export function ScreenApp(): JSX.Element {
       </svg>
       {scene?.grid && <GridLayer grid={scene.grid} />}
       {scene?.marks?.length ? <MarksLayer marks={scene.marks} /> : null}
+      {scene?.dwellUi && <DwellUi ui={scene.dwellUi} />}
+      <DwellRing />
     </>
   )
 }

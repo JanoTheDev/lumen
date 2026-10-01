@@ -6,6 +6,7 @@
 import { screen, type BrowserWindow, type Display } from 'electron'
 import type { GuideStep, LocateItem, Point, Rect } from '@shared/types'
 import type { ScreenScene } from '@shared/events'
+import type { DwellRingData } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
 import { onBroadcast, registerWindowSet } from './registry'
 import { loadConfig } from '../config'
@@ -39,14 +40,22 @@ let captureDisplay: number | null = null
 let created = false
 
 const emptyScene = (s: Scene): boolean =>
-  !s.highlights.length && !s.buddy && !s.marks?.length && !s.grid && !s.annotations?.length
+  !s.highlights.length &&
+  !s.buddy &&
+  !s.marks?.length &&
+  !s.grid &&
+  !s.annotations?.length &&
+  !s.dwellUi?.scrollAt &&
+  !s.dwellUi?.dragFrom
 
 /**
  * What is drawn right now. While hidden for a screenshot, the a11y numbers and grid stay up:
  * the user is choosing from them, and the model may as well see what the user sees.
  */
 function visibleScene(): Scene {
-  return suppressed ? { highlights: [], marks: scene.marks, grid: scene.grid } : scene
+  return suppressed
+    ? { highlights: [], marks: scene.marks, grid: scene.grid, dwellUi: scene.dwellUi }
+    : scene
 }
 
 function intersects(r: Rect, b: Electron.Rectangle): boolean {
@@ -73,6 +82,13 @@ export function localize(s: Scene, d: { id: number; bounds: Electron.Rectangle }
   const marks = s.marks?.filter((m) => intersects(m.rect, b))
   if (marks?.length) out.marks = marks.map((m) => ({ ...m, rect: shift(m.rect, b) }))
   if (s.grid && intersects(s.grid.rect, b)) out.grid = { ...s.grid, rect: shift(s.grid.rect, b) }
+  const dw = s.dwellUi
+  if (dw) {
+    const ui: NonNullable<ScreenScene['dwellUi']> = {}
+    if (dw.scrollAt && contains(b, dw.scrollAt)) ui.scrollAt = shiftPt(dw.scrollAt, b)
+    if (dw.dragFrom && contains(b, dw.dragFrom)) ui.dragFrom = shiftPt(dw.dragFrom, b)
+    if (ui.scrollAt || ui.dragFrom) out.dwellUi = ui
+  }
   const ann = s.annotations?.filter((a) => a.points.some((p) => contains(b, p)))
   if (ann?.length)
     out.annotations = ann.map((a) => ({ ...a, points: a.points.map((p) => shiftPt(p, b)) }))
@@ -288,9 +304,9 @@ export function flashSuccess(rect: Rect): void {
   setTimeout(() => setScene({ highlights: scene.highlights.filter((h) => h.id !== id) }), 1100)
 }
 
-/** Drops highlights, buddy and annotations. Numbers and the grid belong to a11y and stay. */
+/** Drops highlights, buddy and annotations. Numbers, the grid and dwell belong to a11y and stay. */
 export function clear(): void {
-  scene = { highlights: [], marks: scene.marks, grid: scene.grid }
+  scene = { highlights: [], marks: scene.marks, grid: scene.grid, dwellUi: scene.dwellUi }
   render()
 }
 
@@ -325,13 +341,18 @@ export function isVisible(): boolean {
 }
 
 /** Dwell ring fast path: only the layer under the point gets it, in its own DIP. */
-export function dwell(data: { x: number; y: number; progress: number; active: boolean }): void {
+export function dwell(data: DwellRingData): void {
   const p = { x: data.x, y: data.y }
   for (const l of layers.values()) {
     if (!l.ready) continue
     if (contains(l.display.bounds, p)) {
       if (data.active) showLayer(l)
-      l.win.webContents.send('screen:dwell', { ...data, ...shiftPt(p, l.display.bounds) })
+      const target = data.target ? shift(data.target, l.display.bounds) : undefined
+      l.win.webContents.send('screen:dwell', {
+        ...data,
+        ...shiftPt(p, l.display.bounds),
+        target
+      })
     } else {
       l.win.webContents.send('screen:dwell', { ...data, active: false })
     }

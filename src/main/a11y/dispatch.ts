@@ -68,6 +68,8 @@ export interface A11yIo {
   openUrl(url: string): boolean
   appUrl(name: string): string | null
   openSettings(): void
+  /** Opens the "what can I say" sheet; false when it cannot (the text answer is used). */
+  openHelp(): boolean
   /** False when dwell is not set up, so there is nothing to pause or resume. */
   setDwellPaused(paused: boolean): boolean
   /** False when switch scanning is not available. */
@@ -223,7 +225,11 @@ export class A11yCommands {
       cmd.args.elementId = node.id
       return undefined
     }
-    if (cmd.id === 'lumen.help') return { mode: 'answer', text: helpText(this.context()) }
+    if (cmd.id === 'lumen.help') {
+      if (!this.io.openHelp()) return { mode: 'answer', text: helpText(this.context()) }
+      this.io.feedback('Here is what you can say', true)
+      return LOCAL_HANDLED
+    }
     return undefined
   }
 

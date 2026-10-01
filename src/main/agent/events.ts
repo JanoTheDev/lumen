@@ -2,10 +2,8 @@
 import type { AgentBridge } from './bridge'
 import { loadConfig } from '../config'
 import { log } from '../logger'
-import { physToLogical } from '../actions/coords'
+import { dwellController } from '../a11y/dwell'
 import { dismissGuide } from '../guides/session'
-import * as dwellRing from '../windows/dwell-ring'
-import { isOverOwnWindow } from '../windows/registry'
 import { setStatus } from '../windows/status'
 import { onDictationDown, onDictationUp } from '../speech/dictation/pipeline'
 import { onAssistantHotkeyDown, onAssistantHotkeyUp } from '../speech/hotkey'
@@ -47,22 +45,11 @@ export function wireAgentEvents(agent: AgentBridge): void {
     handleVoiceCancel((data?.phrase as string | undefined) ?? 'cancel')
   )
 
-  agent.onEvent('dwell-progress', (data) => {
-    if (!loadConfig().dwellClick.enabled) return
-    dwellRing.progress(data)
-  })
-
+  // Dwell v2 (a11y/dwell.ts) decides what a dwell does, also on Lumen's own windows.
+  agent.onEvent('dwell-progress', (data) => dwellController()?.onProgress(data))
   agent.onEvent('dwell-trigger', (data) => {
-    if (!loadConfig().dwellClick.enabled) return
-    const x = data?.x as number | undefined
-    const y = data?.y as number | undefined
-    if (typeof x !== 'number' || typeof y !== 'number') return
-    // Suppress dwell-click over the HUD / answer / status / settings windows
-    if (isOverOwnWindow(physToLogical({ x, y }))) return
-    console.log(`[dwell] click at (${x}, ${y})`)
-    setStatus('acting', 'Dwell click', undefined, 900)
-    agent
-      .execute({ type: 'click', x, y, button: 'left' })
+    dwellController()
+      ?.onTrigger(data)
       .catch((e) => console.error('[dwell] click failed:', (e as Error).message))
   })
 

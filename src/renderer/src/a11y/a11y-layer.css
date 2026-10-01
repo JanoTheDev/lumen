@@ -67,3 +67,111 @@
   border-radius: 0.2em;
   padding: 0.05em 0.25em;
 }
+
+/* Dwell ring, snapped target, scroll arrows and drag start (06 T08). */
+
+.a11y-dwell,
+.a11y-dwell-target,
+.a11y-dwell-ui,
+.a11y-dwell-arrow,
+.a11y-dwell-dragfrom {
+  position: fixed;
+  pointer-events: none;
+  forced-color-adjust: none;
+}
+
+.a11y-dwell {
+  overflow: visible;
+}
+
+.a11y-dwell__outline {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.a11y-dwell__track {
+  fill: rgba(0, 0, 0, 0.35);
+  stroke: #000;
+  stroke-width: 6;
+}
+
+.a11y-dwell__arc {
+  fill: none;
+  stroke: #ffd800;
+  stroke-width: 6;
+  stroke-linecap: round;
+}
+
+.a11y-dwell__pie {
+  fill: #ffd800;
+  opacity: 0.85;
+}
+
+.a11y-dwell__glyph {
+  fill: #fff;
+  stroke: #000;
+  stroke-width: 3;
+  paint-order: stroke;
+  font-weight: 800;
+  font-family: system-ui, 'Segoe UI', sans-serif;
+}
+
+.a11y-dwell.is-paused .a11y-dwell__arc,
+.a11y-dwell.is-paused .a11y-dwell__pie {
+  stroke: #9a9a9a;
+  fill: #9a9a9a;
+}
+
+.a11y-dwell.is-paused .a11y-dwell__arc {
+  fill: none;
+}
+
+.a11y-dwell.is-warn .a11y-dwell__arc {
+  stroke: #ff5a36;
+}
+
+.a11y-dwell.is-warn .a11y-dwell__pie {
+  fill: #ff5a36;
+}
+
+.a11y-dwell-target {
+  box-sizing: border-box;
+  border: 3px solid #ffd800;
+  outline: 2px solid #000;
+  border-radius: 4px;
+}
+
+.a11y-dwell-target.is-warn {
+  border-color: #ff5a36;
+}
+
+.a11y-dwell-ui {
+  inset: 0;
+}
+
+.a11y-dwell-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  font:
+    800 28px/1 system-ui,
+    'Segoe UI',
+    sans-serif;
+  color: #000;
+  background: #ffd800;
+  border: 3px solid #000;
+  border-radius: 12px;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.a11y-dwell-dragfrom {
+  width: 20px;
+  height: 20px;
+  box-sizing: border-box;
+  border: 4px solid #000;
+  border-radius: 50%;
+  background: #ffd800;
+  box-shadow: 0 0 0 2px #fff;
+}

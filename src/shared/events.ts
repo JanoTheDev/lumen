@@ -41,6 +41,8 @@ export interface ScreenScene {
   marks?: { n: number; rect: Rect }[]
   grid?: { rect: Rect; cols: number; rows: number; level: number }
   dwell?: { at: Point; progress: number; clickType: string }
+  /** Dwell v2 (06): scroll arrows around a point and the start of a dwell drag. */
+  dwellUi?: { scrollAt?: Point; dragFrom?: Point }
   annotations?: { kind: 'arrow' | 'circle' | 'scribble' | 'text'; points: Point[]; text?: string }[]
 }
 

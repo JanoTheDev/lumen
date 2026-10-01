@@ -29,7 +29,8 @@ export default defineConfig({
           dwellring: resolve('src/renderer/dwellring.html'),
           assistant: resolve('src/renderer/assistant.html'),
           screen: resolve('src/renderer/screen.html'),
-          panel: resolve('src/renderer/panel.html')
+          panel: resolve('src/renderer/panel.html'),
+          a11y: resolve('src/renderer/a11y.html')
         }
       }
     }
