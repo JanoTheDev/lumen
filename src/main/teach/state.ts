@@ -79,7 +79,6 @@ export interface LessonState {
   level: number
   /** Hint timing multiplier: 1, 1.5 or 2. */
   pace: number
-  startedAt: number
   stats: Record<string, StepStats>
   /** Rotating praise index. */
   praise: number
@@ -137,7 +136,6 @@ export const IDLE: LessonState = {
   index: 0,
   level: 0,
   pace: 1,
-  startedAt: 0,
   stats: {},
   praise: 0
 }
