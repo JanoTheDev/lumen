@@ -130,6 +130,40 @@ describe('uia', () => {
     await snapshot()
     expect((await find({ automationId: 'nameBox' }))[0].value).toBe('set by uia')
   })
+
+  it('uia-event reports invoke and value changes in the foreground window', async (ctx) => {
+    if (!(agent.has('uia-events') && agent.has('uia'))) ctx.skip()
+    await agent.ok('focus_window', { hwnd: fixture.hwnd })
+    await agent.ok('subscribe', { events: ['uia-event'], enabled: true })
+    try {
+      await sleep(600) // the watcher registers on the foreground window (250 ms poll)
+      const from = agent.frames.length
+      const { nodes } = await snapshot()
+      const btn = nodes.find((n) => n.name === 'Increment')!
+      await agent.ok('uia_act', { elementId: btn.id, action: 'invoke' })
+      const inv = await agent.waitFor(
+        (f) => f.event === 'uia-event' && f.data?.kind === 'invoked',
+        5000,
+        from
+      )
+      expect(inv.data?.element).toMatchObject({ name: 'Increment', role: 'button' })
+      const box = nodes.find((n) => n.automationId === 'nameBox')!
+      await agent.ok('uia_act', {
+        elementId: box.id,
+        action: 'set_value',
+        value: 'watched',
+        allowTerminal: true
+      })
+      const val = await agent.waitFor(
+        (f) => f.event === 'uia-event' && f.data?.kind === 'value',
+        5000,
+        from
+      )
+      expect(val.data?.element).toMatchObject({ automationId: 'nameBox', value: 'watched' })
+    } finally {
+      await agent.ok('subscribe', { events: ['uia-event'], enabled: false })
+    }
+  })
 })
 
 describe('input', () => {

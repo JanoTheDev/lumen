@@ -588,6 +588,7 @@ pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
 // ---- focus-changed events --------------------------------------------------
 
 pub mod events;
+pub mod watch;
 
 #[cfg(test)]
 mod tests {

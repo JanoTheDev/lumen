@@ -5,8 +5,11 @@
 //! events; main performs the click. After a click the cursor must leave the
 //! tolerance radius before the next dwell (`maxRepeats` = 0), or at most
 //! `maxRepeats` more clicks in place. Paused explicitly and automatically while
-//! the agent injects input (+1 s). Optional `snapToElement` asks UIA for the
-//! control under the cursor (50 ms budget) so the ring can wrap it.
+//! the agent injects input (+1 s), while the user holds any physical key and for
+//! 1 s after their last keystroke (keyboard hook activity). `smoothing` (EMA
+//! alpha 0-0.9) steadies a jittery pointer (eye/head trackers) before the radius
+//! test. Optional `snapToElement` asks UIA for the control under the cursor
+//! (50 ms budget) so the ring can wrap it.
 //!
 //! No WH_MOUSE_LL hook: it slowed wheel delivery and broke Ctrl+scroll zoom.
 
@@ -23,6 +26,9 @@ pub const CLICK_TYPES: &[&str] = &["left", "right", "double", "drag"];
 pub const POLL: Duration = Duration::from_millis(40);
 pub const BASE_TOLERANCE_PX: f64 = 12.0;
 pub const AUTO_PAUSE_GRACE: Duration = Duration::from_secs(1);
+/// No dwell progress this long after the user's last keystroke.
+pub const KEY_GRACE: Duration = Duration::from_secs(1);
+pub const MAX_SMOOTHING: f64 = 0.9;
 const SNAP_BUDGET: Duration = Duration::from_millis(50);
 
 #[derive(Debug, Clone, PartialEq)]
@@ -167,6 +173,8 @@ pub struct Config {
     pub max_repeats: u32,
     pub move_tolerance_px: Option<f64>,
     pub snap_to_element: bool,
+    /// EMA weight of the previous smoothed position; 0 = raw cursor.
+    pub smoothing: f64,
 }
 
 impl Default for Config {
@@ -179,6 +187,7 @@ impl Default for Config {
             max_repeats: 0,
             move_tolerance_px: None,
             snap_to_element: false,
+            smoothing: 0.0,
         }
     }
 }
@@ -189,6 +198,7 @@ impl Config {
             "enabled": self.enabled, "ms": self.ms, "cooldownMs": self.cooldown_ms,
             "clickType": self.click_type, "maxRepeats": self.max_repeats,
             "moveTolerancePx": self.move_tolerance_px, "snapToElement": self.snap_to_element,
+            "smoothing": self.smoothing,
         })
     }
 }
@@ -228,7 +238,25 @@ pub fn parse_config(cfg: &Map<String, Value>, base: &Config) -> Config {
     if let Some(Value::Bool(b)) = cfg.get("snapToElement") {
         out.snap_to_element = *b;
     }
+    if let Some(v) = num(cfg.get("smoothing"), 0.0, MAX_SMOOTHING) {
+        out.smoothing = v;
+    }
     out
+}
+
+/// One EMA step: `alpha` weighs the previous smoothed point (0 = follow the cursor). Pure.
+pub fn smooth(prev: Option<(f64, f64)>, x: i32, y: i32, alpha: f64) -> (f64, f64) {
+    let a = alpha.clamp(0.0, MAX_SMOOTHING);
+    match prev {
+        Some((px, py)) if a > 0.0 => (a * px + (1.0 - a) * x as f64, a * py + (1.0 - a) * y as f64),
+        _ => (x as f64, y as f64),
+    }
+}
+
+/// The user is typing: a physical key is held or was pressed within KEY_GRACE.
+fn typing() -> bool {
+    use crate::hotkey::activity;
+    activity::KEYBOARD.busy(KEY_GRACE, activity::async_down)
 }
 
 pub fn geometry(mons: &[MonitorInfo], x: i32, y: i32) -> Map<String, Value> {
@@ -321,16 +349,21 @@ impl Dwell {
                 let mut mons = monitors::enumerate();
                 let mut mons_at = Instant::now();
                 let mut snap: Option<Value> = None;
+                let mut smoothed: Option<(f64, f64)> = None;
                 while !stop.load(Ordering::SeqCst) {
                     std::thread::sleep(POLL);
-                    let (x, y) = crate::input::sendinput::cursor_pos();
+                    let (rx, ry) = crate::input::sendinput::cursor_pos();
+                    let alpha = shared.lock().unwrap().config.smoothing;
+                    let (sx, sy) = smooth(smoothed, rx, ry, alpha);
+                    smoothed = Some((sx, sy));
+                    let (x, y) = (sx.round() as i32, sy.round() as i32);
                     if mons_at.elapsed() > Duration::from_secs(2) {
                         mons = monitors::enumerate();
                         mons_at = Instant::now();
                     }
                     let geo = geometry(&mons, x, y);
                     let scale = geo.get("scale").and_then(Value::as_f64).unwrap_or(1.0);
-                    let is_paused = paused.load(Ordering::SeqCst) || busy();
+                    let is_paused = paused.load(Ordering::SeqCst) || busy() || typing();
                     let (events, moved, started) = {
                         let mut s = shared.lock().unwrap();
                         let (anchor, was_active) = (s.fsm.anchor(), s.fsm.is_active());
@@ -560,6 +593,25 @@ mod tests {
     }
 
     #[test]
+    fn smoothing_steadies_jitter_and_off_follows_the_cursor() {
+        assert_eq!(smooth(Some((0.0, 0.0)), 100, 50, 0.0), (100.0, 50.0));
+        assert_eq!(smooth(None, 100, 50, 0.8), (100.0, 50.0));
+        let (x, _) = smooth(Some((0.0, 0.0)), 100, 0, 0.75);
+        assert!((x - 25.0).abs() < 1e-9);
+        assert_eq!(smooth(Some((0.0, 0.0)), 100, 0, 5.0).0.round(), 10.0, "alpha capped at 0.9");
+        // ±20 px jitter around (100, 100) stays inside a 12 px radius once smoothed at 0.8.
+        let mut f = Fsm { ms: 400, cooldown_ms: 0, ..Fsm::default() };
+        let mut p = None;
+        let mut n = 0;
+        for i in 0..40 {
+            let (sx, sy) = smooth(p, 100 + if i % 2 == 0 { 20 } else { -20 }, 100, 0.8);
+            p = Some((sx, sy));
+            n += triggers(&f.step(i as f64 * 0.04, sx.round() as i32, sy.round() as i32, 1.0, false));
+        }
+        assert_eq!(n, 1);
+    }
+
+    #[test]
     fn mouse_watch_polls_fast_only_while_moving() {
         assert_eq!(mouse_poll_interval(Duration::ZERO), MouseWatch::FAST_POLL);
         assert_eq!(mouse_poll_interval(Duration::from_millis(200)), MouseWatch::FAST_POLL);
@@ -582,5 +634,9 @@ mod tests {
         let c = parse_config(json!({"ms": 900, "moveTolerancePx": null}).as_object().unwrap(), &c);
         assert_eq!((c.ms, c.move_tolerance_px), (900, None));
         assert_eq!(c.to_json()["clickType"], "left");
+        let c = parse_config(json!({"smoothing": 0.5}).as_object().unwrap(), &c);
+        assert_eq!(c.smoothing, 0.5);
+        let c = parse_config(json!({"smoothing": 0.95}).as_object().unwrap(), &c);
+        assert_eq!(c.smoothing, 0.5, "out of range keeps the old value");
     }
 }

@@ -179,6 +179,41 @@ describe('hotkey (injected)', () => {
   })
 })
 
+describe('switch keys', () => {
+  it('validates names and releases with an empty list', async (ctx) => {
+    if (!agent.has('switch')) ctx.skip()
+    expect(await agent.ok('switch_keys', { keys: ['Space', 'F8'], mouse: ['x1'] })).toEqual({
+      keys: ['Space', 'F8'],
+      mouse: ['x1']
+    })
+    expect(await agent.ok('switch_keys', { keys: [] })).toEqual({ keys: [], mouse: [] })
+    expect((await agent.request('switch_keys', { keys: ['Bogus'] })).error?.code).toBe('E_INVALID')
+    expect((await agent.request('switch_keys', { keys: [], mouse: ['wheel'] })).error?.code).toBe(
+      'E_INVALID'
+    )
+    expect((await agent.request('switch_keys', { keys: 'Space' })).error?.code).toBe('E_INVALID')
+  })
+
+  it('injected keys are neither suppressed nor reported (switch, key-combo)', async (ctx) => {
+    if (!(agent.has('switch') && agent.has('key-combo') && agent.has('input'))) ctx.skip()
+    await agent.ok('switch_keys', { keys: ['F23'] })
+    await agent.ok('subscribe', { events: ['key-combo'], enabled: true })
+    try {
+      const from = agent.frames.length
+      await agent.ok('input', { steps: [{ t: 'keys', combo: 'f23' }], allowTerminal: true })
+      await agent.ok('input', { steps: [{ t: 'keys', combo: 'ctrl+f23' }], allowTerminal: true })
+      await new Promise((r) => setTimeout(r, 400))
+      const seen = agent.frames
+        .slice(from)
+        .filter((f) => f.event === 'switch' || f.event === 'key-combo')
+      expect(seen).toEqual([])
+    } finally {
+      await agent.ok('subscribe', { events: ['key-combo'], enabled: false })
+      await agent.ok('switch_keys', { keys: [] })
+    }
+  })
+})
+
 describe('dwell', () => {
   it('dwell_config returns the effective config', async (ctx) => {
     if (!agent.has('dwell')) ctx.skip()
@@ -186,7 +221,8 @@ describe('dwell', () => {
       enabled: false,
       ms: 900,
       cooldownMs: 700,
-      clickType: 'right'
+      clickType: 'right',
+      smoothing: 0.4
     })
     expect(c).toMatchObject({
       enabled: false,
@@ -195,6 +231,7 @@ describe('dwell', () => {
       clickType: 'right',
       maxRepeats: 0
     })
+    if (agent.ready.impl === 'native') expect(c.smoothing).toBe(0.4)
     const p = await agent.ok('dwell_pause')
     expect(p).toEqual({ paused: true })
     expect(await agent.ok('dwell_resume')).toEqual({ paused: false })

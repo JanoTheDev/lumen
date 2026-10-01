@@ -31,6 +31,9 @@ pub const CAPABILITIES: &[&str] = &[
     "system-info",
     "tts",
     "audio-output",
+    "uia-events",
+    "key-combo",
+    "switch",
 ];
 
 #[derive(Debug, Clone, Default)]
@@ -146,6 +149,16 @@ impl App {
         }
     }
 
+    /// Applies a dwell config; the keyboard hook tracks key activity while dwell is on.
+    pub fn configure_dwell(&self, cfg: &serde_json::Map<String, Value>) -> dwell::Config {
+        let c = self.dwell.configure(cfg);
+        let update = hotkey::Update { activity: Some(c.enabled), ..Default::default() };
+        if let Err(e) = self.hotkeys.apply(update) {
+            tracing::warn!("dwell key activity unavailable: {}", e.message);
+        }
+        c
+    }
+
     pub fn emit(&self, event: &str, data: Value) {
         self.router.out().emit(event, data);
     }
@@ -196,6 +209,8 @@ pub fn register_core(app: &Arc<App>) {
     });
     let out = app.router.out().clone();
     app.add_subscribable("focus-changed", move |on| crate::uia::events::set_enabled(&out, on));
+    let out = app.router.out().clone();
+    app.add_subscribable("uia-event", move |on| crate::uia::watch::set_enabled(&out, on));
     app.cmd("focus_window", Lane::Input, None, |_, args, token| {
         let hwnd = match (arg::opt_i64(args, "hwnd")?, arg::opt_str(args, "process")?) {
             (Some(h), _) => h as isize,
@@ -207,7 +222,7 @@ pub fn register_core(app: &Arc<App>) {
         Ok(json!({"done": true, "hwnd": hwnd}))
     });
 
-    app.cmd("dwell_config", Lane::Inline, None, |app, args, _| Ok(app.dwell.configure(args).to_json()));
+    app.cmd("dwell_config", Lane::Inline, None, |app, args, _| Ok(app.configure_dwell(args).to_json()));
     app.cmd("dwell_pause", Lane::Inline, None, |app, _, _| {
         app.dwell.set_paused(true);
         Ok(json!({"paused": true}))
@@ -244,6 +259,33 @@ pub fn register_core(app: &Arc<App>) {
             .ok_or_else(|| AgentError::invalid("set_hotkey needs a combo string"))?;
         app.hotkeys.apply(hotkey::Update { assistant: Some(combo), ..Default::default() })?;
         Ok(json!({"ok": true, "combo": combo}))
+    });
+
+    let weak = Arc::downgrade(app);
+    app.add_subscribable("key-combo", move |on| {
+        if let Some(app) = weak.upgrade()
+            && let Err(e) = app.hotkeys.apply(hotkey::Update { combos: Some(on), ..Default::default() })
+        {
+            tracing::warn!("key-combo: {}", e.message);
+        }
+    });
+
+    app.cmd("switch_keys", Lane::Inline, None, |app, args, _| {
+        let names = |key: &str| -> Result<Vec<&str>, AgentError> {
+            match args.get(key) {
+                None | Some(Value::Null) => Ok(vec![]),
+                Some(Value::Array(a)) => {
+                    a.iter().map(Value::as_str).collect::<Option<Vec<_>>>().ok_or_else(|| {
+                        AgentError::invalid(format!("switch_keys.{key} must be a list of names"))
+                    })
+                }
+                Some(_) => Err(AgentError::invalid(format!("switch_keys.{key} must be a list of names"))),
+            }
+        };
+        let (keys, mouse) = (names("keys")?, names("mouse")?);
+        let switches = hotkey::switch::Switches::parse(&keys, &mouse)?;
+        app.hotkeys.apply(hotkey::Update { switches: Some(switches), ..Default::default() })?;
+        Ok(json!({"keys": keys, "mouse": mouse}))
     });
 
     app.cmd("set_dictation_hotkey", Lane::Inline, None, |app, args, _| {
@@ -299,7 +341,12 @@ fn cmd_init(app: &Arc<App>, args: &Args, _: &CancelToken) -> CmdResult {
         .map_err(|_| AgentError::invalid("init.dictationHotkey must be a string"))?
         .unwrap_or("");
     let taps = arg::opt_bool(args, "taps")?.unwrap_or(false);
-    let hotkeys = hotkey::Update { assistant: Some(hotkey), dictation: Some(dictation), taps: Some(taps) };
+    let hotkeys = hotkey::Update {
+        assistant: Some(hotkey),
+        dictation: Some(dictation),
+        taps: Some(taps),
+        ..Default::default()
+    };
     hotkey::Service::validate(&hotkeys)?;
     let subscriptions = app.check_events(args.get("subscriptions"))?;
 
@@ -312,7 +359,7 @@ fn cmd_init(app: &Arc<App>, args: &Args, _: &CancelToken) -> CmdResult {
     let mut dwell_cfg = arg::obj(args, "dwell").cloned().unwrap_or_default();
     let enabled = dwell_cfg.get("enabled") == Some(&Value::Bool(true));
     dwell_cfg.insert("enabled".into(), json!(enabled));
-    app.dwell.configure(&dwell_cfg);
+    app.configure_dwell(&dwell_cfg);
     let known: Vec<&'static str> = app.subscribable.lock().unwrap().keys().copied().collect();
     for event in known {
         app.set_subscription(event, subscriptions.iter().any(|s| s == event));

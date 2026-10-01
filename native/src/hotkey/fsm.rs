@@ -1,6 +1,11 @@
 //! Hotkey state machine (pure; driven by low-level hook events).
 //!
-//! - Modifier state comes from the event stream, never `GetAsyncKeyState`.
+//! - Modifier state comes from the event stream. A key-up lost while the secure
+//!   desktop was up (Win+L, Ctrl+Alt+Del, UAC) leaves it stale, so `resync` drops
+//!   modifiers the async key state says are up before each key-down is handled
+//!   (modifiers are never suppressed, so their async state is reliable; it is only
+//!   used to clear, since it also counts injected keys). A held trigger whose up was
+//!   lost is released when its next down comes later than any auto-repeat could.
 //! - Trigger down with the exact modifier set: suppress, emit `<down>` once
 //!   (autorepeat ignored). The matching trigger up is suppressed too.
 //! - `<up>` fires on trigger up or on release of any modifier in the combo.
@@ -12,6 +17,11 @@
 use super::accel::{Hotkey, MOD_ALT, MOD_CTRL, MOD_SHIFT, MOD_WIN, modifier_bit};
 
 pub const TAP_WINDOW_MS: u32 = 400;
+/// Auto-repeat of a held key comes far faster (the longest repeat delay is 1 s).
+pub const STALE_TRIGGER_MS: u32 = 1500;
+/// Generic VK per modifier bit, for the async key state.
+const MOD_VKS: [(u8, &[u16]); 4] =
+    [(MOD_CTRL, &[0x11]), (MOD_ALT, &[0x12]), (MOD_SHIFT, &[0x10]), (MOD_WIN, &[0x5B, 0x5C])];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Binding {
@@ -58,6 +68,8 @@ pub struct Fsm {
     active: Option<usize>,
     /// Trigger VK whose key-up must still be swallowed.
     swallow_up: Option<u16>,
+    /// Hook time of the active trigger's last down.
+    active_at: u32,
     /// Modifier pressed with nothing else since: (bit, down time).
     tap_pending: Option<(u8, u32)>,
     /// Last completed tap: (bit, up time, count).
@@ -96,6 +108,40 @@ impl Fsm {
         &self.config
     }
 
+    pub fn mods(&self) -> u8 {
+        self.mods
+    }
+
+    /// Before a key-down: drops modifiers `is_down` (async key state) says are up and
+    /// releases a held trigger whose up was lost. Returns `<up>` emits for released combos.
+    pub fn resync(&mut self, ev: KeyEvent, is_down: &dyn Fn(u16) -> bool) -> Vec<Output> {
+        let mut out = vec![];
+        if !ev.down || (ev.injected && !self.config.accept_injected) || modifier_bit(ev.vk) != 0 {
+            return out;
+        }
+        for (bit, vks) in MOD_VKS {
+            if self.mods & bit != 0 && !vks.iter().any(|vk| is_down(*vk)) {
+                self.mods &= !bit;
+                self.tap_pending = None;
+                if let Some(i) = self.active
+                    && self.config.bindings[i].hotkey.mods & bit != 0
+                {
+                    self.active = None;
+                    out.push(Output::Emit(self.config.bindings[i].up));
+                }
+            }
+        }
+        if let Some(i) = self.active
+            && self.config.bindings[i].hotkey.vk == ev.vk
+            && ev.time.wrapping_sub(self.active_at) > STALE_TRIGGER_MS
+        {
+            self.active = None;
+            self.swallow_up = None;
+            out.push(Output::Emit(self.config.bindings[i].up));
+        }
+        out
+    }
+
     /// Feeds one event. Returns (suppress, outputs).
     pub fn step(&mut self, ev: KeyEvent) -> (bool, Vec<Output>) {
         let mut out = vec![];
@@ -118,6 +164,7 @@ impl Fsm {
             if let Some(i) = self.active
                 && self.config.bindings[i].hotkey.vk == ev.vk
             {
+                self.active_at = ev.time;
                 return (true, out); // autorepeat
             }
             if self.active.is_none()
@@ -128,6 +175,7 @@ impl Fsm {
                     .position(|b| b.hotkey.vk == ev.vk && b.hotkey.mods == self.mods)
             {
                 self.active = Some(i);
+                self.active_at = ev.time;
                 self.swallow_up = Some(ev.vk);
                 out.push(Output::Emit(self.config.bindings[i].down));
                 if self.mods & MOD_WIN != 0 {
@@ -306,6 +354,40 @@ mod tests {
         f.step(ev(0x78, true, 0));
         let o = f.configure(Config::default());
         assert_eq!(emits(&o), ["hotkey-up"]);
+    }
+
+    #[test]
+    fn resync_drops_modifiers_lost_on_the_secure_desktop() {
+        let mut f = fsm("Ctrl+Space");
+        f.step(ev(VK_LCONTROL, true, 0));
+        // Win+L: the Ctrl up never reaches the hook. Ctrl is up per the async state.
+        let up = |_: u16| false;
+        assert!(f.resync(ev(SPACE, true, 5000), &up).is_empty());
+        assert_eq!(f.mods(), 0);
+        assert_eq!(f.step(ev(SPACE, true, 5000)), (false, vec![]), "plain Space is not the hotkey");
+        // Modifiers the async state still reports down stay.
+        f.step(ev(VK_LCONTROL, true, 6000));
+        f.resync(ev(SPACE, true, 6010), &|vk| vk == 0x11);
+        assert_eq!(f.mods(), MOD_CTRL);
+        // Injected and modifier events never resync.
+        f.resync(KeyEvent { vk: SPACE, down: true, injected: true, time: 6020 }, &up);
+        f.resync(ev(VK_LSHIFT, true, 6020), &up);
+        assert_eq!(f.mods(), MOD_CTRL);
+    }
+
+    #[test]
+    fn resync_releases_combo_and_lost_trigger_up() {
+        let mut f = fsm("Ctrl+Space");
+        f.step(ev(VK_LCONTROL, true, 0));
+        assert_eq!(emits(&f.step(ev(SPACE, true, 0)).1), ["hotkey-down"]);
+        // Auto-repeat keeps it held; a fresh down long after the lost up starts a new press.
+        let down = |_: u16| true;
+        assert!(f.resync(ev(SPACE, true, 500), &down).is_empty());
+        assert_eq!(f.step(ev(SPACE, true, 500)), (true, vec![]));
+        assert_eq!(emits(&f.resync(ev(SPACE, true, 9000), &down)), ["hotkey-up"]);
+        assert_eq!(emits(&f.step(ev(SPACE, true, 9000)).1), ["hotkey-down"]);
+        // Ctrl lost while held: the combo ends.
+        assert_eq!(emits(&f.resync(ev(0x41, true, 9100), &|_| false)), ["hotkey-up"]);
     }
 
     fn tap(f: &mut Fsm, vk: u16, t: u32) -> Vec<Output> {

@@ -1,14 +1,21 @@
-//! Global hotkeys via a `WH_KEYBOARD_LL` hook on a dedicated thread.
+//! Global hotkeys via a `WH_KEYBOARD_LL` hook on a dedicated thread, plus what
+//! else needs the low-level hooks: switch keys/buttons (`switch.rs`, with a
+//! `WH_MOUSE_LL` hook only while mouse switches are set), observe-only `key-combo`
+//! events (`combo.rs`) and physical key activity for dwell (`activity.rs`).
 //!
-//! The hook callback only steps the thread-local FSM and queues events with a
-//! non-blocking send; it takes no locks shared with other threads. Bindings
-//! are swapped through a channel owned by the hook thread; a posted thread
-//! message only wakes it (any process can post one, so its params are never
-//! trusted). The hook is only installed while something is bound, so an idle
-//! agent adds no latency to system-wide typing.
+//! The hook callbacks only step thread-local state, write atomics and queue events
+//! with a non-blocking send; they take no locks shared with other threads. Config
+//! is swapped through a channel owned by the hook thread; a posted thread message
+//! only wakes it (any process can post one, so its params are never trusted). Each
+//! hook is only installed while something needs it, so an idle agent adds no
+//! latency to system-wide typing. Injected input (`LLKHF_INJECTED`, or our own
+//! `dwExtraInfo` tag) is never suppressed, observed or counted as activity.
 
 pub mod accel;
+pub mod activity;
+pub mod combo;
 pub mod fsm;
+pub mod switch;
 
 use std::cell::RefCell;
 use std::sync::Mutex;
@@ -20,12 +27,33 @@ use serde_json::json;
 use crate::proto::AgentError;
 use crate::proto::writer::Out;
 use fsm::{Binding, Config, Fsm, Output};
+use switch::{SwitchFsm, Switches};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Bound {
     assistant: String,
     dictation: String,
     taps: bool,
+    switches: Switches,
+    combos: bool,
+    activity: bool,
+}
+
+/// Everything the hook thread needs.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct HookConfig {
+    pub hotkeys: Config,
+    pub switches: Switches,
+    /// Report `key-combo` (subscribed).
+    pub combos: bool,
+    /// Track physical key activity (dwell is on).
+    pub activity: bool,
+}
+
+impl HookConfig {
+    pub fn is_idle(&self) -> bool {
+        self.hotkeys.is_idle() && self.switches.is_empty() && !self.combos && !self.activity
+    }
 }
 
 /// The hook thread: its id once it has announced itself, and its config queue.
@@ -48,6 +76,9 @@ pub struct Update<'a> {
     pub assistant: Option<&'a str>,
     pub dictation: Option<&'a str>,
     pub taps: Option<bool>,
+    pub switches: Option<Switches>,
+    pub combos: Option<bool>,
+    pub activity: Option<bool>,
 }
 
 fn parse_opt(accel: &str) -> Result<Option<accel::Hotkey>, AgentError> {
@@ -87,6 +118,15 @@ impl Service {
         if let Some(t) = update.taps {
             next.taps = t;
         }
+        if let Some(sw) = update.switches {
+            next.switches = sw;
+        }
+        if let Some(c) = update.combos {
+            next.combos = c;
+        }
+        if let Some(a) = update.activity {
+            next.activity = a;
+        }
         let mut bindings = vec![];
         if let Some(hk) = parse_opt(&next.assistant)? {
             bindings.push(Binding { hotkey: hk, down: "hotkey-down", up: "hotkey-up" });
@@ -94,7 +134,12 @@ impl Service {
         if let Some(hk) = parse_opt(&next.dictation)? {
             bindings.push(Binding { hotkey: hk, down: "dictation-down", up: "dictation-up" });
         }
-        let config = Config { bindings, taps: next.taps, accept_injected: self.accept_injected };
+        let config = HookConfig {
+            hotkeys: Config { bindings, taps: next.taps, accept_injected: self.accept_injected },
+            switches: next.switches.clone(),
+            combos: next.combos,
+            activity: next.activity,
+        };
         if config.is_idle() && self.hook.lock().unwrap().is_none() {
             *bound = next;
             return Ok(());
@@ -112,7 +157,7 @@ impl Service {
 
     /// Hands `config` to the hook thread, starting it on first use. A thread that
     /// is slow to start is waited for again on the next call; a dead one is replaced.
-    fn send(&self, config: Config) -> Result<(), AgentError> {
+    fn send(&self, config: HookConfig) -> Result<(), AgentError> {
         let mut slot = self.hook.lock().unwrap();
         let h = match slot.as_mut() {
             Some(h) => h,
@@ -149,15 +194,78 @@ impl Service {
     }
 }
 
-type ConfigMsg = (Config, Sender<Result<(), String>>);
+type ConfigMsg = (HookConfig, Sender<Result<(), String>>);
 
 thread_local! {
     static HOOK_CTX: RefCell<Option<HookCtx>> = const { RefCell::new(None) };
 }
 
+#[derive(Default)]
 struct HookCtx {
     fsm: Fsm,
-    out: Out,
+    switch: SwitchFsm,
+    combos: bool,
+    /// Last reported key-down, to skip its auto-repeat.
+    combo_vk: Option<u16>,
+    out: Option<Out>,
+}
+
+impl HookCtx {
+    fn configure(&mut self, config: HookConfig) {
+        let out = self.out.clone();
+        if let Some(out) = &out {
+            deliver(out, self.fsm.configure(config.hotkeys));
+            for (index, down) in self.switch.configure(config.switches) {
+                emit_switch(out, index, down);
+            }
+        }
+        self.combos = config.combos;
+        self.combo_vk = None;
+    }
+
+    /// One physical key event; returns whether to suppress it.
+    fn key(&mut self, ev: fsm::KeyEvent, is_down: &dyn Fn(u16) -> bool) -> bool {
+        let Some(out) = self.out.clone() else { return false };
+        deliver(&out, self.fsm.resync(ev, is_down));
+        let (suppress, report) = self.switch.key(ev.vk, ev.down, self.fsm.mods());
+        if let Some((index, down)) = report {
+            emit_switch(&out, index, down);
+        }
+        if suppress {
+            return true;
+        }
+        let (suppress, outputs) = self.fsm.step(ev);
+        deliver(&out, outputs);
+        if !ev.down {
+            if self.combo_vk == Some(ev.vk) {
+                self.combo_vk = None;
+            }
+        } else if self.combos
+            && !suppress
+            && self.combo_vk != Some(ev.vk)
+            && let Some(combo) = combo::combo_name(self.fsm.mods(), ev.vk)
+        {
+            self.combo_vk = Some(ev.vk);
+            out.try_emit("key-combo", json!({"combo": combo}));
+        }
+        suppress
+    }
+
+    /// One physical mouse button event; returns whether to suppress it.
+    fn button(&mut self, button: u8, down: bool) -> bool {
+        let Some(out) = self.out.clone() else { return false };
+        let (suppress, report) = self.switch.mouse(button, down);
+        if let Some((index, down)) = report {
+            emit_switch(&out, index, down);
+        }
+        suppress
+    }
+}
+
+fn emit_switch(out: &Out, index: usize, down: bool) {
+    if !out.try_emit("switch", json!({"index": index, "down": down})) {
+        tracing::warn!("dropped switch event: writer queue full");
+    }
 }
 
 fn deliver(out: &Out, outputs: Vec<Output>) {
@@ -175,10 +283,10 @@ fn deliver(out: &Out, outputs: Vec<Output>) {
         }
     }
 }
-
 #[cfg(windows)]
 mod hook {
     use super::*;
+    use crate::input::sendinput::EXTRA_INFO;
     use windows::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Threading::GetCurrentThreadId;
@@ -187,14 +295,22 @@ mod hook {
         VIRTUAL_KEY,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        CallNextHookEx, GetMessageW, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, LLKHF_INJECTED, MSG, PM_NOREMOVE,
-        PeekMessageW, PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WM_APP,
-        WM_KEYDOWN, WM_SYSKEYDOWN,
+        CallNextHookEx, GetMessageW, HC_ACTION, HHOOK, HOOKPROC, KBDLLHOOKSTRUCT, LLKHF_INJECTED,
+        LLMHF_INJECTED, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, PeekMessageW, PostThreadMessageW,
+        SetWindowsHookExW, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOWS_HOOK_ID, WM_APP,
+        WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_RBUTTONDOWN, WM_RBUTTONUP,
+        WM_SYSKEYDOWN, WM_XBUTTONDOWN, WM_XBUTTONUP,
     };
 
     const WM_CONFIG: u32 = WM_APP + 1;
     /// Unassigned VK used to mask the Win key release (standard trick).
     const VK_MASK: u16 = 0xE8;
+
+    #[derive(Default)]
+    struct Hooks {
+        keyboard: Option<HHOOK>,
+        mouse: Option<HHOOK>,
+    }
 
     /// Starts the hook thread; its id arrives on the returned channel once its queue exists.
     pub fn spawn(out: Out, configs: Receiver<ConfigMsg>) -> std::io::Result<Receiver<u32>> {
@@ -206,7 +322,7 @@ mod hook {
                 let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
                 let _ = tx.send(GetCurrentThreadId());
             }
-            HOOK_CTX.with(|c| *c.borrow_mut() = Some(HookCtx { fsm: Fsm::default(), out }));
+            HOOK_CTX.with(|c| *c.borrow_mut() = Some(HookCtx { out: Some(out), ..Default::default() }));
             pump(configs);
         })?;
         Ok(rx)
@@ -219,10 +335,10 @@ mod hook {
     }
 
     fn pump(configs: Receiver<ConfigMsg>) {
-        let mut hook: Option<HHOOK> = None;
+        let mut hooks = Hooks::default();
         let mut msg = MSG::default();
         loop {
-            // SAFETY: standard message loop on the thread that owns the hook.
+            // SAFETY: standard message loop on the thread that owns the hooks.
             let r = unsafe { GetMessageW(&mut msg, None, 0, 0) }.0;
             // 0 is WM_QUIT, -1 an error (looping on it would spin).
             if r == 0 || r == -1 {
@@ -232,47 +348,55 @@ mod hook {
                 continue;
             }
             while let Ok((config, reply)) = configs.try_recv() {
-                let _ = reply.send(apply_config(&mut hook, config));
+                let _ = reply.send(apply_config(&mut hooks, config));
             }
         }
-        if let Some(h) = hook.take() {
-            // SAFETY: the hook was installed by this thread.
-            let _ = unsafe { UnhookWindowsHookEx(h) };
-        }
+        let _ = set_hook(&mut hooks.keyboard, None);
+        let _ = set_hook(&mut hooks.mouse, None);
     }
 
-    /// Runs on the hook thread, which owns `hook`.
-    fn apply_config(hook: &mut Option<HHOOK>, config: Config) -> Result<(), String> {
-        let idle = config.is_idle();
-        HOOK_CTX.with(|c| {
-            if let Some(ctx) = c.borrow_mut().as_mut() {
-                let outputs = ctx.fsm.configure(config);
-                deliver(&ctx.out, outputs);
-            }
-        });
-        if idle {
-            if let Some(h) = hook.take() {
-                // SAFETY: the hook was installed by this thread.
-                let _ = unsafe { UnhookWindowsHookEx(h) };
-            }
-            return Ok(());
-        }
-        if hook.is_some() {
-            return Ok(());
-        }
-        // SAFETY: pure query for this module.
-        let module = unsafe { GetModuleHandleW(None) }.ok().map(|m| HINSTANCE(m.0));
-        // SAFETY: `proc` is a valid LL hook procedure; this thread pumps messages for it.
-        match unsafe { SetWindowsHookExW(WH_KEYBOARD_LL, Some(proc), module, 0) } {
-            Ok(h) => {
-                *hook = Some(h);
+    /// Installs (`Some`) or removes (`None`) one hook; runs on the hook thread.
+    fn set_hook(slot: &mut Option<HHOOK>, want: Option<(WINDOWS_HOOK_ID, HOOKPROC)>) -> Result<(), String> {
+        match (want, slot.is_some()) {
+            (None, true) => {
+                if let Some(h) = slot.take() {
+                    // SAFETY: the hook was installed by this thread.
+                    let _ = unsafe { UnhookWindowsHookEx(h) };
+                }
                 Ok(())
             }
-            Err(e) => Err(format!("SetWindowsHookExW failed: {}", e.message())),
+            (Some((id, proc)), false) => {
+                // SAFETY: pure query for this module.
+                let module = unsafe { GetModuleHandleW(None) }.ok().map(|m| HINSTANCE(m.0));
+                // SAFETY: `proc` is a valid LL hook procedure; this thread pumps messages for it.
+                match unsafe { SetWindowsHookExW(id, proc, module, 0) } {
+                    Ok(h) => {
+                        *slot = Some(h);
+                        Ok(())
+                    }
+                    Err(e) => Err(format!("SetWindowsHookExW failed: {}", e.message())),
+                }
+            }
+            _ => Ok(()),
         }
     }
 
-    unsafe extern "system" fn proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    /// Runs on the hook thread, which owns the hooks.
+    fn apply_config(hooks: &mut Hooks, config: HookConfig) -> Result<(), String> {
+        let keyboard = !config.is_idle();
+        let mouse = !config.switches.mouse.is_empty();
+        HOOK_CTX.with(|c| {
+            if let Some(ctx) = c.borrow_mut().as_mut() {
+                ctx.configure(config);
+            }
+        });
+        let kb: HOOKPROC = Some(keyboard_proc);
+        let ms: HOOKPROC = Some(mouse_proc);
+        set_hook(&mut hooks.keyboard, keyboard.then_some((WH_KEYBOARD_LL, kb)))?;
+        set_hook(&mut hooks.mouse, mouse.then_some((WH_MOUSE_LL, ms)))
+    }
+
+    unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code == HC_ACTION as i32 {
             // SAFETY: for HC_ACTION, lparam points at a KBDLLHOOKSTRUCT owned by the system.
             let kb = unsafe { &*(lparam.0 as *const KBDLLHOOKSTRUCT) };
@@ -280,18 +404,64 @@ mod hook {
             let ev = fsm::KeyEvent {
                 vk: kb.vkCode as u16,
                 down,
-                injected: kb.flags.0 & LLKHF_INJECTED.0 != 0,
+                injected: kb.flags.0 & LLKHF_INJECTED.0 != 0 || kb.dwExtraInfo == EXTRA_INFO,
                 time: kb.time,
             };
+            if !ev.injected {
+                activity::KEYBOARD.record(ev.vk, down);
+            }
             let suppress = HOOK_CTX.with(|c| {
                 let Ok(mut c) = c.try_borrow_mut() else { return false };
                 let Some(ctx) = c.as_mut() else { return false };
-                let (suppress, outputs) = ctx.fsm.step(ev);
-                deliver(&ctx.out, outputs);
-                suppress
+                if ev.injected {
+                    // Hotkeys may accept injected input (--accept-injected); nothing else does.
+                    let (suppress, outputs) = ctx.fsm.step(ev);
+                    if let Some(out) = &ctx.out {
+                        deliver(out, outputs);
+                    }
+                    return suppress;
+                }
+                ctx.key(ev, &activity::async_down)
             });
             if suppress {
                 return LRESULT(1);
+            }
+        }
+        // SAFETY: forwarding the unmodified hook arguments.
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
+    }
+
+    /// Mouse button message → (index into switch::MOUSE_BUTTONS, down); moves and wheel → None.
+    fn button_of(msg: u32, mouse_data: u32) -> Option<(u8, bool)> {
+        Some(match msg {
+            WM_LBUTTONDOWN => (0, true),
+            WM_LBUTTONUP => (0, false),
+            WM_RBUTTONDOWN => (1, true),
+            WM_RBUTTONUP => (1, false),
+            WM_MBUTTONDOWN => (2, true),
+            WM_MBUTTONUP => (2, false),
+            WM_XBUTTONDOWN | WM_XBUTTONUP => match mouse_data >> 16 {
+                1 => (3, msg == WM_XBUTTONDOWN),
+                2 => (4, msg == WM_XBUTTONDOWN),
+                _ => return None,
+            },
+            _ => return None,
+        })
+    }
+
+    unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code == HC_ACTION as i32 {
+            // SAFETY: for HC_ACTION, lparam points at an MSLLHOOKSTRUCT owned by the system.
+            let ms = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+            let injected = ms.flags & LLMHF_INJECTED != 0 || ms.dwExtraInfo == EXTRA_INFO;
+            if !injected && let Some((button, down)) = button_of(wparam.0 as u32, ms.mouseData) {
+                let suppress = HOOK_CTX.with(|c| {
+                    let Ok(mut c) = c.try_borrow_mut() else { return false };
+                    c.as_mut().is_some_and(|ctx| ctx.button(button, down))
+                });
+                if suppress {
+                    return LRESULT(1);
+                }
             }
         }
         // SAFETY: forwarding the unmodified hook arguments.

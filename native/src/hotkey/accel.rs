@@ -94,7 +94,7 @@ const NAMED: &[(&str, u16)] = &[
 ];
 
 /// US-layout OEM keys for single punctuation characters.
-const PUNCT: &[(char, u16)] = &[
+pub const PUNCT: &[(char, u16)] = &[
     (',', 0xBC),
     ('-', 0xBD),
     ('.', 0xBE),
