@@ -118,11 +118,21 @@ export interface RunOptions {
   prompt: string
   context: TaskContext
   tools: readonly ToolName[]
+  /** Tools outside the agent-mode table (background set, spawn_task, skills). */
+  extraTools?: readonly ToolDef[]
+  /** Consecutive calls of these tools in one turn run at the same time (spawn_task fan-out). */
+  parallelTools?: readonly string[]
   cancelWindowMs: number
   system?: string
+  /** A second cacheable system block after the prompt (the skills list, L1). */
+  systemExtra?: string
+  /** First user turn instead of the agent-mode one (background tasks: no screen). */
+  firstTurn?: string
   /** No plan and no countdown (a continuation the user already saw start). */
   skipPlan?: boolean
   caps?: Partial<Caps>
+  /** How much "keep going" at a cap adds (default DEFAULT_CAPS). */
+  capStep?: Partial<Caps>
   signal?: AbortSignal
   resume?: SavedRun
   /** Input-lane owner name. */
@@ -191,7 +201,10 @@ function describeCall(c: ToolCall): string {
 let seq = 0
 const defaultId = (): string => `t_${Date.now().toString(36)}${(seq++).toString(36)}`
 
-const SYSTEM_BLOCKS = (system: string): SystemBlock[] => [{ text: system, cacheable: true }]
+const SYSTEM_BLOCKS = (system: string, extra?: string): SystemBlock[] => [
+  { text: system, cacheable: true },
+  ...(extra ? [{ text: extra, cacheable: true }] : [])
+]
 
 export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunResult> {
   const controller = new AbortController()
@@ -203,6 +216,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
   const log = deps.log ?? (() => {})
 
   const caps: Caps = { ...DEFAULT_CAPS, ...opts.caps, ...opts.resume?.caps }
+  const capStep: Caps = { ...DEFAULT_CAPS, ...opts.capStep }
   let task: AgentTask =
     opts.resume?.task ?? newTask(deps.newId?.() ?? defaultId(), opts.prompt, deps.now())
   const publish = (): void => {
@@ -221,8 +235,10 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     }
   }
 
-  const tools = toolSet(opts.tools)
-  const allowed = new Set<string>(opts.tools)
+  const extra = opts.extraTools ?? []
+  const tools = [...toolSet(opts.tools), ...extra]
+  const allowed = new Set<string>([...opts.tools, ...extra.map((t) => t.name)])
+  const parallel = new Set(opts.parallelTools ?? [])
   const usesInput = opts.tools.some((t) => INPUT_TOOLS.includes(t))
   const verifyFails: Record<number, number> = { ...opts.resume?.verifyFails }
   let release: (() => void) | null = null
@@ -261,7 +277,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
       messages = [
         {
           role: 'user',
-          content: text(taskTurn(opts.prompt, opts.context, plan?.steps ?? null))
+          content: text(opts.firstTurn ?? taskTurn(opts.prompt, opts.context, plan?.steps ?? null))
         }
       ]
     }
@@ -279,7 +295,11 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           return stop(`I stopped at the limit: ${capHit}.`)
         const turn = await raced(
           deps.model.turn(
-            { system: SYSTEM_BLOCKS(opts.system ?? AGENT_SYSTEM), tools, messages },
+            {
+              system: SYSTEM_BLOCKS(opts.system ?? AGENT_SYSTEM, opts.systemExtra),
+              tools,
+              messages
+            },
             signal
           ),
           signal
@@ -307,6 +327,22 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           const capHit = capReached(task, caps, deps.now())
           if (capHit && !(await continuePast(capHit)))
             return stop(`I stopped at the limit: ${capHit}.`)
+        }
+        if (parallel.has(call.name)) {
+          let n = 1
+          while (n < pending.length && pending[n].name === call.name) n++
+          const batch = pending.slice(0, n)
+          const outcomes = await Promise.all(batch.map((c) => runCall(c)))
+          batch.forEach((c, i) =>
+            results.push({
+              type: 'tool_result',
+              id: c.id,
+              content: outcomes[i].content,
+              ...(outcomes[i].isError ? { isError: true } : {})
+            })
+          )
+          pending = pending.slice(n)
+          continue
         }
         const outcome = await runCall(call)
         if (outcome.noAnswer) {
@@ -353,10 +389,10 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     update({ phase: 'confirm' })
     const yes = await raced(deps.askContinue(reason, signal), signal)
     if (!yes) return false
-    caps.maxActions += DEFAULT_CAPS.maxActions
-    caps.maxModelCalls += DEFAULT_CAPS.maxModelCalls
-    caps.maxCostUsd += DEFAULT_CAPS.maxCostUsd
-    caps.maxWallMs += DEFAULT_CAPS.maxWallMs
+    caps.maxActions += capStep.maxActions
+    caps.maxModelCalls += capStep.maxModelCalls
+    caps.maxCostUsd += capStep.maxCostUsd
+    caps.maxWallMs += capStep.maxWallMs
     update({ phase: 'running' })
     return true
   }
