@@ -44,15 +44,56 @@ Also available now:
 - **Safety:** only web links can be opened, risky shortcuts (Run dialog, terminals) are blocked, and text on screen is never treated as an instruction.
 - **Settings:** hotkey, voice, accessibility, models, eight themes; no JSON editing needed.
 
-## In progress
+## Roadmap
 
-- Element-accurate pointing via UI Automation, numbered marks and a zoom-in second look.
-- Streaming spoken answers with barge-in, local speech recognition and Windows voices.
-- Local voice control ("show numbers", "click 5", "scroll down") without calling the AI.
-- Lessons that check your progress, with skill packs for Blender, DaVinci Resolve and Windows.
-- A redesigned assistant bar, cursor buddy and first-run setup that asks for one key.
-- Memory you control: what Lumen remembers about you and your past sessions, stored locally, viewable and deletable.
-- A small native helper that replaces the Python agent, and a one-click installer.
+**Foundation**
+
+- [x] Security hardening: sandboxed windows, link and shortcut safety policy, validated settings and IPC
+- [x] Reliable cancel (Escape or "stop" stops the model call and any pending actions)
+- [x] Correct highlights and clicks at any display scaling and on multiple monitors
+- [x] Faster, more robust desktop agent (Windows OCR, UI Automation, clipboard-free typing)
+- [x] Newer models, prompt caching, structured replies and streaming answers
+- [x] AI intent router instead of keyword rules
+- [x] CI on Windows (typecheck, lint, tests)
+
+**Redesign**
+
+- [ ] New design system: one calm visual language, system font, readable at any size
+- [ ] Assistant bar replacing the HUD, answer card and status bubble
+- [ ] Cursor buddy that flies to and points at what it's talking about
+- [ ] Rebuilt Settings, plus a tray Home panel
+- [ ] First-run setup that asks for exactly one AI key and installs the rest
+- [ ] Memory settings: see, edit and delete what Lumen remembers
+
+**Pointing and actions**
+
+- [ ] Element-accurate pointing via UI Automation, numbered marks and a zoom-in second look
+- [ ] Observe → act → verify loop that never retypes text it already entered
+- [ ] Agent mode with permissions, a visible ghost cursor and confirm-before-risky-actions
+
+**Voice**
+
+- [ ] Dictation anywhere: dedicated hotkey, light cleanup, personal dictionary (auto-detects when a text field is focused)
+- [ ] Streaming spoken answers with barge-in
+- [ ] Free local speech recognition and Windows voices by default
+
+**Accessibility**
+
+- [ ] Local voice control ("show numbers", "click 5", "scroll down") without calling the AI
+- [ ] Mouse grid, switch scanning and dwell click types (right, double, drag)
+- [ ] Screen-reader output (NVDA and Narrator), captions, high contrast
+
+**Teaching**
+
+- [ ] Skill packs for Blender, DaVinci Resolve and Windows
+- [ ] Lessons that point, wait for you, check the step and give more help when you're stuck
+- [ ] "Continue where we left off" and progress across sessions
+
+**Shipping**
+
+- [ ] Small native helper replacing the Python agent (no Python install needed)
+- [ ] One-click installer with auto-update
+- [ ] Optional local models (Ollama) for fully offline use
 
 ---
 
