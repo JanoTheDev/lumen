@@ -29,6 +29,15 @@ function draw(scene: Scene | null): void {
   })
 }
 
+/** The bar confirm id of the lesson's own do-it offer, while it is up. */
+let lessonConfirmId: string | null = null
+
+/** The confirm on the bar is the lesson's own offer (not a policy, Claude Code or task one). */
+function ownConfirmUp(): boolean {
+  const c = assistant.state().confirm
+  return !!c && assistant.confirmPending() && c.actionId === lessonConfirmId
+}
+
 function showState(state: AssistantState | null): void {
   // A newer state replaces an open do-it offer; its late answer is ignored.
   const seq = ++confirmSeq
@@ -37,17 +46,23 @@ function showState(state: AssistantState | null): void {
     return
   }
   if (state.confirm) {
-    void assistant
-      .requestConfirm({
-        summary: state.statusText ?? state.confirm.summary,
-        risk: state.confirm.risk
-      })
-      .then((ok) => {
-        if (seq === confirmSeq) bus.emit({ type: 'lesson.command', command: ok ? 'yes' : 'no' })
-      })
+    // Another feature's confirm (safety gate, Claude Code permission, a task) is answered
+    // first; replacing it would deny it. The lesson still takes "do it" / "yes" by voice.
+    if (assistant.confirmPending() && !ownConfirmUp()) return
+    const answer = assistant.requestConfirm({
+      summary: state.statusText ?? state.confirm.summary,
+      risk: state.confirm.risk
+    })
+    lessonConfirmId = assistant.state().confirm?.actionId ?? null
+    void answer.then((ok) => {
+      if (seq === confirmSeq) bus.emit({ type: 'lesson.command', command: ok ? 'yes' : 'no' })
+    })
     return
   }
-  if (assistant.state().confirm) assistant.close()
+  // Only the lesson's own offer goes; other confirms and the bar's task views stay.
+  if (ownConfirmUp()) assistant.dropConfirm()
+  lessonConfirmId = null
+  if (assistant.confirmPending()) return
   const kind = state.phase === 'acting' ? 'acting' : state.phase === 'idle' ? 'answer' : 'step'
   setStatus(kind, state.statusText ?? '', state.step, kind === 'answer' ? 4000 : undefined)
 }
