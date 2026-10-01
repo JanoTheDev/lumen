@@ -92,9 +92,11 @@ Model bboxes are `Rect` in screenshot image px. `actions/coords.ts` converts ima
 
 ### Query flow
 
-Hold hotkey → agent `hotkey-down` → assistant bar opens and its VoiceHost starts recording → release → `hotkey-up` starts a speculative capture while Whisper transcribes → `assistant:query` → overrides → model call (cancellable) → response routed: `answer` card, `guide` highlights, `action` via `executeActions` (safety policy per action), `text_insert`, `locate` dim-and-reveal. Multi-step and research requests run as an agent-mode task (`agent-mode/session`).
+Hold hotkey → agent `hotkey-down` → `speech/hotkey` + `speech/activation` (hold; a quick tap, or tap mode, stays hands-free and ends on silence; a double-tap starts a conversation, `speech/conversation`, which listens again after each turn once the reply has been spoken) → the assistant bar's VoiceHost records (16 kHz WAV) → release → speculative capture while `voice:transcribe` runs `speech/stt` (offline sherpa-onnx in the speech worker: Parakeet for English, Canary for es/de/fr per `voice.language`; or OpenAI Whisper with the merged vocabulary) → `assistant:query` → `speech/router-hook` (short answers in the voice language become English words, "stop, …" cancels running work) → confirm answers → intercept (agent mode, lesson words, 06 grammar, prefilter and cancel words) → dictation auto-detect → model call (cancellable) → response routed: `answer` card, `guide` highlights, `action` via `executeActions` (safety policy per action), `text_insert`, `locate` dim-and-reveal. Multi-step and research requests run as an agent-mode task (`agent-mode/session`). `speech/router.ts` holds the order as a pure, tested decision. Spoken replies: `speech.say-chunk` → `speech/tts` (Windows voices through the agent, a voice of the voice language when installed) → WebAudio player in the bar. `[time] voice …` lines mark stt-final, first-token and tts-first-audio from the end of speech (`speech/latency`).
 
-Wake word: agent emits `wake-detected` → same recording flow with client-side VAD auto-stop.
+Dictation hotkey: `speech/dictation` (cleanup on the fast model, typed through the agent, terminal guard, recovery file); a name corrected the same way twice joins `dictation.dictionary` (`dictation/learn`, counts in `~/.ai-overlay/dictionary.json`).
+
+Wake word: sherpa-onnx keyword spotting in the speech worker on the bar's mic stream (`voice:wake-pcm`), Vosk in the agent as the fallback → same hands-free recording.
 
 ## Settings
 
