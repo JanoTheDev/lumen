@@ -41,6 +41,11 @@ export interface CopilotDeps {
   /** Writes the per-session --settings file; returns its path. */
   writeSettings(key: string, base: string): string
   removeSettings(key: string): void
+  /**
+   * The session's coding-skills plugin folders, rebuilt at every spawn (Lumen-owned, outside
+   * the project); [] when the project has no skills.
+   */
+  pluginDirs?(key: string, project: string): string[]
   decide(input: DecisionInput, signal?: AbortSignal): Promise<AutopilotDecision>
   claudeMd(project: string): string | undefined
   /** The user's memory profile facts, redacted (T36). */
@@ -137,6 +142,9 @@ export class ClaudeCopilot {
           allowedTools: [...cfg.allowedTools, ...(project.allowedTools ?? [])],
           ...(settingsPath ? { settingsPath } : {})
         },
+        ...(this.deps.pluginDirs
+          ? { spawnArgs: () => ({ pluginDirs: this.deps.pluginDirs!(id, project.path) }) }
+          : {}),
         ...(last ? { resume: last.sessionId, title: last.title } : {}),
         title: last?.title ?? project.name
       },
@@ -220,6 +228,18 @@ export class ClaudeCopilot {
     this.entries.delete(id)
     if (this.focusedId === id) this.focusedId = null
     return true
+  }
+
+  /**
+   * The projects' coding skills changed: their sessions restart on the next turn (after the
+   * current one) with the rebuilt plugin folder. Returns the sessions that will reload.
+   */
+  reloadSkills(projects: string[]): ClaudeSessionView[] {
+    const hit = [...this.entries.values()].filter((e) =>
+      projects.some((p) => samePath(p, e.s.view.project))
+    )
+    for (const e of hit) e.s.recycle()
+    return hit.map((e) => e.s.view)
   }
 
   setAutopilot(level: AutopilotLevel, id?: string): void {

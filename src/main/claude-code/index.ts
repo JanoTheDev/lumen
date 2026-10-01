@@ -30,6 +30,12 @@ import { applyHooks, previewHooks, writeSessionSettings } from './hooks-config'
 import { matchClaudeCodeIntent, type ClaudeIntent } from './intents'
 import { listClaudeProjects, matchProject, mergeProjects } from './projects'
 import { CopilotStore } from './store'
+import { CodingSkillLibrary } from '../coding-skills/library'
+import { CodingSkills } from '../coding-skills/service'
+import { CodingSkillVoice } from '../coding-skills/voice'
+import { authorSkill } from '../skills/compose'
+import type { Complete } from '../web/summarize'
+import * as settingsWindow from '../windows/settings'
 
 let store: CopilotStore | null = null
 let server: HookServer | null = null
@@ -63,6 +69,75 @@ function notify(text: string, kind: NoticeKind): void {
 export function copilotStore(): CopilotStore {
   store ??= new CopilotStore(join(dirname(configPath()), 'claude-code'))
   return store
+}
+
+// ---- coding skills ----
+
+let skills: CodingSkills | null = null
+let skillVoice: CodingSkillVoice | null = null
+
+const fastComplete: Complete = async (system, user, schema, maxTokens, signal) => {
+  const { llm, model, effort } = getProvider('fast')
+  const res = await llm.complete(
+    {
+      model,
+      system: [{ text: system, cacheable: true }],
+      messages: [{ role: 'user', content: user }],
+      maxTokens,
+      effort,
+      schema,
+      schemaName: 'coding_skill'
+    },
+    signal
+  )
+  return res.data ?? parseJsonAs(res.text, schema)
+}
+
+/** Coding skills (library, drafts, per-project attachments) for Lumen-started sessions. */
+export function codingSkills(): CodingSkills {
+  skills ??= new CodingSkills({
+    library: new CodingSkillLibrary(join(copilotStore().dir, 'coding-skills')),
+    distill: { complete: fastComplete },
+    author: (req) => authorSkill(req),
+    now: () => Date.now(),
+    newId: () => `csd_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`,
+    changed: (projects) => void copilot?.reloadSkills(projects),
+    log: (m) => log('step', `[coding-skills] ${m}`)
+  })
+  return skills
+}
+
+/** The session's plugin folder (Lumen-owned, under run/): rebuilt at every spawn. */
+function sessionPluginDir(key: string): string {
+  return join(copilotStore().runDir, `${key}-skills`)
+}
+
+/** "Claude picks it up from its next turn." for projects with a running session. */
+export function skillReloadNote(projects: string[]): string {
+  const live = projects.some((p) => copilot?.forProject(p))
+  return live
+    ? 'Claude picks it up from its next turn.'
+    : 'Claude loads it the next time it starts there.'
+}
+
+function voiceSkills(): CodingSkillVoice {
+  skillVoice ??= new CodingSkillVoice({
+    skills: codingSkills(),
+    focusedProject: () => {
+      const f = copilot?.focused()
+      return f ? { path: f.project, name: f.projectName } : null
+    },
+    matchProject: (spoken) => {
+      const p = matchProject(spoken, allProjects())
+      return p ? { path: p.path, name: p.name } : null
+    },
+    reloadNote: skillReloadNote,
+    notify: (text, urgent) => notify(text, urgent ? 'needs-you' : 'info'),
+    showDraft: () => settingsWindow.create('settings/claude-code'),
+    now: () => Date.now(),
+    log: (m) => log('step', `[coding-skills] ${m}`)
+  })
+  return skillVoice
 }
 
 export function allProjects(): ClaudeProject[] {
@@ -322,7 +397,19 @@ export async function installClaudeCode(): Promise<void> {
       ),
     hookBase,
     writeSettings: (key, base) => writeSessionSettings(st.runDir, base, key, token),
-    removeSettings: (key) => rmSync(join(st.runDir, `${key}.json`), { force: true }),
+    removeSettings: (key) => {
+      rmSync(join(st.runDir, `${key}.json`), { force: true })
+      rmSync(sessionPluginDir(key), { recursive: true, force: true })
+    },
+    pluginDirs: (key, project) => {
+      try {
+        const dir = codingSkills().library.buildPluginDir(sessionPluginDir(key), project)
+        return dir ? [dir] : []
+      } catch (e) {
+        log('fail', `[coding-skills] plugin folder: ${(e as Error).message}`)
+        return []
+      }
+    },
     decide: async (input, signal) => {
       const { llm, model, effort } = getProvider('fast')
       const res = await llm.complete(
@@ -459,6 +546,8 @@ function handle(i: ClaudeIntent): ReturnType<typeof reply> | undefined {
 
 /** Router stage hook: a Claude Code voice intent → handled reply, else undefined. */
 export function interceptClaudeCode(prompt: string): unknown | undefined {
+  const skill = copilot ? voiceSkills().intercept(prompt) : undefined
+  if (skill) return skill
   const i = matchClaudeCodeIntent(prompt)
   if (!i) return undefined
   try {

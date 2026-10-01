@@ -70,6 +70,11 @@ export interface ClaudeArgsInput {
   disallowedTools?: string[]
   /** Per-session settings file with Lumen's http hooks. */
   settingsPath?: string
+  /**
+   * Lumen-owned plugin folders (coding skills), each passed as --plugin-dir: loaded for this
+   * session only, in place (code.claude.com/docs/en/cli-reference, checked 2026-10-01).
+   */
+  pluginDirs?: string[]
 }
 
 /** The headless, stream-json-both-ways command line (claude-code.md, probe 2026-10-01). */
@@ -101,6 +106,8 @@ export function buildArgs(input: ClaudeArgsInput): string[] {
       '--settings',
       isAbsolute(input.settingsPath) ? input.settingsPath : refuse(input.settingsPath)
     )
+  for (const dir of input.pluginDirs ?? [])
+    args.push('--plugin-dir', isAbsolute(dir) ? dir : refuse(dir))
   // Control characters, anything that skips permissions, a value that reads as a flag.
   for (const a of args)
     // eslint-disable-next-line no-control-regex

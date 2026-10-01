@@ -44,6 +44,8 @@ export interface SessionInit {
   autopilot: AutopilotLevel
   /** Flags for every (re)spawn; `resume` comes from the session id. */
   args: Omit<ClaudeArgsInput, 'resume'>
+  /** Flags worked out again at every spawn (the coding-skills plugin folder). */
+  spawnArgs?: () => Partial<Omit<ClaudeArgsInput, 'resume'>>
   env?: NodeJS.ProcessEnv
   /** Resume this CLI session id instead of starting a new one. */
   resume?: string
@@ -70,6 +72,10 @@ export class ClaudeSession extends EventEmitter {
   /** User turns written and not ended by a `result` yet. */
   private inFlight = 0
   private stderrTail = ''
+  /** Restart the process once the current turn ends (coding skills changed). */
+  private recyclePending = false
+  /** The process was ended by recycle(): the session counts as running and resumes on send. */
+  private retired = false
 
   constructor(
     private readonly init: SessionInit,
@@ -96,7 +102,7 @@ export class ClaudeSession extends EventEmitter {
   }
 
   get alive(): boolean {
-    return !!this.child
+    return !!this.child || this.retired
   }
 
   /** Patches the view and tells listeners (manager, UI). */
@@ -149,6 +155,47 @@ export class ClaudeSession extends EventEmitter {
   }
 
   /**
+   * The next turn starts a fresh process (same CLI session, --resume) so it loads changed
+   * startup inputs such as the coding-skills plugin folder. A busy session finishes its turn
+   * first. Returns true when the restart is done or queued.
+   */
+  recycle(): boolean {
+    if (!this.child) return true
+    if (this.inFlight > 0 || this.interrupting || !this.view.sessionId) {
+      this.recyclePending = true
+      return true
+    }
+    this.retire()
+    return true
+  }
+
+  /** Ends the idle process quietly; the session stays as it is and resumes on the next turn. */
+  private retire(): void {
+    const child = this.child
+    this.recyclePending = false
+    if (!child) return
+    this.child = null
+    this.retired = true
+    let exited = false
+    child.on('exit', () => (exited = true))
+    try {
+      child.stdin?.end()
+    } catch {
+      /* already closed */
+    }
+    setTimeout(() => {
+      if (exited) return
+      try {
+        if (child.killTree) child.killTree(false)
+        else child.kill()
+      } catch {
+        /* gone */
+      }
+    }, STOP_GRACE_MS).unref?.()
+    this.deps.log?.(`[${this.view.id}] restarting on the next turn to load new skills`)
+  }
+
+  /**
    * App quit: stdin closed, and a process in the middle of a turn is killed now (with its
    * children); a timer would never fire once the app has exited.
    */
@@ -167,6 +214,7 @@ export class ClaudeSession extends EventEmitter {
 
   /** Ends the process (stdin closed, killed after a grace period). Resumable later. */
   stop(): void {
+    this.retired = false
     if (!this.child) {
       this.update({ phase: 'stopped', pending: undefined })
       return
@@ -205,7 +253,11 @@ export class ClaudeSession extends EventEmitter {
   }
 
   private spawn(): void {
-    const args = buildArgs({ ...this.init.args, resume: this.view.sessionId })
+    const args = buildArgs({
+      ...this.init.args,
+      ...this.init.spawnArgs?.(),
+      resume: this.view.sessionId
+    })
     const cmd = command(this.init.cliPath, args)
     this.costBase += this.procCost
     this.procCost = 0
@@ -213,11 +265,16 @@ export class ClaudeSession extends EventEmitter {
     this.interrupting = false
     this.inFlight = 0
     this.stderrTail = ''
+    this.recyclePending = false
+    this.retired = false
     const child = this.deps.spawn(cmd, this.init.project, { ...process.env, ...this.init.env })
     this.child = child
     this.update({ phase: 'starting', error: undefined, lastLine: 'Starting Claude Code' })
     const parser = new NdjsonParser(
-      (ev) => this.onEvent(ev),
+      (ev) => {
+        // A retired process (recycle) may still flush a line; it belongs to no turn now.
+        if (this.child === child) this.onEvent(ev)
+      },
       (junk) => this.deps.log?.(`[${this.view.id}] non-json: ${junk}`)
     )
     child.stdout?.setEncoding?.('utf8')
@@ -286,6 +343,7 @@ export class ClaudeSession extends EventEmitter {
     if (Object.keys(patch).length) this.update(patch)
     if (fx.turnEnded) {
       const end: TurnEnd = { text: fx.turnEnded.text, isError: fx.turnEnded.isError, interrupted }
+      if (this.recyclePending && this.inFlight === 0 && this.view.sessionId) this.retire()
       this.emit('turn', end)
     }
   }
