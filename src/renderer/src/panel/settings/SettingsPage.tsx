@@ -4,6 +4,7 @@ import { filterSections, SECTIONS, type SectionId, type SectionProps } from './m
 import { useConfig } from './useConfig'
 import { About } from './sections/About'
 import { Bridges } from './sections/Bridges'
+import { Connectors } from './sections/Connectors'
 import { Accessibility } from './sections/Accessibility'
 import { General } from './sections/General'
 import { Lessons } from './sections/Lessons'
@@ -24,6 +25,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   lessons: Lessons,
   skills: Skills,
   bridges: Bridges,
+  connectors: Connectors,
   privacy: Privacy,
   about: About
 }

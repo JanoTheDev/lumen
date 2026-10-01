@@ -18,6 +18,7 @@ export type SectionId =
   | 'lessons'
   | 'skills'
   | 'bridges'
+  | 'connectors'
   | 'privacy'
   | 'about'
 
@@ -91,6 +92,12 @@ export const SECTIONS: readonly SectionMeta[] = [
     label: 'App helpers',
     icon: icons.toggle,
     keywords: 'app helpers bridges blender obs add-on addon websocket password lesson checks'
+  },
+  {
+    id: 'connectors',
+    label: 'Connectors',
+    icon: icons.external,
+    keywords: 'connectors mcp servers tools calendar email files folder integrations agent token'
   },
   {
     id: 'privacy',
