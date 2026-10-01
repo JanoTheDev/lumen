@@ -10,6 +10,7 @@ import { isResearchIntent } from './legacy/classifier'
 import { correctNthElement } from './nth'
 import { runPlanned, runResearch } from './research'
 import { present, type GuideStartFn } from './present'
+import { mergeSplit, recordSplitHistory, runParallelSplit, type SubResult } from './parallel'
 import {
   describeRoute,
   isContinuation,
@@ -38,7 +39,9 @@ export interface PipelineDeps {
 interface TurnPlan {
   /** Prompt sent to the model (the legacy path appends steering text). */
   prompt: string
-  path: 'model' | 'plan' | 'research'
+  path: 'model' | 'plan' | 'research' | 'split'
+  /** Independent answer questions run in parallel (path "split"). */
+  subqueries?: string[]
   /** Model-call options from the route (routedMode, targetApp). */
   routing: Pick<CallOptions, 'routedMode' | 'targetApp'>
   /** A locate request: a navigate + follow_up reply must end in locate. */
@@ -191,12 +194,16 @@ async function planRouted(
     ctx,
     plan: {
       prompt: utterance,
-      path:
-        confident && route?.mode === 'research'
-          ? 'research'
-          : confident && route?.mode === 'plan'
-            ? 'plan'
-            : 'model',
+      path: !confident
+        ? 'model'
+        : route?.parallelSplit
+          ? 'split'
+          : route?.mode === 'research'
+            ? 'research'
+            : route?.mode === 'plan'
+              ? 'plan'
+              : 'model',
+      subqueries: route?.parallelSplit,
       routing: { routedMode, targetApp },
       locate: route?.mode === 'locate'
     }
@@ -228,7 +235,21 @@ async function runTurn(
   log('plan', `query: "${plan.prompt.slice(0, 80)}"`)
 
   let result: ModelResponse
-  if (plan.path === 'research') {
+  let split: SubResult[] | null = null
+  if (plan.path === 'split' && plan.subqueries) {
+    log('plan', `parallel split: ${plan.subqueries.map((q) => `"${q.slice(0, 30)}"`).join(', ')}`)
+    // No turnId: sub-answers do not stream speech; the merged answer is spoken once.
+    split = await runParallelSplit(plan.subqueries, scope, (q, child) =>
+      callModel(q, screenshot, activeWindow, {
+        ...opts,
+        turnId: undefined,
+        signal: child.signal,
+        routedMode: 'answer'
+      })
+    )
+    result = mergeSplit(split)
+    timer.split(`parallel split (${split.length}) done`)
+  } else if (plan.path === 'research') {
     result = await runResearch(plan.prompt, activeWindow, opts, scope)
     timer.split('research agent done')
   } else if (plan.path === 'plan') {
@@ -263,7 +284,8 @@ async function runTurn(
     }
   }
 
-  if (!opts.lowDetail) addToHistory(prompt, historySummary(result))
+  if (split) recordSplitHistory(split, historySummary)
+  else if (!opts.lowDetail) addToHistory(prompt, historySummary(result))
 
   present(result, prompt, deps.onGuide)
   return result

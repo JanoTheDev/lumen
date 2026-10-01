@@ -10,7 +10,6 @@ import type { Action, ModelResponse } from '@shared/types'
 import { INVALID, safeParse } from './validate'
 import { beginScope, cancelAll, endScope, isAbortError, type CancelScope } from '../query/cancel'
 import { TaskQueue } from '../query/task-queue'
-import { canParallelize, mergeAnswers, splitSubtasks } from '../query/task-splitter'
 import type { CallOptions } from '../ai'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
@@ -46,32 +45,7 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
     const scope = beginScope()
     armEscape()
     try {
-      // Level 2: split read-only prompts into parallel subtasks.
-      if (!opts.lowDetail) {
-        const subtasks = splitSubtasks(prompt)
-        if (canParallelize(subtasks)) {
-          const result = await userQueue.enqueue(
-            `parallel (${subtasks.length}) "${prompt.slice(0, 40)}"`,
-            async () => {
-              log(
-                'plan',
-                `parallel subtasks: ${subtasks.length} — ${subtasks.map((s) => `"${s.slice(0, 30)}"`).join(', ')}`
-              )
-              const timer = startTimer(`parallel subtasks (${subtasks.length})`)
-              const answers = await Promise.all(
-                subtasks.map((st) => deps.runQuery(st, opts, scope.child()))
-              )
-              timer.total()
-              const texts = answers.map((a) => (a.mode === 'answer' ? a.text : JSON.stringify(a)))
-              return { mode: 'answer' as const, text: mergeAnswers(subtasks, texts) }
-            }
-          )
-          setStatus('answer', 'Done', undefined, 1400)
-          return result
-        }
-      }
-
-      // Level 1: serialize user requests through the queue.
+      // Serialize user requests; parallel splits happen inside the turn (router).
       const result = await userQueue.enqueue(`"${prompt.slice(0, 40)}"`, () =>
         deps.runQuery(prompt, opts, scope)
       )
