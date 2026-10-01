@@ -7,12 +7,11 @@ import { log } from '../logger'
 import { physToLogical } from '../actions/coords'
 import { dismissGuide } from '../guides/session'
 import { cancelAll } from '../query/cancel'
-import { startSpeculativeCapture } from '../query/context'
-import { captureContext } from '../query/capture'
 import * as dwellRing from '../windows/dwell-ring'
 import { isOverOwnWindow } from '../windows/registry'
 import { setStatus } from '../windows/status'
 import { onDictationDown, onDictationUp } from '../speech/dictation/pipeline'
+import { onAssistantHotkeyDown, onAssistantHotkeyUp } from '../speech/hotkey'
 
 let agentFailed = false
 
@@ -35,26 +34,8 @@ export function wireAgentEvents(agent: AgentBridge): void {
     agentFailed = false
   })
 
-  agent.onEvent('hotkey-down', () => {
-    const handsFree = loadConfig().handsFreeMode
-    console.log(`[hotkey] down — handsFree=${handsFree}`)
-    holdEscape('hud')
-    // Tap-to-talk (hands-free) uses the same auto-stop-on-silence path as wake-word activation
-    bus.emit({ type: 'voice.started', handsFree })
-    setStatus('listening', handsFree ? 'Listening (hands-free)…' : 'Listening…')
-  })
-
-  agent.onEvent('hotkey-up', () => {
-    if (loadConfig().handsFreeMode) {
-      // In hands-free mode the VAD loop stops recording automatically; ignore release.
-      return
-    }
-    console.log('[hotkey] up — stopping recording, keeping HUD visible until query done')
-    bus.emit({ type: 'voice.stopped' })
-    setStatus('transcribing', 'Transcribing', { index: 1, total: 3 })
-    // Capture while speech is transcribed; runQuery awaits this promise if it is fresh.
-    startSpeculativeCapture(() => captureContext(true))
-  })
+  agent.onEvent('hotkey-down', () => onAssistantHotkeyDown())
+  agent.onEvent('hotkey-up', () => onAssistantHotkeyUp())
 
   agent.onEvent('dictation-down', () => onDictationDown())
   agent.onEvent('dictation-up', () => onDictationUp())

@@ -61,6 +61,8 @@ export interface SendChannels {
   'settings:window-close': []
   'settings:window-minimize': []
   'settings:window-maximize': []
+  /** A hands-free recording ended on its own (silence, no speech, mic error). */
+  'voice:ended': []
   'assistant:command': [cmd: AssistantCommand]
   /** Card size in CSS px, for dwell suppression over the bar. */
   'assistant:resize': [size: { w: number; h: number }]
@@ -224,6 +226,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'settings:window-close',
   'settings:window-minimize',
   'settings:window-maximize',
+  'voice:ended',
   'assistant:command',
   'assistant:resize',
   'assistant:interactive',

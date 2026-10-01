@@ -168,6 +168,7 @@ export default function App(): JSX.Element {
 
   const handleError = (message: string): void => {
     console.error('[voice] error:', message)
+    if (!dictationRef.current) window.lumen.send('voice:ended')
     if (wakeTimerRef.current) {
       clearTimeout(wakeTimerRef.current)
       wakeTimerRef.current = null
@@ -316,12 +317,18 @@ export default function App(): JSX.Element {
       const startedAt = Date.now()
       let heardSpeech = false
       let silenceStart = 0
+      // The hotkey state in main must know the recording is over, or the next press stops
+      // a recording that no longer exists.
+      const ended = (): void => {
+        if (!dictationRef.current) window.lumen.send('voice:ended')
+      }
       const tick = (): void => {
         wakeTimerRef.current = null
         if (session !== voiceSessionRef.current || cancelledRef.current) return
         const now = Date.now()
         if (now - startedAt >= opts.maxRecordMs) {
           console.log('[auto-stop] max duration reached — stopping')
+          ended()
           setPhase('processing')
           stop()
           return
@@ -333,6 +340,7 @@ export default function App(): JSX.Element {
           if (silenceStart === 0) silenceStart = now
           else if (now - silenceStart >= opts.silenceMs) {
             console.log('[auto-stop] silence detected — stopping')
+            ended()
             setPhase('processing')
             stop()
             return
@@ -340,6 +348,7 @@ export default function App(): JSX.Element {
         }
         if (!heardSpeech && now - startedAt > opts.maxWaitMs) {
           console.log('[auto-stop] no speech — aborting')
+          ended()
           cancelledRef.current = true
           abort()
           opts.onNoSpeech()
@@ -378,8 +387,20 @@ export default function App(): JSX.Element {
         dictation: true
       })
     }
+    // A quick tap on the assistant hotkey: keep listening, stop on silence.
+    const assistantHandsFree = (): void => {
+      console.log('[voice] hands-free — will auto-stop on silence')
+      const vad = vadRef.current ?? DEFAULT_VAD
+      watchSilence(voiceSessionRef.current, {
+        threshold: vad.speechThreshold,
+        silenceMs: vad.silenceMs,
+        maxWaitMs: vad.maxWaitMs,
+        maxRecordMs: vad.maxRecordMs ?? DEFAULT_MAX_RECORD_MS,
+        onNoSpeech: () => {}
+      })
+    }
     const dictationHandsFree = (): void => {
-      if (!dictationRef.current) return
+      if (!dictationRef.current) return assistantHandsFree()
       console.log('[dictation] hands-free — will auto-stop on silence')
       const vad = vadRef.current ?? DEFAULT_VAD
       watchSilence(voiceSessionRef.current, {

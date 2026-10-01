@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { audioSchema, textSchema } from '@shared/ipc'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
+import { onRecordingEnded } from '../speech/hotkey'
 import { sttStatus } from '../speech/stt'
 import { installLocalModel } from '../speech/stt/local-model'
 
@@ -38,6 +39,7 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
     const opts = safeParse('voice:transcribe', transcribeOptsSchema, rawOpts) ?? {}
     return deps.transcribe(audio, opts)
   })
+  ipcMain.on('voice:ended', () => onRecordingEnded())
   ipcMain.handle('voice:stt-status', () => sttStatus())
   ipcMain.handle('voice:stt-install', async () => {
     try {
