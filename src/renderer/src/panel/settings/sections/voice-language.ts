@@ -15,7 +15,7 @@ const OFFLINE = new Set<VoiceLanguage>(['en', 'es', 'de', 'fr'])
 
 export function languageHint(lang: VoiceLanguage): string {
   if (lang === 'auto')
-    return 'OpenAI detects the language. Offline recognition then listens for English.'
+    return 'OpenAI detects the language of each request and answers in it; sentences that mix languages are kept as spoken. Offline recognition listens for English.'
   const answers = 'Answers and spoken replies follow this language.'
   if (lang === 'en') return answers
   if (OFFLINE.has(lang))
