@@ -59,6 +59,7 @@ Also available now:
 **Redesign**
 
 - [ ] New design system: one calm visual language, system font, readable at any size
+- [ ] Smooth, physical animations everywhere (springs, no pops, 60–120 fps), with reduced-motion support
 - [ ] Assistant bar replacing the HUD, answer card and status bubble
 - [ ] Cursor buddy that flies to and points at what it's talking about
 - [ ] Rebuilt Settings, plus a tray Home panel
