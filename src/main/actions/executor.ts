@@ -28,6 +28,7 @@ import { sleep } from '../util'
 import { waitForSettle } from '../ai/observe'
 import { armCancel } from '../speech/wake/arm'
 import { holdDwell } from '../a11y/dwell'
+import { recordUndo } from '../undo'
 
 // How long an uncertain target stays on screen before the click (cancel window).
 const CONFIRM_MS = 2500
@@ -286,10 +287,13 @@ export async function executeActions(
         continue
       }
       console.log('[execute] running:', redactForLog(JSON.stringify(scaled)))
+      // How to reverse it ("undo that", 11 T16), kept only once it ran.
+      const commitUndo = await recordUndo(action, { taskId: gateCtx.taskId })
       let stop: boolean
       try {
         stop = await run(scaled)
         g.finish('ok')
+        commitUndo?.()
       } catch (e) {
         g.finish(signal?.aborted ? 'cancelled' : 'error')
         throw e
