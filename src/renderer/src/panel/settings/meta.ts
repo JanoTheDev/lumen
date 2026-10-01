@@ -70,7 +70,8 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'models',
     label: 'Models & keys',
     icon: icons.cpu,
-    keywords: 'model provider anthropic openai claude gpt api key planning verify'
+    keywords:
+      'model provider anthropic openai claude gpt api key planning verify cost price spend per day budget'
   },
   {
     id: 'memory',

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Card, Select, TextField } from '../../../ui'
 import type { SectionProps } from '../meta'
 import { KeyForm } from './KeyForm'
+import { ModelsCost } from './ModelsCost'
 
 type Role = 'main' | 'fast' | 'planning' | 'verify'
 
@@ -111,6 +112,8 @@ export function Models({ cfg, patch }: SectionProps): JSX.Element {
           />
         ))}
       </Card>
+
+      <ModelsCost />
     </>
   )
 }
