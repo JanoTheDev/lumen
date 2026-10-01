@@ -109,6 +109,17 @@ describe('model-written skills (compose)', () => {
     expect(composeTurn({ description: 'brief', kind: 'style' })).toMatch(/reply-style skill/)
   })
 
+  it('names the configured connectors for the writer and keeps only those', () => {
+    const req = {
+      description: 'file my issues',
+      connectors: ['github', 'notes'],
+      connectorNames: { github: 'GitHub (work)', notes: 'notes' }
+    }
+    expect(composeTurn(req)).toContain('Connector ids: github (GitHub work), notes')
+    const { draft } = draftFromCompose(output({ connectors: ['github', 'slack'] }), req)
+    expect(draft.permissions.connectors).toEqual(['github'])
+  })
+
   it('picks a free name and refuses empty output', async () => {
     const r = await authorSkill(
       { description: 'read my morning mail' },

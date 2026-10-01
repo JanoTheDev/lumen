@@ -78,6 +78,8 @@ export interface AuthorSkillRequest {
   apps?: string[]
   /** Connector ids the model may name in `connectors`. */
   connectors?: string[]
+  /** The user's names for those connectors (id → name), shown next to the ids. */
+  connectorNames?: Record<string, string>
   /** Extra context for the model (what ran, the foreground app). */
   context?: string
 }
@@ -97,13 +99,22 @@ export type AuthorSkillResult = ({ ok: true } & AuthoredSkill) | { ok: false; er
 const STYLE_NOTE =
   'This is a reply-style skill: its instructions say how Lumen should word its answers (tone, length, format) while it is on. needs_input false, websites [], steps_json "", tools [].'
 
+/** "github (GitHub issues)"; the name is the user's own text, cut short and on one line. */
+function connectorLabel(id: string, names?: Record<string, string>): string {
+  const n = names?.[id]
+    ?.replace(/[\s()]+/g, ' ')
+    .trim()
+    .slice(0, 40)
+  return n && n.toLowerCase() !== id ? `${id} (${n})` : id
+}
+
 export function composeTurn(req: AuthorSkillRequest): string {
   return [
     `The user wants a skill: ${req.description.trim().slice(0, 2000)}`,
     ...(req.kind === 'style' ? ['', STYLE_NOTE] : []),
     '',
     `App ids: ${req.apps?.length ? req.apps.join(', ') : '(none)'}`,
-    `Connector ids: ${req.connectors?.length ? req.connectors.join(', ') : '(none)'}`,
+    `Connector ids: ${req.connectors?.length ? req.connectors.map((c) => connectorLabel(c, req.connectorNames)).join(', ') : '(none)'}`,
     ...(req.context ? ['', 'Context:', req.context.slice(0, 4000)] : [])
   ].join('\n')
 }

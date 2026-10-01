@@ -181,14 +181,34 @@ export function removeSkill(name: string): SkillActionResult {
 
 // ---- "Write it for me" (11 F9) ----
 
+/** The connectors set up in Settings (id + name), for skills the model writes or edits. */
+export async function connectorChoices(): Promise<{ id: string; name: string }[]> {
+  try {
+    // Loaded on use: the connectors module pulls in the policy gate and its windows.
+    const { connectors } = await import('../connectors')
+    return connectors()
+      .list()
+      .slice(0, 40)
+      .map((c) => ({ id: c.id, name: c.name }))
+  } catch {
+    return []
+  }
+}
+
 const composed = new Map<string, { skill: AuthoredSkill; at: number }>()
 
 /** The model writes a skill from a description; kept for review under a token. */
 export async function composeSkillDraft(description: string): Promise<SkillComposePreview> {
   if (!registry) return notReady
   const reg = registry
+  const known = await connectorChoices()
   const r = await authorSkill(
-    { description, apps: [...new Set(reg.all().flatMap((s) => s.manifest.apps))].slice(0, 60) },
+    {
+      description,
+      apps: [...new Set(reg.all().flatMap((s) => s.manifest.apps))].slice(0, 60),
+      connectors: known.map((c) => c.id),
+      connectorNames: Object.fromEntries(known.map((c) => [c.id, c.name]))
+    },
     { taken: (n) => !!reg.get(n) }
   )
   if (!r.ok) return r

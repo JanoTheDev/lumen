@@ -54,12 +54,13 @@ import {
   editTurn,
   findSkill,
   matchEditIntent,
+  type EditLimits,
   type EditOutput,
   type SkillRef
 } from './edit'
 import { setSkillAuthoringHost } from './agent-tools'
 import { needsUpdate, needsUpdateLine } from './health'
-import { getSkillRegistry, matchTrigger, onSkillRun, skillRuns } from './index'
+import { connectorChoices, getSkillRegistry, matchTrigger, onSkillRun, skillRuns } from './index'
 import { saveSkillFiles, writeNewSkill } from './manage'
 import { SKILL_FILE } from './manifest'
 import {
@@ -112,6 +113,8 @@ export interface CreationDeps {
   editWords?(turn: string): Promise<EditOutput | null>
   /** Skills by name and phrases, for "change my morning skill …". */
   skills?(): SkillRef[]
+  /** The apps and connectors an edited skill may name (the clamp of new skills). */
+  editLimits?(): Promise<EditLimits>
   /** A skill's SKILL.md and whether it has steps.json; null when unknown. */
   skillText?(name: string): { text: string; hasSteps: boolean } | null
   saveEdit?(
@@ -153,6 +156,8 @@ type Pending =
       stepsJson?: string | null
       line: string
       details: string[]
+      /** The edit asks for more than before. */
+      widens: boolean
       at: number
     }
 
@@ -420,7 +425,10 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
         return null
       })
     if (!out) return { ok: false, error: 'the AI could not change it' }
-    const checked = checkEdit(cur.text, out, { hasSteps: cur.hasSteps })
+    const checked = checkEdit(cur.text, out, {
+      hasSteps: cur.hasSteps,
+      ...(deps.editLimits ? { limits: await deps.editLimits() } : {})
+    })
     if (!checked.ok) return { ok: false, error: checked.error }
     // An update from a run that worked: fresh steps from that run when it can repeat.
     let stepsJson: string | null | undefined = checked.dropSteps ? null : undefined
@@ -447,6 +455,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
         ...(stepsJson !== undefined ? { stepsJson } : {}),
         line,
         details: checked.diff.lines,
+        widens: checked.diff.widens,
         at: deps.now()
       }
     }
@@ -603,9 +612,7 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       const e = await makeEdit(name, change)
       if (!e.ok) return { ok: false, text: `Not changed: ${e.error}.` }
       const p = e.pending
-      const risk = p.details.some((l) => /^It (?:may now|now works|no longer asks)/.test(l))
-        ? 'high'
-        : 'medium'
+      const risk = p.widens ? 'high' : 'medium'
       const yes = await deps.confirm(p.line.replace(/ Say “save it”.*$/, ''), risk)
       if (!yes) return { ok: true, text: 'The user said no; the skill stays as it was.' }
       return applyEdit(p)
@@ -663,6 +670,8 @@ export function installSkillCreation(
   startRecording: CreationDeps['startRecording'],
   host: CreationHost = {}
 ): SkillCreation {
+  const connectorList = async (): Promise<{ id: string; name: string }[]> =>
+    host.connectors ? host.connectors().map((id) => ({ id, name: id })) : connectorChoices()
   instance = createSkillCreation({
     now: () => Date.now(),
     words: async (turn) => {
@@ -700,15 +709,22 @@ export function installSkillCreation(
     say: (text) => announce(text, { kind: 'answer' }),
     log: (msg) => log('plan', msg),
     handled: LOCAL_HANDLED,
-    compose: (description) =>
-      authorSkill(
+    compose: async (description) => {
+      const known = await connectorList()
+      return authorSkill(
         {
           description,
           apps: appIds(),
-          ...(host.connectors ? { connectors: host.connectors() } : {})
+          connectors: known.map((c) => c.id),
+          connectorNames: Object.fromEntries(known.map((c) => [c.id, c.name]))
         },
         { taken: (n) => !!getSkillRegistry()?.get(n) }
-      ),
+      )
+    },
+    editLimits: async () => ({
+      apps: appIds(),
+      connectors: (await connectorList()).map((c) => c.id)
+    }),
     editWords: async (turn) => {
       const { llm, model, effort } = getProvider('main')
       const res = await llm.complete(
