@@ -422,7 +422,7 @@ export interface InvokeChannels {
   'tasks:cancel': { args: [id: string]; result: { ok: boolean } }
   /** Opens the task's chat view in the panel window (a task or chat id, or "all"). */
   'tasks:open': { args: [id: string]; result: { ok: boolean } }
-  /** Task chat view (08 T41): one chat's header and transcript; null when it is gone. */
+  /** Task chat view (08 T43): one chat's header and transcript; null when it is gone. */
   'tasks:chat': { args: [id: string]; result: ChatView | null }
   /** The chat view's list: background, foreground and Claude Code chats. */
   'tasks:chats': { args: []; result: ChatSummary[] }

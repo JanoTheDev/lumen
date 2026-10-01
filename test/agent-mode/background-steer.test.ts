@@ -1,4 +1,4 @@
-// Steering, pause / resume and transcript records of background tasks (08 T41).
+// Steering, pause / resume and transcript records of background tasks (08 T43).
 import { describe, expect, it } from 'vitest'
 import {
   BackgroundManager,

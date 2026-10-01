@@ -76,7 +76,7 @@ export function taskRow(t: BackgroundTask): TaskRow {
     canCancel: open,
     canRunAgain:
       !t.claude && (t.phase === 'interrupted' || t.phase === 'failed' || t.phase === 'cancelled'),
-    // Every task has a chat (08 T41): its transcript, or the session's for Claude.
+    // Every task has a chat (08 T43): its transcript, or the session's for Claude.
     canOpen: true,
     ...(t.question && (t.phase === 'asking' || t.phase === 'needs-foreground')
       ? { question: { text: t.question.text, choices: t.question.choices ?? [] } }

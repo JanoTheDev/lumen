@@ -1,4 +1,4 @@
-// Task chat headers (08 T41): status, counters and which buttons the view shows, for each kind
+// Task chat headers (08 T43): status, counters and which buttons the view shows, for each kind
 // of chat. Pure; transcript-wire.ts feeds it the live state.
 import type { ClaudeSessionView } from '@shared/claude-code'
 import type { ChatHeader, ChatPhase, ChatSummary } from '@shared/task-chat'

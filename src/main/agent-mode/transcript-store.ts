@@ -1,4 +1,4 @@
-// Task transcripts on disk (08 T41): ~/.ai-overlay/tasks/transcripts/<id>.json next to the task
+// Task transcripts on disk (08 T43): ~/.ai-overlay/tasks/transcripts/<id>.json next to the task
 // files, one per background task (bg_), foreground agent task (t_) and Claude session (cc_).
 // Written atomically (temp file + rename); unreadable files are skipped. Background
 // transcripts go with their task; foreground and Claude ones keep the newest KEEP_OTHER.

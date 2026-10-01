@@ -1,5 +1,5 @@
 // Home flyout Tasks list (08 T29): background tasks with their progress line, cancel, run
-// again, and answers to queued questions. A row opens the task's chat view (08 T41) in the
+// again, and answers to queued questions. A row opens the task's chat view (08 T43) in the
 // panel window; "All tasks" opens the view's list.
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import type { BackgroundTask } from '@shared/types'

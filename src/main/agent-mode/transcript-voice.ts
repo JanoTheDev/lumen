@@ -1,4 +1,4 @@
-// Task chat by voice (08 T41): "show me what the email task is doing" opens the chat view,
+// Task chat by voice (08 T43): "show me what the email task is doing" opens the chat view,
 // "tell the background task to also check Outlook" sends it a steer message. Pure matching;
 // transcript-wire.ts acts on it.
 import type { ChatSummary } from '@shared/task-chat'

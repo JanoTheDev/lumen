@@ -1,4 +1,4 @@
-// Task chat view (08 T41), panel route #/tasks/<id>: the list of task chats on the side
+// Task chat view (08 T43), panel route #/tasks/<id>: the list of task chats on the side
 // (background tasks, on-screen agent tasks, Claude Code sessions) and the chosen one's chat.
 import { useCallback, useEffect, useState } from 'react'
 import type { ChatSummary } from '@shared/task-chat'

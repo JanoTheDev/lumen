@@ -1,4 +1,4 @@
-// Task transcripts (08 T41): what a background task, a foreground agent task or a Claude Code
+// Task transcripts (08 T43): what a background task, a foreground agent task or a Claude Code
 // session said and did, for the task chat view. Pure: entries in memory with size caps and
 // redaction; persistence and live pushes are the hub's (transcript-hub.ts).
 //

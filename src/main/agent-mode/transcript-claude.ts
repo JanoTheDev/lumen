@@ -1,4 +1,4 @@
-// Claude Code sessions in the task chat (08 T41): the CLI's stream-json events (the same ones
+// Claude Code sessions in the task chat (08 T43): the CLI's stream-json events (the same ones
 // claude-code/events.ts reads for the session view) as transcript entries. Pure.
 import type { ClaudeSessionView } from '@shared/claude-code'
 import type { ChatPhase } from '@shared/task-chat'

@@ -1,4 +1,4 @@
-// Task chat hub (08 T41): one transcript recorder per task id, saved a moment after it changes
+// Task chat hub (08 T43): one transcript recorder per task id, saved a moment after it changes
 // (and at once when the task ends), pushed live only to views that watch that id. Background
 // tasks report through the manager (TaskRecord), foreground agent tasks through session.ts,
 // Claude sessions through the CLI's stream. Electron-free; the header comes from a source the

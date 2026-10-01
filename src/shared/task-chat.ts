@@ -1,4 +1,4 @@
-// Task chat view (08 T41): the transcript of a background task, a foreground agent task or a
+// Task chat view (08 T43): the transcript of a background task, a foreground agent task or a
 // Claude Code session, as the panel's #/tasks/<id> view shows it. Types for main and the
 // renderer, plus the validators of its IPC payloads (channels.ts imports the types only).
 import { z } from 'zod'

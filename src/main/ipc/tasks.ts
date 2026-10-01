@@ -1,5 +1,5 @@
 // Background tasks IPC (08 T29, CONTRACTS C11): the Home flyout's Tasks list. tasks:changed
-// carries the whole list (it is short) to the Home window. The task chat view (08 T41) in the
+// carries the whole list (it is short) to the Home window. The task chat view (08 T43) in the
 // panel window: tasks:chat / tasks:chats read, tasks:watch subscribes the open view to
 // tasks:chat pushes, tasks:steer and tasks:control act on the task.
 import { ipcMain } from 'electron'

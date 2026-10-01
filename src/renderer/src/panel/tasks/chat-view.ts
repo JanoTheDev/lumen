@@ -1,4 +1,4 @@
-// Task chat view (08 T41): pure helpers for the panel's #/tasks/<id> page: deltas, grouping
+// Task chat view (08 T43): pure helpers for the panel's #/tasks/<id> page: deltas, grouping
 // of tool rows, status words and what the screen reader hears for a new entry.
 import type {
   ChatDelta,

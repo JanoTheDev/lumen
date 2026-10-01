@@ -1,4 +1,4 @@
-// One task's chat (08 T41): status header with Stop / Pause / Resume / Run again, the live
+// One task's chat (08 T43): status header with Stop / Pause / Resume / Run again, the live
 // transcript, a confirm card for a waiting OK, and the composer that steers the task.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react'
 import type { ChatControlOp, ChatHeader, ChatView } from '@shared/task-chat'

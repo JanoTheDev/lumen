@@ -43,7 +43,7 @@ export interface TaskControl {
   record?(e: RunEvent): void
 }
 
-/** What the task's transcript hears from the manager (08 T41). */
+/** What the task's transcript hears from the manager (08 T43). */
 export type TaskRecord =
   | { type: 'start'; task: BackgroundTask }
   | { type: 'run'; ev: RunEvent }
@@ -69,7 +69,7 @@ export interface ManagerDeps {
   remove?(id: string): void
   /** A task ended (done / failed): the presence-gated notice. */
   finished?(task: BackgroundTask): void
-  /** The task's transcript (08 T41). */
+  /** The task's transcript (08 T43). */
   record?(id: string, e: TaskRecord): void
   now(): number
   newId(): string

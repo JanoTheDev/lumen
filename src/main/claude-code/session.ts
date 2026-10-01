@@ -60,7 +60,7 @@ export function userLine(text: string): string {
 }
 
 /**
- * Read-only taps on every session (the task chat transcript, 08 T41): 'user' (id, text) for
+ * Read-only taps on every session (the task chat transcript, 08 T43): 'user' (id, text) for
  * each user turn written, 'event' (id, event) for each stream-json event read.
  */
 export const sessionTaps = new EventEmitter()

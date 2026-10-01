@@ -1,4 +1,4 @@
-// Task chat wiring (08 T41): the hub's store and header source, Claude session taps, the
+// Task chat wiring (08 T43): the hub's store and header source, Claude session taps, the
 // panel's live pushes, the view's controls (stop / pause / resume / run again / approve /
 // deny), steer messages and the voice commands. IPC handlers are in ipc/tasks.ts.
 import { app } from 'electron'

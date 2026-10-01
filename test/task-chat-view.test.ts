@@ -1,4 +1,4 @@
-// Task chat view (08 T41): pure helpers and static markup checks (there is no DOM library in
+// Task chat view (08 T43): pure helpers and static markup checks (there is no DOM library in
 // this repo; keyboard and screen reader behaviour is a hand test).
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'

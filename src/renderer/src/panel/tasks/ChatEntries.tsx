@@ -1,4 +1,4 @@
-// Task chat transcript (08 T41): message bubbles, collapsible tool rows, questions, results.
+// Task chat transcript (08 T43): message bubbles, collapsible tool rows, questions, results.
 import type { ChatEntry, ChatHeader } from '@shared/task-chat'
 import { Button, Markdown, icons } from '../../ui'
 import { groupEntries, toolLine, TOOL_STATUS_TEXT } from './chat-view'

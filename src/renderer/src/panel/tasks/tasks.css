@@ -1,4 +1,4 @@
-/* Task chat view (08 T41). Sizes in rem so uiScale (the panel's root font) scales it; motion
+/* Task chat view (08 T43). Sizes in rem so uiScale (the panel's root font) scales it; motion
    follows the global reduce-motion rules in theme.css. */
 
 .chat-list ul {
