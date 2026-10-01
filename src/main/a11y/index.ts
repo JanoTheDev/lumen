@@ -19,7 +19,7 @@ import { currentContext } from '../query/context'
 import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
 import { conversationActive } from '../speech/hotkey'
-import { speakAnswer, stopSpeaking } from '../speech/tts'
+import { speakAnswer, speakNow, stopSpeaking } from '../speech/tts'
 import * as assistant from '../windows/assistant'
 import * as commandSheet from '../windows/command-sheet'
 import * as screenLayer from '../windows/screen-layer'
@@ -147,14 +147,25 @@ function feedback(text: string, ok: boolean): void {
 
 /** Voices `text` through the screen reader, else Lumen's voice; false when neither can. */
 function voice(text: string): boolean {
+  return voiceTracked(text) !== false
+}
+
+/**
+ * voice(), returning the id Lumen's playback reports with (`speech.finished`); null when it
+ * was voiced without a report (screen reader), false when nothing can voice it.
+ */
+function voiceTracked(text: string): string | null | false {
   const agent = getAgent()
   if (screenReaderActive() && agent?.hasCapability('announce')) {
     commands.announce(agent, text, 'polite', { timeoutMs: 2000 }).catch(() => {})
-    return true
+    return null
   }
   if (loadConfig().voice.tts === 'off') return false
-  speakAnswer(text).catch(() => {})
-  return true
+  try {
+    return speakNow(text)
+  } catch {
+    return null
+  }
 }
 
 async function readText(scope: TextScope): Promise<UiaText | null> {
@@ -338,7 +349,7 @@ function createIo(): A11yIo {
           : `Part ${index + 1} of ${total}`
       )
       stopSpeaking()
-      voice(text)
+      return voiceTracked(text) || null
     },
     silence: () => stopSpeaking(),
     canSpeak: () =>
@@ -395,6 +406,8 @@ export function installA11y(): void {
     if (voiceStartPausesReading(e, conversationActive())) commandsImpl.reader.pause()
   })
   bus.on('query.started', () => commandsImpl.reader.stop())
+  // The next part follows the real end of Lumen's playback (the estimate is the fallback).
+  bus.on('speech.finished', (e) => commandsImpl.reader.speechFinished(e.turnId, e.reason))
   installCoexist({ announce: (text) => feedback(text, true) })
   installFocusNarration()
   const dwell = installDwell({

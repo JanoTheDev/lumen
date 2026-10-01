@@ -12,6 +12,7 @@ import {
   guideIdSchema,
   parsePayload,
   promptSchema,
+  sayDoneSchema,
   MAX_AUDIO_BYTES
 } from '../src/shared/ipc'
 import { DEFAULT_CONFIG } from '../src/main/config'
@@ -98,5 +99,12 @@ describe('ipc payloads', () => {
     expect(actionsSchema.safeParse([{ type: 'click', x: 1, y: 2 }]).success).toBe(true)
     expect(actionsSchema.safeParse([{ type: 'run_shell', cmd: 'calc' }]).success).toBe(false)
     expect(actionsSchema.safeParse([{ type: 'click', x: 'a' }]).success).toBe(false)
+  })
+  it('validates speech-finished reports', () => {
+    const ok = { turnId: 'preview-3', seq: 3, reason: 'ended' }
+    expect(sayDoneSchema.safeParse(ok).success).toBe(true)
+    expect(sayDoneSchema.safeParse({ ...ok, reason: 'done' }).success).toBe(false)
+    expect(sayDoneSchema.safeParse({ ...ok, seq: -1 }).success).toBe(false)
+    expect(sayDoneSchema.safeParse({ ...ok, extra: 1 }).success).toBe(false)
   })
 })

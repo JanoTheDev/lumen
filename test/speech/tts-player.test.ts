@@ -119,4 +119,21 @@ describe('TtsPlayer', () => {
     await vi.advanceTimersByTimeAsync(SPEAKING_HOLD_MS + 1)
     expect(states).toEqual([true, false])
   })
+
+  it('reports how each chunk ended: played, stopped or failed', async () => {
+    const ctx = fakeContext()
+    const p = new TtsPlayer(() => ctx)
+    const ends: string[] = []
+    await p.enqueue(chunk(10), (e) => ends.push(`a:${e}`))
+    await p.enqueue(chunk(10), (e) => ends.push(`b:${e}`))
+    ctx.sources[0].onended?.()
+    expect(ends).toEqual(['a:ended'])
+    const late = p.enqueue(chunk(10), (e) => ends.push(`c:${e}`))
+    p.stop()
+    await late
+    expect(ends).toEqual(['a:ended', 'b:stopped', 'c:stopped'])
+    ctx.decodeAudioData = () => Promise.reject(new Error('bad audio'))
+    await p.enqueue(chunk(10), (e) => ends.push(`d:${e}`))
+    expect(ends.at(-1)).toBe('d:failed')
+  })
 })

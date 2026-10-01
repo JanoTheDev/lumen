@@ -632,6 +632,8 @@ export interface SendChannels {
   'voice:barge-in': []
   /** Spoken reply started (true) or finished (false) in the voice renderer. */
   'voice:speaking': [speaking: boolean]
+  /** One `voice:tts` say / audio message finished playing, was stopped or failed. */
+  'voice:say-done': [done: SayDone]
   'assistant:command': [cmd: AssistantCommand]
   /** A voice error in the renderer (microphone, transcription): shown in the bar's error row. */
   'assistant:error': [message: string]
@@ -1247,6 +1249,14 @@ export type TtsMessage =
   | { op: 'audio'; turnId: string; seq: number; mime: string; data: string }
   | { op: 'stop' }
 
+/** How one spoken message (turnId + seq) ended in the voice renderer. */
+export type SayDoneReason = 'ended' | 'stopped' | 'failed'
+export interface SayDone {
+  turnId: string
+  seq: number
+  reason: SayDoneReason
+}
+
 /** main → renderer events (`webContents.send`). */
 export interface EventChannels {
   'screen:highlights': [steps: GuideStep[]]
@@ -1502,6 +1512,7 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'voice:wake-pcm',
   'voice:barge-in',
   'voice:speaking',
+  'voice:say-done',
   'assistant:command',
   'assistant:error',
   'assistant:correct',

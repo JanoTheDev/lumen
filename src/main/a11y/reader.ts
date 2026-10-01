@@ -1,12 +1,17 @@
 // "Read the page" (06 T13): long text read aloud in parts with stop / pause / continue / next /
-// back. Pure: speech, timers and the clock are injected. There is no "finished speaking" event
-// from Lumen's voice or a screen reader, so each part waits for its estimated speaking time.
+// back. Pure: speech, timers and the clock are injected. When Lumen's voice speaks a part, the
+// voice renderer reports the end of playback (`speech.finished`) and the next part follows it;
+// the estimated speaking time is the fallback. A screen reader reports nothing, so with one the
+// estimate alone sets the pace.
 
 /** About 170 spoken words a minute at rate 1. */
 const WORDS_PER_MINUTE = 170
 /** Gap after each part. */
 const GAP_MS = 400
 const MIN_PART_MS = 1200
+/** Waiting for a playback report: synthesis delay and slower voices on top of the estimate. */
+const FALLBACK_FACTOR = 1.5
+const FALLBACK_EXTRA_MS = 3000
 
 /**
  * Splits text into parts of at most `max` characters: paragraphs first, long paragraphs at
@@ -73,9 +78,17 @@ export function speakMs(text: string, rate = 1): number {
   return Math.max(MIN_PART_MS, Math.round(ms)) + GAP_MS
 }
 
+/** How long a part waits for its playback report before moving on anyway. */
+export function fallbackMs(text: string, rate = 1): number {
+  return Math.round(speakMs(text, rate) * FALLBACK_FACTOR) + FALLBACK_EXTRA_MS
+}
+
 export interface ReaderDeps {
-  /** Speaks one part (interrupting whatever Lumen was saying). */
-  speak(text: string, index: number, total: number): void
+  /**
+   * Speaks one part (interrupting whatever Lumen was saying). Returns the id its playback
+   * report carries (`speechFinished`), or nothing when no report will come (screen reader).
+   */
+  speak(text: string, index: number, total: number): string | null | void
   /** Silences Lumen's voice now. */
   silence(): void
   rate(): number
@@ -104,6 +117,8 @@ export class PageReader {
   private index = 0
   private timer: unknown = null
   private state: ReaderState = 'idle'
+  /** Playback id of the part being spoken, while its report is awaited. */
+  private waitingFor: string | null = null
 
   constructor(private readonly deps: ReaderDeps) {}
 
@@ -173,11 +188,29 @@ export class PageReader {
     return true
   }
 
+  /**
+   * Lumen's voice finished a message: when it is the current part, the next one follows after
+   * a short gap. A failed part falls back to its estimated time (the text is on the bar); a
+   * stopped one keeps the fallback timer (whoever stopped it pauses or moves the reading).
+   */
+  speechFinished(id: string, reason: 'ended' | 'stopped' | 'failed'): void {
+    if (this.state !== 'reading' || id !== this.waitingFor) return
+    this.waitingFor = null
+    if (reason === 'stopped') return
+    this.clear()
+    const text = this.parts[this.index]
+    const ms = reason === 'ended' ? GAP_MS : speakMs(text, this.deps.rate())
+    this.timer = this.deps.setTimeout(() => this.advance(), ms)
+  }
+
   private speakCurrent(): void {
     this.clear()
     const text = this.parts[this.index]
-    this.deps.speak(text, this.index, this.parts.length)
-    this.timer = this.deps.setTimeout(() => this.advance(), speakMs(text, this.deps.rate()))
+    const id = this.deps.speak(text, this.index, this.parts.length)
+    this.waitingFor = typeof id === 'string' ? id : null
+    const rate = this.deps.rate()
+    const ms = this.waitingFor ? fallbackMs(text, rate) : speakMs(text, rate)
+    this.timer = this.deps.setTimeout(() => this.advance(), ms)
   }
 
   private advance(): void {
@@ -196,6 +229,7 @@ export class PageReader {
   private clear(): void {
     if (this.timer !== null) this.deps.clearTimeout(this.timer)
     this.timer = null
+    this.waitingFor = null
   }
 
   private set(state: ReaderState): void {

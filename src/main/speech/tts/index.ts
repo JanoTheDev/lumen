@@ -101,11 +101,12 @@ function synth(
     : helper.synth(text, voice, rate, signal, lang).then((data) => ({ mime: 'audio/wav', data }))
 }
 
-function say(text: string, turnId: string): void {
+/** Queues `text` for the voice renderer; false when nothing will be played. */
+function say(text: string, turnId: string): boolean {
   const cfg = loadConfig()
   const engine = ttsEngine(cfg.voice.tts, openAiTtsAvailable())
   const clean = forTheEar(text)
-  if (!engine || !clean) return
+  if (!engine || !clean) return false
   const n = seq++
   const { ttsVoice: voice, ttsRate: rate, language: lang } = cfg.voice
   const fallback: TtsMessage = { op: 'say', turnId, seq: n, text: clean, voice, rate, lang }
@@ -113,7 +114,7 @@ function say(text: string, turnId: string): void {
   if (engine === 'windows' && !helper.usable) {
     send(fallback)
     voiceLatency.mark('tts-first-audio', turnId)
-    return
+    return true
   }
   // Synthesis starts now; playback order is kept by chaining the sends.
   const gen = generation
@@ -132,6 +133,7 @@ function say(text: string, turnId: string): void {
       if (gen === generation) send(fallback)
     }
   })
+  return true
 }
 
 /** Lumen's voice is on and no screen reader is speaking for the user. */
@@ -143,12 +145,21 @@ function turnSpeaks(): boolean {
 
 /** Speaks `text` now (settings preview, announce fallback). During a turn it does nothing. */
 export async function speakAnswer(text: string): Promise<void> {
-  if (turns.current) return
+  speakNow(text)
+}
+
+/**
+ * speakAnswer, returning the turn id its playback reports with (`speech.finished`), or null
+ * when nothing is played (a turn is running, empty text). Throws when spoken replies are off.
+ */
+export function speakNow(text: string): string | null {
+  if (turns.current) return null
   if (!ttsEngine(loadConfig().voice.tts, openAiTtsAvailable())) {
     throw new Error('Spoken replies are off')
   }
   stopSpeaking()
-  say(text, `preview-${seq}`)
+  const id = `preview-${seq}`
+  return say(text, id) ? id : null
 }
 
 /** Loads the Windows voice list early when spoken replies are on. */

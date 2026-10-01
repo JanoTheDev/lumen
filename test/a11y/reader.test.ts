@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', async () => (await import('../helpers/electron-mock')).electronModule())
 
-import { PageReader, chunkText, speakMs, voiceStartPausesReading } from '../../src/main/a11y/reader'
+import {
+  PageReader,
+  chunkText,
+  fallbackMs,
+  speakMs,
+  voiceStartPausesReading
+} from '../../src/main/a11y/reader'
 import { A11yCommands, LOCAL_HANDLED } from '../../src/main/a11y/dispatch'
 import { fakeA11yIo, type FakeA11yOptions } from '../helpers/fake-a11y-io'
 
@@ -55,7 +61,9 @@ describe('PageReader', () => {
     const spoken: string[] = []
     let silenced = 0
     const r = new PageReader({
-      speak: (t) => spoken.push(t),
+      speak: (t) => {
+        spoken.push(t)
+      },
       silence: () => silenced++,
       rate: () => 1,
       setTimeout: (fn, ms) => setTimeout(fn, ms),
@@ -106,6 +114,79 @@ describe('PageReader', () => {
     expect(spoken).toHaveLength(1)
     expect(r.active).toBe(false)
     expect(r.resume()).toBe(false)
+  })
+  describe('with playback reports (speech.finished)', () => {
+    function tracked(): { r: PageReader; ids: string[] } {
+      const ids: string[] = []
+      const r = new PageReader({
+        speak: (_t, i) => {
+          ids.push(`preview-${i}`)
+          return `preview-${i}`
+        },
+        silence: () => {},
+        rate: () => 1,
+        setTimeout: (fn, ms) => setTimeout(fn, ms),
+        clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>)
+      })
+      return { r, ids }
+    }
+
+    it('moves on when the part has played, not when the estimate runs out', () => {
+      const { r, ids } = tracked()
+      r.start(page, 600)
+      const estimate = speakMs(para(1))
+      // Slower than estimated: the estimate alone would cut the part off.
+      vi.advanceTimersByTime(estimate + 100)
+      expect(ids).toHaveLength(1)
+      r.speechFinished('preview-0', 'ended')
+      vi.advanceTimersByTime(399)
+      expect(ids).toHaveLength(1)
+      vi.advanceTimersByTime(1)
+      expect(ids).toEqual(['preview-0', 'preview-1'])
+    })
+
+    it('ignores reports for other messages and stopped playback', () => {
+      const { r, ids } = tracked()
+      r.start(page, 600)
+      r.speechFinished('preview-9', 'ended')
+      r.speechFinished('preview-0', 'stopped')
+      vi.advanceTimersByTime(1000)
+      expect(ids).toHaveLength(1)
+      // A stale report after moving on does nothing either.
+      r.skip(1)
+      r.speechFinished('preview-0', 'ended')
+      vi.advanceTimersByTime(1000)
+      expect(ids).toEqual(['preview-0', 'preview-1'])
+    })
+
+    it('falls back to a longer timeout when no report comes', () => {
+      const { r, ids } = tracked()
+      r.start(page, 600)
+      const fallback = fallbackMs(para(1))
+      expect(fallback).toBeGreaterThan(speakMs(para(1)))
+      vi.advanceTimersByTime(fallback - 1)
+      expect(ids).toHaveLength(1)
+      vi.advanceTimersByTime(1)
+      expect(ids).toHaveLength(2)
+    })
+
+    it('a failed part waits its estimated time, then goes on', () => {
+      const { r, ids } = tracked()
+      r.start(page, 600)
+      r.speechFinished('preview-0', 'failed')
+      vi.advanceTimersByTime(speakMs(para(1)))
+      expect(ids).toHaveLength(2)
+    })
+
+    it('a report while paused is ignored', () => {
+      const { r, ids } = tracked()
+      r.start(page, 600)
+      r.pause()
+      r.speechFinished('preview-0', 'ended')
+      vi.advanceTimersByTime(10 * 60_000)
+      expect(ids).toHaveLength(1)
+      expect(r.status).toBe('paused')
+    })
   })
 })
 

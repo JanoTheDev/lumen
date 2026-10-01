@@ -1,7 +1,7 @@
 // Plays spoken replies in the voice renderer (the one that owns the microphone). Audio from
 // main (Windows voices rendered to WAV, cloud MP3) goes through the WebAudio player, where
 // echo cancellation hears it. Plain text (`say`) is the fallback through speechSynthesis.
-import type { TtsMessage } from '@shared/channels'
+import type { SayDoneReason, TtsMessage } from '@shared/channels'
 import { TtsPlayer } from './player'
 
 /** Installed voices, waiting briefly for Chromium to load the list. */
@@ -81,10 +81,23 @@ export function stopSpeaking(): void {
   notify()
 }
 
-async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void> {
+/** Tells main once how one say / audio message ended (the page reader waits for it). */
+function reporter(msg: { turnId: string; seq: number }): (reason: SayDoneReason) => void {
+  let sent = false
+  return (reason) => {
+    if (sent) return
+    sent = true
+    window.lumen.send('voice:say-done', { turnId: msg.turnId, seq: msg.seq, reason })
+  }
+}
+
+async function sayWindows(
+  msg: Extract<TtsMessage, { op: 'say' }>,
+  report: (reason: SayDoneReason) => void
+): Promise<void> {
   const gen = stopGeneration
   const voices = await windowsVoices()
-  if (gen !== stopGeneration) return
+  if (gen !== stopGeneration) return report('stopped')
   const u = new SpeechSynthesisUtterance(msg.text)
   const voice = pickVoice(voices, msg.voice, msg.lang)
   if (voice) {
@@ -104,8 +117,14 @@ async function sayWindows(msg: Extract<TtsMessage, { op: 'say' }>): Promise<void
     synthesizing = Math.max(0, synthesizing - 1)
     notify()
   }
-  u.onend = done
-  u.onerror = done
+  u.onend = () => {
+    done()
+    report('ended')
+  }
+  u.onerror = (e) => {
+    done()
+    report(e.error === 'interrupted' || e.error === 'canceled' ? 'stopped' : 'failed')
+  }
   speechSynthesis.speak(u)
 }
 
@@ -120,8 +139,10 @@ function base64ToBytes(b64: string): ArrayBuffer {
 export function startSpeaker(): () => void {
   const off = window.lumen.on('voice:tts', (msg) => {
     if (msg.op === 'stop') stopSpeaking()
-    else if (msg.op === 'say') sayWindows(msg).catch(() => {})
-    else void player.enqueue(base64ToBytes(msg.data))
+    else if (msg.op === 'say') {
+      const report = reporter(msg)
+      sayWindows(msg, report).catch(() => report('failed'))
+    } else void player.enqueue(base64ToBytes(msg.data), reporter(msg))
   })
   // Main waits for quiet before a conversation listens again.
   const offState = onSpeakingChange((state) => window.lumen.send('voice:speaking', state !== null))

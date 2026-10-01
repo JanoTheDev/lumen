@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { z } from 'zod'
-import { audioSchema, textSchema } from '@shared/ipc'
+import { audioSchema, sayDoneSchema, textSchema } from '@shared/ipc'
+import { bus } from '../bus'
 import { INVALID, safeParse } from './validate'
 import { loadConfig } from '../config'
 import { onRecordingEnded, onSpeakingChanged, onTurnEnded } from '../speech/hotkey'
@@ -56,6 +57,10 @@ export function registerVoiceIpc(deps: VoiceIpcDeps): void {
   ipcMain.on('voice:barge-in', () => handleBargeIn())
   ipcMain.on('voice:speaking', (_e, raw: unknown) => {
     if (typeof raw === 'boolean') onSpeakingChanged(raw)
+  })
+  ipcMain.on('voice:say-done', (_e, raw: unknown) => {
+    const done = safeParse('voice:say-done', sayDoneSchema, raw)
+    if (done) bus.emit({ type: 'speech.finished', ...done })
   })
   // Also handled by ipc/hud (the bar); here a conversation listens again.
   ipcMain.on('assistant:close', () => onTurnEnded())

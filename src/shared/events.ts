@@ -175,6 +175,13 @@ export type AppEvent =
   | { type: 'query.delta'; turnId: string; delta: string }
   /** One complete sentence of the spoken answer, ready for TTS (index from 0). */
   | { type: 'speech.say-chunk'; turnId: string; text: string; index: number }
+  /** One spoken message finished playing in the voice renderer (or was stopped / failed). */
+  | {
+      type: 'speech.finished'
+      turnId: string
+      seq: number
+      reason: 'ended' | 'stopped' | 'failed'
+    }
   | {
       type: 'query.done'
       turnId: string

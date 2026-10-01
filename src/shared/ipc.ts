@@ -10,6 +10,14 @@ export const MAX_AUDIO_BYTES = 25 * 1024 * 1024
 export const promptSchema = z.string().trim().min(1).max(4000)
 export const queryOptsSchema = z.object({ lowDetail: z.boolean().optional() }).strict().optional()
 export const textSchema = z.string().max(20_000)
+/** voice:say-done: one spoken message ended in the voice renderer. */
+export const sayDoneSchema = z
+  .object({
+    turnId: z.string().min(1).max(100),
+    seq: z.number().int().min(0),
+    reason: z.enum(['ended', 'stopped', 'failed'])
+  })
+  .strict()
 export const nameSchema = z.string().max(80)
 /** Dictation history entries and notes (04 T44/T45) use random UUIDs. */
 export const entryIdSchema = z

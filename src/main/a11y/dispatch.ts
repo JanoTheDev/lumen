@@ -111,8 +111,11 @@ export interface A11yIo {
   ocrText(where: 'cursor' | 'window'): Promise<string>
   /** Shows `text` in the bar and voices it (screen reader or Lumen's voice). */
   say(text: string): void
-  /** One part of a long reading: shown and voiced; Lumen's voice is cut first. */
-  speakPart(text: string, index: number, total: number): void
+  /**
+   * One part of a long reading: shown and voiced; Lumen's voice is cut first. Returns the id
+   * Lumen's playback report carries (`speech.finished`), null when none will come.
+   */
+  speakPart(text: string, index: number, total: number): string | null | void
   /** Silences Lumen's voice. */
   silence(): void
   /** A screen reader or Lumen's voice can read aloud. */
