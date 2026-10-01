@@ -59,7 +59,10 @@ export type AppEvent =
   | { type: 'voice.stopped' }
   | { type: 'voice.cancelled' }
   | { type: 'query.started'; turnId: string; prompt: string }
+  /** Streamed text of the answer's spoken part, as it arrives. */
   | { type: 'query.delta'; turnId: string; delta: string }
+  /** One complete sentence of the spoken answer, ready for TTS (index from 0). */
+  | { type: 'speech.say-chunk'; turnId: string; text: string; index: number }
   | {
       type: 'query.done'
       turnId: string

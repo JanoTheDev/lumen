@@ -49,13 +49,15 @@ export async function runQuery(
   deps: PipelineDeps
 ): Promise<ModelResponse> {
   let cost: TurnCost | undefined
+  const turnId = randomUUID()
+  bus.emit({ type: 'query.started', turnId, prompt })
   const response = await withTurnCost(
-    () => runTurn(prompt, baseOpts, scope, deps),
+    () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
     (c) => (cost = c)
   )
   bus.emit({
     type: 'query.done',
-    turnId: randomUUID(),
+    turnId,
     response,
     model: cost?.model,
     cost: cost && { usd: cost.usd, calls: cost.calls, ...cost.usage }
