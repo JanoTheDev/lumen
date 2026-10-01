@@ -848,6 +848,18 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
     case 'mcp_tool':
       mcpFindings(a, out)
       break
+    case 'write_file':
+      // create_file (docs-out): a new file in Documents/Lumen is low; elsewhere medium for
+      // agents; replacing an existing file always asks.
+      if (a.action === 'replace')
+        out.push({ risk: 'high', reason: `replaces ${a.description ?? 'a file'}` })
+      else if (a.action !== 'default' && agentish(ctx.origin))
+        out.push({ risk: 'medium', reason: `saves ${a.description ?? 'a file'}` })
+      break
+    case 'move_file':
+      // rename_file / move_file (files/granted): only inside folders the user granted, never
+      // over another file, undo kept, so low (automations run them unattended).
+      break
     default:
       if (!LOW_TYPES.has(a.type)) out.push({ risk: 'high', reason: `unknown action ${a.type}` })
   }
