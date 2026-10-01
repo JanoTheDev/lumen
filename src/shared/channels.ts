@@ -18,6 +18,7 @@ import type {
   ConnectorView
 } from './connectors'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
+import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
 import type { RoutineUpdate, RoutineView } from './routines'
 import type {
@@ -191,6 +192,20 @@ export interface InvokeChannels {
   'voice:stt-install': { args: []; result: { ok: boolean; error?: string } }
   /** Whether main wants the wake-word mic feed (renderer start-up sync). */
   'voice:wake-state': { args: []; result: { listen: boolean } }
+  /** Dictation history, stats and notes (04 T44-T46), Home flyout. */
+  'dictation:history': { args: []; result: DictationHistoryView }
+  'dictation:history-delete': { args: [id: string]; result: { ok: boolean } }
+  'dictation:history-clear': { args: []; result: { ok: boolean } }
+  'dictation:history-copy': { args: [id: string]; result: { ok: boolean } }
+  /** Types the entry again into the field focused once the flyout has closed. */
+  'dictation:history-insert': { args: [id: string]; result: { ok: boolean; notice?: string } }
+  'dictation:stats': { args: []; result: DictationStatsView }
+  'dictation:stats-reset': { args: []; result: { ok: boolean } }
+  'notes:list': { args: []; result: Note[] }
+  'notes:add': { args: [text: string]; result: { ok: boolean; note?: Note } }
+  'notes:update': { args: [id: string, text: string]; result: { ok: boolean } }
+  'notes:delete': { args: [id: string]; result: { ok: boolean } }
+  'notes:copy': { args: [id: string]; result: { ok: boolean } }
   'settings:get': { args: []; result: Record<string, unknown> }
   'settings:patch': {
     args: [patch: ConfigPatch | Record<string, unknown>]
@@ -1051,6 +1066,18 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'voice:stt-status',
   'voice:stt-install',
   'voice:wake-state',
+  'dictation:history',
+  'dictation:history-delete',
+  'dictation:history-clear',
+  'dictation:history-copy',
+  'dictation:history-insert',
+  'dictation:stats',
+  'dictation:stats-reset',
+  'notes:list',
+  'notes:add',
+  'notes:update',
+  'notes:delete',
+  'notes:copy',
   'settings:get',
   'settings:patch',
   'guides:list',

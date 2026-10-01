@@ -10,6 +10,11 @@ export const promptSchema = z.string().trim().min(1).max(4000)
 export const queryOptsSchema = z.object({ lowDetail: z.boolean().optional() }).strict().optional()
 export const textSchema = z.string().max(20_000)
 export const nameSchema = z.string().max(80)
+/** Dictation history entries and notes (04 T44/T45) use random UUIDs. */
+export const entryIdSchema = z
+  .string()
+  .regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+export const noteTextSchema = z.string().trim().min(1).max(10_000)
 export const guideIdSchema = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
 /** Lesson ids (07): kebab-case, app id first. */
 export const lessonIdSchema = z
