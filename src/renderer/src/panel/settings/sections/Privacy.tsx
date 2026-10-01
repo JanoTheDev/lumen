@@ -3,6 +3,7 @@ import type { SttStatus } from '@shared/channels'
 import { voicePrivacyRows, voiceFullyLocal, type VoicePrivacyInput } from '@shared/voice-privacy'
 import { Card, Switch } from '../../../ui'
 import type { SectionProps } from '../meta'
+import { PrivacyActions } from './PrivacyActions'
 
 const FLOWS: Array<[string, string, string]> = [
   ['Your question', 'The AI provider you chose', 'Only when you ask something'],
@@ -79,6 +80,8 @@ export function Privacy({ cfg, patch }: SectionProps): JSX.Element {
           hint="Off by default. Nothing is sent while this is off."
         />
       </Card>
+
+      <PrivacyActions cfg={cfg} patch={patch} />
     </>
   )
 }

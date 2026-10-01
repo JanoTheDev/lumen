@@ -127,7 +127,8 @@ export const SECTIONS: readonly SectionMeta[] = [
     id: 'privacy',
     label: 'Privacy',
     icon: icons.shield,
-    keywords: 'privacy screenshots telemetry data sent logs'
+    keywords:
+      'privacy screenshots telemetry data sent logs audit action log grants always allowed revoke permissions send without asking typed text'
   },
   {
     id: 'about',
