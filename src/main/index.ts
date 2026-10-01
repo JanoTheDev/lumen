@@ -48,6 +48,8 @@ import {
   setDictationRecorder
 } from './speech/dictation/pipeline'
 import { recordDictation } from './speech/dictation/history'
+import { addNote } from './speech/dictation/notes'
+import { setNoteSaver } from './web'
 import { isOwnRendererUrl } from './windows/factory'
 import { installPermissionHandlers } from './windows/permissions'
 import { applyUiScaleOnLoad } from './windows/registry'
@@ -183,6 +185,11 @@ app.whenReady().then(() => {
   offerRecovery(2500)
   // Every dictation goes to the local history (when on) and stats (04 T44/T46).
   setDictationRecorder(recordDictation)
+  // "Save this to my notes" from a page or news answer lands in Home Notes.
+  setNoteSaver((n) => {
+    addNote({ text: n.text, source: { title: n.title, url: n.url }, via: 'web' })
+    return true
+  })
   createWindows()
   applyAutostart(loadConfig().system.startAtLogin)
   onConfigPatched((next) => applyAutostart(next.system.startAtLogin))
