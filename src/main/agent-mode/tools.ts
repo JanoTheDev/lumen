@@ -96,6 +96,15 @@ export const askUserInput = z.object({
   choices: z.array(z.string()).optional().describe('Up to 4 short answers shown as buttons.')
 })
 
+export const focusModeInput = z.object({
+  on: z.boolean().describe('true: dim everything but the work area; false: show everything again.'),
+  region: z
+    .string()
+    .describe(
+      'Area to keep bright, by name from the app guide ("viewport", "timeline"); "" = the window in front.'
+    )
+})
+
 export const readFileInput = z.object({
   fileId: z.string().describe('Id of a file the user dropped onto Lumen.')
 })
@@ -121,6 +130,7 @@ export type NavigateInput = z.infer<typeof navigateInput>
 export type LaunchAppInput = z.infer<typeof launchAppInput>
 export type WaitForInput = z.infer<typeof waitForInput>
 export type AskUserInput = z.infer<typeof askUserInput>
+export type FocusModeInput = z.infer<typeof focusModeInput>
 export type FinishInput = z.infer<typeof finishInput>
 
 export const TOOLS = {
@@ -166,6 +176,12 @@ export const TOOLS = {
       'Asks the user one short question out loud and returns the answer. Use it when information is missing (a recipient, a choice between options). Never guess names, addresses or amounts.',
     schema: askUserInput
   },
+  focus_mode: {
+    name: 'focus_mode',
+    description:
+      'Dims the rest of the screen so the user sees only the part of the app the task is about (clicks still reach dimmed parts). Turn it on when the user asks to focus or declutter, and off when they ask to see everything. Only the user’s screen changes; nothing in the app does.',
+    schema: focusModeInput
+  },
   read_file: {
     name: 'read_file',
     description: 'Reads the text of a file the user dropped onto Lumen in this conversation.',
@@ -193,6 +209,7 @@ export const FOREGROUND_TOOLS: readonly ToolName[] = [
   'launch_app',
   'wait_for',
   'ask_user',
+  'focus_mode',
   'finish'
 ]
 

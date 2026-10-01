@@ -21,6 +21,7 @@ import { readFocus, waitForSettle } from '../ai/observe'
 import { checksFor, verify, type Check, type Observation } from '../ai/verify'
 import { log } from '../logger'
 import * as screenLayer from '../windows/screen-layer'
+import { focusOff, focusOn } from '../focus'
 import { appRegistry, findApp, launchEntry } from './apps'
 import { askUser, type AskIo } from './ask'
 import { performAct, type StrategyPorts, type TypedFields } from './exec-strategy'
@@ -30,6 +31,7 @@ import type { ToolHandler, ToolOutcome } from './runner'
 import type {
   ActInput,
   AskUserInput,
+  FocusModeInput,
   KeysInput,
   LaunchAppInput,
   NavigateInput,
@@ -384,6 +386,13 @@ async function ask(
   return { content: text(`The user answered: "${answer}"`) }
 }
 
+// ---- focus_mode ----
+
+async function focusMode(input: FocusModeInput): Promise<ToolOutcome> {
+  const region = input.region.trim() || undefined
+  return { content: text(input.on ? await focusOn({ region }) : focusOff()) }
+}
+
 /** The handlers for one task. */
 export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
   return {
@@ -394,6 +403,7 @@ export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
     launch_app: (i, c) => launchApp(i as LaunchAppInput, env, c.signal),
     wait_for: (i, c) => waitForTool(i as WaitForInput, c.signal),
     ask_user: (i, c) => ask(i as AskUserInput, env, c.signal, c.update),
+    focus_mode: (i) => focusMode(i as FocusModeInput),
     read_file: async () => fail('No files were shared in this conversation.')
   }
 }
