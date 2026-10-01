@@ -5,10 +5,11 @@
 import { ipcMain } from 'electron'
 import { dirname, join } from 'path'
 import { auditQuerySchema, grantScopeSchema } from '@shared/ipc'
-import { configPath } from '../config'
+import { configPath, loadConfig } from '../config'
 import { INVALID, safeParse } from '../ipc/validate'
 import * as assistant from '../windows/assistant'
-import { installAudit, lastTaskSummary, listAudit } from '../audit/log'
+import { onBroadcast } from '../windows/registry'
+import { installAudit, lastTaskSummary, listAudit, setAuditStoreTypedText } from '../audit/log'
 import { setConfirmUi } from './confirm'
 import { grants, installGrants } from './grants'
 import { installBackground } from './background'
@@ -19,7 +20,10 @@ import { setSkillRecordingSink, startSkillRecording } from '../teach'
 export function installAgentMode(): void {
   const root = dirname(configPath())
   installGrants(join(root, 'grants.json'))
-  installAudit(join(root, 'audit'))
+  const { audit } = loadConfig()
+  setAuditStoreTypedText(audit.storeTypedText)
+  installAudit(join(root, 'audit'), audit.retentionDays)
+  onBroadcast('settings:changed', () => setAuditStoreTypedText(loadConfig().audit.storeTypedText))
   installBackground(join(root, 'tasks'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),

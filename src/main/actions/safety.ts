@@ -159,6 +159,8 @@ export interface PolicyCtx {
   prevType?: string
   /** Default: user-direct and lesson "never" (their own batch confirm), others "risky". */
   confirmMode?: ConfirmMode
+  /** `agent.allowSendWithoutReview`: sending a message is medium (countdown), not high. */
+  allowSendWithoutReview?: boolean
 }
 
 /** The fields evaluate reads; model Actions, input steps, launch_app and MCP calls fit. */
@@ -501,7 +503,7 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   }
   const afterType = ctx.prevType === 'type'
   if (isMessaging(w) && (combo === 'ctrl+enter' || (combo === 'enter' && afterType))) {
-    out.push({ risk: 'high', reason: 'sends the message' })
+    out.push({ risk: ctx.allowSendWithoutReview ? 'medium' : 'high', reason: 'sends the message' })
     return
   }
   if (combo === 'enter' && afterType && isTerminal(w))
@@ -543,9 +545,13 @@ function nameOf(a: EvalAction): string {
   return [a.elementName, a.text, a.description, a.target?.text].filter(Boolean).join(' ')
 }
 
-function clickFindings(name: string, out: Finding[]): void {
+const SEND_NAMES = new Set(['send', 'send now'])
+
+function clickFindings(name: string, ctx: PolicyCtx, out: Finding[]): void {
   const word = riskyName(name)
-  if (word) out.push({ risk: 'high', reason: `clicks “${word}”` })
+  if (!word) return
+  const send = ctx.allowSendWithoutReview && SEND_NAMES.has(word)
+  out.push({ risk: send ? 'medium' : 'high', reason: `clicks “${word}”` })
 }
 
 // ---- MCP ----
@@ -604,12 +610,12 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
     case 'click_bbox':
     case 'click_element':
     case 'click_nth_element':
-      clickFindings(nameOf(a), out)
+      clickFindings(nameOf(a), ctx, out)
       break
     case 'uia_act':
       if (a.action === 'set_value') typeFindings(a.value ?? '', ctx, out, redactions)
       else if (a.action !== 'focus' && a.action !== 'scroll_into_view')
-        clickFindings(nameOf(a), out)
+        clickFindings(nameOf(a), ctx, out)
       break
     case 'input': {
       let prevType = ctx.prevType
@@ -617,7 +623,7 @@ function classify(a: EvalAction, ctx: PolicyCtx, out: Finding[], redactions: str
         const stepCtx = { ...ctx, prevType }
         if (s.t === 'keys') keyFindings(s.combo, stepCtx, out)
         else if (s.t === 'type') typeFindings(s.text, stepCtx, out, redactions)
-        else if (s.t === 'click' && a.elementName) clickFindings(a.elementName, out)
+        else if (s.t === 'click' && a.elementName) clickFindings(a.elementName, ctx, out)
         if (s.t !== 'wait') prevType = s.t
       }
       break

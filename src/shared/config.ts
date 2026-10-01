@@ -505,6 +505,11 @@ export const configV2Schema = z.object({
   agent: z.object({
     confirm: z.enum(['always', 'risky', 'never']),
     cancelWindowMs: z.number().int().min(0).max(30_000),
+    /**
+     * Safety-policy §4: sending a message (Send button, Ctrl+Enter in a chat) is high risk and
+     * waits for an explicit yes. On: it is medium, so the cancel-window countdown runs instead.
+     */
+    allowSendWithoutReview: z.boolean().default(false),
     /** Background tasks (08 T26–T29): concurrency, per-task caps, granted folders, quiet. */
     background: z
       .object({
@@ -547,6 +552,16 @@ export const configV2Schema = z.object({
       .default({ enabled: false, rules: [] })
   }),
   privacy: z.object({ saveScreenshots: z.boolean(), telemetry: z.boolean() }),
+  /**
+   * Action audit log (08 T04): days of ~/.ai-overlay/audit kept, and whether typed text is kept
+   * (secrets and passwords redacted). Off: only its length and SHA-256.
+   */
+  audit: z
+    .object({
+      retentionDays: z.number().int().min(1).max(365),
+      storeTypedText: z.boolean()
+    })
+    .default({ retentionDays: 30, storeTypedText: false }),
   teach: z.object({
     activeSkill: z.string().max(80).nullable(),
     hintLevel: z.enum(['auto', 'minimal', 'detailed']),
@@ -687,6 +702,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   agent: {
     confirm: 'risky',
     cancelWindowMs: 3000,
+    allowSendWithoutReview: false,
     background: {
       max: 3,
       maxModelCalls: 30,
@@ -698,6 +714,7 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     proactive: { enabled: false, rules: [] }
   },
   privacy: { saveScreenshots: false, telemetry: false },
+  audit: { retentionDays: 30, storeTypedText: false },
   teach: {
     activeSkill: null,
     hintLevel: 'auto',
@@ -815,6 +832,7 @@ const patchObject = z
     buddy: s2.buddy.partial().strict(),
     agent: s2.agent.partial().strict(),
     privacy: s2.privacy.partial().strict(),
+    audit: s2.audit.unwrap().partial().strict(),
     teach: s2.teach.partial().strict(),
     memory: s2.memory.partial().strict(),
     ai: s2.ai.partial().strict(),

@@ -109,7 +109,8 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
     observedText: ctx.observedText,
     task: ctx.task,
     prevType,
-    confirmMode: ctx.confirmMode ?? (agentish ? cfg.agent.confirm : undefined)
+    confirmMode: ctx.confirmMode ?? (agentish ? cfg.agent.confirm : undefined),
+    allowSendWithoutReview: cfg.agent.allowSendWithoutReview
   }
   const decision = evaluate(action, policyCtx)
   const audit = (verdict: AuditDecision, result: AuditResult): void =>

@@ -1,6 +1,8 @@
 // Action audit log (safety-policy §8): ~/.ai-overlay/audit/YYYY-MM-DD.ndjson, one line per
-// executed or denied action. Typed text is stored as length + SHA-256, never plaintext; URLs
-// and names go through the secret redactor. Files older than the retention are pruned at start.
+// executed or denied action. Typed text is stored as length + SHA-256; only with
+// `audit.storeTypedText` on is the text kept too, with secrets and passwords redacted. URLs
+// and names go through the secret redactor. Files older than `audit.retentionDays` are pruned
+// at start.
 import { createHash } from 'crypto'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -38,6 +40,20 @@ const DAY_MS = 86_400_000
 
 let dir: string | null = null
 let last: AuditEntry[] = []
+let storeTypedText = false
+
+/** `audit.storeTypedText`: keep typed text (redacted) next to its hash. Off by default. */
+export function setAuditStoreTypedText(on: boolean): void {
+  storeTypedText = on
+}
+
+const TYPED_TEXT_MAX = 500
+
+/** Typed text as the log keeps it: length + hash, plus the redacted text when opted in. */
+function typedText(text: string): Record<string, unknown> {
+  const h = hashText(text)
+  return storeTypedText ? { ...h, redacted: redactForLog(text).slice(0, TYPED_TEXT_MAX) } : h
+}
 
 export function hashText(text: string): { len: number; sha256: string } {
   return { len: text.length, sha256: createHash('sha256').update(text, 'utf8').digest('hex') }
@@ -51,12 +67,12 @@ export function summarizeAction(a: EvalAction, app?: string): Record<string, unk
   if (name) out.element = redactForLog(name).slice(0, 120)
   if (a.url) out.url = redactForLog(a.url).slice(0, 500)
   if (a.keys) out.keys = Array.isArray(a.keys) ? a.keys.join('+') : a.keys
-  if (a.type === 'type' && a.text) out.text = hashText(a.text)
-  if (a.value) out.value = hashText(a.value)
+  if (a.type === 'type' && a.text) out.text = typedText(a.text)
+  if (a.value) out.value = typedText(a.value)
   if (a.action) out.pattern = a.action
   if (a.steps)
     out.steps = a.steps.map((s) =>
-      s.t === 'type' ? { t: 'type', text: hashText(s.text) } : s.t === 'keys' ? s : { t: s.t }
+      s.t === 'type' ? { t: 'type', text: typedText(s.text) } : s.t === 'keys' ? s : { t: s.t }
     )
   if (a.appId) out.appId = a.appId
   if (a.server) out.tool = `${a.server}/${a.tool ?? ''}`

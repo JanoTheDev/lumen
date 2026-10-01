@@ -262,6 +262,24 @@ describe('evaluate: risk classifier over element names', () => {
     }
   })
 
+  it('allowSendWithoutReview makes only sending medium, never grantable', () => {
+    const ctx = { ...agent, allowSendWithoutReview: true }
+    for (const text of ['Send', 'Send now']) {
+      const d = evaluate({ type: 'click_element', text }, ctx)
+      expect(d).toMatchObject({ risk: 'medium', needsConfirm: true })
+      expect(d.grantScope).toBeUndefined()
+    }
+    expect(evaluate({ type: 'click_element', text: 'Delete' }, ctx).risk).toBe('high')
+    expect(evaluate({ type: 'click_element', text: 'Reply all' }, ctx).risk).toBe('high')
+    const chat = { process: 'Discord.exe' }
+    expect(
+      evaluate({ type: 'hotkey', keys: ['ctrl', 'enter'] }, { ...ctx, activeWindow: chat }).risk
+    ).toBe('medium')
+    expect(
+      evaluate({ type: 'hotkey', keys: ['ctrl', 'enter'] }, { ...agent, activeWindow: chat }).risk
+    ).toBe('high')
+  })
+
   it('unknown action types are high', () => {
     expect(risk({ type: 'format_disk' })).toBe('high')
     expect(risk({ type: 'scroll' })).toBe('low')

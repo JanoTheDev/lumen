@@ -6,6 +6,7 @@ import {
   installAudit,
   lastTaskSummary,
   listAudit,
+  setAuditStoreTypedText,
   summarizeAction,
   uninstallAudit,
   writeAudit,
@@ -74,6 +75,23 @@ describe('audit log', () => {
     expect(JSON.stringify(s)).not.toContain('secret note')
     const steps = summarizeAction({ type: 'input', steps: [{ t: 'type', text: 'pw' }] })
     expect(JSON.stringify(steps)).not.toContain('"pw"')
+  })
+
+  it('keeps typed text only when opted in, with secrets redacted', () => {
+    const key = ['sk', 'proj', 'A'.repeat(40)].join('-')
+    setAuditStoreTypedText(true)
+    try {
+      const s = summarizeAction({ type: 'type', text: `hello ${key}` })
+      const text = s.text as { len: number; sha256: string; redacted: string }
+      expect(text.len).toBe(6 + key.length)
+      expect(text.redacted).toContain('hello')
+      expect(text.redacted).not.toContain(key)
+      const steps = summarizeAction({ type: 'input', steps: [{ t: 'type', text: 'hi there' }] })
+      expect(JSON.stringify(steps)).toContain('hi there')
+    } finally {
+      setAuditStoreTypedText(false)
+    }
+    expect(JSON.stringify(summarizeAction({ type: 'type', text: 'hello' }))).not.toContain('hello')
   })
 
   it('redacts secrets in URLs', () => {
