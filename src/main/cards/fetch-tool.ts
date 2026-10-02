@@ -1,12 +1,14 @@
 // fetch_url for foreground research tasks (05 T39): the last source after the page in front and
 // the user's browser. The shared safe GET (https only, no private hosts, every redirect checked,
 // size and time capped) with robots.txt respected; HTML reduced to text and fenced as
-// <observed source="web <url>">, so present_cards can count the page as read.
+// <observed source="web <url>">, so present_cards can count the page as read. Each fetch, done or
+// refused, writes one action-log line.
 import { z } from 'zod'
 import type { ToolContent, ToolDef } from '../ai/providers/types'
 import { observed } from '../agent-mode/prompts'
 import type { ToolHandler } from '../agent-mode/runner'
-import { redactForModel } from '../actions/redact'
+import { redactForLog, redactForModel } from '../actions/redact'
+import { writeAudit } from '../audit/log'
 import { htmlToText } from '../web/extract'
 import { FETCH_MAX_BYTES, safeGet, type RobotsCache, type SafeGetOptions } from '../web/net'
 
@@ -27,17 +29,41 @@ export const FETCH_URL_TOOL: ToolDef = {
 const robots: RobotsCache = new Map()
 const text = (t: string): ToolContent[] => [{ type: 'text', text: t }]
 
+export type FetchAudit = (
+  taskId: string,
+  action: { type: 'fetch_url'; url: string; status?: number },
+  result: 'ok' | 'error' | 'denied',
+  reason?: string
+) => void
+
+/** One action-log line per fetch, like the background fetch_url (URL and reason redacted). */
+const auditFetch: FetchAudit = (taskId, action, result, reason) =>
+  writeAudit({
+    t: new Date().toISOString(),
+    task: taskId,
+    origin: 'agent',
+    action: { ...action, url: redactForLog(action.url) },
+    risk: 'low',
+    decision: result === 'denied' ? 'blocked' : 'auto',
+    result,
+    ms: 0,
+    ...(reason ? { reason: redactForLog(reason) } : {})
+  })
+
 export function fetchUrlHandler(
   opts: {
     /** Text the task read (the policy's injection check). */
     onText?(text: string): void
     get?: (url: string, o: SafeGetOptions) => ReturnType<typeof safeGet>
+    audit?: FetchAudit
   } = {}
 ): ToolHandler {
   const get = opts.get ?? safeGet
+  const audit = opts.audit ?? auditFetch
   return async (raw, ctx) => {
     const input = fetchUrlInput.safeParse(raw)
     if (!input.success) return { content: text('Invalid input.'), isError: true }
+    const taskId = ctx.task().id
     try {
       const res = await get(input.data.url, {
         signal: ctx.signal,
@@ -46,6 +72,7 @@ export function fetchUrlHandler(
         maxBytes: FETCH_MAX_BYTES,
         overflow: 'cut'
       })
+      audit(taskId, { type: 'fetch_url', url: res.url, status: res.status }, 'ok')
       const html = /html|xml/.test(res.contentType) || /^\s*</.test(res.body)
       let body = html ? htmlToText(res.body) : res.body.trim()
       const cut = res.cut || body.length > PAGE_MAX_CHARS
@@ -64,6 +91,9 @@ export function fetchUrlHandler(
       if (ctx.signal.aborted) throw e
       const msg = (e as Error).message
       const code = (e as { code?: string }).code
+      const denied =
+        code === 'E_ROBOTS' || /^E_DENIED|blocked|only https|not a string|invalid URL/i.test(msg)
+      audit(taskId, { type: 'fetch_url', url: input.data.url }, denied ? 'denied' : 'error', msg)
       return {
         content: text(
           code === 'E_ROBOTS'
