@@ -71,9 +71,41 @@ export function setBuddySpendReader(fn: BuddySpendReader | null): void {
   spend = fn
 }
 
+/** Connector ids and skill names that exist, for saves (unknown until those modules load). */
+const known: { connectors?: () => string[]; skills?: () => string[] } = {}
+
 export function installBuddies(root = join(dirname(configPath()), 'buddies')): void {
   if (service) return
+  // Loaded on use: the connectors module pulls in the policy gate and its windows.
+  void import('../connectors')
+    .then(
+      (m) =>
+        (known.connectors = () =>
+          m
+            .connectors()
+            .list()
+            .map((c) => c.id))
+    )
+    .catch(() => {})
+  void import('../skills')
+    .then((m) => {
+      known.skills = () => {
+        const r = m.getSkillRegistry()
+        return r ? r.enabled().map((s) => s.manifest.name) : []
+      }
+    })
+    .catch(() => {})
   const store = new BuddyStore(root, {
+    clamp: () => {
+      try {
+        return {
+          ...(known.connectors ? { connectors: known.connectors() } : {}),
+          ...(known.skills ? { skills: known.skills() } : {})
+        }
+      } catch {
+        return {}
+      }
+    },
     canWrite: () => {
       try {
         return memory().canWrite()

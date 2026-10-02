@@ -42,7 +42,7 @@ import {
 } from './creation-voice'
 import { modelBuddyEditWords, buddyEditTurn } from './edit'
 import { BuddyOfferStore } from './offers'
-import { clampPermissions } from './clamp'
+import { clampPermissions, type ClampContext } from './clamp'
 import { pruneOrphanSchedules } from './schedule'
 
 const PENDING_MS = 15 * 60_000
@@ -207,14 +207,23 @@ export async function exportBuddyFile(
   return { ok: true, path: pick.filePath }
 }
 
-const pending = new Map<string, { archive: Buffer; source: string; at: number }>()
+const pending = new Map<
+  string,
+  { archive: Buffer; source: string; at: number; known: ClampContext }
+>()
+
+/** Connectors set up and skills installed here (an import keeps only those). */
+async function knownHere(): Promise<ClampContext> {
+  return { connectors: (await connectorChoices()).map((c) => c.id), skills: skillNames() }
+}
 
 /** The buddies in an archive as the import preview shows them. Throws PackError. */
 export function previewBuddyArchive(
   archive: Buffer,
-  root: string
+  root: string,
+  known: ClampContext = {}
 ): Extract<BuddyImportPreview, { ok: true }>['buddies'] {
-  return planBuddyArchive(archive, root).map(({ id, buddy: b, updates, notes }) => ({
+  return planBuddyArchive(archive, root, known).map(({ id, buddy: b, updates, notes }) => ({
     id,
     name: b.name,
     look: b.look,
@@ -251,11 +260,12 @@ export async function previewBuddyFile(sender?: Electron.WebContents): Promise<B
     return { ok: false, error: 'the file is larger than 50 MB' }
   const archive = readFileSync(file)
   try {
-    const buddies = previewBuddyArchive(archive, buddiesRoot())
+    const known = await knownHere()
+    const buddies = previewBuddyArchive(archive, buddiesRoot(), known)
     const now = Date.now()
     for (const [k, v] of pending) if (now - v.at > PENDING_MS) pending.delete(k)
     const token = randomBytes(12).toString('hex')
-    pending.set(token, { archive, source: basename(file), at: now })
+    pending.set(token, { archive, source: basename(file), at: now, known })
     return { ok: true, token, buddies }
   } catch (e) {
     return failure(e)
@@ -263,9 +273,14 @@ export async function previewBuddyFile(sender?: Electron.WebContents): Promise<B
 }
 
 /** Installs every buddy in the archive as community-untrusted. */
-function installArchive(archive: Buffer, source: string, root: string): BuddyImportResult {
+function installArchive(
+  archive: Buffer,
+  source: string,
+  root: string,
+  known: ClampContext
+): BuddyImportResult {
   try {
-    return { ok: true, installed: installBuddyArchive(archive, source, root) }
+    return { ok: true, installed: installBuddyArchive(archive, source, root, known) }
   } catch (e) {
     return failure(e)
   }
@@ -278,7 +293,7 @@ export function importPending(token: string): BuddyImportResult {
     return { ok: false, error: 'that import expired; choose the file again' }
   // A schedule left from a gone buddy never attaches to an import with the same id.
   pruneOrphanSchedules()
-  const r = installArchive(p.archive, p.source, buddiesRoot())
+  const r = installArchive(p.archive, p.source, buddiesRoot(), p.known)
   if (!r.ok) {
     log('fail', `buddy import from ${p.source} failed: ${r.error}`)
     return r

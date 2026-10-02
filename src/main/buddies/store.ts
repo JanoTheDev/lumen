@@ -36,7 +36,10 @@ export interface BuddyStoreOptions {
   canWrite?: () => boolean
   /** Text that must not be kept (secrets, health …): refused for the notebook. */
   sensitive?: (text: string) => boolean
-  /** Known connectors / skills for the clamp (default: any well-formed id). */
+  /**
+   * Connectors / skills that exist, checked when a buddy is saved (default: any well-formed id).
+   * Ones the buddy already had stay, so a connector that is away for a moment is not lost.
+   */
   clamp?: () => ClampContext
   now?: () => number
 }
@@ -126,7 +129,6 @@ export class BuddyStore {
     try {
       const raw = parseBuddyFile(readFileSync(join(this.dir(id), BUDDY_FILE), 'utf8'))
       return clampBuddy(id, raw, {
-        ...this.opts.clamp?.(),
         forceUntrusted: this.imported(id),
         now: this.now()
       })
@@ -149,8 +151,13 @@ export class BuddyStore {
 
   /** Writes the buddy (clamped first; updatedAt now). Returns what was written. */
   save(b: Buddy): Buddy {
+    const ctx = this.opts.clamp?.() ?? {}
+    const held = this.get(b.id)
     const clean = clampBuddy(b.id, { ...b, updatedAt: this.now() } as Record<string, unknown>, {
-      ...this.opts.clamp?.(),
+      ...(ctx.connectors
+        ? { connectors: [...ctx.connectors, ...(held?.permissions.connectors ?? [])] }
+        : {}),
+      ...(ctx.skills ? { skills: [...ctx.skills, ...(held?.skills ?? [])] } : {}),
       forceUntrusted: this.imported(b.id),
       now: this.now()
     })

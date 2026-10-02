@@ -53,6 +53,7 @@ vi.mock('../../src/main/buddies/schedule', () => ({
 import { bus } from '../../src/main/bus'
 import {
   buddiesIpcHandlers,
+  leftOut,
   registerBuddiesIpc,
   type BuddiesIpcDeps
 } from '../../src/main/buddies/ipc'
@@ -266,6 +267,19 @@ describe('buddies:update and schedule phrases (08 T53)', () => {
       ok: false,
       error: 'disk full'
     })
+  })
+
+  it('says which connectors and skills a save left out', () => {
+    const saved = { permissions: { connectors: ['gmail'] }, skills: [] } as unknown as Buddy
+    const fields = {
+      permissions: { connectors: ['gmail', 'their-server'] },
+      skills: ['x-skill']
+    } as Parameters<typeof leftOut>[0]
+    expect(leftOut(fields, saved)).toEqual([
+      'Left out connectors that are not set up: their-server.',
+      'Left out skills that are not installed: x-skill.'
+    ])
+    expect(leftOut({ name: 'X' }, saved)).toEqual([])
   })
 
   it('says a schedule phrase back or why not', () => {

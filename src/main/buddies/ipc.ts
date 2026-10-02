@@ -234,7 +234,9 @@ export function buddiesIpcHandlers(d: BuddiesIpcDeps): Record<string, Handler> {
       const fields = r.fields as Partial<BuddyEditable>
       try {
         const buddy = d.update(r.id, fields)
-        return buddy ? { ok: true, buddy } : { ok: false, error: 'There is no such buddy.' }
+        if (!buddy) return { ok: false, error: 'There is no such buddy.' }
+        const notes = leftOut(fields, buddy)
+        return { ok: true, buddy, ...(notes.length ? { notes } : {}) }
       } catch (e) {
         return { ok: false, error: (e as Error).message }
       }
@@ -245,6 +247,18 @@ export function buddiesIpcHandlers(d: BuddiesIpcDeps): Record<string, Handler> {
       return d.parseWhen(when)
     }
   }
+}
+
+/** Connectors and skills a save left out because they do not exist. */
+export function leftOut(fields: Partial<BuddyEditable>, saved: Buddy): string[] {
+  const gone = (asked: readonly string[] | undefined, kept: readonly string[]): string[] =>
+    (asked ?? []).filter((x) => !kept.includes(x))
+  const c = gone(fields.permissions?.connectors, saved.permissions.connectors)
+  const s = gone(fields.skills, saved.skills)
+  return [
+    ...(c.length ? [`Left out connectors that are not set up: ${c.join(', ')}.`] : []),
+    ...(s.length ? [`Left out skills that are not installed: ${s.join(', ')}.`] : [])
+  ]
 }
 
 const PUSH_MS = 150

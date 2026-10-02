@@ -292,7 +292,7 @@ export function BuddiesDetail({ id, onBack }: { id: string; onBack: () => void }
     setBusy(false)
     if (r?.ok) {
       setEdit(null)
-      say(`Saved ${r.buddy.name}.`)
+      say([`Saved ${r.buddy.name}.`, ...(r.notes ?? [])].join(' '))
       refresh()
     } else say(`Not saved: ${r && !r.ok ? r.error : 'something went wrong'}`, true)
   }

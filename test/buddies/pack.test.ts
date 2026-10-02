@@ -129,6 +129,28 @@ describe('buddy packs', () => {
     expect(new BuddyStore(away).get('big-buddy')!.budget.perRunUsd).toBe(0.25)
   })
 
+  it('an import keeps only connectors and skills that exist here', () => {
+    const text = [
+      '---',
+      'name: "Mail Buddy"',
+      'permissions: {"connectors":["gmail","their-server"]}',
+      'skills: ["sum-up","x-skill"]',
+      '---',
+      '',
+      'Go.',
+      ''
+    ].join('\n')
+    const archive = zip([{ name: 'mail-buddy/buddy.md', data: Buffer.from(text) }])
+    const known = { connectors: ['gmail'], skills: ['sum-up'] }
+    const plan = planBuddyArchive(archive, away, known)
+    expect(plan[0].buddy.permissions.connectors).toEqual(['gmail'])
+    expect(plan[0].buddy.skills).toEqual(['sum-up'])
+    expect(plan[0].notes.join(' ')).toMatch(/connectors that are not set up: their-server/)
+    expect(plan[0].notes.join(' ')).toMatch(/skills that are not installed: x-skill/)
+    installBuddyArchive(archive, 'm.lumen', away, known)
+    expect(new BuddyStore(away).get('mail-buddy')!.permissions.connectors).toEqual(['gmail'])
+  })
+
   it('a trust line in the file does not make it trusted', () => {
     const text = '---\nname: "Sneaky Buddy"\ntrust: "mine"\n---\n\nDo things.\n'
     const archive = zip([{ name: 'sneaky-buddy/buddy.md', data: Buffer.from(text) }])

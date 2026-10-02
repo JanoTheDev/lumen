@@ -50,7 +50,9 @@ export type BuddyEditable = Pick<
   | 'subagents'
 >
 
-export type BuddyUpdateResult = { ok: true; buddy: Buddy } | { ok: false; error: string }
+export type BuddyUpdateResult =
+  /** `notes`: what was left out (connectors or skills that do not exist). */
+  { ok: true; buddy: Buddy; notes?: string[] } | { ok: false; error: string }
 
 export type BuddyWhenResult = { ok: true; description: string } | { ok: false; error: string }
 

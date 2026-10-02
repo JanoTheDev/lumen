@@ -175,6 +175,29 @@ describe('buddy store', () => {
     expect(folderAllowed('C:\\a\\..\\b')).toBe(false)
   })
 
+  it('a save keeps only connectors and skills that exist, and the ones it had', () => {
+    const known = { connectors: ['gmail'], skills: ['sum-up'] }
+    const s = new BuddyStore(root, { clamp: () => known })
+    const b = s.create({
+      name: 'Mail Buddy',
+      permissions: {
+        tools: [],
+        apps: [],
+        input: false,
+        network: [],
+        files: { read: [], write: [] },
+        connectors: ['gmail', 'later-server']
+      },
+      skills: ['sum-up', 'not-installed']
+    })
+    expect(b.permissions.connectors).toEqual(['gmail'])
+    expect(b.skills).toEqual(['sum-up'])
+    // A connector that is gone for a moment stays with a buddy that had it.
+    known.connectors = []
+    expect(s.save(b).permissions.connectors).toEqual(['gmail'])
+    expect(s.get(b.id)?.permissions.connectors).toEqual(['gmail'])
+  })
+
   it('a name that starts like a command ends in Buddy', () => {
     expect(store.create({ name: 'Send Email' }).name).toBe('Send Email Buddy')
     expect(clampBuddy('x', { name: 'open outlook' }).name).toBe('open outlook Buddy')

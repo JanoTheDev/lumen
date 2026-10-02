@@ -9,7 +9,14 @@
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { BUDDY_DEFAULT_PER_RUN_USD, type Buddy } from '@shared/buddies'
-import { buddyIdFor, buddyNameKey, clampBuddy, freeBuddyName, isBuddyId } from '../buddies/clamp'
+import {
+  buddyIdFor,
+  buddyNameKey,
+  clampBuddy,
+  freeBuddyName,
+  isBuddyId,
+  type ClampContext
+} from '../buddies/clamp'
 import {
   BUDDY_FILE,
   BuddyStore,
@@ -64,14 +71,25 @@ export function buddyPackKind(opts: BuddyKindOptions = {}): PackKind {
 
 /**
  * What an import keeps of a pack's buddy: no folders (paths on someone else's PC; a hand-made
- * file could name any), and a budget per run no higher than the default. `notes` say what was
- * left out, for the import preview.
+ * file could name any), a budget per run no higher than the default, only connectors and skills
+ * that exist here (`known`; left out = not checked). `notes` say what was left out, for the
+ * import preview.
  */
 export function importedBuddy(
   b: Buddy,
-  nameTaken: (name: string) => boolean = () => false
+  nameTaken: (name: string) => boolean = () => false,
+  known: ClampContext = {}
 ): { buddy: Buddy; notes: string[] } {
   const notes: string[] = []
+  const keep = (list: string[], have?: readonly string[]): [string[], string[]] =>
+    have
+      ? [list.filter((x) => have.includes(x)), list.filter((x) => !have.includes(x))]
+      : [list, []]
+  const [connectors, noConnectors] = keep(b.permissions.connectors, known.connectors)
+  if (noConnectors.length)
+    notes.push(`Left out connectors that are not set up: ${noConnectors.join(', ')}.`)
+  const [skills, noSkills] = keep(b.skills, known.skills)
+  if (noSkills.length) notes.push(`Left out skills that are not installed: ${noSkills.join(', ')}.`)
   const name = freeBuddyName(b.name, nameTaken)
   if (name !== b.name) notes.push(`Named “${name}”: you already have a buddy called ${b.name}.`)
   const { read, write } = b.permissions.files
@@ -88,7 +106,8 @@ export function importedBuddy(
     buddy: {
       ...b,
       name,
-      permissions: { ...b.permissions, files: { read: [], write: [] } },
+      permissions: { ...b.permissions, connectors, files: { read: [], write: [] } },
+      skills,
       budget: { ...b.budget, perRunUsd },
       scheduleIds: [],
       trust: 'community-untrusted'
@@ -128,7 +147,8 @@ function kindFor(root: string): PackKind {
 /** The buddies in an archive, with the ids they would install under. Throws PackError. */
 export function planBuddyArchive(
   archive: Buffer,
-  root: string
+  root: string,
+  known: ClampContext = {}
 ): { id: string; buddy: Buddy; updates: boolean; notes: string[] }[] {
   const packs = planPacks(readZip(archive, ZIP_LIMITS), kindFor(root))
   // Names stay unique: not one of the user's other buddies (an earlier import this replaces
@@ -141,7 +161,7 @@ export function planBuddyArchive(
   return packs.map((p) => {
     const file = p.files.find((f) => f.name === BUDDY_FILE)!
     const raw = buddyFromPackFile(file.data.toString('utf8'), p.id)
-    const { buddy, notes } = importedBuddy(raw, (n) => names.includes(buddyNameKey(n)))
+    const { buddy, notes } = importedBuddy(raw, (n) => names.includes(buddyNameKey(n)), known)
     names.push(buddyNameKey(buddy.name))
     return { id: p.id, buddy, updates: existsSync(join(root, p.id)), notes }
   })
@@ -154,14 +174,19 @@ export function planBuddyArchive(
 export function installBuddyArchive(
   archive: Buffer,
   source: string,
-  root: string
+  root: string,
+  known: ClampContext = {}
 ): { id: string; name: string; updated: boolean }[] {
-  const plan = new Map(planBuddyArchive(archive, root).map((p) => [p.id, p.buddy]))
+  const plan = new Map(planBuddyArchive(archive, root, known).map((p) => [p.id, p.buddy]))
   return installPacks(archive, { kind: kindFor(root), destRoot: root, source }).map((p) => {
     const planned = plan.get(p.id)
     const b =
       planned ??
-      importedBuddy(buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id)).buddy
+      importedBuddy(
+        buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id),
+        () => false,
+        known
+      ).buddy
     writeBuddyFileAt(p.dir, b)
     return { id: p.id, name: b.name, updated: p.updated }
   })
