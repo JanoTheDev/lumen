@@ -45,6 +45,7 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Book it for me.** "Book the second one" opens the site and fills in the booking as a supervised agent task. Logins, captchas and card checks are handed back to you, Lumen never types into payment fields, and the final Book / Pay / Place order click always asks first, with the price it just read from the page.
 - **Background tasks.** Say "in the background…" or "keep an eye on…" and the work runs in parallel without touching your mouse or keyboard. Results land in the Tasks list on Home with a tray badge.
 - **Helpers inside a task.** A background or agent task can hand focused jobs to small helpers (researcher, reader, writer, checker) that work at the same time, inside the same safety rules, budget and cancel button. Their work shows as one group in the task chat; set how many run at once and which model they use in Settings → Automations → Helpers.
+- **Buddies.** Make your own named helpers ("make a buddy that checks my mail every weekday at 8") by voice or in Settings. Call one by name ("Inbox Buddy, what's new?"), or let it run on its schedule. Each buddy has its own instructions, permissions, model, monthly budget and notebook; while it works on screen the cursor buddy takes its colour and name. Share them as `.lumen` files.
 - **Task chat.** Click any task (background, agent or Claude Code) to watch its conversation live, see every step it took, steer it with a message, answer its questions, pause or stop it.
 - **Safety first.** Every action is rated low / medium / high risk. Risky ones need your OK ("yes", "always" for this site, or "no"), sending, deleting and buying always ask (Send, Delete and recipient checks also work in Dutch, German, French and Spanish Gmail and Outlook), a recipient or personal detail you never said is shown on the confirm card, dangerous shortcuts (Run dialog, terminals) are blocked, passwords and secrets are redacted, and text on screen is treated as data, never as instructions. Every action is written to a local audit log.
 - **Multi-monitor and any display scaling.** Highlights and clicks land in the right place on every screen.
@@ -113,7 +114,7 @@ Optional, local, and off by default (Settings → Smart helpers), except undo:
 - **First-run setup** with profiles, one API key, voice files and a practice round.
 - **Settings** for voice, accessibility, buddy and look, models and keys, memory, lessons, skills, connectors, background and routines, smart helpers, app helpers, Claude Code and privacy (eight themes including a custom one); no JSON editing.
 - **Memory** you can see, edit and delete, plus a private mode.
-- **Usage and cost** per day, shown in Settings.
+- **Usage and cost:** Settings → Usage shows where tokens and money go per feature, task, automation, buddy, skill and model, with monthly limits that pause automations and buddies, a CSV export, and voice questions ("how much did I spend this week?").
 - **Automatic updates** from GitHub Releases (installed build; the portable build tells you when one is out).
 - **Any AI provider:** Anthropic, OpenAI, Google Gemini's free tier (opt-in, with its privacy terms shown), OpenRouter, Groq, Mistral, DeepSeek, Together or any OpenAI-compatible service, and local models through Ollama or LM Studio, auto-detected, with a "local only" mode. Pick a provider and model per job.
 
@@ -238,7 +239,7 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 _Last updated: October 2026._
 
-**Where things stand:** every feature listed above is built, has automated tests (about 380 test files and over 4,700 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
+**Where things stand:** every feature listed above is built, has automated tests (about 415 test files and over 5,000 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
 
 ### Done
 
@@ -260,6 +261,8 @@ _Last updated: October 2026._
 - [x] Book it for me: supervised booking with a checkout guard (price on the confirm, payment fields left to you)
 - [x] Background tasks with a live task chat (steer, answer, pause, stop)
 - [x] Helpers inside a task: parallel researcher / reader / writer / checker sub-agents
+- [x] Buddies: named helpers you make, call by name or run on a schedule, with their own budget and notebook
+- [x] Usage tracking per feature, task, automation, buddy, skill and model, with monthly limits
 - [x] Automations: time, app, folder, idle, login and network triggers, optional wake when closed
 - [x] Undo, what changed, focus mode, shortcut coach, comfort, error rescue
 - [x] Files in and out: drop or point at a file; create Word, Excel, CSV, PDF, Markdown and HTML
@@ -292,12 +295,7 @@ _Last updated: October 2026._
 
 ### In progress
 
-- [ ] **Usage tracking:** see where tokens and money go, per feature, task, automation, skill and model
 - [ ] **Better web research:** read result pages as text instead of screenshots, faster answers with sources
-
-### Planned next
-
-- [ ] **Buddies:** your own named helpers ("ask Scout to check my inbox") that run on a schedule or when called by name; the on-screen buddy takes their colour and name while they work
 
 ### After that
 
