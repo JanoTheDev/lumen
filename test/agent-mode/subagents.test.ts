@@ -359,6 +359,24 @@ describe('run_subagents', () => {
     expect(turns).toBeLessThanOrEqual(4)
   })
 
+  it('parallel jobs cannot all start a turn on the last cent (review M3)', async () => {
+    let turns = 0
+    const h = harness(
+      async () => {
+        turns++
+        await tick(1)
+        return reply(call('fetch_url', { url: `https://a.example/${turns}` }))
+      },
+      { costOf: () => 0.01 },
+      0.01
+    )
+    const jobs = Array.from({ length: 6 }, (_, i) => ({ role: 'researcher', task: `job ${i}` }))
+    const out = await runSubagentsHandler(h.env)({ jobs }, h.ctx)
+    expect(out.costUsd).toBeLessThanOrEqual(0.01 + 0.01)
+    expect(turns).toBeLessThanOrEqual(2)
+    expect(textOf(out)).toContain("Stopped: the task's budget ran out.")
+  })
+
   it('stops a job at its own cost cap', async () => {
     const h = harness(async () => reply(call('fetch_url', { url: 'https://a.example/' })), {
       costOf: () => 0.02,

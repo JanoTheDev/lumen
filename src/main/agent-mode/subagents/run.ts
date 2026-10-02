@@ -21,6 +21,7 @@ import { redactForModel } from '../../actions/redact'
 import { readUrls } from '../../cards/research'
 import { observed, stripTags } from '../prompts'
 import {
+  raced,
   runAgent,
   type RunnerDeps,
   type ToolCtx,
@@ -77,10 +78,23 @@ class JobTimeLimit extends Error {
   }
 }
 
-/** Money shared by the jobs of one call: the parent's remaining budget. */
+/**
+ * Money shared by the jobs of one call: the parent's remaining budget. A model turn reserves
+ * its expected cost first (the dearest turn seen so far, before any: `firstGuess`), so
+ * parallel jobs cannot all start a turn on the last cent: when the money left does not cover
+ * the reservations, a turn waits for the running ones; once it cannot cover one more turn
+ * (and one has been measured), the job stops.
+ */
 export class SharedBudget {
   private spent = 0
-  constructor(private readonly limit: number) {}
+  private reserved = 0
+  private inFlight = 0
+  private estimate: number | null = null
+  private waiters = new Set<() => void>()
+  constructor(
+    private readonly limit: number,
+    private readonly firstGuess = 0
+  ) {}
   spend(usd: number): void {
     if (Number.isFinite(usd) && usd > 0) this.spent += usd
   }
@@ -89,6 +103,43 @@ export class SharedBudget {
   }
   get total(): number {
     return this.spent
+  }
+
+  /** Waits for room for one turn; resolves with the call that ends it (its real cost). */
+  async reserve(signal: AbortSignal): Promise<(costUsd: number) => void> {
+    if (!Number.isFinite(this.limit)) return (usd) => this.spend(usd)
+    for (;;) {
+      if (signal.aborted) throw signal.reason
+      if (this.left <= 0) throw new BudgetSpent()
+      const measured = this.estimate
+      const need = measured ?? this.firstGuess
+      const free = this.left - this.reserved
+      if (free >= need || (measured === null && !this.inFlight)) {
+        const held = need
+        this.reserved += held
+        this.inFlight++
+        let open = true
+        return (usd) => {
+          if (!open) return
+          open = false
+          this.reserved -= held
+          this.inFlight--
+          this.spend(usd)
+          if (Number.isFinite(usd) && usd > 0) this.estimate = Math.max(this.estimate ?? 0, usd)
+          for (const w of [...this.waiters]) w()
+        }
+      }
+      if (!this.inFlight) throw new BudgetSpent()
+      await new Promise<void>((resolve) => {
+        const wake = (): void => {
+          this.waiters.delete(wake)
+          signal.removeEventListener('abort', wake)
+          resolve()
+        }
+        this.waiters.add(wake)
+        signal.addEventListener('abort', wake, { once: true })
+      })
+    }
   }
 }
 
@@ -165,9 +216,13 @@ export async function runJob(
   const defs = roleTools(role, offered.defs)
   const sources: string[] = []
   let cost = 0
+  /** This job's share only (the shared budget already counted it). */
+  const chargeJob = (usd: number): void => {
+    if (Number.isFinite(usd) && usd > 0) cost += usd
+  }
   const charge = (usd: number): void => {
     if (!Number.isFinite(usd) || usd <= 0) return
-    cost += usd
+    chargeJob(usd)
     budget.spend(usd)
   }
   const handlers: Record<string, ToolHandler> = {}
@@ -175,6 +230,9 @@ export async function runJob(
     const h = offered.handlers[d.name]
     if (!h) continue
     handlers[d.name] = async (input, ctx): Promise<ToolOutcome> => {
+      // A tool may spend money itself (a paid lookup): not once the parent's is gone.
+      if (budget.left <= 0)
+        return { content: text(`Not run: ${new BudgetSpent().message}.`), isError: true }
       onStep?.(toolLabel(d.name, input), cost)
       const out = await h(input, ctx)
       if (out.costUsd) charge(out.costUsd)
@@ -192,10 +250,18 @@ export async function runJob(
     model: {
       plan: async () => ({ plan: null }),
       turn: async (req, s) => {
-        const r = await env.turn(req, s)
-        charge(env.costOf(r.model, r.usage))
-        onStep?.('', cost)
-        return r
+        const done = await budget.reserve(s)
+        let usd = 0
+        try {
+          // Raced: a call that ignores the abort must not keep its reservation.
+          const r = await raced(env.turn(req, s), s)
+          usd = env.costOf(r.model, r.usage)
+          return r
+        } finally {
+          done(usd)
+          chargeJob(usd)
+          onStep?.('', cost)
+        }
       }
     },
     handlers,
@@ -287,7 +353,11 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
       return { content: text(`At most ${MAX_JOBS} jobs per call.`), isError: true }
 
     const offered = await env.tools()
-    const budget = new SharedBudget(ctx.remainingUsd?.() ?? Number.POSITIVE_INFINITY)
+    // Before any turn is measured, one is guessed at a quarter of a job's cost cap.
+    const budget = new SharedBudget(
+      ctx.remainingUsd?.() ?? Number.POSITIVE_INFINITY,
+      env.costCapUsd / 4
+    )
     const views: SubJob[] = jobs.map((j) => ({
       role: j.role,
       task: clip(j.task, TASK_SHOWN),
