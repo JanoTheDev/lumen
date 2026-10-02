@@ -270,4 +270,35 @@ describe('cards.do wiring', () => {
     expect(startBooking).toHaveBeenCalledTimes(1)
     vi.resetModules()
   })
+
+  it('after a booking, follow-ups still mean the results, not the confirmation', async () => {
+    vi.resetModules()
+    vi.doUnmock('../../src/main/cards/book')
+    vi.doMock('../../src/main/a11y', () => ({ announce: vi.fn() }))
+    vi.doMock('../../src/main/actions/executor', () => ({
+      executeActions: vi.fn(async () => ({ executed: 1 }))
+    }))
+    vi.doMock('../../src/main/agent-mode/session', () => ({
+      agentRunning: () => false,
+      runAgentTask: vi.fn(async () => done)
+    }))
+    vi.doMock('../../src/main/windows/assistant', () => ({ showAnswer: vi.fn() }))
+    vi.doMock('../../src/main/agent/instance', () => ({
+      requireAgent: () => ({ activeWindow: async () => 'Browser' })
+    }))
+    vi.doMock('../../src/main/cards/images', () => ({
+      cardImages: { resolve: async () => null }
+    }))
+    const { installBooking } = await import('../../src/main/cards/book-install')
+    const { startBooking: book } = await import('../../src/main/cards/book')
+    const { presentCards, currentCards, store } = await import('../../src/main/cards/index')
+    installBooking()
+    const shown = presentCards('Hotels', cards)
+    if (!shown.ok) throw new Error(shown.error)
+    const r = await book(card, { cards, quiet: true })
+    expect(r.status).toBe('done')
+    expect(currentCards()?.id).toBe(shown.id)
+    expect(store.inConversation().map((s) => s.id)).toEqual([shown.id])
+    vi.resetModules()
+  })
 })

@@ -32,7 +32,8 @@ export function installBooking(): void {
       const { runAgentTask } = await import('../agent-mode/session')
       return runAgentTask(goal, windowOnlyContext(window), signal, opts)
     },
-    present: (text, cards) => presentCards(text, cards),
+    // Shown and kept by id, but the results stay what "the second one" means next.
+    present: (text, cards) => presentCards(text, cards, { conversation: false }),
     say(text) {
       assistant.showAnswer(text)
       announce(text, { kind: 'command' })
