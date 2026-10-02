@@ -276,6 +276,20 @@ describe('decidePermission', () => {
     expect(decidePermission(bash('tsc --noEmit'), 'careful').verdict).toBe('allow')
   })
 
+  it('careful asks before cargo config or the toolchain pin changes (review M2)', () => {
+    for (const f of [
+      `${P}\\.cargo\\config.toml`,
+      `${P}\\.cargo\\config`,
+      `${P}\\crates\\a\\.cargo\\config.toml`,
+      `${P}\\rust-toolchain.toml`,
+      `${P}\\rust-toolchain`
+    ])
+      expect(decidePermission(tool('Write', { file_path: f }), 'careful').reason, f).toMatch(
+        /settings that run code/
+      )
+    expect(decidePermission(bash('cargo fmt --check'), 'careful').verdict).toBe('allow')
+  })
+
   it('careful never auto-approves edits to config that runs code', () => {
     for (const f of [
       `${P}\\.git\\config`,

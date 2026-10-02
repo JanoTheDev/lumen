@@ -372,10 +372,11 @@ function commandSafety(cmd: string, req: ToolRequest): 'read' | 'code' | null {
 }
 
 // Files whose contents decide what runs later (git config and hooks, Claude Code settings and
-// hooks, editor tasks, direnv, installed packages and virtualenvs): an edit there is never
-// approved on its own, even in the project.
+// hooks, editor tasks, direnv, installed packages and virtualenvs, cargo config whose aliases can
+// turn `cargo fmt` into `cargo run`, the Rust toolchain pin): an edit there is never approved on
+// its own, even in the project.
 const EXEC_CONFIG_RE =
-  /(^|\/)(\.git|\.claude|\.vscode|\.idea|\.husky|\.githooks|node_modules|\.venv|venv)(\/|$)|(^|\/)(\.envrc|\.gitmodules|\.npmrc|\.yarnrc(\.yml)?|\.mcp\.json)$/
+  /(^|\/)(\.git|\.claude|\.vscode|\.idea|\.husky|\.githooks|node_modules|\.venv|venv|\.cargo)(\/|$)|(^|\/)(\.envrc|\.gitmodules|\.npmrc|\.yarnrc(\.yml)?|\.mcp\.json|rust-toolchain(\.toml)?)$/
 
 /** The path is a file that configures what runs (see EXEC_CONFIG_RE). */
 export function execConfigPath(project: string, p: string, cwd = project): boolean {
