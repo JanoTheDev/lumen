@@ -1,0 +1,85 @@
+{
+  "snapshotId": "excel-create-table",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "Create Table",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "edit",
+        "name": "Where is the data for your table?",
+        "value": "=$A$1:$B$7",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "value",
+          "text"
+        ]
+      },
+      {
+        "id": "e2",
+        "role": "checkbox",
+        "name": "My table has headers",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "toggle"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "button",
+        "name": "OK",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "button",
+        "name": "Cancel",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      }
+    ]
+  }
+}

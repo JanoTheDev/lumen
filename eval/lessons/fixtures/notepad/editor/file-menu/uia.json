@@ -1,0 +1,214 @@
+{
+  "snapshotId": "notepad",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "Untitled - Notepad",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "tabitem",
+        "name": "Untitled",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e2",
+        "role": "tabitem",
+        "name": "notes.txt",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "button",
+        "name": "Add New Tab",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "menuitem",
+        "name": "File",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e5",
+        "role": "menuitem",
+        "name": "Edit",
+        "rect": {
+          "x": 20,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e6",
+        "role": "menuitem",
+        "name": "View",
+        "rect": {
+          "x": 320,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e7",
+        "role": "menuitem",
+        "name": "New tab",
+        "rect": {
+          "x": 620,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e8",
+        "role": "menuitem",
+        "name": "Open",
+        "rect": {
+          "x": 920,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e9",
+        "role": "menuitem",
+        "name": "Save",
+        "rect": {
+          "x": 20,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e10",
+        "role": "menuitem",
+        "name": "Save as",
+        "rect": {
+          "x": 320,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e11",
+        "role": "menuitem",
+        "name": "Save all",
+        "rect": {
+          "x": 620,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e12",
+        "role": "document",
+        "name": "Text editor",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "focused": true,
+        "patterns": [
+          "value",
+          "text"
+        ]
+      }
+    ]
+  }
+}

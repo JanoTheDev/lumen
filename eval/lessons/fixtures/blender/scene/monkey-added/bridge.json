@@ -1,0 +1,53 @@
+{
+  "blender": "4.2.1",
+  "bridge": "1.0.0",
+  "mode": "OBJECT",
+  "active_object": "Suzanne",
+  "active_object_type": "MESH",
+  "selected": [
+    "Cube"
+  ],
+  "workspace": "Layout",
+  "scene_frame": 1,
+  "render_engine": "BLENDER_EEVEE_NEXT",
+  "last_operator": {
+    "idname": "MESH_OT_primitive_monkey_add",
+    "name": "MESH_OT_primitive_monkey_add"
+  },
+  "op_seq": 13,
+  "operators": [
+    {
+      "seq": 10,
+      "idname": "VIEW3D_OT_select",
+      "name": "VIEW3D_OT_select"
+    },
+    {
+      "seq": 11,
+      "idname": "OBJECT_OT_mode_set",
+      "name": "OBJECT_OT_mode_set"
+    },
+    {
+      "seq": 12,
+      "idname": "VIEW3D_OT_view_axis",
+      "name": "VIEW3D_OT_view_axis"
+    },
+    {
+      "seq": 13,
+      "idname": "MESH_OT_primitive_monkey_add",
+      "name": "MESH_OT_primitive_monkey_add"
+    }
+  ],
+  "object_count": 4,
+  "file_path": "",
+  "is_dirty": true,
+  "mesh_select_mode": "VERT",
+  "selected_face_count": 0,
+  "properties_context": "MATERIAL",
+  "viewport_shading": "SOLID",
+  "active_material_base_color": [
+    0.8,
+    0.8,
+    0.8,
+    1
+  ]
+}

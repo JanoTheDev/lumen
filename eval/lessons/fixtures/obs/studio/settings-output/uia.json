@@ -1,0 +1,248 @@
+{
+  "snapshotId": "obs-settings-Output",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "Settings",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "listitem",
+        "name": "General",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e2",
+        "role": "listitem",
+        "name": "Stream",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "listitem",
+        "name": "Output",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "focused": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "listitem",
+        "name": "Audio",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e5",
+        "role": "listitem",
+        "name": "Video",
+        "rect": {
+          "x": 20,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e6",
+        "role": "listitem",
+        "name": "Hotkeys",
+        "rect": {
+          "x": 320,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e7",
+        "role": "listitem",
+        "name": "Accessibility",
+        "rect": {
+          "x": 620,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e8",
+        "role": "listitem",
+        "name": "Advanced",
+        "rect": {
+          "x": 920,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e9",
+        "role": "combobox",
+        "name": "Output Mode",
+        "value": "Simple",
+        "rect": {
+          "x": 20,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "expand",
+          "value"
+        ]
+      },
+      {
+        "id": "e10",
+        "role": "edit",
+        "name": "Recording Path",
+        "value": "C:\\Users\\demo\\Videos",
+        "rect": {
+          "x": 320,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "value",
+          "text"
+        ]
+      },
+      {
+        "id": "e11",
+        "role": "button",
+        "name": "Browse",
+        "rect": {
+          "x": 620,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e12",
+        "role": "button",
+        "name": "OK",
+        "rect": {
+          "x": 920,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e13",
+        "role": "button",
+        "name": "Cancel",
+        "rect": {
+          "x": 20,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e14",
+        "role": "button",
+        "name": "Apply",
+        "rect": {
+          "x": 320,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      }
+    ]
+  }
+}

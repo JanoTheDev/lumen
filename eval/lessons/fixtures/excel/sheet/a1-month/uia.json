@@ -1,0 +1,446 @@
+{
+  "snapshotId": "excel-sheet",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "Book1 - Excel",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "tabitem",
+        "name": "Home",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e2",
+        "role": "tabitem",
+        "name": "Insert",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "tabitem",
+        "name": "Table Design",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "edit",
+        "name": "Name Box",
+        "value": "A2",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "value",
+          "text"
+        ]
+      },
+      {
+        "id": "e5",
+        "role": "dataitem",
+        "name": "A1",
+        "value": "Month",
+        "rect": {
+          "x": 20,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e6",
+        "role": "dataitem",
+        "name": "A2",
+        "value": "",
+        "rect": {
+          "x": 320,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "focused": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e7",
+        "role": "dataitem",
+        "name": "A3",
+        "value": "",
+        "rect": {
+          "x": 620,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e8",
+        "role": "dataitem",
+        "name": "A4",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e9",
+        "role": "dataitem",
+        "name": "A5",
+        "value": "",
+        "rect": {
+          "x": 20,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e10",
+        "role": "dataitem",
+        "name": "A6",
+        "value": "",
+        "rect": {
+          "x": 320,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e11",
+        "role": "dataitem",
+        "name": "A7",
+        "value": "",
+        "rect": {
+          "x": 620,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e12",
+        "role": "dataitem",
+        "name": "A8",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e13",
+        "role": "dataitem",
+        "name": "A9",
+        "value": "",
+        "rect": {
+          "x": 20,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e14",
+        "role": "dataitem",
+        "name": "A10",
+        "value": "",
+        "rect": {
+          "x": 320,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e15",
+        "role": "dataitem",
+        "name": "B1",
+        "value": "",
+        "rect": {
+          "x": 620,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e16",
+        "role": "dataitem",
+        "name": "B2",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e17",
+        "role": "dataitem",
+        "name": "B3",
+        "value": "",
+        "rect": {
+          "x": 20,
+          "y": 252,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e18",
+        "role": "dataitem",
+        "name": "B4",
+        "value": "",
+        "rect": {
+          "x": 320,
+          "y": 252,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e19",
+        "role": "dataitem",
+        "name": "B5",
+        "value": "",
+        "rect": {
+          "x": 620,
+          "y": 252,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e20",
+        "role": "dataitem",
+        "name": "B6",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 252,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e21",
+        "role": "dataitem",
+        "name": "B7",
+        "value": "",
+        "rect": {
+          "x": 20,
+          "y": 300,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e22",
+        "role": "dataitem",
+        "name": "B8",
+        "value": "",
+        "rect": {
+          "x": 320,
+          "y": 300,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e23",
+        "role": "dataitem",
+        "name": "B9",
+        "value": "",
+        "rect": {
+          "x": 620,
+          "y": 300,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      },
+      {
+        "id": "e24",
+        "role": "dataitem",
+        "name": "B10",
+        "value": "",
+        "rect": {
+          "x": 920,
+          "y": 300,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select",
+          "value"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+[
+  {
+    "kind": "window-opened",
+    "element": {
+      "name": "Save As",
+      "role": "window"
+    }
+  }
+]

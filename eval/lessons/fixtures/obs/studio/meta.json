@@ -1,0 +1,5 @@
+{
+  "app": "obs",
+  "notes": "OBS Studio main window and Settings dialog; obs-websocket responses.",
+  "synthetic": true
+}

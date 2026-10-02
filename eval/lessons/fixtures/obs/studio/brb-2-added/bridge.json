@@ -1,0 +1,33 @@
+{
+  "GetRecordStatus": {
+    "outputActive": false,
+    "outputPaused": false
+  },
+  "GetRecordDirectory": {
+    "recordDirectory": "C:\\Users\\demo\\Videos"
+  },
+  "GetCurrentProgramScene": {
+    "sceneName": "Scene",
+    "sceneUuid": "u1"
+  },
+  "GetSceneList": {
+    "currentProgramSceneName": "Scene",
+    "scenes": [
+      {
+        "sceneName": "Scene"
+      },
+      {
+        "sceneName": "Be right back 2"
+      }
+    ]
+  },
+  "GetInputList": {
+    "inputs": [
+      {
+        "inputName": "Window Capture",
+        "inputKind": "window_capture",
+        "unversionedInputKind": "window_capture"
+      }
+    ]
+  }
+}

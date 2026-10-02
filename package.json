@@ -14,6 +14,7 @@
     "eval:router": "vitest run --config eval/vitest.config.ts eval/router",
     "eval:dictation": "vitest run --config eval/vitest.config.ts eval/dictation",
     "eval:grounding": "vitest run --config eval/vitest.config.ts eval/grounding",
+    "eval:lessons": "vitest run --config eval/vitest.config.ts eval/lessons",
     "capture:fixture": "node scripts/capture-fixture.mjs",
     "perf:baseline": "node scripts/perf-baseline.mjs",
     "size:report": "node scripts/size-report.mjs",

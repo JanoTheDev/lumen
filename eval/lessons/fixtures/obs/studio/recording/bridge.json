@@ -1,0 +1,30 @@
+{
+  "GetRecordStatus": {
+    "outputActive": true,
+    "outputPaused": false
+  },
+  "GetRecordDirectory": {
+    "recordDirectory": "C:\\Users\\demo\\Videos"
+  },
+  "GetCurrentProgramScene": {
+    "sceneName": "Scene",
+    "sceneUuid": "u1"
+  },
+  "GetSceneList": {
+    "currentProgramSceneName": "Scene",
+    "scenes": [
+      {
+        "sceneName": "Scene"
+      }
+    ]
+  },
+  "GetInputList": {
+    "inputs": [
+      {
+        "inputName": "Window Capture",
+        "inputKind": "window_capture",
+        "unversionedInputKind": "window_capture"
+      }
+    ]
+  }
+}

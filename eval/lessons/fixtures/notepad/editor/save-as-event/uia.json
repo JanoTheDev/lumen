@@ -1,0 +1,102 @@
+{
+  "snapshotId": "notepad-save-as",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "Save As",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "treeitem",
+        "name": "Documents",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": []
+      },
+      {
+        "id": "e2",
+        "role": "edit",
+        "name": "File name:",
+        "value": "*.txt",
+        "automationId": "1001",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "value",
+          "text"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "combobox",
+        "name": "Save as type:",
+        "value": "Text documents (*.txt)",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "expand",
+          "value"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "button",
+        "name": "Save",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e5",
+        "role": "button",
+        "name": "Cancel",
+        "rect": {
+          "x": 20,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      }
+    ]
+  }
+}

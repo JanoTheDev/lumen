@@ -1,0 +1,48 @@
+{
+  "blender": "4.2.1",
+  "bridge": "1.0.0",
+  "mode": "EDIT_MESH",
+  "active_object": "Cube",
+  "active_object_type": "MESH",
+  "selected": [
+    "Cube"
+  ],
+  "workspace": "Layout",
+  "scene_frame": 1,
+  "render_engine": "BLENDER_EEVEE_NEXT",
+  "last_operator": {
+    "idname": "VIEW3D_OT_view_axis",
+    "name": "View Axis"
+  },
+  "op_seq": 12,
+  "operators": [
+    {
+      "seq": 10,
+      "idname": "VIEW3D_OT_select",
+      "name": "VIEW3D_OT_select"
+    },
+    {
+      "seq": 11,
+      "idname": "OBJECT_OT_mode_set",
+      "name": "OBJECT_OT_mode_set"
+    },
+    {
+      "seq": 12,
+      "idname": "VIEW3D_OT_view_axis",
+      "name": "VIEW3D_OT_view_axis"
+    }
+  ],
+  "object_count": 3,
+  "file_path": "",
+  "is_dirty": true,
+  "mesh_select_mode": "FACE",
+  "selected_face_count": 1,
+  "properties_context": "MATERIAL",
+  "viewport_shading": "SOLID",
+  "active_material_base_color": [
+    0.8,
+    0.8,
+    0.8,
+    1
+  ]
+}

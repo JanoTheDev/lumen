@@ -1,0 +1,227 @@
+{
+  "snapshotId": "obs-main",
+  "root": {
+    "id": "e0",
+    "role": "window",
+    "name": "OBS 30.2.3 - Profile: Untitled - Scenes: Untitled",
+    "rect": {
+      "x": 0,
+      "y": 0,
+      "w": 1920,
+      "h": 1040
+    },
+    "monitorId": 0,
+    "enabled": true,
+    "patterns": [],
+    "children": [
+      {
+        "id": "e1",
+        "role": "menuitem",
+        "name": "File",
+        "rect": {
+          "x": 20,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e2",
+        "role": "menuitem",
+        "name": "Edit",
+        "rect": {
+          "x": 320,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e3",
+        "role": "menuitem",
+        "name": "View",
+        "rect": {
+          "x": 620,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e4",
+        "role": "listitem",
+        "name": "Scene",
+        "rect": {
+          "x": 920,
+          "y": 60,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e5",
+        "role": "listitem",
+        "name": "Window Capture",
+        "rect": {
+          "x": 20,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "select"
+        ]
+      },
+      {
+        "id": "e6",
+        "role": "button",
+        "name": "Add Scene",
+        "rect": {
+          "x": 320,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e7",
+        "role": "button",
+        "name": "Add Source",
+        "rect": {
+          "x": 620,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e8",
+        "role": "button",
+        "name": "Start Streaming",
+        "rect": {
+          "x": 920,
+          "y": 108,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e9",
+        "role": "button",
+        "name": "Stop Recording",
+        "rect": {
+          "x": 20,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e10",
+        "role": "button",
+        "name": "Start Virtual Camera",
+        "rect": {
+          "x": 320,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e11",
+        "role": "button",
+        "name": "Studio Mode",
+        "rect": {
+          "x": 620,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e12",
+        "role": "button",
+        "name": "Settings",
+        "rect": {
+          "x": 920,
+          "y": 156,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      },
+      {
+        "id": "e13",
+        "role": "button",
+        "name": "Exit",
+        "rect": {
+          "x": 20,
+          "y": 204,
+          "w": 280,
+          "h": 40
+        },
+        "monitorId": 0,
+        "enabled": true,
+        "patterns": [
+          "invoke"
+        ]
+      }
+    ]
+  }
+}
