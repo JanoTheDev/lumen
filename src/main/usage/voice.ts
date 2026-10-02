@@ -365,8 +365,8 @@ const SPEND_WORDS = /\b(?:spend|spent|spending|cost me|used|use|tokens|usage)\b/
 /**
  * The pipeline's hook: a usage question answered from the ledger, else null. A named question
  * whose name matches no automation or buddy falls through. While answer cards are fresh
- * (`cardsFresh`), only a question with spend words is ours ("how much does the hotel cost" is
- * a card follow-up).
+ * (`cardsFresh`), only a question with spend words or a kind word ("automation", "routine",
+ * "buddy") is ours ("how much does the hotel cost" is a card follow-up).
  */
 export function usageTurn(
   text: string,
@@ -375,7 +375,8 @@ export function usageTurn(
 ): ModelResponse | null {
   const q = parseUsageQuestion(text)
   if (!q) return null
-  if (!SPEND_WORDS.test(clean(text)) && cardsFresh()) return null
+  const saidKind = q.kind === 'named' && !!q.hint
+  if (!saidKind && !SPEND_WORDS.test(clean(text)) && cardsFresh()) return null
   const answer = answerUsageQuestion(q, src)
   if (!answer) return null
   return { mode: 'answer', text: answer, spoken: answer }

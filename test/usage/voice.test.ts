@@ -202,9 +202,21 @@ describe('named questions only for a name said whole or with its kind (review M4
 
   it('leaves price questions to fresh answer cards unless spend words are said', () => {
     const cards = (): boolean => true
-    expect(usageTurn('how much does Flight Price Buddy cost', src, cards)).toBeNull()
+    expect(usageTurn('how much does flight price cost', src, cards)).toBeNull()
     expect(usageTurn('what cost the most today', src, cards)).toBeNull()
     expect(usageTurn('how much has Flight Price Buddy used', src, cards)?.text).toMatch(/Flight/)
     expect(usageTurn('how much did I spend this month', src, cards)?.text).toMatch(/spent/)
+  })
+
+  it.each([
+    ['how much does Flight Price Buddy cost', /Flight Price Buddy cost/],
+    ['how much has my price buddy cost', /Flight Price Buddy cost/],
+    ['how much does my Netflix reminder automation cost', /Netflix renewal reminder automation/]
+  ])('%s is ours with fresh cards: the kind word was said', (text, want) => {
+    expect(usageTurn(text, src, () => true)?.text).toMatch(want)
+  })
+
+  it('a kind word for no such buddy still falls through to the cards', () => {
+    expect(usageTurn('how much does the hotel buddy cost', src, () => true)).toBeNull()
   })
 })
