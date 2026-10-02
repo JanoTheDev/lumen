@@ -11,7 +11,7 @@ import {
   buddyPromptUtterance,
   buddyStartInput,
   buddyTaskEnv,
-  helperCostCap,
+  BuddyRunBudgets,
   type EnvelopeFor,
   type RunBuddyOpts
 } from './run'
@@ -70,6 +70,7 @@ const newestFirst = (a: BuddyRunSummary, b: BuddyRunSummary): number => b.starte
 
 export class Buddies {
   private screenRuns: ScreenRunsReader = () => []
+  private readonly budgets = new BuddyRunBudgets(() => this.deps.tasks())
 
   constructor(private readonly deps: BuddiesDeps) {}
 
@@ -217,12 +218,11 @@ export class Buddies {
         const env = buddyTaskEnv(b, task, host, {
           envelope: this.deps.envelope,
           notebook: this.notebook(b.id),
-          memoryWrite: (fact) => this.appendNotebook(b.id, fact)
+          memoryWrite: (fact) => this.appendNotebook(b.id, fact),
+          // The run and its helpers spend from one budget, not a budget each.
+          budget: this.budgets.for(b, task)
         })
-        // A helper spends from its parent run's budget, not a budget of its own.
-        return task.parentId
-          ? { ...env, maxCostUsd: helperCostCap(b, task, this.deps.tasks()) }
-          : env
+        return env
       },
       scope: (task, fn) =>
         withUsageScope({ origin: 'buddy', buddyId: task.buddyId, taskId: task.id }, fn),

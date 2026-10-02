@@ -31,6 +31,19 @@ export interface Caps {
   maxCostUsd: number
 }
 
+/**
+ * A cost budget shared with other tasks (a buddy run and its helpers): it stands in for
+ * caps.maxCostUsd, and the other tasks' spend counts toward it.
+ */
+export interface SharedBudget {
+  /** What the run's other tasks (its parent, its helpers) spent so far. */
+  othersUsd(): number
+  /** The run's cost cap now ("keep going" in any task of the run raises it). */
+  capUsd(): number
+  /** "Keep going" at the cost cap: raise the run's cap by one step. */
+  extend(): void
+}
+
 /** safety-policy §7. */
 export const DEFAULT_CAPS: Caps = {
   maxActions: 25,
@@ -150,6 +163,8 @@ export interface RunOptions {
   caps?: Partial<Caps>
   /** How much "keep going" at a cap adds (default DEFAULT_CAPS). */
   capStep?: Partial<Caps>
+  /** A cost budget shared with other tasks, in place of caps.maxCostUsd. */
+  budget?: SharedBudget
   signal?: AbortSignal
   resume?: SavedRun
   /** Input-lane owner name. */
@@ -236,6 +251,21 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
 
   const caps: Caps = { ...DEFAULT_CAPS, ...opts.caps, ...opts.resume?.caps }
   const capStep: Caps = { ...DEFAULT_CAPS, ...opts.capStep }
+  const budget = opts.budget
+  /** The first cap reached; a shared budget stands in for the cost cap. */
+  const capHit = (): string | null => {
+    if (!budget) return capReached(task, caps, deps.now())
+    const own = capReached(task, { ...caps, maxCostUsd: Infinity }, deps.now())
+    if (own) return own
+    const cap = budget.capUsd()
+    return task.counters.costUsd + budget.othersUsd() >= cap
+      ? `$${cap.toFixed(2)} of model use`
+      : null
+  }
+  const costLeft = (): number =>
+    budget
+      ? Math.max(0, budget.capUsd() - budget.othersUsd() - task.counters.costUsd)
+      : Math.max(0, caps.maxCostUsd - task.counters.costUsd)
   let task: AgentTask =
     opts.resume?.task ?? newTask(deps.newId?.() ?? defaultId(), opts.prompt, deps.now())
   const publish = (): void => {
@@ -309,9 +339,8 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     let results: ToolResultBlock[] = opts.resume?.results ?? []
     for (;;) {
       if (!pending.length) {
-        const capHit = capReached(task, caps, deps.now())
-        if (capHit && !(await continuePast(capHit)))
-          return stop(`I stopped at the limit: ${capHit}.`)
+        const hit = capHit()
+        if (hit && !(await continuePast(hit))) return stop(`I stopped at the limit: ${hit}.`)
         const notes = deps.between ? await raced(deps.between(signal), signal) : []
         if (notes.length) messages = withSteer(messages, notes)
         const turn = await raced(
@@ -346,9 +375,8 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           return finish(summary, needs, report)
         }
         if (INPUT_TOOLS.includes(call.name as ToolName)) {
-          const capHit = capReached(task, caps, deps.now())
-          if (capHit && !(await continuePast(capHit)))
-            return stop(`I stopped at the limit: ${capHit}.`)
+          const hit = capHit()
+          if (hit && !(await continuePast(hit))) return stop(`I stopped at the limit: ${hit}.`)
         }
         if (parallel.has(call.name)) {
           let n = 1
@@ -416,6 +444,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
     caps.maxActions += capStep.maxActions
     caps.maxModelCalls += capStep.maxModelCalls
     caps.maxCostUsd += capStep.maxCostUsd
+    budget?.extend()
     caps.maxWallMs += capStep.maxWallMs
     update({ phase: 'running' })
     return true
@@ -451,7 +480,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
           messages: () => messages,
           callId: call.id,
           ...(deps.observe ? { report: deps.observe } : {}),
-          remainingUsd: () => Math.max(0, caps.maxCostUsd - task.counters.costUsd)
+          remainingUsd: costLeft
         }),
         signal
       )

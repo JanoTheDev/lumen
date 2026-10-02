@@ -505,6 +505,8 @@ async function runTask(
       maxCostUsd: buddy?.maxCostUsd ?? cfg.maxCostUsd,
       maxWallMs: cfg.maxWallMin * 60_000
     },
+    // A buddy run and its helpers share one budget.
+    ...(buddy?.budget ? { budget: buddy.budget } : {}),
     ports,
     turn: (req, signal) => {
       const { llm, model, effort } = getProvider(role)

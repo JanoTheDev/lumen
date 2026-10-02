@@ -10,6 +10,7 @@ import type { BuddyTaskEnv } from '../agent-mode/background/buddy-hook'
 import type { StartInput } from '../agent-mode/background/manager'
 import { taskTitle } from '../agent-mode/background/manager'
 import { observed } from '../agent-mode/prompts'
+import type { SharedBudget } from '../agent-mode/runner'
 import type { SkillEnvelope } from '../agent-mode/skill-envelope'
 import type { GuardHost } from '../agent-mode/skill-run'
 import type { LoadedSkill } from '../skills/registry'
@@ -187,25 +188,54 @@ export function buddyRunSettings(b: Buddy): BuddyRunSettings {
   }
 }
 
-/**
- * A helper's cost cap: what is left of the run's budget after its parent and the parent's other
- * helpers (like run_subagents, which spend from the parent's cap).
- */
-export function helperCostCap(
-  b: Pick<Buddy, 'budget'>,
+type CostRow = Pick<BackgroundTask, 'id' | 'parentId' | 'counters'>
+
+/** What a run's tasks other than `task` spent: its top task and every helper of it. */
+export function othersSpendUsd(
   task: Pick<BackgroundTask, 'id' | 'parentId'>,
-  tasks: readonly Pick<BackgroundTask, 'id' | 'parentId' | 'counters'>[]
+  tasks: readonly CostRow[]
 ): number {
-  const spent = tasks
-    .filter((t) => t.id !== task.id && (t.id === task.parentId || t.parentId === task.parentId))
+  const root = task.parentId ?? task.id
+  return tasks
+    .filter((t) => t.id !== task.id && (t.id === root || t.parentId === root))
     .reduce((sum, t) => sum + t.counters.costUsd, 0)
-  return Math.max(0, b.budget.perRunUsd - spent)
+}
+
+const BUDGET_RUNS_KEPT = 50
+
+/**
+ * One cost budget per buddy run, shared by its top task and its helpers (like run_subagents,
+ * which spend from the parent's cap): the buddy's budget per run, raised by one more each
+ * time the user says "keep going" in any task of the run. Spend is read live at each check.
+ */
+export class BuddyRunBudgets {
+  /** Top task id → "keep going" count, newest last. */
+  private readonly steps = new Map<string, number>()
+
+  constructor(private readonly tasks: () => readonly CostRow[]) {}
+
+  for(b: Pick<Buddy, 'budget'>, task: Pick<BackgroundTask, 'id' | 'parentId'>): SharedBudget {
+    const root = task.parentId ?? task.id
+    return {
+      othersUsd: () => othersSpendUsd(task, this.tasks()),
+      capUsd: () => b.budget.perRunUsd * (1 + (this.steps.get(root) ?? 0)),
+      extend: () => {
+        const n = (this.steps.get(root) ?? 0) + 1
+        this.steps.delete(root)
+        this.steps.set(root, n)
+        while (this.steps.size > BUDGET_RUNS_KEPT)
+          this.steps.delete(this.steps.keys().next().value!)
+      }
+    }
+  }
 }
 
 export interface BuddyTaskDeps {
   envelope: EnvelopeFor
   notebook: string
   memoryWrite(fact: string): 'ok' | 'rejected' | 'disabled'
+  /** The run's shared cost budget (top task and helpers). */
+  budget?: SharedBudget
 }
 
 /** What the background runner needs for one task of this buddy. */
@@ -222,6 +252,7 @@ export function buddyTaskEnv(
     ...buddyRunSettings(b),
     memoryWrite: deps.memoryWrite,
     context: buddyContext(deps.notebook),
-    silent: b.report === 'silent'
+    silent: b.report === 'silent',
+    ...(deps.budget ? { budget: deps.budget } : {})
   }
 }

@@ -11,7 +11,13 @@ import type {
   Usage
 } from '../../ai/providers/types'
 import { confirmsEveryAction } from '../../skills/permissions'
-import { runAgent, type Caps, type RunnerDeps, type ToolHandler } from '../runner'
+import {
+  runAgent,
+  type Caps,
+  type RunnerDeps,
+  type SharedBudget,
+  type ToolHandler
+} from '../runner'
 import type { ToolGuard } from '../skill-run'
 import { createBackgroundHandlers, type BgPorts } from './handlers'
 import type { RunOutcome, TaskControl } from './manager'
@@ -29,6 +35,8 @@ export interface BackgroundCaps {
 
 export interface BgRunEnv {
   caps: BackgroundCaps
+  /** A cost budget shared with other tasks (a buddy run and its helpers). */
+  budget?: SharedBudget
   ports: BgPorts
   turn(
     req: { system: SystemBlock[]; tools: ToolDef[]; messages: AgentMessage[] },
@@ -355,6 +363,7 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
       caps: capsFor(env.caps),
       // "Keep going" grows a cap by its starting size.
       capStep: capsFor(env.caps),
+      ...(env.budget ? { budget: env.budget } : {}),
       signal: ctl.signal,
       owner: `background:${task.id}`,
       speakSummary: false

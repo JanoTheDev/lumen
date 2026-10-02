@@ -107,7 +107,7 @@ import { setBuddyRunHook } from '../../src/main/agent-mode/background/buddy-hook
 import { skillEnvelope } from '../../src/main/agent-mode/skill-envelope'
 import { Buddies } from '../../src/main/buddies/service'
 import { BuddyStore, IMPORT_MARKER } from '../../src/main/buddies/store'
-import { buddyContext, helperCostCap } from '../../src/main/buddies/run'
+import { BuddyRunBudgets, buddyContext } from '../../src/main/buddies/run'
 
 const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 }
 let seq = 0
@@ -226,7 +226,7 @@ describe('helpers of a buddy run (L1)', () => {
     expect(child?.result?.summary).toMatch(/E_DENIED: the buddy may not use the skill/)
   })
 
-  it('a helper spends what is left of the run budget', () => {
+  it('the run and its helpers share one budget, raised by keep going', () => {
     const counters = (costUsd: number): BackgroundTask['counters'] => ({
       modelCalls: 1,
       costUsd,
@@ -238,13 +238,32 @@ describe('helpers of a buddy run (L1)', () => {
       { id: 'c2', parentId: 'p', counters: counters(0) },
       { id: 'x', counters: counters(3) }
     ]
+    const budgets = new BuddyRunBudgets(() => tasks)
     const b = { budget: { perRunUsd: 0.25 } }
-    expect(helperCostCap(b, { id: 'c2', parentId: 'p' }, tasks)).toBeCloseTo(0.1)
-    expect(
-      helperCostCap(b, { id: 'c2', parentId: 'p' }, [
-        ...tasks,
-        { id: 'c3', parentId: 'p', counters: counters(1) }
-      ])
-    ).toBe(0)
+    const helper = budgets.for(b, { id: 'c2', parentId: 'p' })
+    const parent = budgets.for(b, { id: 'p' })
+    expect(helper.othersUsd()).toBeCloseTo(0.15)
+    // The parent's cap counts what its helpers spent.
+    expect(parent.othersUsd()).toBeCloseTo(0.05)
+    expect(helper.capUsd()).toBe(0.25)
+    parent.extend()
+    // A helper's cap follows the run's raised cap.
+    expect(helper.capUsd()).toBe(0.5)
+    expect(budgets.for(b, { id: 'x' }).capUsd()).toBe(0.25)
+  })
+
+  it('the parent stops at the run budget once its helper spent it (M1)', async () => {
+    const b = writer()
+    h.script = [reply(call('spawn_task', { prompt: 'help', wait: true })), finish('helped')]
+    // Parent turn $0.01, helper turn $0.24: together the $0.25 budget.
+    h.costs = [0.01, 0.24, 0]
+    const r = svc.run(b.id, { trigger: 'manual' })
+    if (!r.ok) throw new Error(r.error)
+    const m = backgroundManager()
+    await vi.waitFor(() => expect(m.get(r.task.id)?.question).toBeDefined())
+    expect(m.get(r.task.id)?.question?.text).toMatch(/limit of \$0\.25/)
+    m.answer(r.task.id, 'Stop')
+    await m.wait(r.task.id)
+    expect(m.get(r.task.id)?.result?.summary).toMatch(/stopped at the limit/)
   })
 })

@@ -3,6 +3,7 @@
 // at start; without it a buddy task fails with a reason. No imports of buddies/ here (no cycle).
 import type { BackgroundTask } from '@shared/types'
 import type { Role } from '../../ai/models'
+import type { SharedBudget } from '../runner'
 import type { SkillEnvelope } from '../skill-envelope'
 import type { GuardHost } from '../skill-run'
 import type { StartInput } from './manager'
@@ -16,6 +17,11 @@ export interface BuddyTaskEnv {
   role: Role
   /** The run's cost cap (the buddy's budget per run). */
   maxCostUsd: number
+  /**
+   * The cost budget the run's top task and its helpers share (stands in for maxCostUsd), so
+   * the whole run stays within the buddy's budget per run.
+   */
+  budget?: SharedBudget
   /** run_subagents is offered. */
   subagents: boolean
   /** use_skill may load this skill. */
