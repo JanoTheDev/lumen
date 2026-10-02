@@ -66,6 +66,16 @@ const BUCKET: Record<UsageOrigin, UsageBucket> = {
 
 export const bucketOf = (origin: string): UsageBucket => BUCKET[origin as UsageOrigin] ?? 'other'
 
+/**
+ * A line's bucket: a buddy's or automation's spend (their helpers' too, origin subagent or
+ * agent) goes to that bucket first, then the origin decides.
+ */
+export function rowBucket(r: Pick<UsageRow, 'origin' | 'buddyId' | 'automationId'>): UsageBucket {
+  if (r.buddyId) return 'buddies'
+  if (r.automationId) return 'automations'
+  return bucketOf(r.origin)
+}
+
 export const emptySums = (): UsageSums => ({
   calls: 0,
   in: 0,
@@ -192,7 +202,7 @@ export function dayBars(rows: readonly UsageRow[], from: number, to: number): Us
     if (isExternal(r)) continue
     const bar = bars.get(dayKey(r.t))
     if (!bar) continue
-    const b = bucketOf(r.origin)
+    const b = rowBucket(r)
     bar.usd[b] = roundUsd(bar.usd[b] + r.usd)
     bar.tokens[b] += r.in + r.out + r.cacheRead + r.cacheWrite
   }
@@ -244,7 +254,7 @@ export function buildReport(
 export function inFilter(r: UsageRow, f: UsageCallsFilter): boolean {
   if (f.group === 'claude') return isExternal(r) && (r.ccSession ?? 'unknown') === f.key
   if (isExternal(r)) return false
-  if (f.group === 'bucket') return bucketOf(r.origin) === f.key
+  if (f.group === 'bucket') return rowBucket(r) === f.key
   if (f.group === 'day') return dayKey(r.t) === f.key
   return groupKey(r, f.group) === f.key
 }

@@ -117,6 +117,17 @@ describe('usage report', () => {
     expect(bars[3].usd.you).toBe(0)
   })
 
+  it("buckets a buddy's or automation's helpers with their owner (review L6)", () => {
+    const rows = [
+      row({ origin: 'subagent', buddyId: 'inbox' }),
+      row({ origin: 'subagent', automationId: 'au_1' }),
+      row({ origin: 'subagent' })
+    ]
+    const bars = dayBars(rows, at('2026-10-02', 0), at('2026-10-02', 13))
+    expect(bars[0].usd).toMatchObject({ buddies: 0.01, automations: 0.01, tasks: 0.01 })
+    expect(callsFor(rows, { group: 'bucket', key: 'buddies' }).total).toBe(1)
+  })
+
   it('drill-down: newest first, capped, by group', () => {
     const rows = Array.from({ length: MAX_CALLS + 5 }, (_, i) =>
       row({ t: at('2026-10-02') + i, taskId: 'bg_aaaa' })
