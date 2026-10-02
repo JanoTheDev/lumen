@@ -1,10 +1,11 @@
 // Card images (05 T38): a remote picture becomes a small local JPEG data URL, so renderers never
 // load a remote URL (CSP img-src stays 'self' data:). Fetched through web/net safeGet (https, no
-// private hosts, every redirect re-checked), ≤ 3 MB, image/* only, 8 s; decoded and scaled to
-// ≤ 640 px by Electron's nativeImage (WebP / AVIF / GIF drawn by Chromium first, raster.ts).
-// Kept in memory (LRU 50) and in ~/.ai-overlay/card-images/ for 7 days, except in private
-// mode. Also: the picture a page names (og:image / twitter:image /
-// a large <img>) and a Wikimedia Commons lookup with its credit line.
+// private hosts, every redirect re-checked), ≤ 3 MB, image/* only, 8 s; PNG / JPEG decoded and
+// scaled to ≤ 640 px by Electron's nativeImage only when the header declares ≤ 8192 px a side and
+// ≤ 40 MP (WebP / AVIF / GIF drawn by Chromium in a sandboxed window, raster.ts). Kept in memory
+// (LRU 50) and in ~/.ai-overlay/card-images/ for 7 days, except in private mode. Also: the
+// picture a page names (og:image / twitter:image / a large <img>) and a Wikimedia Commons lookup
+// with its credit line.
 import { createHash } from 'crypto'
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
@@ -33,16 +34,81 @@ export interface ImageDeps {
   now?: () => number
 }
 
+/** Largest picture decoded at all: a small file can declare a huge bitmap (decompression bomb). */
+export const DECODE_MAX_SIDE = 8192
+export const DECODE_MAX_PIXELS = 40_000_000
+
+type Size = { width: number; height: number }
+
+/** PNG width and height from the IHDR chunk, or null when it is not a PNG. */
+export function pngSize(b: Buffer): Size | null {
+  if (b.length < 24 || b.readUInt32BE(0) !== 0x89504e47 || b.readUInt32BE(4) !== 0x0d0a1a0a)
+    return null
+  if (b.toString('latin1', 12, 16) !== 'IHDR') return null
+  return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) }
+}
+
+/** JPEG width and height from its first SOFn frame header, or null. */
+export function jpegSize(b: Buffer): Size | null {
+  if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null
+  let i = 2
+  while (i + 3 < b.length) {
+    if (b[i] !== 0xff) return null
+    const marker = b[i + 1]
+    if (marker === 0xff) {
+      i++ // fill byte
+      continue
+    }
+    // Markers without a length: TEM, RST0-7, SOI, EOI.
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd9)) {
+      i += 2
+      continue
+    }
+    const len = b.readUInt16BE(i + 2)
+    if (len < 2) return null
+    const sof = marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)
+    if (sof) {
+      if (i + 9 > b.length) return null
+      return { height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7) }
+    }
+    if (marker === 0xda) return null // image data before any frame header
+    i += 2 + len
+  }
+  return null
+}
+
+const decodable = (s: Size | null): boolean =>
+  !!s &&
+  s.width > 0 &&
+  s.height > 0 &&
+  s.width <= DECODE_MAX_SIDE &&
+  s.height <= DECODE_MAX_SIDE &&
+  s.width * s.height <= DECODE_MAX_PIXELS
+
+/**
+ * How a fetched picture is decoded: PNG / JPEG by nativeImage in this process, only when the
+ * header declares a sane size; WebP / AVIF / GIF in the sandboxed raster window; else not at all.
+ */
+export function decodeRoute(bytes: Buffer): 'native' | 'raster' | null {
+  const png = pngSize(bytes)
+  if (png) return decodable(png) ? 'native' : null
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8)
+    return decodable(jpegSize(bytes)) ? 'native' : null
+  return rasterKind(bytes) ? 'raster' : null
+}
+
 async function nativeEncode(bytes: Buffer): Promise<Buffer | null> {
+  const route = decodeRoute(bytes)
+  if (!route) return null
   try {
-    const { nativeImage } = await import('electron')
-    const img = nativeImage.createFromBuffer(bytes)
-    if (img.isEmpty()) {
+    if (route === 'raster') {
       // WebP / AVIF / GIF: drawn by Chromium in a script-less offscreen window (raster.ts).
-      if (!rasterKind(bytes)) return null
       const drawn = await rasterize(bytes, IMAGE_MAX_EDGE)
       return drawn && !drawn.isEmpty() ? drawn.toJPEG(80) : null
     }
+    const { nativeImage } = await import('electron')
+    const img = nativeImage.createFromBuffer(bytes)
+    if (img.isEmpty()) return null
     const { width, height } = img.getSize()
     if (!width || !height) return null
     const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(width, height))

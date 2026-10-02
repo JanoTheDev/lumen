@@ -6,7 +6,10 @@ import {
   IMAGE_DISK_TTL_MS,
   IMAGE_MEMORY_ITEMS,
   commonsImage,
+  decodeRoute,
   imageFromPage,
+  jpegSize,
+  pngSize,
   pageImage,
   type Get
 } from '../../src/main/cards/images'
@@ -243,5 +246,46 @@ describe('Wikimedia Commons', () => {
       throw new Error('offline')
     }
     expect(await commonsImage('Nice', broken)).toBeNull()
+  })
+})
+
+describe('decode size guard', () => {
+  const png = (w: number, h: number): Buffer => {
+    const b = Buffer.alloc(33)
+    b.writeUInt32BE(0x89504e47, 0)
+    b.writeUInt32BE(0x0d0a1a0a, 4)
+    b.writeUInt32BE(13, 8)
+    b.write('IHDR', 12, 'latin1')
+    b.writeUInt32BE(w, 16)
+    b.writeUInt32BE(h, 20)
+    return b
+  }
+  const jpg = (w: number, h: number): Buffer =>
+    Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      // APP0 (JFIF) segment, skipped
+      Buffer.from([0xff, 0xe0, 0x00, 0x04, 0x00, 0x00]),
+      Buffer.from([0xff, 0xc0, 0x00, 0x11, 0x08, h >> 8, h & 0xff, w >> 8, w & 0xff, 0x03]),
+      Buffer.alloc(9)
+    ])
+
+  it('reads PNG and JPEG sizes from the header', () => {
+    expect(pngSize(png(640, 480))).toEqual({ width: 640, height: 480 })
+    expect(jpegSize(jpg(1200, 800))).toEqual({ width: 1200, height: 800 })
+    expect(pngSize(jpg(1, 1))).toBeNull()
+    expect(jpegSize(png(1, 1))).toBeNull()
+  })
+
+  it('never decodes a huge declared bitmap in the main process', () => {
+    expect(decodeRoute(png(640, 480))).toBe('native')
+    expect(decodeRoute(jpg(1200, 800))).toBe('native')
+    expect(decodeRoute(png(40_000, 40_000))).toBeNull()
+    expect(decodeRoute(png(8000, 8000))).toBeNull() // 64 MP
+    expect(decodeRoute(jpg(9000, 100))).toBeNull()
+    expect(decodeRoute(Buffer.from([0xff, 0xd8, 0xff, 0xd9]))).toBeNull()
+    expect(decodeRoute(Buffer.from([...Buffer.from('GIF89a', 'latin1'), 1, 0, 1, 0]))).toBe(
+      'raster'
+    )
+    expect(decodeRoute(Buffer.from('not an image'))).toBeNull()
   })
 })
