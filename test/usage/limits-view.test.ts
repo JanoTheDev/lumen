@@ -27,6 +27,14 @@ describe('usage limits view', () => {
     ).toBe('$4.20 of $4.00 · 120k of 500k tokens · paused')
   })
 
+  it('marks spend counted at the standard rate as estimated (review M5)', () => {
+    expect(
+      limitProgressText({ ...base, capUsd: 5, ratio: 0.84, level: 'warn', estimated: 3 })
+    ).toBe(
+      '$4.20 of $5.00 · nearly there · estimated: 3 calls without a known price counted at a standard rate'
+    )
+  })
+
   it('edits tokens in thousands', () => {
     expect(tokensToField(undefined)).toBe(0)
     expect(tokensToField(250_000)).toBe(250)

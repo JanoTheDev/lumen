@@ -126,6 +126,8 @@ export interface UsageLimitRow {
   /** Highest share of a cap used (0 without a cap). */
   ratio: number
   level: 'none' | 'ok' | 'warn' | 'paused'
+  /** Calls with no known price, counted in `usd` at a standard rate. */
+  estimated?: number
 }
 
 export interface UsageLimitsView {

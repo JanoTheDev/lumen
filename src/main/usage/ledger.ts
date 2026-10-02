@@ -343,7 +343,7 @@ export const emptyTotals = (): UsageTotals => ({
 })
 
 const NANO = 1_000_000_000
-const roundUsd = (n: number): number => Math.round(n * NANO) / NANO
+export const roundUsd = (n: number): number => Math.round(n * NANO) / NANO
 
 /**
  * Sums lines. By default only Lumen's own spend; `{external: true}` sums only the lines paid

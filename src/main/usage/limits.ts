@@ -8,14 +8,17 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { UsageLimitsConfig } from '@shared/config'
+import { usageCost } from '../ai/pricing'
 import { loadConfig } from '../config'
 import {
   isExternal,
   ledgerDir,
   ledgerPersisting,
   monthKey,
-  monthTotals,
   onUsageRecorded,
+  queryUsage,
+  roundUsd,
+  startOfMonth,
   type UsageFilter,
   type UsageRow
 } from './ledger'
@@ -37,6 +40,8 @@ export interface LimitState {
   /** This month's Lumen spend in the scope. */
   usd: number
   tokens: number
+  /** Paid calls with no known price in `usd`, counted at the task caps' fallback rate. */
+  estimated: number
   cap: LimitCap
   /** Highest of usd / cap.usd and tokens / cap.tokens; 0 without a cap. */
   ratio: number
@@ -180,16 +185,50 @@ function filterFor(scope: LimitScope): UsageFilter {
 
 let unsubscribe: (() => void) | null = null
 
-// Running month totals per scope key, so a recorded line does not re-read the whole month.
-const running = new Map<string, { month: string; usd: number; tokens: number }>()
+/**
+ * What a line counts against a USD cap: its cost, or, for a paid model with no known price, its
+ * tokens at the rate the task caps use (usageCost), so a cap still trips. Free / local stay $0.
+ */
+export function limitUsd(r: UsageRow): number {
+  if (r.priced || r.free) return r.usd
+  const est = usageCost(r.model, {
+    inputTokens: r.in,
+    outputTokens: r.out,
+    cacheReadTokens: r.cacheRead,
+    cacheWriteTokens: r.cacheWrite
+  }).total
+  return roundUsd(r.usd + est)
+}
 
-function spent(scope: LimitScope, now: Date): { usd: number; tokens: number } {
+const isEstimated = (r: UsageRow): boolean => !r.priced && !r.free && r.in + r.out > 0
+
+interface Spent {
+  month: string
+  usd: number
+  tokens: number
+  estimated: number
+}
+
+// Running month totals per scope key, so a recorded line does not re-read the whole month.
+const running = new Map<string, Spent>()
+
+function spent(scope: LimitScope, now: Date): Spent {
   const month = monthKey(now)
   const key = scopeKey(scope)
   const hit = running.get(key)
   if (hit?.month === month) return hit
-  const t = monthTotals(filterFor(scope), now)
-  const fresh = { month, usd: t.usd, tokens: t.in + t.out }
+  const fresh: Spent = { month, usd: 0, tokens: 0, estimated: 0 }
+  const rows = queryUsage({
+    from: startOfMonth(now),
+    to: now.getTime() + 1,
+    filter: filterFor(scope)
+  })
+  for (const r of rows) {
+    if (isExternal(r)) continue
+    fresh.usd = roundUsd(fresh.usd + limitUsd(r))
+    fresh.tokens += r.in + r.out
+    if (isEstimated(r)) fresh.estimated += r.calls ?? 1
+  }
   // Cached only while the listener keeps it current.
   if (unsubscribe) running.set(key, fresh)
   return fresh
@@ -211,7 +250,15 @@ export function limitState(scope: LimitScope): LimitState {
   const cap = capFor(scope)
   const sp = spent(scope, now)
   const ratio = hasCap(cap) ? ratioOf(sp, cap) : 0
-  return { scope, usd: sp.usd, tokens: sp.tokens, cap, ratio, level: levelOf(ratio, hasCap(cap)) }
+  return {
+    scope,
+    usd: sp.usd,
+    tokens: sp.tokens,
+    estimated: sp.estimated,
+    cap,
+    ratio,
+    level: levelOf(ratio, hasCap(cap))
+  }
 }
 
 export function money(n: number): string {
@@ -303,8 +350,9 @@ export function checkRunLimit(input: {
 function bump(key: string, month: string, row: UsageRow): void {
   const hit = running.get(key)
   if (hit?.month !== month) return // read fresh (row included) on first use
-  hit.usd = Math.round((hit.usd + row.usd) * 1e9) / 1e9
+  hit.usd = roundUsd(hit.usd + limitUsd(row))
   hit.tokens += row.in + row.out
+  if (isEstimated(row)) hit.estimated += row.calls ?? 1
 }
 
 /** Takes a scope out of paused; the overall cap's one also re-arms the user's warning. */

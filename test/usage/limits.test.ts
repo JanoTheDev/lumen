@@ -175,4 +175,27 @@ describe('usage limits', () => {
     call(0.1, { origin: 'user-direct' })
     expect(warnings).toHaveLength(2)
   })
+
+  it('counts paid calls with no known price at the fallback rate (review M5)', () => {
+    limits = { monthlyUsd: 1, automations: { au_morning: { usd: 1 } } }
+    // 1M input tokens at the Sonnet 5.5 rate ($2 / MTok) is past a $1 cap.
+    call(0, {
+      priced: false,
+      free: false,
+      in: 1_000_000,
+      out: 0,
+      automationId: 'au_morning',
+      origin: 'automation'
+    })
+    const st = limitState({ kind: 'automation', id: 'au_morning' })
+    expect(st).toMatchObject({ level: 'paused', usd: 2, estimated: 1 })
+    expect(canStartRun({ automationId: 'au_morning' }).ok).toBe(false)
+    // A free or local model stays $0 (its tokens count only toward a token cap).
+    limits = { monthlyUsd: 1, automations: {} }
+    resetUsageLimits()
+    install()
+    expect(limitState({ kind: 'buddy', id: 'inbox' })).toMatchObject({ usd: 0, estimated: 0 })
+    call(0, { priced: false, free: true, in: 1_000_000, buddyId: 'inbox' })
+    expect(limitState({ kind: 'buddy', id: 'inbox' })).toMatchObject({ usd: 0, estimated: 0 })
+  })
 })

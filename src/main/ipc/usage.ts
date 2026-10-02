@@ -53,7 +53,8 @@ function limitRow(scope: LimitScope, name: string): UsageLimitRow {
     ...(st.cap.usd !== undefined ? { capUsd: st.cap.usd } : {}),
     ...(st.cap.tokens !== undefined ? { capTokens: st.cap.tokens } : {}),
     ratio: st.ratio,
-    level: st.level
+    level: st.level,
+    ...(st.estimated ? { estimated: st.estimated } : {})
   }
 }
 
