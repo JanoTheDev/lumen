@@ -482,8 +482,8 @@ function styleSources(files: readonly TreeFile[], p: FoundPlugin): TreeFile[] {
 
 // ---- MCP servers ----
 
-const PLUGIN_VAR =
-  /\$\{(?:CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR|CLAUDE_[A-Z_]+)\}/
+/** ${CLAUDE_PLUGIN_ROOT}, ${CLAUDE_X:-default} and bare $CLAUDE_X: Claude Code's own folders. */
+const PLUGIN_VAR = /\$\{CLAUDE_[A-Z_]+(?::-[^}]*)?\}|\$CLAUDE_[A-Z_]+/
 const VAR = /\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g
 
 /** `${VAR:-default}` → default; plain `${VAR}` stays (reported as needed). */

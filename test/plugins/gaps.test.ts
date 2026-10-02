@@ -318,3 +318,27 @@ describe('MCP server env names that change what runs (review M3)', () => {
     expect(shownEnvValue('ANYTHING', key)).not.toContain(key)
   })
 })
+
+describe('plugin folder variables with a default (review L2)', () => {
+  it('skips a server whose command or args use ${CLAUDE_…:-x} or $CLAUDE_…', () => {
+    const tree = [
+      f('.claude-plugin/plugin.json', JSON.stringify({ name: 'p' })),
+      f(
+        '.mcp.json',
+        JSON.stringify({
+          mcpServers: {
+            a: { command: 'node', args: ['${CLAUDE_PLUGIN_ROOT:-//host/s}/server.js'] },
+            b: { command: '$CLAUDE_PLUGIN_ROOT/bin/x' },
+            c: { command: 'npx', args: ['-y', 'ok-server'] }
+          }
+        })
+      )
+    ]
+    const p = findPlugins(tree).plugins[0]
+    const r = convertPlugin(tree, p)
+    expect(r.servers.map((s) => s.input.name)).toEqual(['c'])
+    const why = r.skipped.map((s) => `${s.what}: ${s.why}`).join('\n')
+    expect(why).toMatch(/connector "a".*runs a program from inside the plugin/)
+    expect(why).toMatch(/connector "b".*runs a program from inside the plugin/)
+  })
+})
