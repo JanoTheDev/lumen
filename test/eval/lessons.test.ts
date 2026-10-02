@@ -93,7 +93,7 @@ describe('lesson-check eval', () => {
   it.fails('T15-G4: a bridge fail is not overridden by a manual alternative', () => {
     expect(gapCases('T15-G4').map((r) => r.out.verdict)).toEqual(['fail'])
   })
-  it.fails('T15-G5: window-opened evaluate sees the dialog that is the snapshot root', () => {
+  it('T15-G5: window-opened evaluate sees the dialog that is the snapshot root', () => {
     expect(gapCases('T15-G5').filter(wrong)).toEqual([])
   })
   it('T15-G6: selected / checked state is readable without an event', () => {
