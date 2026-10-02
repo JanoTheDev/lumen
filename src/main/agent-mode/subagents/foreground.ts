@@ -2,6 +2,8 @@
 // guarded handlers, except read_file, which in the foreground reads dropped files by id: a
 // reader sub-agent gets the background read_file (granted folders, plus the skill's own folders)
 // and read_document instead, behind the same skill guard, feeding the task's observed text.
+// When the task offers its dropped files, the reader's read_file takes their ids too.
+import { z } from 'zod'
 import type { ToolDef } from '../../ai/providers/types'
 import { writeAudit } from '../../audit/log'
 import { loadConfig } from '../../config'
@@ -24,6 +26,17 @@ export interface ForegroundSubagentOpts {
   observedText(): string
 }
 
+/** A reader's read_file when the task has dropped files: by id, or a path in a granted folder. */
+export const READER_READ_FILE: ToolDef = {
+  name: 'read_file',
+  description:
+    'Reads a file: one the user dropped onto Lumen (fileId, path "") or a text file inside a folder the user or the skill granted (path, fileId ""). Other paths fail with E_DENIED.',
+  schema: z.object({
+    fileId: z.string().describe('Id of a file the user dropped, or "".'),
+    path: z.string().describe('Absolute path inside a granted folder, or "".')
+  })
+}
+
 const unavailable = (): never => {
   throw new Error('not available to helpers')
 }
@@ -35,6 +48,8 @@ export function foregroundSubagentTools(o: ForegroundSubagentOpts): {
   const handlers: Record<string, ToolHandler> = {}
   for (const [k, h] of Object.entries(o.handlers)) if (h && k !== 'read_file') handlers[k] = h
   const defs = o.defs.filter((d) => d.name !== 'read_file')
+  // The task's own read_file (dropped files by id, already behind its guards).
+  const dropped = o.defs.some((d) => d.name === 'read_file') ? o.handlers.read_file : undefined
   const offers = (name: string): boolean => !o.envelope || o.envelope.offers(name)
   const audit = (
     action: Record<string, unknown>,
@@ -80,12 +95,15 @@ export function foregroundSubagentTools(o: ForegroundSubagentOpts): {
       })
     ).read_document
   }
-  const readerDefs: ToolDef[] = [BG_TOOLS.read_file, GRANTED_FILE_TOOLS.read_document]
+  const readerDefs: ToolDef[] = [
+    dropped ? READER_READ_FILE : BG_TOOLS.read_file,
+    GRANTED_FILE_TOOLS.read_document
+  ]
   for (const d of readerDefs) {
     if (!offers(d.name)) continue
     const h = readers[d.name]
     const guard = o.envelope?.guard
-    handlers[d.name] = async (input, ctx) => {
+    const read: ToolHandler = async (input, ctx) => {
       const refused = guard ? await guard(d.name, input, ctx.signal) : null
       if (refused) return refused
       const r = await h(input, ctx)
@@ -95,6 +113,14 @@ export function foregroundSubagentTools(o: ForegroundSubagentOpts): {
       }
       return r
     }
+    handlers[d.name] =
+      d === READER_READ_FILE && dropped
+        ? (input, ctx) => {
+            const id = typeof input.fileId === 'string' ? input.fileId.trim() : ''
+            if (id) return dropped({ fileId: id }, ctx)
+            return read({ path: typeof input.path === 'string' ? input.path : '' }, ctx)
+          }
+        : read
     defs.push(d)
   }
   return { defs, handlers }
