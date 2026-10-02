@@ -21,7 +21,7 @@
 //   runBuddy(id, {utterance?, trigger: 'call'|'schedule'|'manual'}): RunBuddyResult
 //       → {ok: true, task} | {ok: false, code: 'E_NOT_FOUND'|'E_OFF'|'E_BUDGET'|'E_BUSY', error}
 //   buddyRuns(id, limit = 20): BuddyRunSummary[]     newest first, from the task store
-//   setBuddySpendReader(fn: BuddySpendReader | null)  monthly spend (default: usage ledger)
+//   setBuddySpendReader(fn: BuddySpendReader | null)  monthly spend (default: the monthly limits)
 // Events: bus `buddies.changed {ids}` after create / update / remove / run / notebook writes.
 // Pure helpers: clamp.ts (clampBuddy, clampPermissions, buddyIdFor, isBuddyId,
 // BUDDY_TOOL_NAMES), run.ts (buddyStartInput, buddyManifest, buddyConfirmsEveryAction),
@@ -45,11 +45,11 @@ import { setBuddyRunHook } from '../agent-mode/background/buddy-hook'
 import { skillEnvelope } from '../agent-mode/skill-envelope'
 import { bus } from '../bus'
 import { configPath } from '../config'
-import { monthTotals } from '../usage/ledger'
 import { canStartRun } from '../usage/limits'
 import { Buddies, type BuddySpendReader, type RunBuddyResult } from './service'
 import type { RunBuddyOpts } from './run'
 import { pruneOrphanSchedules } from './schedule'
+import { ledgerSpend } from './spend'
 import { BuddyStore, type NotebookWrite } from './store'
 
 export type { BuddySpendReader, RunBuddyResult } from './service'
@@ -58,11 +58,7 @@ export { Buddies } from './service'
 
 let service: Buddies | null = null
 
-/** This month's Lumen spend of the buddy from the usage ledger (tokens = in + out). */
-export const ledgerSpend: BuddySpendReader = (buddyId, now) => {
-  const t = monthTotals({ buddyId }, now)
-  return { usd: t.usd, tokens: t.in + t.out }
-}
+export { ledgerSpend }
 
 let spend: BuddySpendReader | null = ledgerSpend
 
