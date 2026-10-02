@@ -263,6 +263,7 @@ describe('payment fields', () => {
     expect(d.risk).toBe('high')
     expect(d.needsConfirm).toBe(true)
     expect(d.reason).toContain('•••• 7518')
+    expect(d.reason).not.toContain('490154203237518')
   })
 
   it.each([
@@ -385,6 +386,43 @@ describe('personal details', () => {
       'high'
     )
     expect(evaluate({ type: 'type', text: 'report' }, field('File name')).risk).not.toBe('high')
+  })
+
+  const excel = (): PolicyCtx => ({
+    origin: 'agent',
+    activeWindow: {
+      title: 'Book1 - Excel',
+      process: 'EXCEL.EXE',
+      focusKnown: true,
+      focusName: 'A1',
+      focusRole: 'edit'
+    }
+  })
+
+  it.each(['1.000.000', '3.14159265', '1234567', '+31 6 12345678', 'anna@example.com'])(
+    'data typed into a spreadsheet is not a personal detail: %s (review M4)',
+    (text) => {
+      expect(evaluate({ type: 'type', text }, excel()).risk).toBe('low')
+    }
+  )
+
+  it.each([
+    ['12345678', 'Search orders'],
+    ['anna@example.com', 'Search contacts'],
+    ['2026 10 05', 'Date'],
+    ['1234567', 'Order number']
+  ])('%s into %s is not a personal detail (review M4)', (text, name) => {
+    expect(evaluate({ type: 'type', text }, field(name)).risk).not.toBe('high')
+  })
+
+  it('a phone number into a form field is still high unless said', () => {
+    expect(evaluate({ type: 'type', text: '+31 6 12345678' }, field('Phone')).risk).toBe('high')
+    expect(evaluate({ type: 'type', text: '+31 6 12345678' }, field('Contact')).risk).toBe('high')
+    const said = evaluate(
+      { type: 'type', text: '+31 6 12345678' },
+      { ...field('Phone'), userText: 'my number is +31 6 12345678' }
+    )
+    expect(said.risk).not.toBe('high')
   })
 
   it('the user typing their own details is not rated', () => {

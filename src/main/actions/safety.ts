@@ -848,8 +848,8 @@ const EDITOR_PROCESSES = new Set([
 const SHEET_OR_EDITOR_TITLE_RE =
   /(?:- (?:excel|word|notepad|libreoffice calc|libreoffice writer)|google (?:sheets|docs))/i
 
-/** A spreadsheet, a text editor or a search box: long numbers there are data, not a card. */
-function clearlyNotPayment(w: WindowInfo | undefined, field: string | undefined): boolean {
+/** A spreadsheet, a text editor or a search box: numbers and addresses there are data. */
+function sheetEditorOrSearch(w: WindowInfo | undefined, field: string | undefined): boolean {
   if (isSearchFieldName(field)) return true
   const proc = lower(w?.process)
   if (SPREADSHEET_PROCESSES.has(proc) || EDITOR_PROCESSES.has(proc) || isIde(w)) return true
@@ -875,7 +875,7 @@ function paymentFindings(
   }
   const cards = typedCardNumbers(text, before)
   if (!cards.length) return false
-  if (cards.some(cardShaped) && !clearlyNotPayment(w, field)) {
+  if (cards.some(cardShaped) && !sheetEditorOrSearch(w, field)) {
     out.push({ risk: 'blocked', reason: 'never types a card number (you type those)' })
     return true
   }
@@ -892,6 +892,24 @@ const DATE_RE = /^\d{1,4}[-./]\d{1,2}[-./]\d{1,4}$/
 function looksLikePhone(t: string): boolean {
   const digits = t.replace(/\D/g, '').length
   return PHONE_ONLY_RE.test(t) && !DATE_RE.test(t) && digits >= 7 && digits <= 15
+}
+
+/** Numbers that are amounts or dates: "1.000.000", "3.14159265", "2026 10 05". */
+const NOT_PHONE_RE = /^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$|^\d+[.,]\d+$|^\d{4} \d{1,2} \d{1,2}$/
+
+/**
+ * A lone phone number outside a phone field: "+31 6 12345678", "0031 …", "(020) 123 4567",
+ * "06-1234 5678". A bare run of digits ("1234567") is an amount, an ID or an order number.
+ */
+function phoneShaped(t: string): boolean {
+  if (!looksLikePhone(t) || NOT_PHONE_RE.test(t)) return false
+  return /^(?:\+|00)/.test(t) || /\d[\s()./-]+\d/.test(t)
+}
+
+/** A form field where a lone email or phone number is a personal detail (not a search box,
+ * spreadsheet cell, editor or document). */
+function detailFormField(w: WindowInfo | undefined, field: string | undefined): boolean {
+  return !sheetEditorOrSearch(w, field) && !/^document$/i.test(w?.focusRole ?? '')
 }
 
 /** The user said these digits (a phone number said with or without spaces). */
@@ -913,9 +931,10 @@ function personalFindings(
 ): void {
   const t = text.trim()
   if (!t) return
-  const phone = looksLikePhone(t)
-  if (!phone && !EMAIL_ONLY_RE.test(t) && !isPersonalFieldName(field)) return
-  if (phone ? saidDigits(t, ctx.userText) : userNamed(t, ctx.userText)) return
+  const named = isPersonalFieldName(field)
+  const lone = phoneShaped(t) || EMAIL_ONLY_RE.test(t)
+  if (!named && !(lone && detailFormField(ctx.activeWindow, field))) return
+  if (looksLikePhone(t) ? saidDigits(t, ctx.userText) : userNamed(t, ctx.userText)) return
   out.push({
     risk: 'high',
     reason: `fills in personal details you did not give: “${t.slice(0, 120)}”`
