@@ -334,3 +334,44 @@ describe('personal details', () => {
     expect(d.risk).not.toBe('high')
   })
 })
+
+describe('keys into a payment field (review H1)', () => {
+  it.each([
+    [['4']],
+    [['num4']],
+    [['shift', '4']],
+    [['space']],
+    [['ctrl', 'v']],
+    [['shift', 'insert']],
+    [['ctrl', 'c']],
+    [['backspace']]
+  ])('agent %j into Card number is blocked', (keys) => {
+    expect(evaluate({ type: 'hotkey', keys }, field('Card number')).risk).toBe('blocked')
+  })
+
+  it.each(['agent', 'routine', 'mcp'] as const)(
+    '%s keys steps into a CVC are blocked',
+    (origin) => {
+      const d = evaluate(
+        { type: 'input', steps: [{ t: 'keys', combo: '4' }] },
+        { ...field('CVC'), origin }
+      )
+      expect(d.risk).toBe('blocked')
+    }
+  )
+
+  it('Tab and Escape still leave the field', () => {
+    expect(evaluate({ type: 'hotkey', keys: ['tab'] }, field('Card number')).risk).not.toBe(
+      'blocked'
+    )
+    expect(evaluate({ type: 'hotkey', keys: ['esc'] }, field('CVC')).risk).not.toBe('blocked')
+  })
+
+  it('the user pressing keys there is not blocked', () => {
+    const d = evaluate(
+      { type: 'hotkey', keys: ['ctrl', 'v'] },
+      { ...field('Card number'), origin: 'user-direct' }
+    )
+    expect(d.risk).toBe('low')
+  })
+})

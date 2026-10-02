@@ -600,11 +600,26 @@ export function dictatedCombo(combo: string, userText: string | undefined): bool
   return combo.split('+').every((k) => words.has(k))
 }
 
+/** Keys that leave a field without putting anything in it (Enter is rated as a submit). */
+const LEAVE_FIELD_COMBOS = new Set(['tab', 'shift+tab', 'esc', 'enter'])
+
+/**
+ * A key press, paste or copy while a payment field has the focus: blocked for agents like typing
+ * there, so a card number cannot go in one digit (or one Ctrl+V) at a time.
+ */
+function paymentKeyFindings(combo: string, ctx: PolicyCtx, out: Finding[]): boolean {
+  if (!agentish(ctx.origin) || LEAVE_FIELD_COMBOS.has(combo)) return false
+  if (!isPaymentFieldName(ctx.activeWindow?.focusName)) return false
+  out.push({ risk: 'blocked', reason: 'never presses keys in a payment field (you type those)' })
+  return true
+}
+
 function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): void {
   const combo = normalizeCombo(keys)
   if (!combo) return
   const parts = combo.split('+')
   const w = ctx.activeWindow
+  if (paymentKeyFindings(combo, ctx, out)) return
   if (DENY_COMBOS.has(combo) || /^win\+\d$/.test(combo)) {
     const asked =
       ctx.origin === 'user-direct' &&
