@@ -56,14 +56,15 @@ GitHub link or a folder, or your own Claude Code setup (**Import my Claude Code 
 `~/.claude/skills`, `~/.claude/commands`, `~/.claude/output-styles` and the installed plugins).
 Before anything is written, a preview lists every skill and connector and what changes.
 
-| Claude Code                                 | In Lumen                                                  |
-| ------------------------------------------- | --------------------------------------------------------- |
-| `skills/<name>/SKILL.md`                    | a skill; text, data and image files next to it are kept   |
-| `commands/<name>.md`                        | a skill; names of two or more words become a voice phrase |
-| `output-styles/<name>.md`                   | a reply style                                             |
-| `.mcp.json` / `mcpServers` in plugin.json   | connectors, each only after you tick "I trust"            |
-| `$ARGUMENTS`                                | the skill's `arguments` value                             |
-| hooks, agents, scripts, LSP servers, `bin/` | not imported                                              |
+| Claude Code                                 | In Lumen                                                          |
+| ------------------------------------------- | ----------------------------------------------------------------- |
+| `skills/<name>/SKILL.md`                    | a skill; text, data and image files next to it are kept           |
+| `commands/<name>.md`                        | a skill; names of two or more words become a voice phrase         |
+| `output-styles/<name>.md`                   | a reply style                                                     |
+| `.mcp.json` / `mcpServers` in plugin.json   | connectors, each only after you tick "I trust"                    |
+| `$ARGUMENTS`                                | the skill's `arguments` value                                     |
+| `$0`, `$1` … / `$ARGUMENTS[0]` …            | values `arg1`, `arg2` … (counted from 0, as Claude Code does now) |
+| hooks, agents, scripts, LSP servers, `bin/` | not imported                                                      |
 
 - **Least privilege.** Imported skills start as untrusted community skills: they ask before
   every action and get no mouse, keyboard, web, file or connector access until you edit their
@@ -76,5 +77,10 @@ Before anything is written, a preview lists every skill and connector and what c
 - **Updating.** Import the same source again to update in place. A skill keeps your trust only
   while its content stays the same; changed content starts untrusted again. A name another skill
   already uses gets the plugin's name in front.
-- **Marketplaces.** Plugins inside the same repository are imported; plugins a marketplace lists
-  from somewhere else are named in the preview so you can import their own link.
+- **Marketplaces.** Plugins inside the same repository are imported. From a GitHub link, plugins
+  the marketplace lists on GitHub are downloaded too (at most 12, 150 MB together; **Stop**
+  cancels the downloads). A folder or `~/.claude` import stays offline: it names those plugins in
+  the preview so you can import their own link.
+- **Connector settings.** Values a plugin sets for a connector are shown in the preview (secrets
+  masked) and used only when ticked. Settings that change which program runs (`PATH`,
+  `NODE_OPTIONS`, `PYTHONPATH`, package registry and proxy settings …) are never taken.
