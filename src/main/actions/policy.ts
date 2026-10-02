@@ -129,7 +129,12 @@ function focusWindow(f: FocusInfoResult): WindowInfo {
     process: f.process,
     focusKnown: known,
     ...(known
-      ? { isPassword: f.password === true, focusName: f.name ?? '', focusRole: f.role ?? '' }
+      ? {
+          isPassword: f.password === true,
+          focusName: f.name ?? '',
+          focusRole: f.role ?? '',
+          ...(f.valueTail ? { focusValue: f.valueTail } : {})
+        }
       : {}),
     ...(f.className ? { className: f.className } : {}),
     ...(f.windowClass ? { windowClass: f.windowClass } : {})

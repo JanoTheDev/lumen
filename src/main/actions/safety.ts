@@ -157,6 +157,8 @@ export interface WindowInfo {
   /** UIA name and role of the focused element. */
   focusName?: string
   focusRole?: string
+  /** The end of the focused field's value (focus_info valueTail): text typed there before. */
+  focusValue?: string
 }
 
 export interface GrantLookup {
@@ -764,7 +766,9 @@ function typeFindings(
       return
     }
     const field = fieldName ?? w?.focusName
-    if (paymentFindings(text, field, out)) return
+    // set_value replaces the value; typing appends to what the field holds.
+    const before = fieldName === undefined ? w?.focusValue : undefined
+    if (paymentFindings(text, field, before, out)) return
     if (w?.focusKnown === false)
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
     if (isMail(w)) mailTypeFindings(text, field, ctx, out)
@@ -820,16 +824,28 @@ function checkoutFinding(word: string): Finding {
   return { risk: 'high', reason: `books or pays: “${word}”`, checkout: word }
 }
 
+/** The field's value plus the typed text makes a card number it did not hold before. */
+function completesCard(text: string, before: string | undefined): boolean {
+  if (!before || hasCardNumber(before)) return false
+  return hasCardNumber(before.slice(-40) + text)
+}
+
 /**
  * Card numbers, CVCs and IBANs are the user's to type: an agent never types into a payment
- * field, and never types a number that passes the card check (Luhn) anywhere.
+ * field, and never types a number that passes the card check (Luhn) anywhere, also not in
+ * parts ("4242 4242 " then "4242 4242").
  */
-function paymentFindings(text: string, field: string | undefined, out: Finding[]): boolean {
+function paymentFindings(
+  text: string,
+  field: string | undefined,
+  before: string | undefined,
+  out: Finding[]
+): boolean {
   if (isPaymentFieldName(field)) {
     out.push({ risk: 'blocked', reason: 'never types into a payment field (you type those)' })
     return true
   }
-  if (hasCardNumber(text)) {
+  if (hasCardNumber(text) || completesCard(text, before)) {
     out.push({ risk: 'blocked', reason: 'never types a card number (you type those)' })
     return true
   }
