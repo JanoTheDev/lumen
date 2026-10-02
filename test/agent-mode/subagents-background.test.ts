@@ -3,7 +3,13 @@ import type { BackgroundTask } from '@shared/types'
 import type { AgentMessage, ToolCall, ToolTurnResult } from '../../src/main/ai/providers/types'
 import type { BgPorts } from '../../src/main/agent-mode/background/handlers'
 import { BackgroundManager, type RunOutcome } from '../../src/main/agent-mode/background/manager'
-import { runBackground, type BgRunEnv } from '../../src/main/agent-mode/background/run'
+import {
+  offersSubagents,
+  runBackground,
+  type BgRunEnv,
+  type RunSkillInfo
+} from '../../src/main/agent-mode/background/run'
+import { permissionsSchema } from '../../src/main/skills/manifest'
 import { SubagentPool } from '../../src/main/agent-mode/subagents/pool'
 import { taskRow } from '../../src/renderer/src/panel/home/tasks-view'
 
@@ -50,6 +56,8 @@ function setup(opts: {
   parent: (n: number, req: { messages: AgentMessage[] }) => ToolTurnResult
   job: (req: { messages: AgentMessage[] }) => Promise<ToolTurnResult> | ToolTurnResult
   guard?: BgRunEnv['guard']
+  skillInfo?: BgRunEnv['skillInfo']
+  toolGuard?: BgRunEnv['toolGuard']
 }): {
   m: BackgroundManager
   log: string[]
@@ -75,6 +83,8 @@ function setup(opts: {
         costOf: () => 0.001,
         now: () => Date.now(),
         ...(opts.guard ? { guard: opts.guard } : {}),
+        ...(opts.skillInfo ? { skillInfo: opts.skillInfo } : {}),
+        ...(opts.toolGuard ? { toolGuard: opts.toolGuard } : {}),
         subagents: {
           pool,
           turn: async (req) => {
@@ -212,7 +222,7 @@ describe('run_subagents in a background task', () => {
     expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
   })
 
-  it('a skill run gets no run_subagents (review L1)', async () => {
+  it('an unknown skill run gets no run_subagents (review L1)', async () => {
     const { m, parentReqs } = setup({
       parent: () => reply(call('finish', { summary: 'ok' })),
       job: () => reply(call('finish', { summary: 'x' }))
@@ -220,6 +230,100 @@ describe('run_subagents in a background task', () => {
     const t = m.start({ prompt: 'run my skill', origin: 'agent', skill: 'morning' })
     await m.wait(t.id)
     expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
+  })
+})
+
+function info(o: { risky?: boolean; trust?: RunSkillInfo['trust'] } = {}): RunSkillInfo {
+  return {
+    name: 'morning',
+    manifest: {
+      name: 'morning',
+      description: 'Morning brief.',
+      version: '1.0.0',
+      apps: [],
+      triggers: [],
+      params: {},
+      permissions: permissionsSchema.parse({ network: ['https://*.example'], risky: !!o.risky }),
+      context: 'background'
+    } as unknown as RunSkillInfo['manifest'],
+    trust: o.trust ?? 'mine'
+  }
+}
+
+describe('run_subagents in a background skill run', () => {
+  it('is offered when the skill is trusted and not risky; jobs pass the skill guard', async () => {
+    const guarded: string[] = []
+    const { m, parentReqs, log } = setup({
+      parent: (n) =>
+        n === 1
+          ? reply(call('run_subagents', { jobs: [{ role: 'checker', task: 'check a.example' }] }))
+          : reply(call('finish', { summary: 'ok' })),
+      job: (req) =>
+        req.messages.length === 1
+          ? reply(call('fetch_url', { url: 'https://evil.test/' }))
+          : reply(call('finish', { summary: 'refused' })),
+      skillInfo: async () => info(),
+      // The skill's envelope: it may not open evil.test.
+      toolGuard: async (tool, input) => {
+        guarded.push(tool)
+        return tool === 'fetch_url' && String(input.url).includes('evil.test')
+          ? { content: [{ type: 'text', text: 'E_DENIED: not this site' }], isError: true }
+          : null
+      }
+    })
+    const t = m.start({ prompt: 'run my skill', origin: 'agent', skill: 'morning' })
+    expect((await m.wait(t.id)).phase).toBe('done')
+    expect(parentReqs[0].tools.map((x) => x.name)).toContain('run_subagents')
+    expect(guarded).toContain('fetch_url')
+    expect(log.some((l) => l.startsWith('fetch '))).toBe(false)
+  })
+
+  it('is not offered when the skill is risky or an untrusted community skill', async () => {
+    for (const i of [info({ risky: true }), info({ trust: 'community-untrusted' })]) {
+      const { m, parentReqs } = setup({
+        parent: () => reply(call('finish', { summary: 'ok' })),
+        job: () => reply(call('finish', { summary: 'x' })),
+        skillInfo: async () => i
+      })
+      await m.wait(m.start({ prompt: 'run my skill', origin: 'agent', skill: 'morning' }).id)
+      expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
+    }
+  })
+
+  it('a helper spawned inside a trusted skill run still gets none', async () => {
+    const { m, parentReqs } = setup({
+      parent: () => reply(call('finish', { summary: 'ok' })),
+      job: () => reply(call('finish', { summary: 'x' })),
+      skillInfo: async () => info()
+    })
+    const child = m.start({
+      prompt: 'child',
+      origin: 'agent',
+      parentId: 'bg_parent',
+      skill: 'morning',
+      immediate: true
+    })
+    await m.wait(child.id)
+    expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
+  })
+})
+
+describe('offersSubagents', () => {
+  it('decides per task kind', () => {
+    expect(offersSubagents({ child: false })).toBe(true)
+    expect(offersSubagents({ child: true })).toBe(false)
+    expect(offersSubagents({ child: true, skill: info() })).toBe(false)
+    expect(offersSubagents({ child: false, skill: info() })).toBe(true)
+    expect(offersSubagents({ child: false, skill: info({ trust: 'builtin' }) })).toBe(true)
+    expect(offersSubagents({ child: false, skill: info({ trust: 'community-trusted' }) })).toBe(
+      true
+    )
+    expect(offersSubagents({ child: false, skill: info({ risky: true }) })).toBe(false)
+    expect(offersSubagents({ child: false, skill: info({ trust: 'community-untrusted' }) })).toBe(
+      false
+    )
+    // A skill run whose skill is unknown (off, gone).
+    expect(offersSubagents({ child: false, skill: null })).toBe(false)
   })
 })
 

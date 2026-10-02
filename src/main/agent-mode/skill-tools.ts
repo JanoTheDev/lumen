@@ -12,6 +12,7 @@ import {
   type SkillIndexContext
 } from '../skills/disclosure'
 import { skillAuthoringHandlers } from '../skills/agent-tools'
+import { confirmsEveryAction } from '../skills/permissions'
 import type { LoadedSkill } from '../skills/registry'
 import type { ToolHandler } from './runner'
 
@@ -62,4 +63,14 @@ export function enabledSkill(name: string): LoadedSkill | null {
   const registry = getSkillRegistry()
   const s = registry?.get(name)
   return s && registry!.isEnabled(s.manifest.name) ? s : null
+}
+
+/**
+ * Whether a foreground skill run offers run_subagents (08 T49): only when the skill does not
+ * confirm every action (risky, or a community skill the user has not trusted), so no helper
+ * ever waits on a skill question. Its manifest's tool list must allow it too (the envelope).
+ */
+export function skillOffersHelpers(s: LoadedSkill): boolean {
+  const trust = getSkillRegistry()?.trustOf(s) ?? s.baseTrust
+  return !confirmsEveryAction(s.manifest, trust)
 }

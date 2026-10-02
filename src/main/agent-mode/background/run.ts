@@ -121,6 +121,19 @@ export function fileWriteNeedsConfirm(skillRun: boolean, skill: RunSkillInfo | n
   return !skill || confirmsEveryAction(skill.manifest, skill.trust)
 }
 
+/**
+ * Whether a background run offers run_subagents (08 T49). Never to a spawned helper (sub-agents
+ * are depth 1 and spawn_task has no grandchildren). In a skill run (`skill` given; null =
+ * unknown) only when the skill is known and does not confirm every action: its jobs then never
+ * wait on a skill question, and they inherit the run's envelope through its guarded handlers.
+ * Pure.
+ */
+export function offersSubagents(o: { child: boolean; skill?: RunSkillInfo | null }): boolean {
+  if (o.child) return false
+  if (o.skill === undefined) return true
+  return !!o.skill && !confirmsEveryAction(o.skill.manifest, o.skill.trust)
+}
+
 /** What the file change is, for the question. */
 export function fileWriteText(tool: string, input: Record<string, unknown>): string {
   const str = (k: string): string => String(input[k] ?? '').slice(0, 120)
@@ -228,9 +241,16 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     defs: [],
     handlers: {}
   }
-  // Not in a helper or a skill run (CLAUDE.md, subagents.md): a skill's confirms and envelope
-  // stay with one task.
-  const sub = env.subagents && !task.parentId && !task.skill ? env.subagents : null
+  const sub =
+    env.subagents &&
+    offersSubagents({
+      child: !!task.parentId,
+      skill: task.skill
+        ? await (env.skillInfo ?? registrySkill)(task.skill).catch(() => null)
+        : undefined
+    })
+      ? env.subagents
+      : null
   const own = {
     ...createBackgroundHandlers(env.ports),
     ...(sub

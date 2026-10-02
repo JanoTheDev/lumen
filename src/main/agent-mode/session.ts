@@ -37,7 +37,13 @@ import {
 import { FOREGROUND_TOOLS, toolSet } from './tools'
 import { foregroundSpawnHandler } from './background'
 import { BG_TOOLS } from './background/tools'
-import { enabledSkill, preloadSkill, skillToolSet, type SkillToolSet } from './skill-tools'
+import {
+  enabledSkill,
+  preloadSkill,
+  skillOffersHelpers,
+  skillToolSet,
+  type SkillToolSet
+} from './skill-tools'
 import {
   afterDrift,
   finishSkillRun,
@@ -103,6 +109,8 @@ export interface RunSettings {
   memoryWrite?: (fact: string) => 'ok' | 'rejected' | 'disabled'
   /** run_subagents is offered (when the envelope lists it); spawn_task never is. */
   subagents?: boolean
+  /** The helpers' model role (default `role`, then Settings → agent.subagents.model). */
+  helperRole?: Role
   /** use_skill may load only these skills. */
   allowSkill?: (name: string) => boolean
   /** Each end of the model loop (a pause too: a resumed run ends again). */
@@ -388,7 +396,7 @@ function deps(
     const cfg = subagentSettings()
     const run = runSubagentsHandler({
       pool: subagentPool(),
-      turn: subagentTurn(under.role ?? cfg.model),
+      turn: subagentTurn(under.helperRole ?? under.role ?? cfg.model),
       costOf: (m, u) => usageCost(m, u).total,
       now: () => Date.now(),
       costCapUsd: cfg.costCapUsd,
@@ -766,11 +774,17 @@ async function runSkill(
       }
     }
     let result: RunResult | null = null
+    // Sub-agents (08 T49) when the skill asks before nothing: its jobs run inside this envelope
+    // on the skill's model role. spawn_task never (noSpawn).
+    const helpers: RunSettings | undefined = skillOffersHelpers(s)
+      ? { subagents: true, ...(s.manifest.model ? { helperRole: s.manifest.model } : {}) }
+      : undefined
     const response = await run(task, env, context, signal, {
       ...extra,
       noSpawn: true,
       ...(how === 'steps+agent' ? { skipPlan: true } : {}),
       envelope: skillEnvelope(s, env.taskId, skillHost),
+      ...(helpers ? { under: helpers } : {}),
       onResult: (r) => (result = r)
     })
     const r = result as RunResult | null

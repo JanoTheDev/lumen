@@ -72,7 +72,8 @@ vi.mock('../../src/main/agent-mode/background/tools', () => ({
 vi.mock('../../src/main/agent-mode/skill-tools', () => ({
   enabledSkill: () => h.skill,
   preloadSkill: () => null,
-  skillToolSet: () => ({ defs: [], handlers: {}, index: '' })
+  skillToolSet: () => ({ defs: [], handlers: {}, index: '' }),
+  skillOffersHelpers: () => true
 }))
 vi.mock('../../src/main/agent-mode/skill-run', () => ({
   afterDrift: (p: string) => `${p}\n\nDRIFT NOTE`,
