@@ -332,7 +332,8 @@ export const faceFrameSchema = z
     browRaise: faceScore,
     smile: faceScore,
     roll: faceScore,
-    yaw: faceScore
+    yaw: faceScore,
+    pitch: faceScore
   })
   .strict()
 export const faceStatusSchema = z
@@ -340,7 +341,13 @@ export const faceStatusSchema = z
   .strict()
 export const faceCalibrateSchema = z.union([
   z.object({ step: z.literal('rest') }).strict(),
-  z.object({ step: z.literal('gesture'), gesture: z.enum(FACE_GESTURES) }).strict()
+  z.object({ step: z.literal('gesture'), gesture: z.enum(FACE_GESTURES) }).strict(),
+  z
+    .object({
+      step: z.literal('range'),
+      at: z.enum(['centre', 'left', 'right', 'up', 'down'])
+    })
+    .strict()
 ])
 
 /** Lesson recorder window (07 T30): webm pieces (about one a second) and its state. */

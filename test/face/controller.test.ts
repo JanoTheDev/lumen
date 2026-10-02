@@ -16,6 +16,7 @@ const frame = (p: Partial<FaceFrame> = {}): FaceFrame => ({
   smile: 0,
   roll: 0,
   yaw: 0,
+  pitch: 0,
   ...p
 })
 
@@ -26,12 +27,14 @@ function setup(cfg: Partial<FaceConfig> = {}) {
   const config: FaceConfig = { ...FACE_DEFAULTS, ...cfg }
   const run = vi.fn()
   const saveThreshold = vi.fn()
+  const saveRange = vi.fn()
   const c = new FaceController({
     now: () => now,
     sleep: () => new Promise<void>((r) => (wake = r)),
     config: () => config,
     run,
-    saveThreshold
+    saveThreshold,
+    saveRange
   })
   const tick = (f: FaceFrame, ms: number): void => {
     for (let t = 0; t < ms; t += 66) {
@@ -43,7 +46,7 @@ function setup(cfg: Partial<FaceConfig> = {}) {
     wake?.()
     await Promise.resolve()
   }
-  return { c, run, saveThreshold, tick, finishSample, config }
+  return { c, run, saveThreshold, saveRange, tick, finishSample, config }
 }
 
 describe('face controller', () => {
@@ -93,6 +96,48 @@ describe('face controller', () => {
     expect(r.message).toMatch(/Turn on face gestures/)
   })
 
+  it('leaves head turns to the head pointer while it is on', () => {
+    const bindings = { ...FACE_DEFAULTS.bindings, turnLeft: 'click' as const }
+    expect(detectorOptions({ ...FACE_DEFAULTS, bindings }).active).toContain('turnLeft')
+    const o = detectorOptions({
+      ...FACE_DEFAULTS,
+      bindings,
+      pointer: { ...FACE_DEFAULTS.pointer, enabled: true }
+    })
+    expect(o.active).not.toContain('turnLeft')
+    expect(o.active).toContain('mouthOpen')
+  })
+
+  it('calibrates the head pointer range from five looks', async () => {
+    const { c, run, saveRange, tick, finishSample } = setup()
+    c.setStatus('running')
+    const look = async (
+      at: 'centre' | 'left' | 'right' | 'up' | 'down',
+      yaw: number,
+      pitch: number
+    ): Promise<{ ok: boolean; message: string }> => {
+      const p = c.calibrateRange(at)
+      tick(frame({ yaw, pitch }), 1500)
+      await finishSample()
+      return p
+    }
+    expect((await look('centre', 2, -5)).ok).toBe(true)
+    expect((await look('left', -18, -5)).message).toBe('Left is set.')
+    expect((await look('right', 22, -5)).ok).toBe(true)
+    expect((await look('up', 2, -20)).ok).toBe(true)
+    // Bottom barely moved: refused, the others are kept.
+    const bad = await look('down', 2, -3)
+    expect(bad.ok).toBe(false)
+    expect(bad.message).toMatch(/bottom/)
+    const r = await look('down', 2, 9)
+    expect(r).toMatchObject({ ok: true, message: 'Pointer range is set.' })
+    expect(saveRange).toHaveBeenCalledWith({
+      yaw: { centre: 2, neg: -18, pos: 22 },
+      pitch: { centre: -5, neg: -20, pos: 9 }
+    })
+    expect(run).not.toHaveBeenCalled()
+  })
+
   it('repeats scroll gestures only', () => {
     const o = detectorOptions({
       ...FACE_DEFAULTS,
@@ -108,7 +153,9 @@ describe('face actions', () => {
     input: vi.fn(async () => true),
     switchPress: vi.fn(() => false),
     toggleDwellPause: vi.fn(() => true),
-    voice: vi.fn()
+    voice: vi.fn(),
+    pointerPause: vi.fn(() => false),
+    pointerRecentre: vi.fn(() => true)
   })
 
   it('maps clicks and scrolls to input at the pointer', async () => {
@@ -131,5 +178,15 @@ describe('face actions', () => {
     await runFaceAction('voice', d)
     expect(d.voice).toHaveBeenCalled()
     expect((await runFaceAction('none', d)).ok).toBe(false)
+  })
+
+  it('pauses and recentres the head pointer', async () => {
+    const d = deps()
+    expect(await runFaceAction('pointer-pause', d)).toEqual({
+      ok: false,
+      why: 'The head pointer is off.'
+    })
+    expect(await runFaceAction('pointer-recentre', d)).toEqual({ ok: true })
+    expect(d.pointerRecentre).toHaveBeenCalled()
   })
 })

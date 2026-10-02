@@ -17,6 +17,7 @@ const frame = (p: Partial<FaceFrame> = {}): FaceFrame => ({
   smile: 0,
   roll: 0,
   yaw: 0,
+  pitch: 0,
   ...p
 })
 

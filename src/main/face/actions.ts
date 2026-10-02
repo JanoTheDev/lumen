@@ -18,6 +18,9 @@ export interface FaceActionDeps {
   toggleDwellPause(): boolean
   /** Starts listening, like the wake word. */
   voice(): void
+  /** Head pointer: pause / resume and recentre; false when it is off (or no face to centre). */
+  pointerPause(): boolean
+  pointerRecentre(): boolean
 }
 
 export function inputSteps(a: FaceAction): InputStep[] | null {
@@ -64,6 +67,12 @@ export async function runFaceAction(
     case 'voice':
       deps.voice()
       return { ok: true }
+    case 'pointer-pause':
+      return deps.pointerPause() ? { ok: true } : { ok: false, why: 'The head pointer is off.' }
+    case 'pointer-recentre':
+      return deps.pointerRecentre()
+        ? { ok: true }
+        : { ok: false, why: 'The head pointer is off or cannot see your face.' }
     default:
       return { ok: false }
   }

@@ -222,9 +222,10 @@ export interface FaceFrame {
   mouthOpen: number
   browRaise: number
   smile: number
-  /** Head roll and yaw in degrees. */
+  /** Head roll, yaw and pitch in degrees. */
   roll: number
   yaw: number
+  pitch: number
 }
 
 export type FaceAssets =
@@ -246,9 +247,18 @@ export interface FaceState {
   last?: { gesture: string; action: string; at: number }
   /** Calibration is sampling (gestures do not act meanwhile). */
   calibrating: boolean
+  /** Head pointer, while it is on: the head's offset (-1..1 = the calibrated edge) and the
+   * dead zone's half size in the same units, for the live preview dot. */
+  pointer?: { paused: boolean; nx: number; ny: number; deadX: number; deadY: number }
 }
 
-export type FaceCalibrateStep = { step: 'rest' } | { step: 'gesture'; gesture: string }
+/** Where the head points during a head-pointer range step. */
+export type FaceRangeAt = 'centre' | 'left' | 'right' | 'up' | 'down'
+
+export type FaceCalibrateStep =
+  | { step: 'rest' }
+  | { step: 'gesture'; gesture: string }
+  | { step: 'range'; at: FaceRangeAt }
 
 export interface FaceCalibrateResult {
   ok: boolean

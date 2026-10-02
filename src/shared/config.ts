@@ -216,7 +216,9 @@ export const FACE_ACTIONS = [
   'switch-select',
   'switch-next',
   'dwell-pause',
-  'voice'
+  'voice',
+  'pointer-pause',
+  'pointer-recentre'
 ] as const
 export type FaceAction = (typeof FACE_ACTIONS)[number]
 
@@ -232,6 +234,44 @@ export const faceThresholdSchema = z.object({
   dir: z.union([z.literal(1), z.literal(-1)])
 })
 export type FaceThreshold = z.infer<typeof faceThresholdSchema>
+
+/** One head axis of the head pointer's range, angles in degrees: centre, then the head turned
+ * toward the screen's left / top (neg) and right / bottom (pos). */
+const faceAxisRangeSchema = z.object({
+  centre: z.number().min(-90).max(90),
+  neg: z.number().min(-90).max(90),
+  pos: z.number().min(-90).max(90)
+})
+export type FaceAxisRange = z.infer<typeof faceAxisRangeSchema>
+
+/** Head pointer (11 T25 leftover): head yaw / pitch move the mouse pointer. */
+const facePointerSchema = z.object({
+  enabled: z.boolean().default(false),
+  /** relative: a joystick, the head's offset from centre sets the speed; absolute: it sets the
+   * position on the screen. */
+  mode: z.enum(['relative', 'absolute']).default('relative'),
+  /** 1..10; relative mode's top speed. */
+  speed: z.number().min(1).max(10).default(4),
+  /** Degrees around the centre that do not move the pointer (relative mode). */
+  deadZone: z.number().min(0).max(15).default(3),
+  /** Exponent of the speed curve: 1 = linear, higher = finer near the centre. */
+  acceleration: z.number().min(1).max(3).default(1.8),
+  /** 0 = raw, 0.9 = very smooth (and slower to follow). */
+  smoothing: z.number().min(0).max(0.9).default(0.6),
+  /** Calibrated range; missing / null (reset) = the built-in one, centred on the first
+   * frames. */
+  range: z.object({ yaw: faceAxisRangeSchema, pitch: faceAxisRangeSchema }).nullable().optional()
+})
+export type FacePointerConfig = z.infer<typeof facePointerSchema>
+
+export const FACE_POINTER_DEFAULTS: FacePointerConfig = {
+  enabled: false,
+  mode: 'relative',
+  speed: 4,
+  deadZone: 3,
+  acceleration: 1.8,
+  smoothing: 0.6
+}
 
 const a11yFaceSchema = z.object({
   /** Camera on and gestures live. Off: the camera is closed and nothing runs. */
@@ -255,16 +295,16 @@ const a11yFaceSchema = z.object({
       turnLeft: 'none',
       turnRight: 'none'
     }),
-  /** Calibrated thresholds; a missing gesture uses the built-in default. */
+  /** Calibrated thresholds; a missing (or null: reset) gesture uses the built-in default. */
   thresholds: z
     .object({
-      mouthOpen: faceThresholdSchema.optional(),
-      browRaise: faceThresholdSchema.optional(),
-      smile: faceThresholdSchema.optional(),
-      tiltLeft: faceThresholdSchema.optional(),
-      tiltRight: faceThresholdSchema.optional(),
-      turnLeft: faceThresholdSchema.optional(),
-      turnRight: faceThresholdSchema.optional()
+      mouthOpen: faceThresholdSchema.nullable().optional(),
+      browRaise: faceThresholdSchema.nullable().optional(),
+      smile: faceThresholdSchema.nullable().optional(),
+      tiltLeft: faceThresholdSchema.nullable().optional(),
+      tiltRight: faceThresholdSchema.nullable().optional(),
+      turnLeft: faceThresholdSchema.nullable().optional(),
+      turnRight: faceThresholdSchema.nullable().optional()
     })
     .default({}),
   /** How long a gesture must be held before it acts. */
@@ -272,7 +312,8 @@ const a11yFaceSchema = z.object({
   /** Quiet time after a gesture acted. */
   cooldownMs: z.number().int().min(100).max(10_000).default(800),
   /** Camera deviceId from enumerateDevices; '' = the system default. */
-  cameraId: z.string().max(200).default('')
+  cameraId: z.string().max(200).default(''),
+  pointer: facePointerSchema.default(FACE_POINTER_DEFAULTS)
 })
 export type FaceConfig = z.infer<typeof a11yFaceSchema>
 
@@ -290,7 +331,8 @@ export const FACE_DEFAULTS: FaceConfig = {
   thresholds: {},
   holdMs: 300,
   cooldownMs: 800,
-  cameraId: ''
+  cameraId: '',
+  pointer: FACE_POINTER_DEFAULTS
 }
 
 const shortcut = z.union([z.literal(''), z.string().regex(HOTKEY_RE)])
@@ -882,7 +924,12 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
     helpHotkey: 'Ctrl+Shift+F1',
     shortcuts: { ...A11Y_DEFAULTS.shortcuts },
     coexist: { yieldToVoiceControl: true, wakeWithDragon: false },
-    face: { ...FACE_DEFAULTS, bindings: { ...FACE_DEFAULTS.bindings }, thresholds: {} }
+    face: {
+      ...FACE_DEFAULTS,
+      bindings: { ...FACE_DEFAULTS.bindings },
+      thresholds: {},
+      pointer: { ...FACE_POINTER_DEFAULTS }
+    }
   },
   buddy: { enabled: false, color: 'accent', size: 'm', followCursor: true },
   agent: {
