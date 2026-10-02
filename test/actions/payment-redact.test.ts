@@ -35,7 +35,7 @@ describe('hasCardNumber', () => {
     '4242.4242.4242.4242',
     '4242_4242_4242_4242',
     '4242  4242  4242  4242',
-    '４２４２'.repeat(4)
+    '\uff14\uff12\uff14\uff12'.repeat(4)
   ])('finds %s (dots, underscores, double spaces, full-width digits; review M2)', (t) => {
     expect(hasCardNumber(t)).toBe(true)
   })
@@ -109,6 +109,31 @@ describe('findPrice', () => {
 
   it('normalizes non-breaking spaces', () => {
     expect(findPrice('Total 1 234,56 €')).toBe('1 234,56 €')
+  })
+
+  it('skips savings and discount lines; no total left means not read (review M3)', () => {
+    const page = 'Subtotal €100\nDiscount -€20\nTotal savings €20\nPay now'
+    expect(findPrice(page, 'pay now')).toBeNull()
+    expect(findPrice('Total €80\nYou saved €20\nPay now', 'pay now')).toBe('€80')
+  })
+
+  it('skips a €0 "paid now" total (review M3)', () => {
+    const page = 'Total (3 nights) €300\nTotal paid now €0\nPay at property €300\nBook'
+    expect(findPrice(page, 'book')).toBe('€300')
+  })
+
+  it('several totals: the one nearest the button, else the largest (review M3)', () => {
+    const page = 'Total: 120.00 EUR\nTotal after 3 months: 360.00 EUR'
+    expect(findPrice(page)).toBe('360.00 EUR')
+    expect(findPrice('Total €10\nPremium total €99\n\nmore\nTotal €45\nPay now', 'pay now')).toBe(
+      '€45'
+    )
+  })
+
+  it('prefers "Order total" / "Amount due" over a plain total (review M3)', () => {
+    const page = 'Order total: £45.00\nTotal items 3\nTotal points earned £1.00\nPlace order'
+    expect(findPrice(page, 'place order')).toBe('£45.00')
+    expect(findPrice('Amount due $12.50\nTotal $99.00')).toBe('$12.50')
   })
 
   it('returns null without an amount', () => {

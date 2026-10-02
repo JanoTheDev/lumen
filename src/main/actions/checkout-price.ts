@@ -22,14 +22,33 @@ const PRICE_RE = new RegExp(
   `(?:(?:${SYMBOL}|${CODE})[ \\u00a0]?(?:${AMOUNT}))|(?:(?:${AMOUNT})[ \\u00a0]?(?:${SYMBOL}|${CODE}))(?![\\p{L}])`,
   'gu'
 )
-/** Lines that hold the amount to pay (en/nl/de/fr/es). */
+/** Lines that hold the amount to pay (en/nl/de/fr/es/it/pt). */
 const TOTAL_RE =
-  /\b(total|grand total|amount due|to pay|you pay|totaal|te betalen|totaalprijs|gesamt|gesamtbetrag|gesamtpreis|summe|zu zahlen|montant total|total à payer|à payer|importe total|total a pagar|precio total)\b/i
+  /\b(total|grand total|amount due|to pay|you pay|totaal|te betalen|totaalprijs|gesamt|gesamtbetrag|gesamtpreis|summe|zu zahlen|montant total|total à payer|à payer|importe total|total a pagar|precio total|totale|importo|valor total)\b/i
+/** Labels that name what is charged, preferred over a plain "Total". */
+const PAY_TOTAL_RE =
+  /\b(grand total|order total|total due|total to pay|amount due|amount to pay|to pay|you pay|te betalen|zu zahlen|gesamtbetrag|total à payer|à payer|total a pagar|totale da pagare|totale ordine|valor total)\b/i
+/** Lines that are not the charge: savings, discounts, subtotals. */
+const NOT_CHARGE_RE =
+  /\b(sav(?:e|ed|ings?)|you save|discount|korting|rabatt|ersparnis|remise|économie|descuento|ahorro|sconto|desconto|sub-?\s?total|subtotaal|zwischensumme|sous-total|subtotale)\b/i
 
 interface PriceHit {
   text: string
   index: number
+  value: number
   total: boolean
+  /** "Order total", "Amount due", "Te betalen". */
+  payTotal: boolean
+  /** A savings, discount or subtotal line, or a negative amount. */
+  notCharge: boolean
+}
+
+/** "1.234,56 €" → 1234.56, "$1,299.99" → 1299.99. */
+function amountOf(s: string): number {
+  const digits = s.replace(/[^\d.,]/g, '')
+  const m = /[.,](\d{1,2})$/.exec(digits)
+  const whole = (m ? digits.slice(0, m.index) : digits).replace(/\D/g, '')
+  return Number(`${whole || '0'}.${m ? m[1] : '0'}`)
 }
 
 function hits(text: string): PriceHit[] {
@@ -41,10 +60,14 @@ function hits(text: string): PriceHit[] {
     // A total's label may sit on the line above its amount (OCR, table cells).
     const prevStart = text.lastIndexOf('\n', Math.max(0, lineStart - 2)) + 1
     const prev = lineStart > 0 ? text.slice(prevStart, lineStart) : ''
+    const label = TOTAL_RE.test(line) || hasPrice(prev) ? line : `${prev} ${line}`
     out.push({
       text: m[0].replace(/\s+/g, ' ').trim(),
       index: m.index,
-      total: TOTAL_RE.test(line) || (!hasPrice(prev) && TOTAL_RE.test(prev))
+      value: amountOf(m[0]),
+      total: TOTAL_RE.test(label),
+      payTotal: PAY_TOTAL_RE.test(label),
+      notCharge: NOT_CHARGE_RE.test(label) || /[-−–]\s*$/.test(text.slice(lineStart, m.index))
     })
   }
   return out
@@ -54,15 +77,29 @@ function hasPrice(s: string): boolean {
   return new RegExp(PRICE_RE.source, 'u').test(s)
 }
 
+/** Several different totals: the one nearest the button, else the largest. */
+function pickTotal(totals: PriceHit[], text: string, near?: string): PriceHit {
+  if (new Set(totals.map((h) => h.value)).size === 1) return totals[totals.length - 1]
+  const at = near ? text.toLowerCase().lastIndexOf(near.toLowerCase()) : -1
+  if (at >= 0)
+    return totals.reduce((a, b) => (Math.abs(b.index - at) < Math.abs(a.index - at) ? b : a))
+  return totals.reduce((a, b) => (b.value > a.value ? b : a))
+}
+
 /**
- * The price the user is about to pay in `text`: the last amount on a "Total" / "Te betalen"
- * line, else the amount nearest the button's word, else the last amount on the page.
+ * The price the user is about to pay in `text`: an "Order total" / "Amount due" / "Te betalen"
+ * amount, else a "Total" one (savings, discounts, subtotals and €0 "paid now" lines left out;
+ * several different totals: the one nearest the button, else the largest), else the amount
+ * nearest the button's word, else the last amount on the page. null when the page has
+ * discounts or subtotals but no total: the charge cannot be told for sure.
  */
 export function findPrice(text: string, near?: string): string | null {
-  const all = hits(text)
-  if (!all.length) return null
-  const totals = all.filter((h) => h.total)
-  if (totals.length) return totals[totals.length - 1].text
+  const found = hits(text)
+  const all = found.filter((h) => !h.notCharge)
+  const charged = all.filter((h) => h.total && h.value > 0)
+  const totals = charged.some((h) => h.payTotal) ? charged.filter((h) => h.payTotal) : charged
+  if (totals.length) return pickTotal(totals, text, near).text
+  if (!all.length || found.some((h) => h.notCharge)) return null
   if (near) {
     const at = text.toLowerCase().lastIndexOf(near.toLowerCase())
     if (at >= 0)

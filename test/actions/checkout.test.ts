@@ -66,18 +66,18 @@ describe('checkoutName', () => {
   })
 
   it.each([
-    ['zero-width space', 'P​ay now'],
-    ['soft hyphen', 'Pa­y now'],
-    ['Cyrillic а', 'Pаy now'],
-    ['Greek Ρ and Cyrillic у', 'Ρaу now'],
-    ['full-width letters', 'Ｐａｙ now']
+    ['zero-width space', 'P\u200bay now'],
+    ['soft hyphen', 'Pa\u00ady now'],
+    ['Cyrillic \u0430', 'P\u0430y now'],
+    ['Greek \u03a1 and Cyrillic \u0443', '\u03a1a\u0443 now'],
+    ['full-width letters', '\uff30\uff41\uff59 now']
   ])('a disguised "Pay now" (%s) is still caught', (_label, name) => {
     expect(checkoutName(name)).toBe('pay now')
   })
 
   it('the same folding hardens the send / delete names', () => {
-    expect(riskyName('S​end')).toBe('send')
-    expect(riskyName('Dеlete')).toBe('delete')
+    expect(riskyName('S\u200bend')).toBe('send')
+    expect(riskyName('D\u0435lete')).toBe('delete')
   })
 
   it.each([
