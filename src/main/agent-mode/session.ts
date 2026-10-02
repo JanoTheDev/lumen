@@ -8,6 +8,8 @@ import { newTaskState } from '../actions/safety'
 import { usageCost } from '../ai/pricing'
 import { withUsageScope, type UsageScope } from '../usage/scope'
 import { getProvider } from '../ai/providers'
+import type { Role } from '../ai/models'
+import { isSensitive } from '../ai/memory/sensitive'
 import { skillContext } from '../ai/skills'
 import { announce } from '../a11y'
 import { bus } from '../bus'
@@ -25,6 +27,7 @@ import { inputLane } from './input-lane'
 import { PLAN_SYSTEM, normalizePlan, planSchema, planTurn, type TaskContext } from './prompts'
 import {
   runAgent,
+  type Caps,
   type RunnerDeps,
   type RunnerModel,
   type RunResult,
@@ -84,6 +87,26 @@ interface PausedRun {
   until: number
   envelope?: SkillEnvelope
   noSpawn?: boolean
+  under?: RunSettings
+}
+
+/**
+ * A buddy on screen (08 T52): its run settings on top of its envelope. Kept with a paused run,
+ * so "resume the task" goes on with the same model, caps, notebook and helpers.
+ */
+export interface RunSettings {
+  /** The model role for the plan and every turn (default planning / main). */
+  role?: Role
+  /** Caps instead of the defaults; "keep going" at a cap adds the same amounts again. */
+  caps?: Partial<Caps>
+  /** memory_write is offered (when the envelope lists it) and its notes go here. */
+  memoryWrite?: (fact: string) => 'ok' | 'rejected' | 'disabled'
+  /** run_subagents is offered (when the envelope lists it); spawn_task never is. */
+  subagents?: boolean
+  /** use_skill may load only these skills. */
+  allowSkill?: (name: string) => boolean
+  /** Each end of the model loop (a pause too: a resumed run ends again). */
+  onEnd?: (r: RunResult) => void
 }
 
 let paused: PausedRun | null = null
@@ -239,9 +262,10 @@ function taskContext(ctx: QueryContext, prompt: string): TaskContext {
   }
 }
 
-const model: RunnerModel = {
+/** The runner's model: the planning and main roles, or one role for both (a buddy's). */
+const modelFor = (role?: Role): RunnerModel => ({
   async plan(prompt, ctx, signal) {
-    const { llm, model, effort } = getProvider('planning')
+    const { llm, model, effort } = getProvider(role ?? 'planning')
     try {
       const res = await llm.complete(
         {
@@ -263,14 +287,14 @@ const model: RunnerModel = {
     }
   },
   async turn(req, signal) {
-    const { llm, model, effort } = getProvider('main')
+    const { llm, model, effort } = getProvider(role ?? 'main')
     if (!llm.toolTurn)
       throw new Error(
         'Agent mode needs an Anthropic or OpenAI key (the local model has no tool use).'
       )
     return llm.toolTurn({ ...req, model, effort, maxTokens: TURN_MAX_TOKENS }, signal)
   }
-}
+})
 
 let lastStatus = ''
 
@@ -336,7 +360,8 @@ function deps(
   guard?: ToolGuard,
   trace?: RunTrace,
   /** Sub-agents (08 T49): the task's offered tools; absent = run_subagents not offered. */
-  sub?: { defs: () => ToolDef[]; envelope?: SkillEnvelope }
+  sub?: { defs: () => ToolDef[]; envelope?: SkillEnvelope },
+  under: RunSettings = {}
 ): RunnerDeps {
   const noteObserved = (t: string): void => {
     env.observedText = `${env.observedText}\n${t}`.slice(-20_000)
@@ -349,6 +374,7 @@ function deps(
       if (!q.success) return { content: [{ type: 'text', text: 'Invalid input.' }], isError: true }
       return { content: [{ type: 'text', text: observed('memory', memorySearchFor(q.data)) }] }
     },
+    ...(under.memoryWrite ? { memory_write: memoryWriteHandler(under.memoryWrite) } : {}),
     ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {}),
     // Research → cards (05 T39).
     present_cards: presentCardsHandler({
@@ -362,7 +388,7 @@ function deps(
     const cfg = subagentSettings()
     const run = runSubagentsHandler({
       pool: subagentPool(),
-      turn: subagentTurn(cfg.model),
+      turn: subagentTurn(under.role ?? cfg.model),
       costOf: (m, u) => usageCost(m, u).total,
       now: () => Date.now(),
       costCapUsd: cfg.costCapUsd,
@@ -401,7 +427,7 @@ function deps(
     }
   }
   return {
-    model,
+    model: modelFor(under.role),
     handlers,
     publish: (task) => {
       if (task.question?.text) lastQuestion = task.question.text
@@ -472,9 +498,10 @@ async function run(
     /** A skill run: its permission check, its tool list and its connectors. */
     envelope?: SkillEnvelope
     onResult?: (r: RunResult) => void
+    under?: RunSettings
   }
 ): Promise<ModelResponse> {
-  const { noSpawn, envelope, onResult, ...more } = extra
+  const { noSpawn, envelope, onResult, under, ...more } = extra
   if (running) throw new Error('An agent task is already running.')
   const ac = new AbortController()
   const onOuter = (): void => ac.abort(signal.reason)
@@ -483,7 +510,8 @@ async function run(
   running = { taskId: env.taskId, abort: () => ac.abort(), pausable: true }
   lastStatus = ''
   // Skills (11 T02): the L1 list after the agent prompt, use_skill / read_skill_file as tools.
-  const skills = skillToolSet()
+  const allowSkill = under?.allowSkill
+  const skills = skillToolSet(allowSkill ? { allow: (s) => allowSkill(s.manifest.name) } : {})
   // Connectors (08 T18): the enabled MCP servers' tools; a skill only gets its own servers.
   const mcp = await mcpToolSet(env).catch(() => ({
     defs: [] as ToolDef[],
@@ -499,10 +527,12 @@ async function run(
   // parallel jobs that come back as short results.
   const extraTools = [
     MEMORY_SEARCH_TOOL,
+    ...(under?.memoryWrite ? [BG_TOOLS.memory_write] : []),
     ...skills.defs,
     ...mcpDefs,
     // run_subagents first: past Anthropic's 20 strict tools the later ones go non-strict.
-    ...(noSpawn ? [] : [RUN_SUBAGENTS_TOOL, BG_TOOLS.spawn_task]),
+    ...((under?.subagents ?? !noSpawn) ? [RUN_SUBAGENTS_TOOL] : []),
+    ...(noSpawn ? [] : [BG_TOOLS.spawn_task]),
     PRESENT_CARDS_TOOL,
     // A skill run reaches only its own sites (no fetch_url outside its envelope).
     ...(envelope ? [] : [FETCH_URL_TOOL])
@@ -521,6 +551,7 @@ async function run(
           cancelWindowMs: loadConfig().agent.cancelWindowMs,
           signal: ac.signal,
           speakSummary: false,
+          ...(under?.caps ? { caps: under.caps, capStep: under.caps } : {}),
           ...more
         },
         deps(
@@ -534,11 +565,13 @@ async function run(
                 defs: () => [...toolSet(tools), ...extraTools],
                 ...(envelope ? { envelope } : {})
               }
-            : undefined
+            : undefined,
+          under
         )
       )
     )
     onResult?.(r)
+    under?.onEnd?.(r)
     transcripts().foregroundEnd(env.taskId, r)
     if (r.status === 'done' && trace.steps.length)
       rememberAgentRun({ prompt, summary: r.summary, at: Date.now(), steps: trace.steps })
@@ -550,7 +583,8 @@ async function run(
             context,
             until: Date.now() + PAUSE_KEEP_MS,
             ...(envelope ? { envelope } : {}),
-            ...(noSpawn ? { noSpawn } : {})
+            ...(noSpawn ? { noSpawn } : {}),
+            ...(under ? { under } : {})
           }
         : null
     log(
@@ -575,18 +609,48 @@ async function run(
 }
 
 /** `prompt`: the user's own words (the policy's userText); `observed`: text that is not theirs. */
-function newEnv(taskId: string, prompt: string, observed = ''): TaskEnv {
+function newEnv(taskId: string, prompt: string, observed = '', gate?: TaskEnv['gate']): TaskEnv {
   return {
     taskId,
     prompt,
     state: newTaskState(),
     fields: { typed: new Map() },
     observedText: observed,
-    ask: askIo
+    ask: askIo,
+    ...(gate ? { gate } : {})
+  }
+}
+
+/** memory_write for a task whose notes go somewhere of its own (a buddy's notebook). */
+function memoryWriteHandler(write: NonNullable<RunSettings['memoryWrite']>): ToolHandler {
+  return async (input) => {
+    const fact = String((input as { fact?: unknown }).fact ?? '').trim()
+    const fail = (t: string): Awaited<ReturnType<ToolHandler>> => ({
+      content: [{ type: 'text', text: t }],
+      isError: true
+    })
+    if (!fact) return fail('The note is empty.')
+    const r = isSensitive(fact) ? 'rejected' : write(fact)
+    if (r === 'disabled') return fail('Memory is off or in private mode; nothing was kept.')
+    if (r === 'rejected') return fail('That note was not kept (it looks sensitive).')
+    return { content: [{ type: 'text', text: 'Kept in your notebook.' }] }
   }
 }
 
 let seq = 0
+
+/**
+ * A buddy on screen (08 T52): the task runs under this envelope (guard, tools, connectors,
+ * network), adds `scope` to its usage scope (origin buddy, buddyId), gates and audits as `gate`
+ * and takes the buddy's run settings.
+ */
+export interface UnderEnvelope extends RunSettings {
+  make: (taskId: string, host: SkillHost) => SkillEnvelope
+  scope?: Partial<UsageScope>
+  gate?: { origin: 'buddy'; buddyId: string }
+  /** The task's id, before it starts (its run record, its chat). */
+  onStart?: (taskId: string) => void
+}
 
 /** Runs a multi-step request as an agent task; the reply is the spoken summary. */
 export function runAgentTask(
@@ -607,14 +671,8 @@ export function runAgentTask(
     observedText?: string
     /** ... and the permission envelopes of the skills that task runs under. */
     underSkills?: readonly string[]
-    /**
-     * A buddy on screen (08 T52): the task runs under this envelope (guard, tools, connectors,
-     * network) and adds `scope` to its usage scope (origin buddy, buddyId).
-     */
-    underEnvelope?: {
-      make: (taskId: string, host: SkillHost) => SkillEnvelope
-      scope?: Partial<UsageScope>
-    }
+    /** A buddy on screen (08 T52). */
+    underEnvelope?: UnderEnvelope
   } = {}
 ): Promise<ModelResponse> {
   paused = null
@@ -623,14 +681,17 @@ export function runAgentTask(
   const scope = { ...base, ...opts.underEnvelope?.scope }
   return withUsageScope(opts.skill ? { ...scope, skillId: opts.skill } : scope, () => {
     const { skill, skillArgs, userText, observedText, underSkills, underEnvelope, ...extra } = opts
-    const env = newEnv(taskId, userText ?? prompt, observedText)
+    const env = newEnv(taskId, userText ?? prompt, observedText, underEnvelope?.gate)
     const context = taskContext(ctx, prompt)
-    if (underEnvelope)
+    if (underEnvelope) {
+      underEnvelope.onStart?.(taskId)
       return run(prompt, env, context, signal, {
         ...extra,
         noSpawn: true,
-        envelope: underEnvelope.make(taskId, skillHost)
+        envelope: underEnvelope.make(taskId, skillHost),
+        under: underEnvelope
       })
+    }
     if (underSkills?.length) {
       const list = underSkills.map((n) => enabledSkill(n))
       if (list.some((x) => !x)) throw new Error('A skill this task runs under is off or gone.')
@@ -759,6 +820,7 @@ export function resumeAgentTask(signal: AbortSignal): Promise<ModelResponse> | n
   return run(p.saved.task.prompt, p.env, p.context, signal, {
     resume: p.saved,
     ...(p.envelope ? { envelope: p.envelope } : {}),
-    ...(p.noSpawn ? { noSpawn: true } : {})
+    ...(p.noSpawn ? { noSpawn: true } : {}),
+    ...(p.under ? { under: p.under } : {})
   })
 }

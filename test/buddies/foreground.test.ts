@@ -53,6 +53,7 @@ describe('the foreground stand-in skill', () => {
     expect(foregroundTools(make({ screen: true }))).toEqual([
       'finish',
       'ask_user',
+      'memory_write',
       'observe',
       'wait_for'
     ])
@@ -64,6 +65,7 @@ describe('the foreground stand-in skill', () => {
     expect(foregroundTools(full)).toEqual([
       'finish',
       'ask_user',
+      'memory_write',
       'observe',
       'wait_for',
       'act',
@@ -118,7 +120,10 @@ describe('runBuddyForeground', () => {
         return envelope
       },
       notebook: () => 'notes',
-      working: (id, active) => events.push([id, active])
+      memoryWrite: () => 'ok',
+      runs: { start: () => {}, end: () => {} },
+      working: (id, active) => events.push([id, active]),
+      now: () => 1
     }
     const r = await runBuddyForeground(
       b,
@@ -128,7 +133,7 @@ describe('runBuddyForeground', () => {
     )
     expect(r).toEqual({ mode: 'answer', text: 'Done.' })
     expect(made).toEqual([
-      'Mail Buddy (buddy):t_1:finish,ask_user,observe,wait_for,act,keys,launch_app'
+      'Mail Buddy (buddy):t_1:finish,ask_user,memory_write,observe,wait_for,act,keys,launch_app'
     ])
     expect(events).toEqual([
       ['mail-buddy', true],
@@ -145,7 +150,10 @@ describe('runBuddyForeground', () => {
         },
         envelope: () => ({}) as SkillEnvelope,
         notebook: () => '',
-        working: (_id, a) => events.push(a)
+        memoryWrite: () => 'ok',
+        runs: { start: () => {}, end: () => {} },
+        working: (_id, a) => events.push(a),
+        now: () => 1
       })
     ).rejects.toThrow('boom')
     expect(events).toEqual([true, false])

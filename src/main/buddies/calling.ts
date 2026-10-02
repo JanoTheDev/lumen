@@ -22,6 +22,7 @@ import { bus } from '../bus'
 import { configPath, loadConfig } from '../config'
 import { log } from '../logger'
 import { windowOnlyContext } from '../query/context'
+import { canStartRun } from '../usage/limits'
 import {
   addAutomation,
   automations,
@@ -37,6 +38,7 @@ import * as assistant from '../windows/assistant'
 import { buddyCreationTurn, setBuddyScheduler } from './creation-voice'
 import { chooseLane, runBuddyForeground } from './foreground'
 import {
+  buddies,
   buddyNotebook,
   buddyRuns,
   buddySummaries,
@@ -56,12 +58,32 @@ import {
   setScheduleHost,
   syncScheduleIds
 } from './schedule'
+import { ScreenRuns } from './screen-runs'
 import { overBudget } from './service'
 import { BuddyVoice } from './voice'
 
 let pause: BuddyPauseFlag | null = null
 /** The buddy running as the foreground agent task, if any. */
 let onScreen: string | null = null
+
+let screenRuns: ScreenRuns | null = null
+
+/** The buddies' on-screen runs (their history merges them with the background ones). */
+const screenRunLog = (): ScreenRuns =>
+  (screenRuns ??= new ScreenRuns(join(dirname(configPath()), 'buddies-screen-runs.json')))
+
+/** May a buddy start a run now (05 T45 monthly limits); the reason when not. */
+export type BuddyRunCheck = (buddyId: string) => { ok: true } | { ok: false; reason: string }
+
+let runCheck: BuddyRunCheck | null = (buddyId) => canStartRun({ buddyId })
+
+/**
+ * The overall usage-limit check for on-screen runs (background runs get it in `runBuddy`);
+ * default the 05 T45 limits. Null = no check.
+ */
+export function setBuddyRunCheck(fn: BuddyRunCheck | null): void {
+  runCheck = fn
+}
 
 const pauseFlag = (): BuddyPauseFlag =>
   (pause ??= new BuddyPauseFlag(join(dirname(configPath()), 'buddies-state.json')))
@@ -94,7 +116,19 @@ function foreground(b: Buddy, opts: RunBuddyOpts, signal: AbortSignal): Promise<
     },
     envelope: skillEnvelope,
     notebook: buddyNotebook,
-    working: (buddyId, active) => bus.emit({ type: 'buddy.working', buddyId, active })
+    memoryWrite: (id, fact) => buddies()?.appendNotebook(id, fact) ?? 'disabled',
+    runs: {
+      start: (buddyId, taskId, title, at) => {
+        screenRunLog().start(buddyId, taskId, title, at)
+        bus.emit({ type: 'buddies.changed', ids: [buddyId] })
+      },
+      end: (taskId, e) => {
+        screenRunLog().end(taskId, e)
+        bus.emit({ type: 'buddies.changed', ids: [b.id] })
+      }
+    },
+    working: (buddyId, active) => bus.emit({ type: 'buddy.working', buddyId, active }),
+    now: () => Date.now()
   }).finally(() => {
     if (onScreen === b.id) onScreen = null
   })
@@ -121,6 +155,8 @@ export function startBuddyNow(
     if (!b.enabled) return { ok: false, code: 'E_OFF', error: `${b.name} is turned off.` }
     const over = overBudget(b, ledgerSpend(b.id, new Date()))
     if (over) return { ok: false, code: 'E_BUDGET', error: over }
+    const limit = runCheck?.(b.id)
+    if (limit && !limit.ok) return { ok: false, code: 'E_BUDGET', error: limit.reason }
     log('plan', `buddy ${b.id} runs on screen (${opts.trigger})`)
     return {
       ok: true,
@@ -263,6 +299,7 @@ let installed = false
 export function installBuddyCalling(): void {
   if (installed) return
   installed = true
+  buddies()?.setScreenRuns((id) => screenRunLog().list(id))
   setScheduleHost({
     automations: () => (automationsLoaded() ? automations().all() : null),
     add: (input) => addAutomation(input),

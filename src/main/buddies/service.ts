@@ -56,8 +56,26 @@ export function overBudget(b: Buddy, spent: { usd: number; tokens: number } | nu
   return null
 }
 
+/** A buddy's on-screen runs (08 T52), newest first; `running` while one is open. */
+export type ScreenRunsReader = (buddyId: string) => BuddyRunSummary[]
+
+const newestFirst = (a: BuddyRunSummary, b: BuddyRunSummary): number => b.startedAt - a.startedAt
+
 export class Buddies {
+  private screenRuns: ScreenRunsReader = () => []
+
   constructor(private readonly deps: BuddiesDeps) {}
+
+  /** Where the buddy's on-screen runs come from (calling.ts sets it). */
+  setScreenRuns(read: ScreenRunsReader): void {
+    this.screenRuns = read
+  }
+
+  /** Background runs and on-screen runs, newest first. */
+  private allRuns(id: string, tasks: BackgroundTask[]): BuddyRunSummary[] {
+    const own = tasks.filter((t) => t.buddyId === id && !t.parentId).map(runSummary)
+    return [...own, ...this.screenRuns(id)].sort(newestFirst)
+  }
 
   private now(): number {
     return this.deps.now?.() ?? Date.now()
@@ -86,7 +104,7 @@ export class Buddies {
     const tasks = this.deps.tasks()
     return this.list().map((b) => {
       const own = tasks.filter((t) => t.buddyId === b.id && !t.parentId)
-      const last = own.sort((x, y) => y.counters.startedAt - x.counters.startedAt)[0]
+      const last = this.allRuns(b.id, tasks)[0]
       return {
         id: b.id,
         name: b.name,
@@ -97,8 +115,8 @@ export class Buddies {
         trust: b.trust,
         enabled: b.enabled,
         scheduleIds: b.scheduleIds,
-        running: own.some(isOpen),
-        ...(last ? { lastRun: runSummary(last) } : {})
+        running: own.some(isOpen) || this.screenRuns(b.id).some((r) => r.phase === 'running'),
+        ...(last ? { lastRun: last } : {})
       }
     })
   }
@@ -148,6 +166,13 @@ export class Buddies {
     return r
   }
 
+  /** memory_write of a run: one note appended to the buddy's notebook. */
+  appendNotebook(id: string, fact: string): 'ok' | 'rejected' | 'disabled' {
+    const r = this.deps.store.appendNotebook(id, fact)
+    if (r === 'ok') this.deps.emit([id])
+    return r === 'ok' || r === 'disabled' ? r : 'rejected'
+  }
+
   /** Starts the buddy now as a background task (origin buddy). */
   run(id: string, opts: RunBuddyOpts): RunBuddyResult {
     const b = isBuddyId(id) ? this.get(id) : null
@@ -160,14 +185,9 @@ export class Buddies {
     return { ok: true, task }
   }
 
-  /** The buddy's runs, newest first (helpers it spawned are left out). */
+  /** The buddy's runs, on screen ones too, newest first (helpers it spawned are left out). */
   runs(id: string, limit = 20): BuddyRunSummary[] {
-    return this.deps
-      .tasks()
-      .filter((t) => t.buddyId === id && !t.parentId)
-      .sort((a, b) => b.counters.startedAt - a.counters.startedAt)
-      .slice(0, limit)
-      .map(runSummary)
+    return this.allRuns(id, this.deps.tasks()).slice(0, limit)
   }
 
   /** What the background runner asks for a buddy task. */
@@ -180,11 +200,7 @@ export class Buddies {
         return buddyTaskEnv(b, task, host, {
           envelope: this.deps.envelope,
           notebook: this.notebook(b.id),
-          memoryWrite: (fact) => {
-            const r = this.deps.store.appendNotebook(b.id, fact)
-            if (r === 'ok') this.deps.emit([b.id])
-            return r === 'ok' || r === 'disabled' ? r : 'rejected'
-          }
+          memoryWrite: (fact) => this.appendNotebook(b.id, fact)
         })
       },
       scope: (task, fn) =>

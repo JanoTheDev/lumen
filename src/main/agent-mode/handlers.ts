@@ -56,6 +56,16 @@ export interface TaskEnv {
   /** Text the agent has read this task (injection check), newest last, capped. */
   observedText: string
   ask: AskIo
+  /** A buddy on screen (08 T52): the gate and audit origin is the buddy's (default agent). */
+  gate?: { origin: 'buddy'; buddyId: string }
+}
+
+/** The task's gate origin (and buddy id for the audit line). */
+export function gateOrigin(env: Pick<TaskEnv, 'gate'>): {
+  origin: 'agent' | 'buddy'
+  buddyId?: string
+} {
+  return env.gate ? { origin: 'buddy', buddyId: env.gate.buddyId } : { origin: 'agent' }
 }
 
 const MAX_OBSERVED = 20_000
@@ -79,7 +89,7 @@ function noteObserved(env: TaskEnv, t: string): void {
 function execOpts(env: TaskEnv, signal: AbortSignal): ExecuteOptions {
   return {
     signal,
-    origin: 'agent',
+    ...gateOrigin(env),
     taskId: env.taskId,
     userText: env.prompt,
     task: env.state,
@@ -342,7 +352,7 @@ export async function launchApp(
     )
   const g = await gate(
     { type: 'launch_app', appId: entry.name },
-    { origin: 'agent', taskId: env.taskId, userText: env.prompt, task: env.state }
+    { ...gateOrigin(env), taskId: env.taskId, userText: env.prompt, task: env.state }
   )
   if (!g.ok) return fail(`E_DENIED: ${g.decision.reason}.`)
   if (signal.aborted) {
@@ -522,7 +532,7 @@ export function createHandlers(env: TaskEnv): Record<string, ToolHandler> {
     focus_mode: (i) => focusMode(i as FocusModeInput),
     read_file: (i) => readDropped(i as ReadFileInput, env),
     create_file: createFileHandler(() => ({
-      origin: 'agent',
+      ...gateOrigin(env),
       taskId: env.taskId,
       userText: env.prompt,
       observedText: env.observedText,

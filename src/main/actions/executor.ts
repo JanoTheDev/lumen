@@ -43,6 +43,8 @@ export interface ExecuteOptions {
   signal?: AbortSignal
   /** Who asked (safety-policy ctx.origin). Default "agent", the strictest model origin. */
   origin?: Origin
+  /** A buddy's run (08 T52): its id goes on the audit line. */
+  buddyId?: string
   /** The user's words for this task. */
   userText?: string
   /** The user already said yes to this batch (transcript confirm). */
@@ -221,6 +223,7 @@ export async function executeActions(
   const { signal } = opts
   const gateCtx = {
     origin: opts.origin ?? ('agent' as const),
+    ...(opts.buddyId ? { buddyId: opts.buddyId } : {}),
     taskId: opts.taskId ?? newTaskId(),
     userText: opts.userText,
     approved: opts.approved,
