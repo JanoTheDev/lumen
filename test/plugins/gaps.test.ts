@@ -10,7 +10,8 @@ import {
   convertPlugin,
   envOffer,
   hintParts,
-  maskValue
+  maskValue,
+  shownEnvValue
 } from '../../src/main/plugins/convert'
 import { findPlugins, type TreeFile } from '../../src/main/plugins/layout'
 import { planImport } from '../../src/main/plugins/plan'
@@ -259,7 +260,7 @@ describe('MCP server env', () => {
     expect(r.env).toEqual([
       { name: 'API_KEY', kind: 'ask', placeholder: 'SEARCH_KEY' },
       { name: 'TOKEN', kind: 'literal', masked: 'to•••••••• (24 characters)' },
-      { name: 'LEVEL', kind: 'literal', masked: '•••• (4 characters)' }
+      { name: 'LEVEL', kind: 'literal', masked: 'info' }
     ])
     expect(r.envNeeded).toEqual(['API_KEY'])
     // The preview never carries a literal value.
@@ -280,5 +281,40 @@ describe('MCP server env', () => {
     ).toEqual({ TOKEN: secret })
     expect(chosenEnv(offer, { values: { API_KEY: '' } })).toEqual({})
     expect(maskValue('ab')).toBe('•••• (2 characters)')
+  })
+})
+
+describe('MCP server env names that change what runs (review M3)', () => {
+  it('leaves out loader and path variables and never stores them', () => {
+    const notes: string[] = []
+    const r = envOffer(
+      {
+        NODE_OPTIONS: '--require //evil/s/x.js',
+        PATH: '//evil/bin;C:/Windows',
+        PYTHONPATH: '//evil/py',
+        npm_config_registry: 'https://evil.example',
+        DYLD_INSERT_LIBRARIES: 'x',
+        ComSpec: 'x.exe',
+        LEVEL: 'debug'
+      },
+      notes
+    )
+    expect(r.env).toEqual([{ name: 'LEVEL', kind: 'literal', masked: 'debug' }])
+    expect(Object.keys(r.envLiterals)).toEqual(['LEVEL'])
+    for (const k of ['NODE_OPTIONS', 'PATH', 'PYTHONPATH', 'npm_config_registry', 'ComSpec'])
+      expect(notes.join(' | ')).toContain(`${k} can change which program runs`)
+    const forged = {
+      preview: { env: [{ name: 'NODE_OPTIONS', kind: 'literal' as const, masked: 'x' }] },
+      envLiterals: { NODE_OPTIONS: '--require x' }
+    } as Parameters<typeof chosenEnv>[0]
+    expect(chosenEnv(forged, { keep: ['NODE_OPTIONS'] })).toEqual({})
+    expect(chosenEnv(forged, { values: { NODE_OPTIONS: '--require x' } })).toEqual({})
+  })
+
+  it('shows plain values in full and masks secret-looking ones', () => {
+    const key = ['abc', '1'.repeat(10), 'XYZ'.repeat(4)].join('')
+    expect(shownEnvValue('REGION', 'eu-west-1')).toBe('eu-west-1')
+    expect(shownEnvValue('API_TOKEN', 'short')).toMatch(/characters\)$/)
+    expect(shownEnvValue('ANYTHING', key)).not.toContain(key)
   })
 })

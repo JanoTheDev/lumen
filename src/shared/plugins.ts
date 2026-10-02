@@ -56,7 +56,7 @@ export interface PluginEnvPreview {
   kind: 'ask' | 'literal'
   /** ask: the variable name the plugin used. */
   placeholder?: string
-  /** literal: the value masked; it is stored only when ticked. */
+  /** literal: the value, masked when it looks like a secret; it is stored only when ticked. */
   masked?: string
 }
 

@@ -14,6 +14,7 @@ import type {
 import { commandLine } from '@shared/connectors'
 import { splitFrontmatter, type YamlValue } from '../skills/frontmatter'
 import { SKILL_FILE_EXT } from '../skills/kind'
+import { findSecrets } from '../actions/redact'
 import { MAX_SKILL_FILE_BYTES } from '../skills/manifest'
 import { joinRel, pathList, readJson, type FoundPlugin, type TreeFile } from './layout'
 
@@ -506,9 +507,31 @@ export function maskValue(v: string): string {
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/
 
 /**
+ * Env names that change which program the trusted command line really runs or what it loads
+ * (search paths, loader / startup options, package registries and proxies, profilers, the
+ * shell). The user trusts the command line they see; a plugin never sets these.
+ */
+const RISKY_ENV_RE =
+  /^(PATH|PATHEXT|COMSPEC|SHELL|BASH_ENV|ENV|PROMPT_COMMAND|HOME|USERPROFILE|APPDATA|LOCALAPPDATA|PROGRAMDATA|SYSTEMROOT|WINDIR|TEMP|TMP|TMPDIR|NODE_OPTIONS|NODE_PATH|NODE_EXTRA_CA_CERTS|NODE_TLS_REJECT_UNAUTHORIZED|ELECTRON_RUN_AS_NODE|PYTHONPATH|PYTHONSTARTUP|PYTHONHOME|PYTHONUSERBASE|PYTHONEXECUTABLE|PERL5OPT|PERL5LIB|PERLLIB|RUBYOPT|RUBYLIB|GEM_HOME|GEM_PATH|CLASSPATH|JAVA_HOME|JAVA_TOOL_OPTIONS|_JAVA_OPTIONS|JDK_JAVA_OPTIONS|SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|HTTPS?_PROXY|ALL_PROXY|GOFLAGS|GOPATH|GOROOT|GOTOOLCHAIN|RUSTFLAGS|CARGO_HOME|RUSTUP_HOME|RUSTUP_TOOLCHAIN|LUA_PATH|LUA_CPATH)$|^(LD_|DYLD_|DOTNET_|CORECLR_|COMPLUS_|COR_|NPM_CONFIG_|YARN_|PNPM_|BUN_|DENO_|COREPACK_|PIP_|UV_|PIPX_|POETRY_|CONDA_|GIT_|BUNDLE_|MAVEN_|GRADLE_)/i
+
+/** The env name can redirect what a stdio server runs (see RISKY_ENV_RE). */
+export const riskyEnvName = (name: string): boolean => RISKY_ENV_RE.test(name)
+
+const SECRET_NAME_RE =
+  /key|token|secret|pass(word|wd|phrase)?|auth|credential|cookie|session|private/i
+
+/** A literal as the preview shows it: in full, unless its name or shape says it is a secret. */
+export function shownEnvValue(name: string, v: string): string {
+  const keyShaped = /^[A-Za-z0-9+/_=.-]{20,}$/.test(v) && /\d/.test(v) && /[A-Za-z]/.test(v)
+  if (SECRET_NAME_RE.test(name) || keyShaped || findSecrets(v).length) return maskValue(v)
+  return v.length > 200 ? `${v.slice(0, 200)}… (${v.length} characters)` : v
+}
+
+/**
  * A server's env as the preview shows it: `${VAR}` values are asked for (the user types them, or
  * fills them later in Settings → Connectors), literal values (and `${VAR:-default}` defaults)
- * are shown masked and only used when the user ticks them. Nothing is stored silently.
+ * are shown (masked when they look like secrets) and only used when the user ticks them. Names
+ * that change which program runs (RISKY_ENV_RE) are left out. Nothing is stored silently.
  */
 export function envOffer(
   raw: unknown,
@@ -521,6 +544,10 @@ export function envOffer(
     raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   for (const [k, v] of Object.entries(map).slice(0, 30)) {
     if (!ENV_KEY.test(k) || typeof v !== 'string') continue
+    if (riskyEnvName(k)) {
+      notes.push(`${k} can change which program runs, so it is left out`)
+      continue
+    }
     if (PLUGIN_VAR.test(v)) {
       notes.push(`${k} pointed into the plugin folder and is left out`)
       continue
@@ -531,7 +558,7 @@ export function envOffer(
       env.push({ name: k, kind: 'ask', placeholder: e.needs[0] })
     } else if (e.text.length <= 4000) {
       envLiterals[k] = e.text
-      env.push({ name: k, kind: 'literal', masked: maskValue(e.text) })
+      env.push({ name: k, kind: 'literal', masked: shownEnvValue(k, e.text) })
     }
   }
   if (envNeeded.length)
@@ -550,7 +577,9 @@ export function chosenEnv(
   choice: { values?: Record<string, string>; keep?: readonly string[] } | undefined
 ): Record<string, string> {
   const out: Record<string, string> = {}
-  const spec = new Map((offer.preview.env ?? []).map((e) => [e.name, e.kind]))
+  const spec = new Map(
+    (offer.preview.env ?? []).filter((e) => !riskyEnvName(e.name)).map((e) => [e.name, e.kind])
+  )
   for (const k of choice?.keep ?? [])
     if (spec.get(k) === 'literal' && offer.envLiterals?.[k] !== undefined)
       out[k] = offer.envLiterals[k]

@@ -179,7 +179,7 @@ describe('conversion', () => {
     expect(search.offer.envLiterals).toEqual({ MODE: 'fast' })
     expect(search.preview.env).toEqual([
       { name: 'API_KEY', kind: 'ask', placeholder: 'SEARCH_KEY' },
-      { name: 'MODE', kind: 'literal', masked: '•••• (4 characters)' }
+      { name: 'MODE', kind: 'literal', masked: 'fast' }
     ])
     expect(plan.servers[1].preview).toMatchObject({ transport: 'http', tokenNeeded: true })
     expect(plan.servers[1].preview.notes.join(' ')).toMatch(/X-Team/)
