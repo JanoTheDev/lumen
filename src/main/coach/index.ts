@@ -54,6 +54,7 @@ import {
 } from './reading-level'
 import { parseShortcutTable, ShortcutCoach, type CoachState } from './shortcuts'
 import { describeChange, elementsOf, type ScreenState } from './what-changed'
+import { withUsageFeature } from '../usage/scope'
 
 const BASE = join(homedir(), '.ai-overlay')
 const STATE_FILE = join(BASE, 'coach.json')
@@ -263,20 +264,22 @@ async function explainError(): Promise<string> {
   const level = readingLevelFor(cfg, d.app)
   try {
     const { llm, model, effort } = getProvider('fast')
-    const res = await llm.complete(
-      {
-        model,
-        system: [{ text: RESCUE_SYSTEM, cacheable: true }],
-        messages: [
-          {
-            role: 'user',
-            content: rescueTurn({ ...d, levelLine: readingLevelLine(level) })
-          }
-        ],
-        maxTokens: 220,
-        effort
-      },
-      AbortSignal.timeout(RESCUE_TIMEOUT_MS)
+    const res = await withUsageFeature('coach', () =>
+      llm.complete(
+        {
+          model,
+          system: [{ text: RESCUE_SYSTEM, cacheable: true }],
+          messages: [
+            {
+              role: 'user',
+              content: rescueTurn({ ...d, levelLine: readingLevelLine(level) })
+            }
+          ],
+          maxTokens: 220,
+          effort
+        },
+        AbortSignal.timeout(RESCUE_TIMEOUT_MS)
+      )
     )
     return res.text.trim() || 'I couldn’t work out that message.'
   } catch (e) {

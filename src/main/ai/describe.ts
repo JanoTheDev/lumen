@@ -18,6 +18,7 @@ import { log } from '../logger'
 import { cropImage } from './frames'
 import { parseJsonAs } from './json'
 import { getProvider, hasVisionModel } from './providers'
+import { withUsageFeature } from '../usage/scope'
 
 export interface DescribeOptions {
   detail: 'brief' | 'full'
@@ -180,18 +181,22 @@ export async function describeScreen(
   if (elements) lines.push(`elements (id role "name" @(x,y,w,h)):\n${elements.text}`)
   try {
     const { llm, model, effort } = getProvider('fast')
-    const res = await llm.complete(
-      {
-        model,
-        system: [{ text: DESCRIBE_SYSTEM, cacheable: true }],
-        messages: [{ role: 'user', content: lines.join('\n') }],
-        images: ctx.screenshot ? [{ base64: ctx.screenshot, detail: brief ? 'low' : 'high' }] : [],
-        maxTokens: brief ? 300 : 700,
-        effort,
-        schema: describeSchema,
-        schemaName: 'lumen_describe'
-      },
-      opts.signal
+    const res = await withUsageFeature('describe', () =>
+      llm.complete(
+        {
+          model,
+          system: [{ text: DESCRIBE_SYSTEM, cacheable: true }],
+          messages: [{ role: 'user', content: lines.join('\n') }],
+          images: ctx.screenshot
+            ? [{ base64: ctx.screenshot, detail: brief ? 'low' : 'high' }]
+            : [],
+          maxTokens: brief ? 300 : 700,
+          effort,
+          schema: describeSchema,
+          schemaName: 'lumen_describe'
+        },
+        opts.signal
+      )
     )
     const out = res.data ?? parseJsonAs(res.text, describeSchema)
     if (!out?.spoken.trim()) return local()
@@ -307,18 +312,20 @@ export async function explainTarget(
   ]
   try {
     const { llm, model, effort } = getProvider('fast')
-    const res = await llm.complete(
-      {
-        model,
-        system: [{ text: EXPLAIN_SYSTEM, cacheable: true }],
-        messages: [{ role: 'user', content: facts.join('\n') }],
-        images: crop ? [{ base64: crop, detail: 'low' }] : [],
-        maxTokens: 200,
-        effort,
-        schema: explainSchema,
-        schemaName: 'lumen_explain'
-      },
-      opts.signal
+    const res = await withUsageFeature('describe', () =>
+      llm.complete(
+        {
+          model,
+          system: [{ text: EXPLAIN_SYSTEM, cacheable: true }],
+          messages: [{ role: 'user', content: facts.join('\n') }],
+          images: crop ? [{ base64: crop, detail: 'low' }] : [],
+          maxTokens: 200,
+          effort,
+          schema: explainSchema,
+          schemaName: 'lumen_explain'
+        },
+        opts.signal
+      )
     )
     const out = res.data ?? parseJsonAs(res.text, explainSchema)
     if (!out?.spoken.trim()) return local()

@@ -78,6 +78,7 @@ import {
 } from './importers'
 import { tutorialSchema } from './importers/tutorial'
 import { pinnedFetch } from '../web/net'
+import { withUsageScope } from '../usage/scope'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -409,32 +410,34 @@ async function explainWhy(
   const { llm, model, effort } = getProvider('fast')
   const i = lesson.steps.indexOf(step)
   const timeout = AbortSignal.timeout(WHY_TIMEOUT_MS)
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: WHY_PROMPT, cacheable: true }],
-      messages: [
-        {
-          role: 'user',
-          content: whyTurn({
-            app: skill?.name ?? lesson.app,
-            lessonTitle: lesson.title,
-            step: step.say,
-            previous: lesson.steps[i - 1]?.say,
-            next: lesson.steps[i + 1]?.say,
-            readingLevel: readingLevelLineFor(loadConfig().helpers, skill?.id ?? lesson.app),
-            replyStyle: activeStyleBlock(),
-            appNotes:
-              skill && hasMatchRules(skill)
-                ? skillContext(skill, step.say, WHY_NOTES_TOKENS)
-                : undefined
-          })
-        }
-      ],
-      maxTokens: 120,
-      effort
-    },
-    signal ? AbortSignal.any([signal, timeout]) : timeout
+  const res = await withUsageScope({ origin: 'lesson', feature: 'lesson' }, () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: WHY_PROMPT, cacheable: true }],
+        messages: [
+          {
+            role: 'user',
+            content: whyTurn({
+              app: skill?.name ?? lesson.app,
+              lessonTitle: lesson.title,
+              step: step.say,
+              previous: lesson.steps[i - 1]?.say,
+              next: lesson.steps[i + 1]?.say,
+              readingLevel: readingLevelLineFor(loadConfig().helpers, skill?.id ?? lesson.app),
+              replyStyle: activeStyleBlock(),
+              appNotes:
+                skill && hasMatchRules(skill)
+                  ? skillContext(skill, step.say, WHY_NOTES_TOKENS)
+                  : undefined
+            })
+          }
+        ],
+        maxTokens: 120,
+        effort
+      },
+      signal ? AbortSignal.any([signal, timeout]) : timeout
+    )
   )
   log('plan', `lesson why for ${lesson.id}/${step.id} (${res.model})`)
   return res.text.trim() || null
@@ -498,23 +501,26 @@ function installRecorder(base: string): void {
     capture: recordShot,
     draftText: async (input, images) => {
       const { llm, model, effort } = getProvider('fast')
-      const res = await llm.complete(
-        {
-          model,
-          system: [{ text: RECORD_PROMPT, cacheable: true }],
-          messages: [{ role: 'user', content: recordTurn(input) }],
-          images: images.length
-            ? images.map((i) => ({
-                base64: i.data,
-                mediaType: i.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const)
-              }))
-            : undefined,
-          maxTokens: 2000,
-          effort,
-          schema: draftTextSchema,
-          schemaName: 'lumen_recorded_lesson'
-        },
-        AbortSignal.timeout(DRAFT_TIMEOUT_MS)
+      const res = await withUsageScope({ origin: 'lesson', feature: 'lesson' }, () =>
+        llm.complete(
+          {
+            model,
+            system: [{ text: RECORD_PROMPT, cacheable: true }],
+            messages: [{ role: 'user', content: recordTurn(input) }],
+            images: images.length
+              ? images.map((i) => ({
+                  base64: i.data,
+                  mediaType:
+                    i.mime === 'image/png' ? ('image/png' as const) : ('image/jpeg' as const)
+                }))
+              : undefined,
+            maxTokens: 2000,
+            effort,
+            schema: draftTextSchema,
+            schemaName: 'lumen_recorded_lesson'
+          },
+          AbortSignal.timeout(DRAFT_TIMEOUT_MS)
+        )
       )
       log('plan', `record: lesson words written (${res.model})`)
       return res.data ?? null
@@ -616,17 +622,19 @@ export function importTutorialFrom(src: TutorialSource, appId?: string): Promise
       complete: async (system, user, signal) => {
         const { llm, model, effort } = getProvider('fast')
         const timeout = AbortSignal.timeout(TUTORIAL_TIMEOUT_MS)
-        const res = await llm.complete(
-          {
-            model,
-            system: [{ text: system, cacheable: true }],
-            messages: [{ role: 'user', content: user }],
-            maxTokens: 6000,
-            effort,
-            schema: tutorialSchema,
-            schemaName: 'lumen_tutorial_lesson'
-          },
-          signal ? AbortSignal.any([signal, timeout]) : timeout
+        const res = await withUsageScope({ origin: 'lesson', feature: 'lesson' }, () =>
+          llm.complete(
+            {
+              model,
+              system: [{ text: system, cacheable: true }],
+              messages: [{ role: 'user', content: user }],
+              maxTokens: 6000,
+              effort,
+              schema: tutorialSchema,
+              schemaName: 'lumen_tutorial_lesson'
+            },
+            signal ? AbortSignal.any([signal, timeout]) : timeout
+          )
         )
         log('plan', `tutorial lesson written (${res.model})`)
         return res.data

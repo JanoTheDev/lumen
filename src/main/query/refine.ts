@@ -17,6 +17,7 @@ import { parseJsonAs } from '../ai/json'
 import { getProvider, hasVisionModel } from '../ai/providers'
 import { log } from '../logger'
 import { LOW_CONFIDENCE, type ResolvedTarget } from './resolve-target'
+import { withUsageFeature } from '../usage/scope'
 
 export type RefineOutcome = 'agree' | 'moved' | 'not-found' | 'skipped'
 
@@ -94,23 +95,25 @@ async function locateInCrop(
 ): Promise<Point | null> {
   const { llm, model, effort } = getProvider('vision-refine')
   const { imgW, imgH } = crop.geometry
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: REFINE_SYSTEM, cacheable: false }],
-      messages: [
-        {
-          role: 'user',
-          content: `The target "${label}" should be in this ${imgW}x${imgH} px crop. Where is its centre?`
-        }
-      ],
-      images: [{ base64: crop.data, detail: 'high' }],
-      maxTokens: 120,
-      effort,
-      schema: refineSchema,
-      schemaName: 'lumen_refine'
-    },
-    signal
+  const res = await withUsageFeature('refine', () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: REFINE_SYSTEM, cacheable: false }],
+        messages: [
+          {
+            role: 'user',
+            content: `The target "${label}" should be in this ${imgW}x${imgH} px crop. Where is its centre?`
+          }
+        ],
+        images: [{ base64: crop.data, detail: 'high' }],
+        maxTokens: 120,
+        effort,
+        schema: refineSchema,
+        schemaName: 'lumen_refine'
+      },
+      signal
+    )
   )
   const out = res.data ?? parseJsonAs(res.text, refineSchema)
   if (!out?.found || out.x === undefined || out.y === undefined) return null

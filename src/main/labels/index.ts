@@ -25,6 +25,7 @@ import { isGenericName } from './detect'
 import { parseLabelCommand } from './grammar'
 import { labelReplySchema } from './prompt'
 import { LabelStore, parseLabelsFile, type LabelEntry } from './store'
+import { withUsageFeature } from '../usage/scope'
 
 const AGENT_TIMEOUT_MS = 3000
 const LABEL_TIMEOUT_MS = 30_000
@@ -114,22 +115,24 @@ function makeLabeler(s: LabelStore): Labeler {
     hasModel: hasVisionModel,
     complete: async (system, user, images) => {
       const { llm, model, effort } = getProvider('fast')
-      const res = await llm.complete(
-        {
-          model,
-          system: [{ text: system, cacheable: true }],
-          messages: [{ role: 'user', content: user }],
-          images: images.map((base64) => ({
-            base64,
-            mediaType: 'image/jpeg' as const,
-            detail: 'low' as const
-          })),
-          maxTokens: 1500,
-          effort,
-          schema: labelReplySchema,
-          schemaName: 'lumen_control_labels'
-        },
-        AbortSignal.timeout(LABEL_TIMEOUT_MS)
+      const res = await withUsageFeature('label', () =>
+        llm.complete(
+          {
+            model,
+            system: [{ text: system, cacheable: true }],
+            messages: [{ role: 'user', content: user }],
+            images: images.map((base64) => ({
+              base64,
+              mediaType: 'image/jpeg' as const,
+              detail: 'low' as const
+            })),
+            maxTokens: 1500,
+            effort,
+            schema: labelReplySchema,
+            schemaName: 'lumen_control_labels'
+          },
+          AbortSignal.timeout(LABEL_TIMEOUT_MS)
+        )
       )
       log('plan', `labels: vision call (${res.model})`)
       return res.data

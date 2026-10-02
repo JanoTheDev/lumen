@@ -12,6 +12,7 @@ import { lessonContext } from '../../teach/context'
 import type { EpisodeDraft } from './episodes'
 import { memorySearch, type memorySearchInput } from './search'
 import type { SessionTurn } from './working'
+import { withUsageFeature } from '../../usage/scope'
 
 export const SESSION_END_IDLE_MS = 2 * 60_000
 const QUIT_SUMMARY_TIMEOUT_MS = 6000
@@ -116,17 +117,19 @@ export async function summarizeWithModel(
   signal?: AbortSignal
 ): Promise<SessionSummary> {
   const { llm, model, effort } = getProvider('fast')
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: SUMMARY_SYSTEM, cacheable: true }],
-      messages: [{ role: 'user', content: `<transcript>\n${transcript}\n</transcript>` }],
-      maxTokens: 900,
-      effort,
-      schema: summarySchema,
-      schemaName: 'lumen_session_memory'
-    },
-    signal
+  const res = await withUsageFeature('memory', () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: SUMMARY_SYSTEM, cacheable: true }],
+        messages: [{ role: 'user', content: `<transcript>\n${transcript}\n</transcript>` }],
+        maxTokens: 900,
+        effort,
+        schema: summarySchema,
+        schemaName: 'lumen_session_memory'
+      },
+      signal
+    )
   )
   const out = res.data ?? parseJsonAs(res.text, summarySchema)
   if (!out) throw new Error('summary did not match the schema')

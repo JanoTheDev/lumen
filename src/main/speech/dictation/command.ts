@@ -12,6 +12,7 @@ import type { LlmProvider } from '../../ai/providers/types'
 import { unwrapReply } from './cleanup'
 import { appKindOf } from './styles'
 import type { FocusTarget } from './terminal-guard'
+import { withUsageScope } from '../../usage/scope'
 
 // An edit command must name the selection ("make this shorter") or be a bare style
 // ("shorter", "more formal", "into bullets"); "Make sure everyone brings their laptop" and
@@ -197,21 +198,23 @@ export async function rewriteSelection(
   const timeout = AbortSignal.timeout(EDIT_TIMEOUT_MS)
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
   const { llm, model } = (opts.resolve ?? (() => getProvider('fast')))()
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: EDIT_PROMPT, cacheable: true }],
-      messages: [
-        {
-          role: 'user',
-          content: `<instruction>${command.trim()}</instruction>\n<selection>${selection}</selection>`
-        }
-      ],
-      maxTokens: Math.min(4096, Math.ceil(selection.length / 2) + 400),
-      temperature: 0.2,
-      effort: 'low'
-    },
-    signal
+  const res = await withUsageScope({ origin: 'dictation', feature: 'dictation-command' }, () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: EDIT_PROMPT, cacheable: true }],
+        messages: [
+          {
+            role: 'user',
+            content: `<instruction>${command.trim()}</instruction>\n<selection>${selection}</selection>`
+          }
+        ],
+        maxTokens: Math.min(4096, Math.ceil(selection.length / 2) + 400),
+        temperature: 0.2,
+        effort: 'low'
+      },
+      signal
+    )
   )
   const text = unwrapReply(res.text).replace(/^<selection>|<\/selection>$/g, '')
   if (!text.trim()) throw new Error('the model returned nothing')

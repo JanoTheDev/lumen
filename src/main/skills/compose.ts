@@ -21,6 +21,7 @@ import { INPUT_TOOL_NAMES, SKILL_TOOL_NAMES, websitePattern, websiteWords } from
 import { EXTRA_FILE_MAX_BYTES, EXTRA_FILE_RE, EXTRA_FILES_MAX } from './manage'
 import { parseSkillFile } from './manifest'
 import { StepsFileError, parseStepsFile } from './steps'
+import { withUsageFeature } from '../usage/scope'
 
 export { SKILL_TOOL_NAMES, websitePattern }
 
@@ -273,17 +274,19 @@ const DEFAULT_TIMEOUT_MS = 45_000
 /** The app's model (main role) writing a skill. */
 export const modelComposeWords: ComposeWords = async (turn) => {
   const { llm, model, effort } = getProvider('main')
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: COMPOSE_PROMPT, cacheable: true }],
-      messages: [{ role: 'user', content: turn }],
-      maxTokens: 4000,
-      effort,
-      schema: composeSchema,
-      schemaName: 'lumen_skill'
-    },
-    AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
+  const res = await withUsageFeature('skill-write', () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: COMPOSE_PROMPT, cacheable: true }],
+        messages: [{ role: 'user', content: turn }],
+        maxTokens: 4000,
+        effort,
+        schema: composeSchema,
+        schemaName: 'lumen_skill'
+      },
+      AbortSignal.timeout(DEFAULT_TIMEOUT_MS)
+    )
   )
   return (res.data as ComposeOutput | undefined) ?? null
 }

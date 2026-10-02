@@ -26,6 +26,7 @@ import { sheetsToXlsx } from './xlsx'
 import { createDocument, lastMade, realWriteDeps, type CreateResult } from './write'
 import { shareMade } from './tool'
 import { readFile } from 'fs/promises'
+import { withUsageFeature } from '../usage/scope'
 
 /** "Open it" means the file made this recently. */
 export const OPEN_WINDOW_MS = 15 * 60_000
@@ -167,24 +168,26 @@ export async function makeFile(
   ]
     .filter(Boolean)
     .join('\n')
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: SYSTEM, cacheable: true }],
-      messages: [
-        {
-          role: 'user',
-          content: `<request>${prompt}</request>\n<hint>\n${hint}\n</hint>${att.text ? `\n\n${att.text}` : ''}`
-        }
-      ],
-      images: att.images,
-      documents: att.documents,
-      maxTokens: MAX_TOKENS,
-      effort,
-      schema: makeReplySchema,
-      schemaName: 'lumen_make_file'
-    },
-    signal
+  const res = await withUsageFeature('document', () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: SYSTEM, cacheable: true }],
+        messages: [
+          {
+            role: 'user',
+            content: `<request>${prompt}</request>\n<hint>\n${hint}\n</hint>${att.text ? `\n\n${att.text}` : ''}`
+          }
+        ],
+        images: att.images,
+        documents: att.documents,
+        maxTokens: MAX_TOKENS,
+        effort,
+        schema: makeReplySchema,
+        schemaName: 'lumen_make_file'
+      },
+      signal
+    )
   )
   const out = res.data ?? parseJsonAs(res.text, makeReplySchema)
   if (!out) return answer('I could not write that file. Try asking again in other words.')

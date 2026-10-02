@@ -5,6 +5,7 @@
 import { getProvider } from '../../ai/providers'
 import type { LlmProvider } from '../../ai/providers/types'
 import { ANCHOR_WINDOW, cueSpans } from './backtrack'
+import { withUsageScope } from '../../usage/scope'
 
 export type CleanupMode = 'light' | 'off'
 
@@ -185,19 +186,21 @@ export async function cleanupDictation(raw: string, opts: CleanupOptions): Promi
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout
   try {
     const { llm, model } = (opts.resolve ?? (() => getProvider('fast')))()
-    const res = await llm.complete(
-      {
-        model,
-        system: [
-          { text: CLEANUP_PROMPT, cacheable: !opts.backtrack },
-          ...(opts.backtrack ? [{ text: BACKTRACK_PROMPT, cacheable: true }] : [])
-        ],
-        messages: [{ role: 'user', content: cleanupTurn(input, dictionary) }],
-        maxTokens: Math.min(4096, Math.ceil(input.length / 2) + 64),
-        temperature: 0,
-        effort: 'low'
-      },
-      signal
+    const res = await withUsageScope({ origin: 'dictation', feature: 'dictation-cleanup' }, () =>
+      llm.complete(
+        {
+          model,
+          system: [
+            { text: CLEANUP_PROMPT, cacheable: !opts.backtrack },
+            ...(opts.backtrack ? [{ text: BACKTRACK_PROMPT, cacheable: true }] : [])
+          ],
+          messages: [{ role: 'user', content: cleanupTurn(input, dictionary) }],
+          maxTokens: Math.min(4096, Math.ceil(input.length / 2) + 64),
+          temperature: 0,
+          effort: 'low'
+        },
+        signal
+      )
     )
     const cleaned = unwrapReply(res.text)
     if (cleaned && wordsPreserved(input, cleaned, { allowRetraction: opts.backtrack }))

@@ -26,6 +26,7 @@ import { addToHistory, historyExchange } from '../ai/history'
 import { recordTurn } from '../ai/memory/runtime'
 import { appNameOf } from '../ai/skills'
 import { withTurnCost, type TurnCost } from '../ai/cost'
+import { setUsageFeature, withUsageFeature, withUsageScope } from '../usage/scope'
 import { refreshLocalModels } from '../ai/providers'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
@@ -125,9 +126,11 @@ export async function runQuery(
   try {
     // Keyless installs: make sure a local server found since the last check is used.
     if (process.versions.electron) await refreshLocalModels().catch(() => null)
-    response = await withTurnCost(
-      () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
-      (c) => (cost = c)
+    response = await withUsageScope({ origin: 'user-direct', feature: 'answer' }, () =>
+      withTurnCost(
+        () => runTurn(prompt, { ...baseOpts, turnId }, scope, deps),
+        (c) => (cost = c)
+      )
     )
   } catch (e) {
     if (scope.cancelled || isAbortError(e)) {
@@ -221,12 +224,16 @@ async function planRouted(
   let route: Route | null = forced
   let activeWindow: string | null = null
   if (!route && !opts.lowDetail) {
-    activeWindow = await agent.activeWindow()
-    route = await routeWithLlm(
-      { utterance, activeWindow, guideActive: guideState().guideActive, lastMode },
-      scope.signal
+    const win = await agent.activeWindow()
+    activeWindow = win
+    route = await withUsageFeature('router', () =>
+      routeWithLlm(
+        { utterance, activeWindow: win, guideActive: guideState().guideActive, lastMode },
+        scope.signal
+      )
     )
   }
+  if (route) setUsageFeature(route.mode)
   scope.throwIfCancelled()
   if (route) log('plan', `route: ${describeRoute(route)}`)
 

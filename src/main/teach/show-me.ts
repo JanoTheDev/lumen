@@ -16,31 +16,34 @@ import type { HowtoResult } from '../howto'
 import { howtoText } from '../howto/tool'
 import type { Lesson } from './lesson'
 import type { Skill, SkillRegistry } from './registry'
+import { withUsageScope } from '../usage/scope'
 
 const MAX_TOKENS = 2500
 
 /** The real model call: main role, the screenshot attached, structured output. */
 const completeLesson: GenerateCall = async ({ system, user, image, signal }) => {
   const { llm, model, effort } = getProvider('main')
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: system, cacheable: true }],
-      messages: [{ role: 'user', content: user }],
-      images: image
-        ? [
-            {
-              base64: image.data,
-              mediaType: image.mime === 'image/png' ? 'image/png' : 'image/jpeg'
-            }
-          ]
-        : undefined,
-      maxTokens: MAX_TOKENS,
-      effort,
-      schema: genLessonSchema,
-      schemaName: 'lumen_lesson'
-    },
-    signal
+  const res = await withUsageScope({ origin: 'lesson', feature: 'lesson' }, () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: system, cacheable: true }],
+        messages: [{ role: 'user', content: user }],
+        images: image
+          ? [
+              {
+                base64: image.data,
+                mediaType: image.mime === 'image/png' ? 'image/png' : 'image/jpeg'
+              }
+            ]
+          : undefined,
+        maxTokens: MAX_TOKENS,
+        effort,
+        schema: genLessonSchema,
+        schemaName: 'lumen_lesson'
+      },
+      signal
+    )
   )
   return res.data ?? parseJsonAs(res.text, genLessonSchema)
 }

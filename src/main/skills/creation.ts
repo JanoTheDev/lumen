@@ -84,6 +84,7 @@ import {
   type RunSignature
 } from './proposals'
 import { readSkillText } from './registry'
+import { withUsageFeature } from '../usage/scope'
 
 /** A draft waits this long for "save it" / "call it …". */
 export const DRAFT_REVIEW_MS = 10 * 60_000
@@ -716,17 +717,19 @@ export function installSkillCreation(
     now: () => Date.now(),
     words: async (turn) => {
       const { llm, model, effort } = getProvider('fast')
-      const res = await llm.complete(
-        {
-          model,
-          system: [{ text: AUTHORING_PROMPT, cacheable: true }],
-          messages: [{ role: 'user', content: turn }],
-          maxTokens: 1500,
-          effort,
-          schema: authoringSchema,
-          schemaName: 'lumen_skill_draft'
-        },
-        AbortSignal.timeout(WORDS_TIMEOUT_MS)
+      const res = await withUsageFeature('skill-write', () =>
+        llm.complete(
+          {
+            model,
+            system: [{ text: AUTHORING_PROMPT, cacheable: true }],
+            messages: [{ role: 'user', content: turn }],
+            maxTokens: 1500,
+            effort,
+            schema: authoringSchema,
+            schemaName: 'lumen_skill_draft'
+          },
+          AbortSignal.timeout(WORDS_TIMEOUT_MS)
+        )
       )
       log('plan', `skill draft words written (${res.model})`)
       return res.data ?? null
@@ -767,17 +770,19 @@ export function installSkillCreation(
     }),
     editWords: async (turn) => {
       const { llm, model, effort } = getProvider('main')
-      const res = await llm.complete(
-        {
-          model,
-          system: [{ text: EDIT_PROMPT, cacheable: true }],
-          messages: [{ role: 'user', content: turn }],
-          maxTokens: 4000,
-          effort,
-          schema: editSchema,
-          schemaName: 'lumen_skill_edit'
-        },
-        AbortSignal.timeout(45_000)
+      const res = await withUsageFeature('skill-write', () =>
+        llm.complete(
+          {
+            model,
+            system: [{ text: EDIT_PROMPT, cacheable: true }],
+            messages: [{ role: 'user', content: turn }],
+            maxTokens: 4000,
+            effort,
+            schema: editSchema,
+            schemaName: 'lumen_skill_edit'
+          },
+          AbortSignal.timeout(45_000)
+        )
       )
       return (res.data as EditOutput | undefined) ?? null
     },

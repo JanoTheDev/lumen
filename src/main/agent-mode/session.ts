@@ -6,6 +6,7 @@ import type { AgentTask } from '@shared/events'
 import type { ModelResponse, SkillRunRecord } from '@shared/types'
 import { newTaskState } from '../actions/safety'
 import { usageCost } from '../ai/pricing'
+import { withUsageScope } from '../usage/scope'
 import { getProvider } from '../ai/providers'
 import { skillContext } from '../ai/skills'
 import { announce } from '../a11y'
@@ -610,23 +611,26 @@ export function runAgentTask(
 ): Promise<ModelResponse> {
   paused = null
   const taskId = `t_${Date.now().toString(36)}${(seq++).toString(36)}`
-  const { skill, skillArgs, userText, observedText, underSkills, ...extra } = opts
-  const env = newEnv(taskId, userText ?? prompt, observedText)
-  const context = taskContext(ctx, prompt)
-  if (underSkills?.length) {
-    const list = underSkills.map((n) => enabledSkill(n))
-    if (list.some((x) => !x)) throw new Error('A skill this task runs under is off or gone.')
-    const envelope = joinEnvelopes(
-      list.map((x) => skillEnvelope(x as LoadedSkill, taskId, skillHost))
-    )
-    return run(prompt, env, context, signal, { ...extra, noSpawn: true, envelope })
-  }
-  // A skill named by its trigger phrase: its instructions are the task's guide.
-  const loaded = skill ? preloadSkill(skill, skillArgs) : null
-  if (loaded) context.skill = loaded
-  const s = skill ? enabledSkill(skill) : null
-  if (s) return runSkill(s, prompt, env, context, signal, skillArgs, extra)
-  return run(prompt, env, context, signal, extra)
+  const scope = { origin: 'agent' as const, feature: 'agent-step', taskId }
+  return withUsageScope(opts.skill ? { ...scope, skillId: opts.skill } : scope, () => {
+    const { skill, skillArgs, userText, observedText, underSkills, ...extra } = opts
+    const env = newEnv(taskId, userText ?? prompt, observedText)
+    const context = taskContext(ctx, prompt)
+    if (underSkills?.length) {
+      const list = underSkills.map((n) => enabledSkill(n))
+      if (list.some((x) => !x)) throw new Error('A skill this task runs under is off or gone.')
+      const envelope = joinEnvelopes(
+        list.map((x) => skillEnvelope(x as LoadedSkill, taskId, skillHost))
+      )
+      return run(prompt, env, context, signal, { ...extra, noSpawn: true, envelope })
+    }
+    // A skill named by its trigger phrase: its instructions are the task's guide.
+    const loaded = skill ? preloadSkill(skill, skillArgs) : null
+    if (loaded) context.skill = loaded
+    const s = skill ? enabledSkill(skill) : null
+    if (s) return runSkill(s, prompt, env, context, signal, skillArgs, extra)
+    return run(prompt, env, context, signal, extra)
+  })
 }
 
 const skillHost: SkillHost = { speak: say, publish: showOnBar, ask: askIo }

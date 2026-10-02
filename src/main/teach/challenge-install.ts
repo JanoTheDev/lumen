@@ -28,6 +28,7 @@ import { matchAppOnly } from './commands'
 import { appIdFor } from './generate'
 import type { ProgressStore } from './progress'
 import type { SkillRegistry } from './registry'
+import { withUsageScope } from '../usage/scope'
 
 const FILE = join(homedir(), '.ai-overlay', 'teach', 'challenges.json')
 const MODEL_TIMEOUT_MS = 25_000
@@ -105,17 +106,19 @@ export function installChallenges(deps: {
       readingLevel: (appId) => readingLevelLineFor(loadConfig().helpers, appId),
       generate: async (system, user) => {
         const { llm, model, effort } = getProvider('fast')
-        const res = await llm.complete(
-          {
-            model,
-            system: [{ text: system, cacheable: true }],
-            messages: [{ role: 'user', content: user }],
-            maxTokens: 600,
-            effort,
-            schema: genChallengeSchema,
-            schemaName: 'lumen_challenge'
-          },
-          AbortSignal.timeout(MODEL_TIMEOUT_MS)
+        const res = await withUsageScope({ origin: 'lesson', feature: 'challenge' }, () =>
+          llm.complete(
+            {
+              model,
+              system: [{ text: system, cacheable: true }],
+              messages: [{ role: 'user', content: user }],
+              maxTokens: 600,
+              effort,
+              schema: genChallengeSchema,
+              schemaName: 'lumen_challenge'
+            },
+            AbortSignal.timeout(MODEL_TIMEOUT_MS)
+          )
         )
         log('plan', `challenge made (${res.model})`)
         return res.data
@@ -139,23 +142,25 @@ export function installChallenges(deps: {
       },
       judge: async (system, user, image) => {
         const { llm, model, effort } = getProvider('fast')
-        const res = await llm.complete(
-          {
-            model,
-            system: [{ text: system, cacheable: true }],
-            messages: [{ role: 'user', content: user }],
-            images: [
-              {
-                base64: image.data,
-                mediaType: image.mime === 'image/png' ? 'image/png' : 'image/jpeg'
-              }
-            ],
-            maxTokens: 700,
-            effort,
-            schema: checkReplySchema,
-            schemaName: 'lumen_challenge_check'
-          },
-          AbortSignal.timeout(MODEL_TIMEOUT_MS)
+        const res = await withUsageScope({ origin: 'lesson', feature: 'challenge' }, () =>
+          llm.complete(
+            {
+              model,
+              system: [{ text: system, cacheable: true }],
+              messages: [{ role: 'user', content: user }],
+              images: [
+                {
+                  base64: image.data,
+                  mediaType: image.mime === 'image/png' ? 'image/png' : 'image/jpeg'
+                }
+              ],
+              maxTokens: 700,
+              effort,
+              schema: checkReplySchema,
+              schemaName: 'lumen_challenge_check'
+            },
+            AbortSignal.timeout(MODEL_TIMEOUT_MS)
+          )
         )
         log('verify', `challenge checked (${res.model})`)
         return res.data
