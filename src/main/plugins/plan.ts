@@ -34,6 +34,20 @@ export function pluginSource(source: string, plugin: string, many: boolean): str
   return many ? `${source}::${plugin}` : source
 }
 
+/**
+ * Gives each plugin of one import its own name (`x`, then `x-2` …), so two plugins called the
+ * same never share an archive, a trust source or connector keys.
+ */
+export function uniquePluginNamer(): (p: FoundPlugin) => FoundPlugin {
+  const seen = new Set<string>()
+  return (p) => {
+    let name = p.name
+    for (let i = 2; seen.has(name.toLowerCase()); i++) name = `${p.name}-${i}`
+    seen.add(name.toLowerCase())
+    return name === p.name ? p : { ...p, name }
+  }
+}
+
 function freeSkillName(
   base: string,
   plugin: string,

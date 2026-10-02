@@ -14,7 +14,7 @@ import {
   shownEnvValue
 } from '../../src/main/plugins/convert'
 import { findPlugins, type TreeFile } from '../../src/main/plugins/layout'
-import { planImport } from '../../src/main/plugins/plan'
+import { planImport, uniquePluginNamer } from '../../src/main/plugins/plan'
 import {
   fetchRemotePlugins,
   githubRepo,
@@ -352,5 +352,29 @@ describe('more arguments than a skill can take (review L4)', () => {
     expect(used.filter((n) => !known.has(n))).toEqual([])
     expect(r.body).toContain('$ARGUMENTS[19]')
     expect(r.notes.join(' ')).toMatch(/more arguments than a Lumen skill can/)
+  })
+})
+
+describe('two plugins with the same name (review L1)', () => {
+  it('get their own names, archives and connector keys', () => {
+    const tree = (skill: string, server: string): TreeFile[] => [
+      f('.claude-plugin/plugin.json', JSON.stringify({ name: 'x' })),
+      f(`skills/${skill}/SKILL.md`, `---\nname: ${skill}\ndescription: Does ${skill}.\n---\nGo.\n`),
+      f(
+        '.mcp.json',
+        JSON.stringify({ mcpServers: { [server]: { command: 'npx', args: [server] } } })
+      )
+    ]
+    const unique = uniquePluginNamer()
+    const found = [tree('one', 's1'), tree('two', 's2')].map((t) => {
+      const plugin = unique(findPlugins(t).plugins[0])
+      return { plugin, converted: convertPlugin(t, plugin) }
+    })
+    expect(found.map((x) => x.plugin.name)).toEqual(['x', 'x-2'])
+    const plan = planImport(found, 'src', { owner: () => 'free' }, [])
+    expect(plan.archives.map((a) => a.source)).toEqual(['src::x', 'src::x-2'])
+    expect(plan.skills.map((s) => s.preview.name)).toEqual(['one', 'two'])
+    const keys = plan.servers.map((s) => s.preview.key)
+    expect(new Set(keys).size).toBe(2)
   })
 })

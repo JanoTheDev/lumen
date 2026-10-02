@@ -21,7 +21,7 @@ import { installArchive, previewArchive, takenNames } from '../skills/manage'
 import { chosenEnv, convertPlugin } from './convert'
 import { fetchPack } from '../packs/fetch'
 import { findPlugins, type FoundPlugin, type RemoteEntry, type TreeFile } from './layout'
-import { planImport, type ImportPlan, type NameOwner } from './plan'
+import { planImport, uniquePluginNamer, type ImportPlan, type NameOwner } from './plan'
 import { fetchRemotePlugins } from './remote'
 import { readClaudeHome, readFolder, readGithub, scanClaudeHome, SourceError } from './sources'
 
@@ -76,20 +76,23 @@ async function plugins(trees: Trees['trees']): Promise<{
   const found: { plugin: FoundPlugin; converted: ReturnType<typeof convertPlugin> }[] = []
   const skipped: ImportPlan['skipped'] = []
   const remote: RemoteEntry[] = []
+  const unique = uniquePluginNamer()
   for (const t of trees) {
     const r = findPlugins(t.files)
     skipped.push(...r.skipped)
     remote.push(...r.remote)
     for (const p of r.plugins) {
-      const plugin = t.label && !p.manifest.name ? { ...p, name: t.label } : p
+      const plugin = unique(t.label && !p.manifest.name ? { ...p, name: t.label } : p)
       found.push({ plugin, converted: convertPlugin(t.files, plugin) })
     }
   }
   if (remote.length) {
     const r = await fetchRemotePlugins(remote, (url) => fetchPack(url))
     skipped.push(...r.skipped)
-    for (const p of r.plugins)
-      found.push({ plugin: p.plugin, converted: convertPlugin(p.files, p.plugin) })
+    for (const p of r.plugins) {
+      const plugin = unique(p.plugin)
+      found.push({ plugin, converted: convertPlugin(p.files, plugin) })
+    }
   }
   return { found, skipped }
 }
