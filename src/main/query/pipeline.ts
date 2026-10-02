@@ -44,6 +44,7 @@ import { matchTrigger } from '../skills'
 import { loadConfig } from '../config'
 import { webTurn } from '../web'
 import { cardsTurn } from '../cards/ask'
+import { usageTurn } from '../usage/voice'
 import { buddyTurn } from '../buddies/calling'
 import { log, startTimer } from '../logger'
 
@@ -288,6 +289,16 @@ async function runTurn(
       await present(result, prompt, deps.onGuide, undefined, scope.signal)
       return result
     }
+  }
+  // Usage questions (05 T45): "how much did I spend this week", "how much has Inbox Buddy
+  // cost". Before the buddy turn, so a buddy's name in a cost question is not a call to it.
+  const usage = opts.lowDetail ? null : usageTurn(prompt)
+  if (usage) {
+    speakEarly(usage, deps)
+    await present(usage, prompt, deps.onGuide, undefined, scope.signal)
+    lastMode = usage.mode
+    addToHistory(historyExchange(prompt, usage))
+    return usage
   }
   // Buddies (08 T51/T52): making or editing one by voice, then calling one by name ("Inbox
   // Buddy, what's new?", "ask Price Buddy to …", "stop Price Buddy"). Only words that start with
