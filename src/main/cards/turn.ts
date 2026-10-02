@@ -9,6 +9,7 @@ import { rememberAnswer } from './answer-link'
 import {
   describeCard,
   foreignCardPhrase,
+  mainCurrency,
   parseCardIntent,
   priceWords,
   resolvePick,
@@ -105,7 +106,8 @@ const fallsThrough = (pick: Pick, r: PickResult): boolean =>
   !r.ok && r.reason === 'none' && pick.by === 'words'
 
 function cheapest(set: StoredCards): Card | null {
-  const priced = set.cards.cards.filter((c) => c.price)
+  const cur = mainCurrency(set.cards.cards)
+  const priced = set.cards.cards.filter((c) => c.price?.currency === cur)
   if (!priced.length) return null
   return priced.reduce((a, b) => (b.price!.amount < a.price!.amount ? b : a))
 }

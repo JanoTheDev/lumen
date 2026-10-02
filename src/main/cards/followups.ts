@@ -239,6 +239,16 @@ const words = (s: string): string[] =>
     .filter((w) => w && !STOP.has(w))
     .map(stem)
 
+/** The currency most priced cards use (ties: the one seen first), or null. */
+export function mainCurrency(cards: readonly { price?: Card['price'] }[]): string | null {
+  const count = new Map<string, number>()
+  for (const c of cards)
+    if (c.price) count.set(c.price.currency, (count.get(c.price.currency) ?? 0) + 1)
+  let best: string | null = null
+  for (const [cur, n] of count) if (best === null || n > count.get(best)!) best = cur
+  return best
+}
+
 const ratio = (c: Card): number | null => (c.rating ? c.rating.value / c.rating.max : null)
 
 /** The card a pick names, or why none fits. `focus`: the card "it" refers to. */
@@ -258,7 +268,7 @@ export function resolvePick(pick: Pick, cards: readonly Card[], focus?: string |
       const priced = cards.filter((c) => c.price)
       if (!priced.length) return { ok: false, reason: 'no-price' }
       // Only one currency is compared: the most common one.
-      const cur = priced[0].price!.currency
+      const cur = mainCurrency(priced)
       const same = priced.filter((c) => c.price!.currency === cur)
       const best = same.reduce((a, b) =>
         (

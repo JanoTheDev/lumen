@@ -7,6 +7,7 @@ import { AnswerPageView } from '../../src/renderer/src/cards/AnswerPage'
 import { CardItem } from '../../src/renderer/src/cards/CardItem'
 import { CardStripView } from '../../src/renderer/src/cards/CardStrip'
 import {
+  bestIds,
   checkedAgo,
   factColumns,
   filterCards,
@@ -51,6 +52,30 @@ describe('card helpers', () => {
     expect(sortCards(cards, 'price').map((c) => c.id)).toEqual(['h2', 'h1', 'h3'])
     expect(sortCards(cards, 'rating').map((c) => c.id)).toEqual(['h1', 'h2', 'h3'])
     expect(sortCards(cards, 'relevance').map((c) => c.id)).toEqual(['h1', 'h2', 'h3'])
+  })
+
+  it('compares prices in the most common currency only', () => {
+    const base = hotelView().cards[2]
+    const priced = (id: string, amount: number, currency: string): typeof base => ({
+      ...base,
+      id,
+      price: { amount, currency, sourceId: 's1' }
+    })
+    const cards = [
+      priced('usd', 50, 'USD'),
+      priced('eur40', 40, 'EUR'),
+      priced('gbp', 20, 'GBP'),
+      priced('eur30', 30, 'EUR'),
+      { ...base, id: 'none' }
+    ]
+    expect(sortCards(cards, 'price').map((c) => c.id)).toEqual([
+      'eur30',
+      'eur40',
+      'gbp',
+      'usd',
+      'none'
+    ])
+    expect(bestIds(cards).cheapest).toBe('eur30')
   })
 
   it('filters on chips and lists fact columns', () => {

@@ -81,12 +81,32 @@ export function readOrder(card: CardView, sources: CardSource[], now: number): s
 
 const ratingScore = (r?: CardRating): number => (r ? r.value / r.max : -1)
 
-/** A sorted copy; cards without the field go last, ties keep the model's order. */
+/** The currency most priced cards use (ties: the one seen first), or null. */
+export function mainCurrency(cards: readonly CardView[]): string | null {
+  const count = new Map<string, number>()
+  for (const c of cards)
+    if (c.price) count.set(c.price.currency, (count.get(c.price.currency) ?? 0) + 1)
+  let best: string | null = null
+  for (const [cur, n] of count) if (best === null || n > count.get(best)!) best = cur
+  return best
+}
+
+/**
+ * A sorted copy; cards without the field go last, ties keep the model's order. By price: the
+ * most common currency first (amounts in other currencies are not compared with it).
+ */
 export function sortCards(cards: CardView[], by: CardSort): CardView[] {
   if (by === 'relevance') return cards.slice()
   const indexed = cards.map((c, i) => ({ c, i }))
+  const cur = by === 'price' ? mainCurrency(cards) : null
+  const group = (c: CardView): number => (!c.price ? 2 : c.price.currency === cur ? 0 : 1)
   indexed.sort((a, b) => {
     if (by === 'price') {
+      const g = group(a.c) - group(b.c)
+      if (g) return g
+      // Other currencies: each one's cards together, in alphabetical order of the code.
+      if (group(a.c) === 1 && a.c.price!.currency !== b.c.price!.currency)
+        return a.c.price!.currency < b.c.price!.currency ? -1 : 1
       const pa = a.c.price?.amount ?? Infinity
       const pb = b.c.price?.amount ?? Infinity
       return pa === pb ? a.i - b.i : pa - pb
@@ -215,7 +235,7 @@ export function bestIds(cards: CardView[]): { cheapest?: string; best?: string }
   const out: { cheapest?: string; best?: string } = {}
   const priced = cards.filter((c) => c.price)
   if (priced.length > 1) {
-    const cur = priced[0].price!.currency
+    const cur = mainCurrency(priced)
     const same = priced.filter((c) => c.price!.currency === cur)
     if (same.length > 1)
       out.cheapest = same.reduce((a, b) => (b.price!.amount < a.price!.amount ? b : a)).id

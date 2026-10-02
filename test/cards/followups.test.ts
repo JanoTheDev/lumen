@@ -100,6 +100,13 @@ describe('resolvePick', () => {
     expect(title({ by: 'words', words: 'with sea view' })).toBe('Hotel Azur')
     expect(title({ by: 'words', words: 'in the hills' })).toBe('Villa Cimiez')
   })
+  it('the cheapest is in the most common currency', () => {
+    const mixed = cards.map((c) => ({ ...c }))
+    mixed[0] = { ...mixed[0], price: { amount: 50, currency: 'USD', sourceId: 's1' } }
+    mixed[1] = { ...mixed[1], price: { amount: 40, currency: 'EUR', sourceId: 's1' } }
+    mixed[2] = { ...mixed[2], price: { amount: 30, currency: 'EUR', sourceId: 's1' } }
+    expect(resolvePick({ by: 'cheapest' }, mixed)).toMatchObject({ ok: true, index: 2 })
+  })
   it('says why when it cannot pick', () => {
     expect(resolvePick({ by: 'index', index: 7 }, cards)).toMatchObject({
       ok: false,
