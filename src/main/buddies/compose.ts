@@ -261,7 +261,13 @@ export function buddyPermissionWords(p: BuddyPermissions): string {
   if (p.files.write.length) out.push(`change files in ${p.files.write.map(folderWord).join(', ')}`)
   if (p.connectors.length) out.push(`use the connectors ${p.connectors.join(', ')}`)
   if (p.profile) out.push('read your saved profile')
-  if (p.screen) out.push('ask to work on your screen')
+  if (p.input)
+    out.push(
+      p.apps.length
+        ? `use your mouse and keyboard in ${p.apps.join(', ')}`
+        : 'use your mouse and keyboard in any app'
+    )
+  else if (p.screen) out.push('ask to work on your screen')
   const extra = p.tools.filter((t) => !['fetch_url', 'read_file', 'read_document'].includes(t))
   if (extra.length) out.push(`use ${extra.map((t) => t.replace(/_/g, ' ')).join(', ')}`)
   if (!out.length) return 'It only uses its notebook and answers.'

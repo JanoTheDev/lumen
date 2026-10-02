@@ -159,7 +159,8 @@ export function editedDraft(
     {
       tools,
       apps: b.permissions.apps,
-      input: out.needs_screen,
+      // The mouse and keyboard are never given by an edit (Settings does that); no screen, no input.
+      input: out.needs_screen && b.permissions.input,
       network,
       files: { read: folders(out.read_folders), write: folders(out.write_folders) },
       connectors: out.connectors.filter((c) => okConnectors.includes(c)),
@@ -251,6 +252,16 @@ export function diffBuddy(
   if (pb.profile && !pa.profile) widen.push('It may now read your saved profile.')
   if (pb.screen && !pa.screen) widen.push('It may now ask to work on your screen.')
   if (!pb.screen && pa.screen) other.push('It no longer works on your screen.')
+  // The mouse and keyboard: newly given, or in more apps (no apps listed = any app).
+  const appsAdd = pa.input ? without(pb.apps, pa.apps) : pb.apps
+  const anyApp = !pb.apps.length && (!pa.input || pa.apps.length > 0)
+  if (pb.input && (anyApp || appsAdd.length))
+    widen.push(
+      anyApp
+        ? 'It may now use your mouse and keyboard in any app.'
+        : `It may now use your mouse and keyboard in ${list(appsAdd)}.`
+    )
+  if (!pb.input && pa.input) other.push('It no longer uses your mouse and keyboard.')
   const toolAdd = without(pb.tools, pa.tools)
   if (toolAdd.length)
     widen.push(`It may now use ${list(toolAdd.map((t) => t.replace(/_/g, ' ')))}.`)

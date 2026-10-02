@@ -177,5 +177,8 @@ describe('helpers', () => {
     expect(line).toMatch(/connectors gmail/)
     expect(line).toMatch(/work on your screen/)
     expect(line).toMatch(/create file/)
+    expect(buddyPermissionWords(clampPermissions({ screen: true, input: true }))).toMatch(
+      /use your mouse and keyboard in any app/
+    )
   })
 })
