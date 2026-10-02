@@ -4,6 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   STRATEGIES,
+  checkOf,
   fixtureExists,
   formatReport,
   loadCases,
@@ -86,6 +87,23 @@ describe('lesson-check eval', () => {
     expect(verdict('excel-header-row-off')).toBe('fail')
     expect(verdict('excel-wrong-tab-selected')).toBe('fail')
     expect(verdict('notepad-tab-already-selected')).toBe('unknown')
+  })
+
+  it('OBS save steps decide without the OK Invoked event', async () => {
+    const verdict = (id: string): string | undefined =>
+      det().find((r) => r.case.id === id)?.out.verdict
+    expect(verdict('obs-settings-saved-no-event')).toBe('pass')
+    expect(verdict('obs-settings-saved-no-bridge')).toBe('unknown')
+    expect(verdict('obs-settings-cancelled-mic-existed')).toBe('fail')
+    expect(verdict('obs-recording-saved-after-apply')).toBe('pass')
+    // Measured from the step start (no lesson answers), Apply-then-OK would read "not changed".
+    const c = cases.find((x) => x.id === 'obs-recording-saved-after-apply')!
+    const stepOnly = await STRATEGIES.deterministic(
+      { ...c, lessonStart: undefined },
+      checkOf(c),
+      load(c.fixture)
+    )
+    expect(stepOnly.verdict).toBe('fail')
   })
 
   it('lists truth-fail cases that pass on the learner\'s "done" in their own section', () => {

@@ -67,6 +67,8 @@ export class LessonRunner {
   /** Latest scene request; an older target lookup that finishes late draws nothing. */
   private sceneSeq = 0
   private listeners = new Set<(s: LessonState) => void>()
+  /** First bridge answers of the running lesson, for `since: "lesson"` checks. */
+  private lessonStart = new Map<string, unknown>()
   /** Model answers to "why?", per lesson step, for the session. */
   private whyCache = new Map<string, string>()
 
@@ -109,6 +111,7 @@ export class LessonRunner {
   start(lesson: Lesson, o: StartOptions = {}): void {
     this.skill = o.skill ?? null
     this.budgets.clear()
+    this.lessonStart = new Map()
     this.dispatch({
       type: 'start',
       lesson,
@@ -274,6 +277,7 @@ export class LessonRunner {
       clock: this.clock,
       step: st,
       budget,
+      lessonStart: this.lessonStart,
       log: (msg) => this.ports.log('verify', `lesson ${this.s.lesson?.id}/${st.id}: ${msg}`)
     })
     this.checks = handle

@@ -147,6 +147,7 @@
             "type": { "const": "uia-event" },
             "event": { "enum": ["invoked", "focused", "value", "selected", "window-opened"] },
             "changed": { "const": true },
+            "absent": { "const": true },
             "match": {
               "type": "object",
               "minProperties": 1,
@@ -195,7 +196,8 @@
           "properties": {
             "type": { "const": "bridge" },
             "app": { "type": "string", "minLength": 1 },
-            "expect": { "type": "object", "minProperties": 1 }
+            "expect": { "type": "object", "minProperties": 1 },
+            "since": { "const": "lesson" }
           }
         },
         {

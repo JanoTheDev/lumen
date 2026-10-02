@@ -28,10 +28,19 @@ export type CheckSpec =
       match: { name?: string; role?: string; automationId?: string; value?: ValueMatch }
       /** value only: passes when the value differs from the one when the step began. */
       changed?: true
+      /** invoked only, inside an allOf: holds unless this event is seen during the step
+       *  (a Cancel click vetoes a "settings closed" check without an OK event). */
+      absent?: true
     }
   | { type: 'window-title'; regex: string }
   | { type: 'vision'; prompt: string }
-  | { type: 'bridge'; app: string; expect: Record<string, unknown> }
+  | {
+      type: 'bridge'
+      app: string
+      expect: Record<string, unknown>
+      /** "lesson": `…Changed` keys compare with the first answer of this lesson, not the step. */
+      since?: 'lesson'
+    }
   | { type: 'keypress'; combo: string }
   | { type: 'manual' }
   | { type: 'anyOf' | 'allOf'; checks: CheckSpec[] }
@@ -113,11 +122,15 @@ export const checkSchema: z.ZodType<CheckSpec> = z.lazy(() =>
             value: valueMatch.optional()
           })
           .strict(),
-        changed: z.literal(true).optional()
+        changed: z.literal(true).optional(),
+        absent: z.literal(true).optional()
       })
       .strict()
       .refine((c) => !c.changed || c.event === 'value', {
         message: 'changed works only with event value'
+      })
+      .refine((c) => !c.absent || c.event === 'invoked', {
+        message: 'absent works only with event invoked'
       }),
     z.object({ type: z.literal('window-title'), regex: z.string().min(1) }).strict(),
     z.object({ type: z.literal('vision'), prompt: z.string().min(3) }).strict(),
@@ -125,7 +138,8 @@ export const checkSchema: z.ZodType<CheckSpec> = z.lazy(() =>
       .object({
         type: z.literal('bridge'),
         app: z.string().min(1),
-        expect: z.record(z.string(), z.unknown())
+        expect: z.record(z.string(), z.unknown()),
+        since: z.literal('lesson').optional()
       })
       .strict(),
     z.object({ type: z.literal('keypress'), combo: z.string().min(1) }).strict(),

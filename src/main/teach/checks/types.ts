@@ -10,6 +10,9 @@ export interface CheckHandle {
   result: Promise<CheckResult>
   evaluate(): Promise<CheckResult>
   cancel(): void
+  /** An `absent` check: true once the event it must not see was seen (an allOf then holds
+   *  back its live pass). */
+  vetoed?(): boolean
 }
 
 /** Vision cost guard shared by every vision check of one step. */
@@ -25,6 +28,9 @@ export interface CheckContext {
   step: LessonStep
   budget: VisionBudget
   log(msg: string): void
+  /** First bridge answer per app + request in this lesson, for `since: "lesson"` checks
+   *  (filled by every bridge query of the lesson; absent outside a lesson). */
+  lessonStart?: Map<string, unknown>
 }
 
 export function newBudget(): VisionBudget {

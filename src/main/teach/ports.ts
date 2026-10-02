@@ -118,8 +118,16 @@ export interface BridgePort {
   query(
     appId: string,
     question: Record<string, unknown>,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    opts?: BridgeQueryOptions
   ): Promise<CheckResult>
+}
+
+export interface BridgeQueryOptions {
+  /** The lesson's first answers per app + request; a query records its answer when new. */
+  lessonStart?: Map<string, unknown>
+  /** "lesson": `…Changed` keys compare with `lessonStart`, not the check's first answer. */
+  since?: 'lesson'
 }
 
 /** "Why?" for a step without a `why` of its own (07 T20). */

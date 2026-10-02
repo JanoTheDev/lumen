@@ -76,7 +76,32 @@ async function selectedAtStart(spec: UiaSpec, ctx: CheckContext): Promise<boolea
   return !!els?.some((el) => elementMatches(spec.match, el) && selectedNow(el))
 }
 
+/**
+ * `absent`: holds unless the event is seen during the step. It never passes on its own (its
+ * result settles only on cancel); evaluate() says fail once seen, else pass, and `vetoed()`
+ * lets an allOf hold back a live pass (a Cancel click before Settings closed).
+ */
+function absent(spec: UiaSpec, ctx: CheckContext): CheckHandle {
+  const r = settleable()
+  let seen = false
+  const unsubscribe = ctx.ports.uia.subscribe(kindsFor(spec.event), (e) => {
+    if (seen || !elementMatches(spec.match, e.element)) return
+    seen = true
+    ctx.log(`uia ${e.kind} "${e.element.name ?? ''}" seen, which the step must not see`)
+  })
+  return {
+    result: r.promise,
+    evaluate: async () => (seen ? 'fail' : 'pass'),
+    vetoed: () => seen,
+    cancel: () => {
+      unsubscribe()
+      r.settle('unknown')
+    }
+  }
+}
+
 export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
+  if (spec.absent) return absent(spec, ctx)
   const r = settleable()
   const changedOnly = spec.event === 'value' && spec.changed === true
   const baseline = changedOnly ? baselineValue(spec, ctx) : Promise.resolve(null)

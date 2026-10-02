@@ -319,7 +319,7 @@ describe('bridge', () => {
     )
     await tickFor(2500)
     expect(await h.result).toBe('pass')
-    expect(query).toHaveBeenCalledWith('blender', { mode: 'EDIT' }, expect.anything())
+    expect(query).toHaveBeenCalledWith('blender', { mode: 'EDIT' }, expect.anything(), {})
     expect(query).toHaveBeenCalledTimes(3)
   })
 

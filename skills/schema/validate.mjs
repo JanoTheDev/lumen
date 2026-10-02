@@ -232,6 +232,15 @@ export function bridgeExpectProblems(check, bridgeKeys) {
   return keys.filter((k) => !spec.keys.includes(k)).map((k) => `unknown ${check.app} key "${k}"`)
 }
 
+/** `absent` checks that are not a direct child of an allOf (elsewhere they mean nothing). */
+function absentOutsideAllOf(check, parent = null, out = []) {
+  if (!check || typeof check !== 'object') return out
+  if (check.absent && parent !== 'allOf') out.push(check)
+  if (Array.isArray(check.checks))
+    check.checks.forEach((c) => absentOutsideAllOf(c, check.type, out))
+  return out
+}
+
 function collectChecks(check, out = []) {
   if (check && typeof check === 'object') {
     out.push(check)
@@ -292,11 +301,20 @@ function validateLesson(lesson, ctx) {
     if (expect && typeof expect === 'object') {
       if (expect.check === 'vision' && !expect.prompt)
         push(`${sp}.expect.prompt`, 'a vision check needs a specific yes/no prompt')
+      for (const c of absentOutsideAllOf(expect.check))
+        push(
+          `${sp}.expect.check`,
+          `"absent" check on ${JSON.stringify(c.match?.name ?? '')} must sit directly in an allOf`
+        )
       for (const c of collectChecks(expect.check)) {
         if (c.type === 'bridge' && bridgeKeys)
           bridgeExpectProblems(c, bridgeKeys).forEach((m) => push(`${sp}.expect.check`, m))
         if (c.type === 'uia-event' && c.changed && c.event !== 'value')
           push(`${sp}.expect.check`, '"changed" works only with event "value"')
+        if (c.type === 'uia-event' && c.absent && c.event !== 'invoked')
+          push(`${sp}.expect.check`, '"absent" works only with event "invoked"')
+        if (c.type === 'bridge' && c.since !== undefined && c.since !== 'lesson')
+          push(`${sp}.expect.check`, '"since" must be "lesson"')
         if (c.type === 'window-title' || (c.type === 'uia-event' && c.match?.value?.regex)) {
           const source = c.type === 'window-title' ? c.regex : c.match.value.regex
           try {

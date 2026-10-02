@@ -48,6 +48,9 @@ export interface Case {
   /** State folders inside the fixture (default before / after). */
   before?: string
   after?: string
+  /** Optional state the lesson started in: the first bridge answers for `since: "lesson"`
+   *  checks (an earlier step asked the bridge there). */
+  lessonStart?: string
   /** "<lessonId>#<stepId>" from skills/<app>/lessons, or an inline check in `expect`. */
   step?: string
   expect?: CheckSpec
@@ -173,7 +176,11 @@ export function validateCase(
   if (!fixtureExists(c.fixture)) errs.push(`fixture ${c.fixture} not found`)
   else {
     const fx = load(c.fixture)
-    for (const s of [c.before ?? 'before', c.after ?? 'after'])
+    for (const s of [
+      c.before ?? 'before',
+      c.after ?? 'after',
+      ...(c.lessonStart ? [c.lessonStart] : [])
+    ])
       if (!fx.states[s]) errs.push(`state ${s} missing in ${c.fixture}`)
   }
   try {
@@ -284,9 +291,9 @@ function withoutManual(c: CheckSpec): CheckSpec {
 export async function runCheck(
   check: CheckSpec,
   fx: Fixture,
-  states: { before: string; after: string }
+  states: { before: string; after: string; lessonStart?: string }
 ): Promise<{ result: CheckResult; log: string[] }> {
-  let cur = fx.states[states.before]
+  let cur = fx.states[states.lessonStart ?? states.before]
   const after = fx.states[states.after]
   const log: string[] = []
   const clock = new ManualClock()
@@ -311,12 +318,21 @@ export async function runCheck(
     },
     bridge: makeBridgePort(() => bridgesFor(() => cur, fx.app))
   })
+  // The lesson's first bridge answers: what an earlier step's query would have recorded.
+  const lessonStart = new Map<string, unknown>()
+  if (states.lessonStart) {
+    const requests = fx.app === 'obs' ? Object.keys(cur.bridge ?? {}) : ['']
+    for (const request of requests)
+      await ports.bridge.query(fx.app, request ? { request } : {}, undefined, { lessonStart })
+    cur = fx.states[states.before]
+  }
   const step: LessonStep = { id: 'eval', say: 'eval', target: null, check, hints: [] }
   const handle = startCheck(check, {
     ports,
     clock,
     step,
     budget: newBudget(),
+    lessonStart,
     log: (m) => log.push(m)
   })
   let settled: CheckResult | null = null
@@ -336,7 +352,11 @@ export async function runCheck(
 
 export const deterministic: Strategy = async (c, check, fx) => {
   const t0 = performance.now()
-  const states = { before: c.before ?? 'before', after: c.after ?? 'after' }
+  const states = {
+    before: c.before ?? 'before',
+    after: c.after ?? 'after',
+    ...(c.lessonStart ? { lessonStart: c.lessonStart } : {})
+  }
   const { result, log } = await runCheck(check, fx, states)
   let verdict: Verdict = result
   if (result === 'pass') {

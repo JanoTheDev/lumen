@@ -67,6 +67,9 @@ One JSON object per line:
   "fixture": "obs/studio",
   "before": "settings-audio", // state folders (default before / after)
   "after": "settings-audio-mic",
+  // optional: the state the lesson started in. Its bridge answers are the lesson-start
+  // baseline that `since: "lesson"` bridge checks compare with (an earlier step asked there).
+  "lessonStart": "settings-output",
   "step": "obs-basics-02-add-microphone#pick-mic", // <lessonId>#<stepId> from skills/*/lessons
   // or an inline check instead of "step":
   // "expect": {"type": "uia-event", "event": "selected", "match": {"name": "Audio"}},

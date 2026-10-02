@@ -72,7 +72,10 @@ function group(
   let bridgeAbsent: Promise<boolean> | null = null
   if (viaBridge?.type === 'bridge' && spec.checks.some((c) => c.type === 'vision'))
     bridgeAbsent = ctx.ports.bridge
-      .query(viaBridge.app, viaBridge.expect)
+      .query(viaBridge.app, viaBridge.expect, undefined, {
+        lessonStart: ctx.lessonStart,
+        since: viaBridge.since
+      })
       .then((res) => res === 'unknown')
       .catch(() => true)
   const children = spec.checks.map((c) =>
@@ -83,11 +86,14 @@ function group(
   const passed = new Set<number>()
   const r = settleable()
   const all = spec.type === 'allOf'
+  // allOf: `absent` children never pass live; they only hold the pass back once vetoed.
+  const needed = children.filter((h) => !h.vetoed).length
   children.forEach((h, i) => {
     void h.result.then((res) => {
       if (res !== 'pass') return
       passed.add(i)
-      if (!all || passed.size === children.length) r.settle('pass')
+      if (!all) return r.settle('pass')
+      if (passed.size === needed && !children.some((c) => c.vetoed?.())) r.settle('pass')
     })
   })
   return {

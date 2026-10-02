@@ -163,7 +163,14 @@
                 {
                   "type": "bridge",
                   "app": "obs",
+                  "since": "lesson",
                   "expect": { "request": "GetRecordDirectory", "recordDirectoryChanged": true }
+                },
+                {
+                  "type": "uia-event",
+                  "event": "invoked",
+                  "absent": true,
+                  "match": { "name": "Cancel", "role": "Button" }
                 }
               ]
             }

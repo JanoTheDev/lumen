@@ -1,5 +1,7 @@
 // bridge: asks an in-app bridge (Blender add-on, OBS websocket …) whether `expect` holds.
 // Polls at 1 Hz; stops polling once the port says no bridge is connected ('unknown').
+// `since: "lesson"` compares `…Changed` keys with the lesson's first answer, so a value the
+// learner applied in an earlier step (Apply, then OK) still counts as changed.
 import type { CheckSpec } from '../lesson'
 import type { CheckResult } from '../ports'
 import type { CheckContext, CheckHandle } from './types'
@@ -14,7 +16,9 @@ export function start(
   const r = settleable()
   const ac = new AbortController()
   const ask = (): Promise<CheckResult> =>
-    ctx.ports.bridge.query(spec.app, spec.expect, ac.signal).catch(() => 'unknown' as const)
+    ctx.ports.bridge
+      .query(spec.app, spec.expect, ac.signal, { lessonStart: ctx.lessonStart, since: spec.since })
+      .catch(() => 'unknown' as const)
   const p = poll(ctx.clock, BRIDGE_POLL_MS, async () => {
     const res = await ask()
     if (res === 'pass') r.settle('pass')

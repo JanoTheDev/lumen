@@ -96,9 +96,31 @@
       "expect": {
         "type": "user-action",
         "check": {
-          "type": "uia-event",
-          "event": "invoked",
-          "match": { "name": "OK", "role": "Button" }
+          "type": "anyOf",
+          "checks": [
+            {
+              "type": "uia-event",
+              "event": "invoked",
+              "match": { "name": "OK", "role": "Button" }
+            },
+            {
+              "type": "allOf",
+              "checks": [
+                { "type": "window-title", "regex": "^OBS \\d" },
+                {
+                  "type": "bridge",
+                  "app": "obs",
+                  "expect": { "request": "GetInputList", "hasInputKind": "wasapi_input_capture" }
+                },
+                {
+                  "type": "uia-event",
+                  "event": "invoked",
+                  "absent": true,
+                  "match": { "name": "Cancel", "role": "Button" }
+                }
+              ]
+            }
+          ]
         }
       },
       "hints": ["Apply saves without closing; OK saves and closes.", "Press Enter to choose OK."],
