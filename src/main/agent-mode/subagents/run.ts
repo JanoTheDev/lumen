@@ -113,6 +113,20 @@ export function jobTurn(task: string, now: Date): string {
 
 const FENCE_TAGS = ['observed', 'sources'] as const
 
+/** A fetched URL as the parent sees it: no query, fragment or login (they can hold tokens). */
+function sourceShown(raw: string): string | null {
+  try {
+    const u = new URL(raw)
+    u.search = ''
+    u.hash = ''
+    u.username = ''
+    u.password = ''
+    return redactForModel(u.toString())
+  } catch {
+    return null
+  }
+}
+
 /** A job's result as the parent model reads it: fenced, redacted, sources listed by Lumen. */
 export function fenceResult(r: JobResult, i: number): string {
   // The model-written text may not fake the sources list or close the fence; only the URLs
@@ -124,7 +138,8 @@ export function fenceResult(r: JobResult, i: number): string {
     `status: ${r.status}`,
     body
   ]
-  if (r.sources.length) lines.push(`<sources>\n${r.sources.join('\n')}\n</sources>`)
+  const sources = r.sources.map(sourceShown).filter((u): u is string => !!u)
+  if (sources.length) lines.push(`<sources>\n${sources.join('\n')}\n</sources>`)
   return observed(`subagent:${r.role}`, lines.join('\n'))
 }
 

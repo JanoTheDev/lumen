@@ -499,6 +499,22 @@ describe('present_cards sees what sub-agents fetched', () => {
     expect(readUrls('run_subagents', {}, out)).toEqual([])
     expect(out).not.toContain('<sources>')
   })
+
+  it('lists sources without query strings or logins (review L5)', () => {
+    const out = fenceResult(
+      {
+        role: 'researcher',
+        task: 't',
+        status: 'done',
+        text: 'ok',
+        sources: ['https://user:pw@shop.example/lamp?token=abc123secret#frag'],
+        costUsd: 0
+      },
+      0
+    )
+    expect(out).toContain('<sources>\nhttps://shop.example/lamp\n</sources>')
+    expect(out).not.toMatch(/abc123secret|user:pw|frag/)
+  })
 })
 
 describe('transcript nesting', () => {

@@ -173,6 +173,31 @@ describe('BackgroundManager', () => {
     expect(m.get(t.id)!.question).toBeUndefined()
   })
 
+  it('paused waiters drop their abort listener once woken (review L5)', async () => {
+    const { m, runs } = setup()
+    const t = m.start({ prompt: 'hold me', origin: 'voice' })
+    const ac = new AbortController()
+    let listeners = 0
+    const add = ac.signal.addEventListener.bind(ac.signal)
+    const remove = ac.signal.removeEventListener.bind(ac.signal)
+    ac.signal.addEventListener = ((...a: Parameters<typeof add>) => {
+      listeners++
+      add(...a)
+    }) as typeof add
+    ac.signal.removeEventListener = ((...a: Parameters<typeof remove>) => {
+      listeners--
+      remove(...a)
+    }) as typeof remove
+    for (let i = 0; i < 3; i++) {
+      expect(m.pause(t.id)).toBe(true)
+      const held = runs[0].ctl.hold!(ac.signal)
+      await tick()
+      expect(m.resume(t.id)).toBe(true)
+      await held
+    }
+    expect(listeners).toBe(0)
+  })
+
   it('progress lines are capped, trimmed and not repeated', () => {
     const { m, runs } = setup()
     const t = m.start({ prompt: 'watch a page', origin: 'voice' })

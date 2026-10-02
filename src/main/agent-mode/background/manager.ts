@@ -111,7 +111,8 @@ interface Entry {
   resolveDone: (t: BackgroundTask) => void
   steers: string[]
   paused?: boolean
-  wake?: () => void
+  /** Waiters held while paused (the task and its sub-agents). */
+  wakers: Set<() => void>
 }
 
 const ACTIVE: BackgroundTaskPhase[] = ['running', 'asking', 'needs-foreground']
@@ -274,9 +275,7 @@ export class BackgroundManager {
     const e = this.entries.get(id)
     if (!e?.paused) return false
     e.paused = false
-    const wake = e.wake
-    e.wake = undefined
-    wake?.()
+    for (const w of [...e.wakers]) w()
     this.deps.record?.(id, { type: 'resumed' })
     this.note(id, 'Going on')
     return true
@@ -327,7 +326,7 @@ export class BackgroundManager {
   private newEntry(task: BackgroundTask): Entry {
     let resolveDone!: (t: BackgroundTask) => void
     const done = new Promise<BackgroundTask>((r) => (resolveDone = r))
-    const entry: Entry = { task, done, resolveDone, steers: [], asks: [] }
+    const entry: Entry = { task, done, resolveDone, steers: [], asks: [], wakers: new Set() }
     this.entries.set(task.id, entry)
     return entry
   }
@@ -370,6 +369,7 @@ export class BackgroundManager {
     if (!e || !isOpen(e.task)) return
     e.asks = []
     e.paused = false
+    for (const w of [...e.wakers]) w()
     if (e.steers.length) this.deps.record?.(id, { type: 'unread', texts: e.steers })
     e.steers = []
     this.patch(id, { ...p, endedAt: this.deps.now() })
@@ -387,16 +387,17 @@ export class BackgroundManager {
       phase: 'running',
       counters: { ...e.task.counters, startedAt: this.deps.now() }
     })
-    // Several waiters (the task and its sub-agents) may hold at once: one wake for all.
+    // Several waiters (the task and its sub-agents) may hold at once: resume wakes them all.
     const hold = async (signal: AbortSignal): Promise<void> => {
       while (e.paused && !signal.aborted)
         await new Promise<void>((resolve) => {
-          const prev = e.wake
-          e.wake = () => {
-            prev?.()
+          const wake = (): void => {
+            e.wakers.delete(wake)
+            signal.removeEventListener('abort', wake)
             resolve()
           }
-          signal.addEventListener('abort', () => resolve(), { once: true })
+          e.wakers.add(wake)
+          signal.addEventListener('abort', wake, { once: true })
         })
     }
     const ctl: TaskControl = {
