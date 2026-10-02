@@ -434,6 +434,8 @@ async function runTask(
     const b = buddyRunHook()?.forTask(task, host) ?? 'Buddies are not loaded.'
     if (typeof b === 'string') return { status: 'failed', summary: b }
     buddy = b
+    // Its notebook holds what earlier runs read: observed text for the gate, not user words.
+    if (b.context) observe(b.context)
   }
   const skills = backgroundSkills(
     task.skill,
