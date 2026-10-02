@@ -58,6 +58,20 @@ describe('CardsFiles', () => {
     expect(parseSnapshot('{nope', set.id)).toBeNull()
   })
 
+  it('the request and text are saved redacted', async () => {
+    const dir = freshDir()
+    const files = new CardsFiles(() => dir)
+    const key = ['sk', 'ant', 'api03', 'A'.repeat(40)].join('-')
+    const set = new CardsStore(Date.now, files).add(`3 hotels ${key}`, hotelCards(), {
+      request: `hotels in Nice, my key is ${key}`
+    })
+    await files.flush()
+    const raw = readFileSync(join(dir, `${set.id}.json`), 'utf8')
+    expect(raw).not.toContain(key)
+    expect(raw).toContain('[redacted')
+    expect(set.request).toContain(key)
+  })
+
   it('a set with a too long picture ref still loads, without that picture', async () => {
     const dir = freshDir()
     const files = new CardsFiles(() => dir)

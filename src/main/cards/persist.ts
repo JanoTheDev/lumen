@@ -1,10 +1,12 @@
 // Card sets on disk (05 T42): `~/.ai-overlay/cards/<id>.json`, the newest 30, so a background
 // task's "View results" still opens after a restart. Pictures are not stored (only their remote
 // refs; they are fetched again, usually from the card-images cache). Nothing is written or read
-// in private mode. A file is validated like fresh cards before it is used.
+// in private mode. The request and spoken text are redacted before they are written. A file is
+// validated like fresh cards before it is used.
 import { mkdir, readdir, readFile, rename, stat, unlink, writeFile } from 'fs/promises'
 import { dirname, join } from 'path'
 import { CARDS_ID_RE } from '@shared/cards'
+import { redactForLog } from '../actions/redact'
 import { configPath, loadConfig } from '../config'
 import { imageRefSchema, summarySchema, validateCards } from './schema'
 import type { CardsDisk, CardsSnapshot } from './store'
@@ -59,7 +61,13 @@ export class CardsFiles implements CardsDisk {
   save(snap: CardsSnapshot): void {
     const dir = this.dir()
     if (!dir || !CARDS_ID_RE.test(snap.id)) return
-    const body = JSON.stringify({ v: 1, ...snap })
+    // The request is the user's words and the text a model's: secrets in them stay off disk.
+    const clean: CardsSnapshot = {
+      ...snap,
+      text: redactForLog(snap.text),
+      ...(snap.request ? { request: redactForLog(snap.request) } : {})
+    }
+    const body = JSON.stringify({ v: 1, ...clean })
     if (body.length > MAX_FILE_BYTES) return
     this.chain = this.chain.then(() => this.write(dir, snap.id, body)).catch(() => {})
   }
