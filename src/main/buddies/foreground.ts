@@ -144,7 +144,11 @@ export async function runBuddyForeground(
       observedText: notebook,
       underEnvelope: {
         make: (id, host) => deps.envelope(standIn, id, host),
-        scope: { origin: 'buddy', buddyId: b.id },
+        scope: {
+          origin: 'buddy',
+          buddyId: b.id,
+          ...(opts.automationId ? { automationId: opts.automationId } : {})
+        },
         gate: { origin: 'buddy', buddyId: b.id },
         ...settings,
         caps: { maxCostUsd },

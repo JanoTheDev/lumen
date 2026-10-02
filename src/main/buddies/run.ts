@@ -25,6 +25,8 @@ export interface RunBuddyOpts {
    * into the prompt only, never into the gate's user words.
    */
   detail?: string
+  /** The buddy schedule automation that started the run (its usage counts toward that cap). */
+  automationId?: string
 }
 
 export type EnvelopeFor = (skill: LoadedSkill, taskId: string, host: GuardHost) => SkillEnvelope
@@ -134,7 +136,8 @@ export function buddyStartInput(b: Buddy, opts: RunBuddyOpts): StartInput {
     userText: buddyUserText(b, opts),
     title: buddyRunTitle(b, opts),
     origin: 'buddy',
-    buddyId: b.id
+    buddyId: b.id,
+    ...(opts.automationId ? { routineId: opts.automationId } : {})
   }
 }
 

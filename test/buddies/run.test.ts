@@ -19,6 +19,7 @@ import {
   buddyManifest,
   buddyStartInput
 } from '../../src/main/buddies/run'
+import { taskUsageScope } from '../../src/main/usage/task-scope'
 
 let root: string
 let started: StartInput[]
@@ -118,6 +119,13 @@ describe('runBuddy', () => {
     expect(input.userText).toBe(b.instructions)
     expect(input.prompt).toContain('This is a scheduled run')
     expect(input.title).toBe('Inbox Buddy: scheduled run')
+  })
+
+  it('a buddy schedule run counts toward its automation (usage review M3)', () => {
+    const input = buddyStartInput(inbox(), { trigger: 'schedule', automationId: 'au_1' })
+    expect(input.routineId).toBe('au_1')
+    const scope = taskUsageScope({ id: 'bg_1', ...input })
+    expect(scope).toMatchObject({ origin: 'buddy', buddyId: 'inbox-buddy', automationId: 'au_1' })
   })
 
   it('refuses a missing, turned off or over-budget buddy', () => {

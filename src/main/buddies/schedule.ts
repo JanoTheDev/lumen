@@ -135,6 +135,7 @@ export async function runScheduledBuddy(
   const prompt = a.action.kind === 'buddy' ? a.action.prompt?.trim() : undefined
   const opts: RunBuddyOpts = {
     trigger: 'schedule',
+    automationId: a.id,
     ...(prompt ? { utterance: prompt } : {}),
     ...(ctx.detail ? { detail: ctx.detail } : {})
   }

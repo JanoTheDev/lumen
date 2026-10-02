@@ -108,6 +108,7 @@ describe('a scheduled run', () => {
     expect(end).toEqual({ result: 'done', summary: '3 new mails', taskId: 'bg_t1' })
     expect(d.run).toHaveBeenCalledWith('inbox-buddy', {
       trigger: 'schedule',
+      automationId: 'au_a',
       utterance: 'only from my boss',
       detail: '(why)'
     })
