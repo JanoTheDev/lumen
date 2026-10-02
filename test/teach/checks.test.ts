@@ -159,6 +159,20 @@ describe('uia-event', () => {
     expect(await h.result).toBe('pass')
   })
 
+  it('a toggle event stands in for a check box value', async () => {
+    const uia = fakeUia()
+    const spec: CheckSpec = {
+      type: 'uia-event',
+      event: 'value',
+      match: { name: 'Header Row', role: 'CheckBox', value: 'On' }
+    }
+    const h = startCheck(spec, ctx({ uia: uia.port }))
+    uia.emit({ kind: 'value', element: { name: 'Header Row', role: 'checkbox', toggled: 'off' } })
+    expect(await peek(h.result)).toBe('pending')
+    uia.emit({ kind: 'value', element: { name: 'Header Row', role: 'checkbox', toggled: 'on' } })
+    expect(await h.result).toBe('pass')
+  })
+
   it('evaluate reads focus now; invoked cannot be read back', async () => {
     const uia = fakeUia()
     const focused: CheckSpec = { type: 'uia-event', event: 'focused', match: { name: 'Scale' } }

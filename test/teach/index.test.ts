@@ -37,6 +37,7 @@ import {
   lessonProgress,
   recordAction,
   recordStatus,
+  elementOf,
   sleep,
   startLesson,
   startOrResume
@@ -172,5 +173,23 @@ describe('sleep', () => {
     await vi.advanceTimersByTimeAsync(10)
     await p
     expect(remove).toHaveBeenCalledWith('abort', expect.any(Function))
+  })
+})
+
+describe('elementOf', () => {
+  it('keeps the UIA state of a live event element and drops junk', () => {
+    const el = { name: 'Header Row', role: 'checkbox', toggled: 'on', selected: false }
+    expect(elementOf({ element: { ...el, expanded: true } })).toEqual({
+      ...el,
+      automationId: undefined,
+      value: undefined,
+      expanded: true
+    })
+    expect(elementOf({ element: { name: 'x', toggled: 'yes', selected: 1 } })).toEqual({
+      name: 'x',
+      role: undefined,
+      automationId: undefined,
+      value: undefined
+    })
   })
 })

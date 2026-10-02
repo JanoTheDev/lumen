@@ -239,17 +239,23 @@ const lessonKeySubs = new Set<unknown>()
 /** A recording owns the agent's event streams and the bar until it stops. */
 const recordingNow = (): boolean => !!recorder?.recording()
 
-function elementOf(data: unknown): UiaEvent['element'] {
+/** The element of a live UIA event, with the state fields a snapshot node also carries. */
+export function elementOf(data: unknown): UiaEvent['element'] {
   const el = ((data as { element?: Record<string, unknown> } | null)?.element ?? {}) as Record<
     string,
     unknown
   >
   const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
+  const bool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined)
+  const toggled = el.toggled === 'on' || el.toggled === 'off' || el.toggled === 'mixed'
   return {
     name: str(el.name),
     role: str(el.role),
     automationId: str(el.automationId),
-    value: str(el.value)
+    value: str(el.value),
+    ...(bool(el.selected) !== undefined ? { selected: el.selected as boolean } : {}),
+    ...(toggled ? { toggled: el.toggled as 'on' | 'off' | 'mixed' } : {}),
+    ...(bool(el.expanded) !== undefined ? { expanded: el.expanded as boolean } : {})
   }
 }
 

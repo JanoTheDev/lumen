@@ -66,7 +66,16 @@ export interface VerifyPort {
 /** A UIA event as the agent reports it (focus-changed, invoke, value-changed …). */
 export interface UiaEvent {
   kind: UiaEventKind
-  element: { name?: string; role?: string; automationId?: string; value?: string }
+  element: {
+    name?: string
+    role?: string
+    automationId?: string
+    value?: string
+    /** UIA state, as on snapshot nodes (ElementNode). */
+    selected?: boolean
+    toggled?: 'on' | 'off' | 'mixed'
+    expanded?: boolean
+  }
 }
 
 export interface UiaPort {

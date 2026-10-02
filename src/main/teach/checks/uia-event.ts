@@ -57,7 +57,7 @@ export function kindsFor(event: UiaEventKind): UiaEventKind[] {
 export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
   const r = settleable()
   const unsubscribe = ctx.ports.uia.subscribe(kindsFor(spec.event), (e) => {
-    if (elementMatches(spec.match, e.element)) {
+    if (elementMatches(spec.match, withToggleValue(e.element))) {
       ctx.log(`uia ${e.kind} "${e.element.name ?? ''}" matched`)
       r.settle('pass')
     }
