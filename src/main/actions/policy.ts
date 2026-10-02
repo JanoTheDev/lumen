@@ -31,6 +31,7 @@ import {
 } from '../audit/log'
 import { loadConfig } from '../config'
 import { log } from '../logger'
+import { currentUsageScope } from '../usage/scope'
 import { setStatus } from '../windows/status'
 
 export interface GateCtx {
@@ -60,6 +61,13 @@ export interface Gate {
 }
 
 const ACTIVE_WINDOW_MS = 1500
+
+/** Buddies whose actions never use or offer "always" grants (an imported one, 08 T50). */
+let ungrantedBuddy: (buddyId: string) => boolean = () => false
+
+export function setUngrantedBuddies(fn: (buddyId: string) => boolean): void {
+  ungrantedBuddy = fn
+}
 
 function needsWindow(a: EvalAction, ctx: GateCtx): boolean {
   if (needsFocus(a)) return true
@@ -179,10 +187,13 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
     ctx.origin === 'mcp' ||
     ctx.origin === 'buddy'
   const cfg = loadConfig()
+  // An imported buddy's run (its connector calls too) neither uses nor offers "always".
+  const buddyId = ctx.buddyId ?? currentUsageScope().buddyId
+  const ungranted = !!buddyId && ungrantedBuddy(buddyId)
   const policyCtx: PolicyCtx = {
     origin: ctx.origin,
     activeWindow,
-    grants: grants(),
+    grants: ungranted ? undefined : grants(),
     taskId: ctx.taskId,
     userText: ctx.userText,
     observedText: ctx.observedText,
@@ -193,7 +204,8 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
   }
   // A book / pay / order click, or a form submit on a page with one: the card shows the price
   // on the page now (05 T41).
-  const decision = await withCheckoutGuard(action, policyCtx, evaluate(action, policyCtx))
+  const rated = await withCheckoutGuard(action, policyCtx, evaluate(action, policyCtx))
+  const decision: Decision = ungranted ? { ...rated, grantScope: undefined } : rated
   const audit = (verdict: AuditDecision, result: AuditResult): void =>
     writeAudit({
       t: new Date().toISOString(),

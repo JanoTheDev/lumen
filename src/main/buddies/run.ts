@@ -96,10 +96,20 @@ const REPORT_LINE: Record<Buddy['report'], string> = {
   cards: 'Report: when you found options, end with present_cards; otherwise a finish summary.'
 }
 
-/** The policy gate's user words: the buddy's instructions plus what the user said. */
+/**
+ * The policy gate's user words: the buddy's instructions plus what the user said. An imported
+ * buddy's instructions were written by someone else: only what the user said counts (they are
+ * in the prompt, which the gate sees as observed text).
+ */
 export function buddyUserText(b: Buddy, opts: RunBuddyOpts): string {
   const said = clean(opts.utterance)
+  if (b.trust !== 'mine') return said
   return said ? `${b.instructions}\n${said}` : b.instructions
+}
+
+/** What the gate counts as read, not said: the notebook, and an imported buddy's instructions. */
+export function buddyObservedText(b: Buddy, notebook: string): string {
+  return [b.trust === 'mine' ? '' : b.instructions, notebook.trim()].filter(Boolean).join('\n')
 }
 
 export function buddyPrompt(b: Buddy, opts: RunBuddyOpts): string {

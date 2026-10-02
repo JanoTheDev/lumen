@@ -29,7 +29,12 @@ vi.mock('../../src/main/ai/app-context', () => ({ isBrowser: () => true }))
 
 import type { Action } from '@shared/types'
 import { executeActions } from '../../src/main/actions/executor'
-import { auditReason, describeForConfirm, gate } from '../../src/main/actions/policy'
+import {
+  auditReason,
+  describeForConfirm,
+  gate,
+  setUngrantedBuddies
+} from '../../src/main/actions/policy'
 import { newTaskState } from '../../src/main/actions/safety'
 import { setAgent } from '../../src/main/agent/instance'
 import type { AgentBridge } from '../../src/main/agent/bridge'
@@ -413,6 +418,36 @@ describe('policy gate', () => {
     grants().revoke('app:outlook.exe')
     await executeActions([{ type: 'type', text: 'x' }], { origin: 'agent', task: newTaskState() })
     expect(cards).toHaveLength(2)
+  })
+
+  it('an imported buddy neither uses nor offers "always" grants', async () => {
+    fakeAgent({ title: 'Mail', process: 'OUTLOOK.EXE' })
+    grants().add('app:outlook.exe')
+    setUngrantedBuddies((id) => id === 'their-buddy')
+    try {
+      const cards = fakeUi('yes')
+      const r = await executeActions([{ type: 'type', text: 'hi' }], {
+        origin: 'buddy',
+        buddyId: 'their-buddy',
+        task: newTaskState(),
+        taskId: 't_ub'
+      })
+      expect(r.executed).toBe(1)
+      expect(cards).toHaveLength(1)
+      expect(cards[0].alwaysLabel).toBeUndefined()
+      expect(cards[0].summary).not.toContain('always')
+      // The user's own buddy still goes by the grant.
+      await executeActions([{ type: 'type', text: 'hi' }], {
+        origin: 'buddy',
+        buddyId: 'my-buddy',
+        task: newTaskState(),
+        taskId: 't_mb'
+      })
+      expect(cards).toHaveLength(1)
+      expect(listAudit(today(), 't_mb')[0].decision).toBe('granted')
+    } finally {
+      setUngrantedBuddies(() => false)
+    }
   })
 
   it('opens ms-settings pages and mailto drafts with the system handler', async () => {

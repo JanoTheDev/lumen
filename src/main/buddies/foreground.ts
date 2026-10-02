@@ -19,6 +19,7 @@ import {
   buddyPrompt,
   buddyRunSettings,
   buddyRunTitle,
+  buddyObservedText,
   buddyUserText,
   type RunBuddyOpts
 } from './run'
@@ -141,7 +142,8 @@ export async function runBuddyForeground(
   try {
     return await deps.runTask(foregroundPrompt(b, opts, notebook), signal, {
       userText: buddyUserText(b, opts),
-      observedText: notebook,
+      // An imported buddy's instructions are someone else's words: observed, never the user's.
+      observedText: buddyObservedText(b, notebook),
       underEnvelope: {
         make: (id, host) => deps.envelope(standIn, id, host),
         scope: {

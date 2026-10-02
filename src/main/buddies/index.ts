@@ -27,7 +27,8 @@
 // BUDDY_TOOL_NAMES), run.ts (buddyStartInput, buddyManifest, buddyConfirmsEveryAction),
 // store.ts (BuddyStore, buddyFileText, parseBuddyFile, IMPORT_MARKER).
 //
-// A run: userText (the gate's user words) = instructions + what the user said; the buddy's
+// A run: userText (the gate's user words) = instructions + what the user said (an imported
+// buddy: only what the user said, no "always" grants); the buddy's
 // permissions become a skill envelope (tools, connectors, network, read folders; an imported or
 // risky buddy confirms every connector / on-screen action, file changes ask in the Tasks list);
 // its model role, per-run cost cap, use_skill limited to its skills, run_subagents only with
@@ -39,6 +40,7 @@ import type { Buddy, BuddyRunSummary, BuddySummary } from '@shared/buddies'
 import { isSensitive } from '../ai/memory'
 import { memory } from '../ai/memory/runtime'
 import { backgroundManager, startBackgroundTask } from '../agent-mode/background'
+import { setUngrantedBuddies } from '../actions/policy'
 import { setBuddyRunHook } from '../agent-mode/background/buddy-hook'
 import { skillEnvelope } from '../agent-mode/skill-envelope'
 import { bus } from '../bus'
@@ -89,6 +91,8 @@ export function installBuddies(root = join(dirname(configPath()), 'buddies')): v
     spend: () => spend
   })
   setBuddyRunHook(service.hook())
+  // An imported buddy never uses or offers "always" grants (a deleted one neither).
+  setUngrantedBuddies((id) => service?.get(id)?.trust !== 'mine')
 }
 
 export function buddies(): Buddies | null {
