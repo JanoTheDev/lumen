@@ -84,7 +84,7 @@ describe('lesson-check eval', () => {
   it('T15-G1: window-opened {name} does not pass on a same-named button', () => {
     expect(gapCases('T15-G1').filter(wrong)).toEqual([])
   })
-  it.fails('T15-G2: a value check on a role alone does not pass on another ComboBox', () => {
+  it('T15-G2: a value check on a role alone does not pass on another ComboBox', () => {
     expect(gapCases('T15-G2').filter(wrong)).toEqual([])
   })
   it.fails('T15-G3: closing Settings with Cancel does not pass a save step', () => {

@@ -70,7 +70,11 @@
             {
               "type": "uia-event",
               "event": "value",
-              "match": { "role": "ComboBox", "value": { "regex": "^(?!Disabled$).+" } }
+              "match": {
+                "name": "Mic/Auxiliary Audio",
+                "role": "ComboBox",
+                "value": { "regex": "^(?!Disabled$).+" }
+              }
             },
             {
               "type": "vision",
