@@ -109,7 +109,8 @@ export function parseUsageQuestion(raw: string): UsageQuestion | null {
     let name = m[1].trim()
     if (NOT_NAMES.has(name)) return null
     let hint: 'automation' | 'buddy' | undefined
-    const tail = /\s+(automation|routine|reminder)s?$/.exec(name)
+    // Only these words say "an automation / a buddy of mine"; without one the name must be whole.
+    const tail = /\s+(automation|routine)s?$/.exec(name)
     if (tail) {
       hint = 'automation'
       name = name.slice(0, tail.index).trim()
@@ -127,9 +128,15 @@ const words = (s: string): string[] =>
     .split(/\s+/)
     .filter(Boolean)
 
+const KIND_WORDS = new Set(['buddy', 'automation'])
+const bare = (ws: string[]): string => ws.filter((w) => !KIND_WORDS.has(w)).join(' ')
+
 /**
- * The automation or buddy the words name: an exact name first, then the one sharing the most
- * words (all of the spoken words must be in the name). Null when none or a tie.
+ * The automation or buddy the words name: an exact name first (with or without "buddy" /
+ * "automation"), then, only when the user said "automation", "routine" or "buddy" (`hint`), the
+ * one sharing the most words (all of the spoken words must be in the name). Without that word a
+ * partial name ("how much does Netflix cost") is a shopping question, not ours. Null when none or
+ * a tie.
  */
 export function matchNamed(
   q: { name: string; hint?: 'automation' | 'buddy' },
@@ -140,6 +147,10 @@ export function matchNamed(
   const pool = q.hint ? scopes.filter((s) => s.kind === q.hint) : scopes
   const exact = pool.filter((s) => words(s.name).join(' ') === said.join(' '))
   if (exact.length === 1) return exact[0]
+  const whole = bare(said)
+  const nearly = whole ? pool.filter((s) => bare(words(s.name)) === whole) : []
+  if (nearly.length === 1) return nearly[0]
+  if (!q.hint) return null
   let best: NamedScope | null = null
   let bestScore = 0
   let tie = false
@@ -314,6 +325,21 @@ export function setUsageVoiceScopes(fn: () => NamedScope[]): void {
   scopesPort = fn
 }
 
+let cardsFreshPort: () => boolean = () => false
+
+/** Whether answer cards a follow-up could mean are on hand (wired at start). */
+export function setUsageVoiceCardsFresh(fn: () => boolean): void {
+  cardsFreshPort = fn
+}
+
+const liveCardsFresh = (): boolean => {
+  try {
+    return cardsFreshPort()
+  } catch {
+    return false
+  }
+}
+
 const liveSources: AnswerSources = {
   rows: (from, to) => queryUsage({ from, to }),
   scopes: () => {
@@ -333,13 +359,23 @@ const liveSources: AnswerSources = {
   now: () => new Date()
 }
 
+/** Words that make a question about Lumen's own spend, not the price of something. */
+const SPEND_WORDS = /\b(?:spend|spent|spending|cost me|used|use|tokens|usage)\b/
+
 /**
  * The pipeline's hook: a usage question answered from the ledger, else null. A named question
- * whose name matches no automation or buddy falls through.
+ * whose name matches no automation or buddy falls through. While answer cards are fresh
+ * (`cardsFresh`), only a question with spend words is ours ("how much does the hotel cost" is
+ * a card follow-up).
  */
-export function usageTurn(text: string, src: AnswerSources = liveSources): ModelResponse | null {
+export function usageTurn(
+  text: string,
+  src: AnswerSources = liveSources,
+  cardsFresh: () => boolean = liveCardsFresh
+): ModelResponse | null {
   const q = parseUsageQuestion(text)
   if (!q) return null
+  if (!SPEND_WORDS.test(clean(text)) && cardsFresh()) return null
   const answer = answerUsageQuestion(q, src)
   if (!answer) return null
   return { mode: 'answer', text: answer, spoken: answer }

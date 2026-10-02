@@ -172,3 +172,39 @@ describe('answerUsageQuestion', () => {
     expect(usageTurn('open notepad', src)).toBeNull()
   })
 })
+
+describe('named questions only for a name said whole or with its kind (review M4)', () => {
+  const scopes: NamedScope[] = [
+    { kind: 'automation', id: 'a1', name: 'Netflix renewal reminder' },
+    { kind: 'buddy', id: 'b1', name: 'Flight Price Buddy' }
+  ]
+  const src: AnswerSources = {
+    rows: () => [row({ automationId: 'a1', usd: 0.5 }), row({ buddyId: 'b1', usd: 0.2 })],
+    scopes: () => scopes,
+    limit: () => null,
+    now: () => NOW
+  }
+
+  it.each([
+    'how much does Netflix cost',
+    'how much does flight cost',
+    'how much does a flight cost'
+  ])('%s is a shopping question', (text) => expect(usageTurn(text, src)).toBeNull())
+
+  it.each([
+    ['how much does my Netflix reminder automation cost', /Netflix renewal reminder automation/],
+    ['how much has Flight Price Buddy cost', /Flight Price Buddy cost/],
+    ['how much does flight price cost', /Flight Price Buddy cost/],
+    ['how much has my price buddy cost', /Flight Price Buddy cost/]
+  ])('%s still answers', (text, want) => {
+    expect(usageTurn(text, src)?.text).toMatch(want)
+  })
+
+  it('leaves price questions to fresh answer cards unless spend words are said', () => {
+    const cards = (): boolean => true
+    expect(usageTurn('how much does Flight Price Buddy cost', src, cards)).toBeNull()
+    expect(usageTurn('what cost the most today', src, cards)).toBeNull()
+    expect(usageTurn('how much has Flight Price Buddy used', src, cards)?.text).toMatch(/Flight/)
+    expect(usageTurn('how much did I spend this month', src, cards)?.text).toMatch(/spent/)
+  })
+})

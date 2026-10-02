@@ -23,7 +23,9 @@ import {
   type UsageNames
 } from '../usage/report'
 import { installUsageLimits, limitState, type LimitScope } from '../usage/limits'
-import { setUsageVoiceScopes, type NamedScope } from '../usage/voice'
+import { setUsageVoiceCardsFresh, setUsageVoiceScopes, type NamedScope } from '../usage/voice'
+import { currentCards } from '../cards'
+import { FOLLOWUP_TTL_MS } from '../cards/turn'
 import * as panel from '../windows/settings'
 import { INVALID, safeParse } from './validate'
 
@@ -156,6 +158,11 @@ export function registerUsageIpc(): void {
     warn: (text) => notice(text)
   })
   setUsageVoiceScopes(namedScopes)
+  // "how much does the hotel cost" with fresh cards is a card follow-up, not a usage question.
+  setUsageVoiceCardsFresh(() => {
+    const set = currentCards()
+    return !!set && Date.now() - set.createdAt <= FOLLOWUP_TTL_MS
+  })
 
   let timer: NodeJS.Timeout | null = null
   onUsageRecorded(() => {
