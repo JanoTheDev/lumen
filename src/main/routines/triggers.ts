@@ -172,9 +172,18 @@ export function describeTrigger(t: AutomationTrigger): string {
   }
 }
 
+/** A buddy's name for its id (08 T52; set by buddies/schedule). */
+let buddyName: (id: string) => string | null = () => null
+
+export function setBuddyNamer(fn: (id: string) => string | null): void {
+  buddyName = fn
+}
+
 export function describeAction(a: AutomationAction): string {
   if (a.kind === 'remind') return `remind you: “${a.say}”`
   if (a.kind === 'skill') return `run the skill “${a.skill}”${a.prompt ? ` (${a.prompt})` : ''}`
+  if (a.kind === 'buddy')
+    return `run ${buddyName(a.buddyId) ?? `the buddy “${a.buddyId}”`}${a.prompt ? ` (${a.prompt})` : ''}`
   return `run “${a.prompt}” in the background`
 }
 

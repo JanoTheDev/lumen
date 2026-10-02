@@ -18,7 +18,9 @@ export function ownWords(a: Automation): string {
     ? act.prompt
     : act.kind === 'skill'
       ? act.prompt || `Run the skill “${act.skill}”.`
-      : act.say
+      : act.kind === 'buddy'
+        ? (act.prompt ?? '')
+        : act.say
 }
 
 /** The task prompt for a task or skill action (reminders have none). */

@@ -31,7 +31,8 @@ export const EVENT_MAX_PER_HOUR = 12
 export const MAX_PENDING = 5
 
 export type RunVia = AutomationRun['via']
-export type RunResult = AutomationResult
+/** `skipped`: it did not run (a buddy paused or past its monthly limit); not a failure. */
+export type RunResult = AutomationResult | 'skipped'
 
 export interface RunEnd {
   result: RunResult
@@ -442,6 +443,11 @@ export class AutomationScheduler {
       ...(end.taskId ? { taskId: end.taskId } : {})
     }
     const runs = this.withRun(a, run)
+    if (end.result === 'skipped') {
+      this.patch(id, { runs })
+      this.commit()
+      return
+    }
     // A run the user cancelled is not the automation's failure.
     const failures =
       end.result === 'done' ? 0 : end.result === 'failed' ? a.failures + 1 : a.failures

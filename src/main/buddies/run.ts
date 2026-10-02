@@ -18,6 +18,11 @@ export interface RunBuddyOpts {
   /** What the user said when calling it ("what's new?"); none for a scheduled run. */
   utterance?: string
   trigger: BuddyTrigger
+  /**
+   * Why a scheduled run started (08 T52: an event line, a file name fenced as observed). Goes
+   * into the prompt only, never into the gate's user words.
+   */
+  detail?: string
 }
 
 export type EnvelopeFor = (skill: LoadedSkill, taskId: string, host: GuardHost) => SkillEnvelope
@@ -99,13 +104,15 @@ export function buddyPrompt(b: Buddy, opts: RunBuddyOpts): string {
     said && opts.trigger !== 'schedule'
       ? `The user asks you now: ${said}`
       : opts.trigger === 'schedule'
-        ? 'This is a scheduled run: do your job as your instructions say.'
+        ? `This is a scheduled run: do your job as your instructions say.${said ? ` For this schedule the user added: ${said}` : ''}`
         : 'The user started this run: do your job as your instructions say.'
+  const detail = opts.detail?.trim().slice(0, UTTERANCE_MAX) ?? ''
   return [
     `You are “${b.name}”, a buddy the user set up for a recurring job. Your instructions, from the user:`,
     b.instructions || '(none yet: ask the user what to do)',
     '',
     now,
+    ...(detail ? [detail] : []),
     REPORT_LINE[b.report],
     'Keep what you need next time in your notebook with memory_write.'
   ].join('\n')

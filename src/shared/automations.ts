@@ -38,6 +38,11 @@ export type AutomationAction =
   | { kind: 'skill'; skill: string; prompt?: string }
   /** Says this (presence rule); when nobody is around it waits in the Tasks list. */
   | { kind: 'remind'; say: string }
+  /**
+   * Runs a buddy (08 T52) under its own instructions, permissions and budget; `prompt` adds
+   * the user's words for this schedule.
+   */
+  | { kind: 'buddy'; buddyId: string; prompt?: string }
 
 export type AutomationResult = 'done' | 'failed' | 'cancelled'
 

@@ -54,7 +54,14 @@ export const actionSchema = z.union([
       prompt: z.string().max(2000).optional()
     })
     .strict(),
-  z.object({ kind: z.literal('remind'), say: z.string().trim().min(1).max(300) }).strict()
+  z.object({ kind: z.literal('remind'), say: z.string().trim().min(1).max(300) }).strict(),
+  z
+    .object({
+      kind: z.literal('buddy'),
+      buddyId: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/),
+      prompt: z.string().max(2000).optional()
+    })
+    .strict()
 ])
 
 const result = z.enum(['done', 'failed', 'cancelled'])

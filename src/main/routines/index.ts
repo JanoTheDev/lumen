@@ -73,7 +73,7 @@ import { folderAllowed, resolveFolderWith } from './folders'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
 import { FOREGROUND_SHAPE, setPresence } from './preapproval'
-import { ownWords, runPrompt } from './run-prompt'
+import { detailLine, ownWords, runPrompt } from './run-prompt'
 import { automationIdFromArgv, WakeTasks } from './schtasks'
 import { RoutineStore } from './store'
 import { describeTrigger, isTimeTrigger } from './triggers'
@@ -123,11 +123,37 @@ function queueReminder(a: Automation, say: string): string {
   return t.id
 }
 
+/**
+ * Runs an automation whose action is a buddy (08 T52, set by buddies/schedule). `detail` is the
+ * event's line with any file name fenced as observed data.
+ */
+export type BuddyAutomationRunner = (
+  a: Automation,
+  ctx: { via: string; detail?: string }
+) => Promise<RunEnd>
+
+let buddyRunner: BuddyAutomationRunner | null = null
+const changeListeners: (() => void)[] = []
+
+export function setBuddyAutomationRunner(fn: BuddyAutomationRunner | null): void {
+  buddyRunner = fn
+}
+
+/** Called after every change to the automations list (added, removed, edited, a run). */
+export function onAutomationsChanged(fn: () => void): void {
+  changeListeners.push(fn)
+}
+
 async function runAutomation(
   a: Automation,
   ctx: { via: string; detail?: string }
 ): Promise<RunEnd> {
   const act = a.action
+  if (act.kind === 'buddy') {
+    if (!buddyRunner) return { result: 'failed', summary: 'Buddies are not loaded.' }
+    const detail = detailLine(a, ctx.detail).trim()
+    return buddyRunner(a, { via: ctx.via, ...(detail ? { detail } : {}) })
+  }
   if (act.kind === 'remind') {
     if (userPresent()) {
       notice(act.say)
@@ -323,6 +349,7 @@ function afterChange(): void {
   knownIds = ids
   watchers.sync(list)
   void wake.sync(list, removed).then(() => engine.replan())
+  for (const fn of changeListeners) fn()
 }
 
 export function automations(): AutomationScheduler {
@@ -331,6 +358,33 @@ export function automations(): AutomationScheduler {
 
 /** Kept for older importers. */
 export const routines = automations
+
+/**
+ * A new automation from a "when" phrase (a buddy's schedule, 08 T52): the same parse and folder
+ * checks as Settings. A string: why it was not made.
+ */
+export async function addAutomation(input: {
+  name: string
+  /** Words ("every weekday at 8") or an already parsed trigger. */
+  when: string | AutomationTrigger
+  action: AutomationAction
+  wake?: boolean
+}): Promise<Automation | string> {
+  let trigger: AutomationTrigger
+  if (typeof input.when === 'string') {
+    const t = parseTriggerText(input.when, parseOpts())
+    if (!t.ok) return t.reason
+    trigger = t.trigger
+  } else {
+    const t = triggerSchema.safeParse(input.when)
+    if (!t.success) return 'That schedule is not valid.'
+    trigger = input.when
+  }
+  const a = await save({ name: input.name, trigger, action: input.action }, [])
+  if (typeof a !== 'string' && input.wake && isTimeTrigger(a.trigger))
+    engine.update(a.id, { wake: true })
+  return typeof a === 'string' ? a : (engine.get(a.id) ?? a)
+}
 
 // ---- voice ----
 
@@ -494,7 +548,7 @@ function problemFor(a: Automation): string | undefined {
 
 function withText(action: AutomationAction, text: string): AutomationAction {
   if (action.kind === 'remind') return { kind: 'remind', say: text }
-  if (action.kind === 'skill') return { ...action, prompt: text }
+  if (action.kind === 'skill' || action.kind === 'buddy') return { ...action, prompt: text }
   return { kind: 'task', prompt: text }
 }
 
@@ -582,6 +636,11 @@ export function registerRoutinesIpc(): void {
 
 let installed = false
 
+/** The automations list is loaded (before that it reads as empty). */
+export function automationsLoaded(): boolean {
+  return installed && !!store
+}
+
 function readLegacy(dir: string): Legacy {
   const cfg = loadConfig().agent.proactive
   return {
@@ -614,6 +673,7 @@ export function installRoutines(file = join(dirname(configPath()), 'automations.
     log('plan', `automation ${id} wake run ${ok ? 'started' : 'skipped'}`)
   })
   onSecondLaunch(() => homeWin.show())
+  for (const fn of changeListeners) fn()
   app?.on('will-quit', () => {
     engine.stop()
     watchers.stop()

@@ -15,7 +15,9 @@ const CONNECTOR_RE =
 
 /** Risky things an action may need: each becomes a pre-approval choice. */
 export function wantsFor(action: AutomationAction): AutomationDraft['wants'] {
-  if (action.kind === 'remind') return { foreground: false, connectors: false }
+  // A buddy's own permissions decide what it may do (08 T52).
+  if (action.kind === 'remind' || action.kind === 'buddy')
+    return { foreground: false, connectors: false }
   const text = action.kind === 'task' ? action.prompt : `${action.skill} ${action.prompt ?? ''}`
   return { foreground: FOREGROUND_RE.test(text), connectors: CONNECTOR_RE.test(text) }
 }
@@ -23,6 +25,7 @@ export function wantsFor(action: AutomationAction): AutomationDraft['wants'] {
 export function draftName(action: AutomationAction, title: (s: string) => string): string {
   if (action.kind === 'remind') return title(action.say)
   if (action.kind === 'skill') return title(`Skill ${action.skill}`)
+  if (action.kind === 'buddy') return title(`Buddy ${action.buddyId}`)
   return title(action.prompt)
 }
 
