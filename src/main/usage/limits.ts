@@ -188,9 +188,11 @@ let unsubscribe: (() => void) | null = null
 /**
  * What a line counts against a USD cap: its cost, or, for a paid model with no known price, its
  * tokens at the rate the task caps use (usageCost), so a cap still trips. Free / local stay $0.
+ * The estimate is the one kept on the line when it was recorded (older lines: priced now).
  */
 export function limitUsd(r: UsageRow): number {
   if (r.priced || r.free) return r.usd
+  if (typeof r.est === 'number') return roundUsd(r.usd + r.est)
   const est = usageCost(r.model, {
     inputTokens: r.in,
     outputTokens: r.out,

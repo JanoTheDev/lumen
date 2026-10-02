@@ -16,6 +16,7 @@ import {
   writeFileSync
 } from 'fs'
 import { dirname, join } from 'path'
+import { usageCost } from '../ai/pricing'
 import { configPath } from '../config'
 import { currentUsageScope, type UsageOrigin, type UsageScope } from './scope'
 
@@ -39,6 +40,11 @@ export interface UsageRow {
   priced: boolean
   /** Local model or free tier. */
   free: boolean
+  /**
+   * A paid line with no known price: its tokens at the task caps' fallback rate, fixed when it
+   * was recorded, so the monthly limits never move when a price list loads later.
+   */
+  est?: number
   origin: UsageOrigin
   feature: string
   taskId?: string
@@ -164,6 +170,19 @@ function clean(row: UsageRow): UsageRow {
   return out as unknown as UsageRow
 }
 
+/** The fallback-rate estimate of a paid line with no known price; undefined otherwise. */
+function estimateOf(entry: UsageEntry): number | undefined {
+  if (entry.priced !== false || entry.free) return undefined
+  const usage = {
+    inputTokens: entry.in ?? 0,
+    outputTokens: entry.out ?? 0,
+    cacheReadTokens: entry.cacheRead ?? 0,
+    cacheWriteTokens: entry.cacheWrite ?? 0
+  }
+  if (usage.inputTokens + usage.outputTokens <= 0) return undefined
+  return roundUsd(usageCost(entry.model, usage).total)
+}
+
 /** Builds the line from the entry plus the current usage scope. */
 export function buildRow(entry: UsageEntry, scope: UsageScope = currentUsageScope()): UsageRow {
   return clean({
@@ -181,6 +200,7 @@ export function buildRow(entry: UsageEntry, scope: UsageScope = currentUsageScop
     usd: entry.usd ?? 0,
     priced: entry.priced ?? true,
     free: entry.free ?? false,
+    est: entry.est ?? estimateOf(entry),
     origin: entry.origin ?? scope.origin,
     feature: entry.feature ?? scope.feature ?? 'other',
     taskId: entry.taskId ?? scope.taskId,

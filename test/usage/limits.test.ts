@@ -3,12 +3,14 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { UsageLimitsConfig } from '../../src/shared/config'
-import { recordCall, setLedgerDir } from '../../src/main/usage/ledger'
+import { registerModelPrice } from '../../src/main/ai/pricing'
+import { recordCall, resetLedgerCache, setLedgerDir } from '../../src/main/usage/ledger'
 import {
   canStartRun,
   checkRunLimit,
   installUsageLimits,
   limitState,
+  limitUsd,
   resetUsageLimits,
   setLimitsStatePath,
   type LimitScope
@@ -197,5 +199,27 @@ describe('usage limits', () => {
     expect(limitState({ kind: 'buddy', id: 'inbox' })).toMatchObject({ usd: 0, estimated: 0 })
     call(0, { priced: false, free: true, in: 1_000_000, buddyId: 'inbox' })
     expect(limitState({ kind: 'buddy', id: 'inbox' })).toMatchObject({ usd: 0, estimated: 0 })
+  })
+})
+
+describe('unpriced estimates are fixed at record time (review s6 L7)', () => {
+  it('a price list loading later moves neither the cached nor a re-read total', () => {
+    const model = 'vendor/unlisted-l7'
+    limits = { monthlyUsd: 10, automations: {} }
+    // 1M input tokens at the fallback (Sonnet 5.5) rate: $2.
+    call(0, { model, priced: false, free: false, in: 1_000_000, out: 0 })
+    expect(limitState({ kind: 'overall' }).usd).toBe(2)
+    registerModelPrice(model, { input: 0.1, output: 0.1, cacheRead: 0, cacheWrite: 0 })
+    expect(limitState({ kind: 'overall' }).usd).toBe(2)
+    // As after a restart: the month is read again from the file.
+    resetUsageLimits()
+    resetLedgerCache()
+    install()
+    expect(limitState({ kind: 'overall' }).usd).toBe(2)
+  })
+
+  it('a line from before the field is still priced as read', () => {
+    const row = { model: 'vendor/unlisted-l7b', usd: 0, priced: false, free: false, in: 1_000_000 }
+    expect(limitUsd({ ...row, out: 0, cacheRead: 0, cacheWrite: 0 } as never)).toBe(2)
   })
 })
