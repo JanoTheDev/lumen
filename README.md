@@ -239,7 +239,7 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 _Last updated: October 2026._
 
-**Where things stand:** every feature listed above is built, has automated tests (about 415 test files and over 5,000 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
+**Where things stand:** every feature listed above is built, has automated tests (about 430 test files and over 5,200 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
 
 ### Done
 
@@ -250,6 +250,7 @@ _Last updated: October 2026._
 - [x] Assistant bar, screen layer, cursor buddy, Home flyout, tray, first-run setup, rebuilt Settings, eight themes
 - [x] Any provider: Anthropic, OpenAI, Gemini free tier, OpenAI-compatible services, Ollama and LM Studio, local-only mode, a model per job
 - [x] Memory you can see and edit, private mode, usage and cost per day
+- [x] Diagnostics page in Settings: how long each step of your last question took
 
 **Pointing and doing**
 
@@ -257,6 +258,7 @@ _Last updated: October 2026._
 - [x] AI intent router, agent mode with plan, countdown, ghost cursor and caps
 - [x] Works in any app: how-to lookups, on-screen grounding, learned per-app notes
 - [x] Gmail and Outlook (new and classic): read, summarize, reply, write, search, attach; send and delete safety in five UI languages
+- [x] Web research that reads result pages as text and answers with sources
 - [x] Rich answer cards with images, prices, ratings and sources for research questions, with voice follow-ups
 - [x] Book it for me: supervised booking with a checkout guard (price on the confirm, payment fields left to you)
 - [x] Background tasks with a live task chat (steer, answer, pause, stop)
@@ -284,6 +286,7 @@ _Last updated: October 2026._
 
 - [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress, learning journal
 - [x] Blender and OBS app helpers for exact lesson checks
+- [x] Offline lesson-check accuracy test set (no false passes on the current cases)
 - [x] Lessons from tutorial transcripts, web pages and subtitle files; sharing as `.lumen` files
 - [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording, by description, or "save that as a skill"
 - [x] Reply styles, Claude Code plugin import (also marketplace plugins from other GitHub repos)
@@ -295,28 +298,26 @@ _Last updated: October 2026._
 
 ### In progress
 
-- [ ] **Better web research:** read result pages as text instead of screenshots, faster answers with sources
+- [ ] **Record a lesson as a video:** say "record this lesson" to save the run as a video with a step-by-step transcript in `Videos\Lumen` (built into Lumen, no extra download)
+- [ ] **Head pointer:** move the mouse by turning your head, with the face-gesture camera input
 
 ### After that
 
 - [ ] Hand-test pass on real hardware: every surface at 100–200 % scaling, light / dark / high contrast, two monitors, NVDA and keyboard only, motion smoothness
 - [ ] Pointing accuracy test set from real apps (Gmail, Outlook, Word, Excel, Slack, VS Code, browsers); the capture tool is ready
-- [ ] Lesson-check accuracy measurements
-- [ ] Community skills and packs index ("Browse community skills", no account needed)
-- [ ] Record a lesson run as a video with a transcript
-- [ ] Offline spoken-language detection
-- [ ] Head-pointer mouse movement for face gestures
+- [ ] Lesson-check accuracy on real screen recordings (the offline test set is done)
 - [ ] First public release
 
 ### Maybe later
 
 - Optional paid streaming voices and transcription (OpenAI, Deepgram, ElevenLabs), always opt-in
+- Offline spoken-language detection (a ~75 MB download)
 - DaVinci Resolve app helper (needs a Studio licence to test)
 - Driving the browser directly instead of through the screen
-- Latency overlay for developers
 
 ### Not planned for now
 
+- A central community index: skills, packs and buddies are shared as `.lumen` files and GitHub links instead
 - Code signing and the "uiAccess" build that works over admin windows (paid certificate required)
 - winget package (waits for signing)
 
