@@ -26,6 +26,22 @@ export function combineAll(results: CheckResult[]): CheckResult {
   return results.includes('fail') ? 'fail' : 'unknown'
 }
 
+/**
+ * anyOf: a connected bridge that says "not done" is decisive, so a `manual` alternative's
+ * pass on the user's "done" does not count then (the step answers "not yet" with its hints).
+ * Without an answering bridge, manual stays the fallback.
+ */
+export function overruleManual(
+  checks: CheckSpec[],
+  results: CheckResult[],
+  ctx?: Pick<CheckContext, 'log'>
+): CheckResult[] {
+  const bridgeSaysNo = checks.some((c, i) => c.type === 'bridge' && results[i] === 'fail')
+  if (!bridgeSaysNo || !checks.some((c) => c.type === 'manual')) return results
+  ctx?.log('bridge says not done; "done" alone does not pass')
+  return results.map((r, i) => (checks[i].type === 'manual' ? 'unknown' : r))
+}
+
 /** Starts `start` only once `gate` resolves true; until then it answers unknown. */
 function deferred(gate: Promise<boolean>, start: () => CheckHandle): CheckHandle {
   const r = settleable()
@@ -83,7 +99,7 @@ function group(
           passed.has(i) ? 'pass' : h.evaluate().catch(() => 'unknown' as const)
         )
       )
-      const res = all ? combineAll(results) : combineAny(results)
+      const res = all ? combineAll(results) : combineAny(overruleManual(spec.checks, results, ctx))
       if (res === 'pass') r.settle('pass')
       return res
     },

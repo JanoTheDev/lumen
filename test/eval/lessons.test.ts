@@ -90,7 +90,7 @@ describe('lesson-check eval', () => {
   it('T15-G3: closing Settings with Cancel does not pass a save step', () => {
     expect(gapCases('T15-G3').filter(wrong)).toEqual([])
   })
-  it.fails('T15-G4: a bridge fail is not overridden by a manual alternative', () => {
+  it('T15-G4: a bridge fail is not overridden by a manual alternative', () => {
     expect(gapCases('T15-G4').map((r) => r.out.verdict)).toEqual(['fail'])
   })
   it('T15-G5: window-opened evaluate sees the dialog that is the snapshot root', () => {

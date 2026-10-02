@@ -380,6 +380,27 @@ describe('combinators', () => {
     expect(combineAll(['pass', 'fail'])).toBe('fail')
   })
 
+  it('anyOf: a bridge that says not done overrules a manual "done"', async () => {
+    let answer: 'pass' | 'fail' | 'unknown' = 'fail'
+    const bridge = { query: async () => answer }
+    const spec: CheckSpec = {
+      type: 'anyOf',
+      checks: [
+        { type: 'bridge', app: 'obs', expect: { request: 'GetRecordStatus', outputActive: false } },
+        { type: 'manual' }
+      ]
+    }
+    const logs: string[] = []
+    const h = startCheck(spec, ctx({ bridge }, logs))
+    expect(await h.evaluate()).toBe('fail')
+    expect(logs.join(' ')).toContain('bridge says not done')
+    answer = 'unknown'
+    expect(await h.evaluate()).toBe('pass')
+    h.cancel()
+    answer = 'pass'
+    expect(await startCheck(spec, ctx({ bridge })).evaluate()).toBe('pass')
+  })
+
   it('anyOf passes on the first child; allOf needs every child', async () => {
     let title = 'x'
     const window = { activeWindow: async () => ({ title }) }
