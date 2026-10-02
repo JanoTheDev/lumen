@@ -44,6 +44,7 @@ Lumen lives in the tray. Hold a hotkey (or say "hey lumen"), ask for something, 
 - **Rich answers.** Research questions ("best ramen in Larnaca", "compare these three laptops") end in answer cards with photos, prices, ratings and numbered sources. Prices and ratings are only shown when Lumen actually read them on a source page. Follow up by voice: "the cheapest one", "tell me more about the second", "compare them", "save it", "more like this". Cards open full size as a grid or a sortable table.
 - **Book it for me.** "Book the second one" opens the site and fills in the booking as a supervised agent task. Logins, captchas and card checks are handed back to you, Lumen never types into payment fields, and the final Book / Pay / Place order click always asks first, with the price it just read from the page.
 - **Background tasks.** Say "in the background…" or "keep an eye on…" and the work runs in parallel without touching your mouse or keyboard. Results land in the Tasks list on Home with a tray badge.
+- **Helpers inside a task.** A background or agent task can hand focused jobs to small helpers (researcher, reader, writer, checker) that work at the same time, inside the same safety rules, budget and cancel button. Their work shows as one group in the task chat; set how many run at once and which model they use in Settings → Automations → Helpers.
 - **Task chat.** Click any task (background, agent or Claude Code) to watch its conversation live, see every step it took, steer it with a message, answer its questions, pause or stop it.
 - **Safety first.** Every action is rated low / medium / high risk. Risky ones need your OK ("yes", "always" for this site, or "no"), sending, deleting and buying always ask (Send, Delete and recipient checks also work in Dutch, German, French and Spanish Gmail and Outlook), a recipient or personal detail you never said is shown on the confirm card, dangerous shortcuts (Run dialog, terminals) are blocked, passwords and secrets are redacted, and text on screen is treated as data, never as instructions. Every action is written to a local audit log.
 - **Multi-monitor and any display scaling.** Highlights and clicks land in the right place on every screen.
@@ -237,7 +238,7 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 _Last updated: October 2026._
 
-**Where things stand:** every feature listed above is built, has automated tests (about 375 test files and over 4,400 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
+**Where things stand:** every feature listed above is built, has automated tests (about 380 test files and over 4,700 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
 
 ### Done
 
@@ -258,6 +259,7 @@ _Last updated: October 2026._
 - [x] Rich answer cards with images, prices, ratings and sources for research questions, with voice follow-ups
 - [x] Book it for me: supervised booking with a checkout guard (price on the confirm, payment fields left to you)
 - [x] Background tasks with a live task chat (steer, answer, pause, stop)
+- [x] Helpers inside a task: parallel researcher / reader / writer / checker sub-agents
 - [x] Automations: time, app, folder, idle, login and network triggers, optional wake when closed
 - [x] Undo, what changed, focus mode, shortcut coach, comfort, error rescue
 - [x] Files in and out: drop or point at a file; create Word, Excel, CSV, PDF, Markdown and HTML
@@ -290,9 +292,14 @@ _Last updated: October 2026._
 
 ### In progress
 
+- [ ] **Usage tracking:** see where tokens and money go, per feature, task, automation, skill and model
 - [ ] **Better web research:** read result pages as text instead of screenshots, faster answers with sources
 
-### Next
+### Planned next
+
+- [ ] **Buddies:** your own named helpers ("ask Scout to check my inbox") that run on a schedule or when called by name; the on-screen buddy takes their colour and name while they work
+
+### After that
 
 - [ ] Hand-test pass on real hardware: every surface at 100–200 % scaling, light / dark / high contrast, two monitors, NVDA and keyboard only, motion smoothness
 - [ ] Pointing accuracy test set from real apps (Gmail, Outlook, Word, Excel, Slack, VS Code, browsers); the capture tool is ready
@@ -308,7 +315,6 @@ _Last updated: October 2026._
 - Optional paid streaming voices and transcription (OpenAI, Deepgram, ElevenLabs), always opt-in
 - DaVinci Resolve app helper (needs a Studio licence to test)
 - Driving the browser directly instead of through the screen
-- Named assistants / personas
 - Latency overlay for developers
 
 ### Not planned for now
