@@ -387,9 +387,14 @@ function saidWhole(word: string, said: string): boolean {
 /**
  * The user's own words name this recipient text: every address in it was said in full, or
  * every name word was said as a whole word ("Anna", "Anna Berg"). A prefix the agent typed for
- * autocomplete ("j", "ann") or a name word the user never said is not named.
+ * autocomplete ("j", "ann") or a name word the user never said is not named. Under 3 letters
+ * only counts with `short` (a personal field: "Jo" said as a whole word is Jo).
  */
-export function userNamed(text: string, userText: string | undefined): boolean {
+export function userNamed(
+  text: string,
+  userText: string | undefined,
+  opts: { short?: boolean } = {}
+): boolean {
   const t = text.trim().toLowerCase()
   if (!t || !userText) return false
   const said = userText.toLowerCase()
@@ -403,7 +408,7 @@ export function userNamed(text: string, userText: string | undefined): boolean {
       .split(/[^\p{L}\p{N}'-]+/u)
       .map((w) => w.replace(/^['-]+|['-]+$/g, ''))
       .filter(Boolean)
-    if (!words.length || words.join('').length < 3) return false
+    if (!words.length || (!opts.short && words.join('').length < 3)) return false
     return words.every((w) => saidWhole(w, said))
   })
 }
@@ -934,7 +939,10 @@ function personalFindings(
   const named = isPersonalFieldName(field)
   const lone = phoneShaped(t) || EMAIL_ONLY_RE.test(t)
   if (!named && !(lone && detailFormField(ctx.activeWindow, field))) return
-  if (looksLikePhone(t) ? saidDigits(t, ctx.userText) : userNamed(t, ctx.userText)) return
+  const said = looksLikePhone(t)
+    ? saidDigits(t, ctx.userText)
+    : userNamed(t, ctx.userText, { short: true })
+  if (said) return
   out.push({
     risk: 'high',
     reason: `fills in personal details you did not give: “${t.slice(0, 120)}”`

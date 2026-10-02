@@ -166,6 +166,26 @@ describe('payment and personal field names', () => {
   })
 
   it.each([
+    'Guest name',
+    'Passenger name',
+    'Lead traveller',
+    'Vollständiger Name',
+    'Nome',
+    'Nome e cognome',
+    'Cognome',
+    'Sobrenome'
+  ])('personal: %s (review L1)', (name) => {
+    expect(isPersonalFieldName(name)).toBe(true)
+  })
+
+  it.each(['Event name', 'Company name', 'Display name', 'Folder name', 'User name'])(
+    'not personal: %s (review L1)',
+    (name) => {
+      expect(isPersonalFieldName(name)).toBe(false)
+    }
+  )
+
+  it.each([
     'File name',
     'Address and search bar',
     'Search email',
@@ -340,6 +360,27 @@ describe('personal details', () => {
     expect(d.risk).toBe('high')
     expect(d.needsConfirm).toBe(true)
     expect(d.reason).toContain('“Anna Berg”')
+  })
+
+  it('a name the user never said is high in a guest name field (review L1)', () => {
+    const d = evaluate(
+      { type: 'type', text: 'John Smith' },
+      { ...field('Guest name'), userText: 'book the hotel' }
+    )
+    expect(d.risk).toBe('high')
+  })
+
+  it('a short name said as a whole word counts (review L2)', () => {
+    const d = evaluate(
+      { type: 'type', text: 'Jo' },
+      { ...field('Full name'), userText: 'book the hotel in Lyon, my name is Jo' }
+    )
+    expect(d.risk).not.toBe('high')
+    const unsaid = evaluate(
+      { type: 'type', text: 'Jo' },
+      { ...field('Full name'), userText: 'book it for John' }
+    )
+    expect(unsaid.risk).toBe('high')
   })
 
   it('a partial word does not count as said', () => {

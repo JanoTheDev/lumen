@@ -393,9 +393,26 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'postcode',
       'postal code',
       'zip code',
-      'date of birth'
+      'date of birth',
+      'lead traveller',
+      'lead traveler',
+      'lead guest',
+      'contact person'
     ],
-    personalExact: ['name', 'your name', 'address', 'city', 'town', 'zip', 'mobile', 'birthday']
+    personalExact: [
+      'name',
+      'your name',
+      'address',
+      'city',
+      'town',
+      'zip',
+      'mobile',
+      'birthday',
+      'guest',
+      'passenger',
+      'traveller',
+      'traveler'
+    ]
   },
   nl: {
     checkout: [
@@ -758,8 +775,58 @@ export function isSearchFieldName(name: string | undefined): boolean {
   return !!name && SEARCH_RE.test(fold(name))
 }
 
+/** "Guest name", "Passenger name", "Vollständiger Name", "Nome": a person's name field. */
+const ENDS_IN_NAME_RE = /(?:^|\s)(?:name|naam|nom|nombre|nome)$/
+/** "File name", "Event name", "Company name": names of things, not people. */
+const THING_NAME_RE = wordsRe([
+  'file',
+  'user',
+  'company',
+  'business',
+  'organisation',
+  'organization',
+  'event',
+  'product',
+  'item',
+  'display',
+  'project',
+  'folder',
+  'document',
+  'list',
+  'group',
+  'team',
+  'channel',
+  'workspace',
+  'domain',
+  'host',
+  'server',
+  'network',
+  'device',
+  'computer',
+  'account',
+  'profile',
+  'hotel',
+  'property',
+  'room',
+  'branch',
+  'tag',
+  'table',
+  'sheet',
+  'field',
+  'bestand',
+  'datei',
+  'fichier',
+  'archivo',
+  'bedrijf',
+  'firma',
+  'entreprise',
+  'empresa'
+])
+
 /** A name / email / phone / address / birth date field, any listed language. */
 export function isPersonalFieldName(name: string | undefined): boolean {
   if (!name?.trim() || SEARCH_RE.test(fold(name))) return false
-  return PERSONAL_RE.test(fold(name.trim())) || PERSONAL_EXACT.has(bareLabel(name))
+  const label = bareLabel(name)
+  if (PERSONAL_RE.test(fold(name.trim())) || PERSONAL_EXACT.has(label)) return true
+  return ENDS_IN_NAME_RE.test(label) && !THING_NAME_RE.test(label)
 }
