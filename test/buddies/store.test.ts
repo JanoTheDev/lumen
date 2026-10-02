@@ -20,7 +20,14 @@ import {
   IMPORT_MARKER,
   parseBuddyFile
 } from '../../src/main/buddies/store'
-import { buddyIdFor, clampBuddy, folderAllowed, isBuddyId } from '../../src/main/buddies/clamp'
+import {
+  buddyIdFor,
+  clampBuddy,
+  folderAllowed,
+  folderPathAllowed,
+  isBuddyId
+} from '../../src/main/buddies/clamp'
+import { plainPath, realFolder } from '../../src/main/buddies/real-folder'
 import { Buddies } from '../../src/main/buddies/service'
 
 let root: string
@@ -223,6 +230,41 @@ describe('buddy store', () => {
       expect(folderAllowed(p), p).toBe(false)
     expect(folderAllowed('C:\\Users\\sam\\Documents\\Invoices')).toBe(true)
     expect(folderAllowed('D:\\Photos')).toBe(true)
+  })
+
+  it('checks the real path: junctions and 8.3 names into blocked folders (M4)', () => {
+    // A fake disk: the profile's legacy junction and short names resolve into AppData.
+    const links: Record<string, string> = {
+      'c:\\users\\sam\\docs': 'C:\\Users\\sam\\AppData\\Roaming',
+      'c:\\users\\sam\\documents': 'C:\\Users\\sam\\Documents',
+      'c:\\progs': '\\\\?\\C:\\Program Files'
+    }
+    const fake = (p: string): string => {
+      const hit = links[p.toLowerCase()]
+      if (hit) return hit
+      if (/^[a-z]:\\$/i.test(p) || /^c:\\users(\\sam)?$/i.test(p)) return p
+      throw new Error('ENOENT')
+    }
+    const real = (p: string): string | null => realFolder(p, fake)
+    expect(real('C:\\Users\\sam\\docs\\Lumen\\logs')).toBe(
+      'C:\\Users\\sam\\AppData\\Roaming\\Lumen\\logs'
+    )
+    expect(folderAllowed('C:\\Users\\sam\\docs\\Lumen', real)).toBe(false)
+    expect(folderAllowed('C:\\progs\\App', real)).toBe(false)
+    expect(folderAllowed('C:\\Users\\sam\\Documents\\Invoices', real)).toBe(true)
+    // A folder that does not exist yet goes by its deepest existing parent.
+    expect(folderAllowed('D:\\New\\Photos', real)).toBe(true)
+    // Names that are blocked as written: legacy junctions and 8.3 short names.
+    for (const p of [
+      'C:\\Users\\sam\\Application Data\\Lumen',
+      'C:\\Users\\sam\\Local Settings\\Temp',
+      'C:\\PROGRA~1\\App',
+      'C:\\Users\\sam\\APPDAT~1\\Roaming',
+      'C:\\WINDOW~1.OLD\\x',
+      'C:\\Windows.old\\Users'
+    ])
+      expect(folderPathAllowed(p), p).toBe(false)
+    expect(plainPath('\\\\?\\UNC\\srv\\share')).toBe('\\\\srv\\share')
   })
 
   it('removes a buddy folder', () => {

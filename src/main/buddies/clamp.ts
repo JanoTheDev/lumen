@@ -1,6 +1,7 @@
 // A buddy clamped to least privilege (the same limits as model-written skills, skills/clamp):
 // known background tools only, https origins only (no `*.com`), local folders only, sane
-// budgets. Applied on every load, so a hand-edited buddy.md cannot widen past it. Pure.
+// budgets. Applied on every load, so a hand-edited buddy.md cannot widen past it. Pure apart
+// from the real-path lookup of folders (real-folder.ts).
 import {
   BUDDY_DEFAULT_PER_RUN_USD,
   BUDDY_INSTRUCTIONS_MAX,
@@ -11,6 +12,7 @@ import {
   type BuddyReport
 } from '@shared/buddies'
 import { websitePattern } from '../skills/clamp'
+import { realFolder } from './real-folder'
 
 /**
  * Background tools a buddy may list. finish, ask_user, memory_write and notify are always
@@ -126,6 +128,9 @@ const num = (v: unknown, min: number, max: number): number | undefined =>
 /** Top folders of a drive that hold Windows or programs, never a buddy's. */
 const SYSTEM_TOPS = new Set([
   'windows',
+  'windows.old',
+  '$windows.~bt',
+  '$windows.~ws',
   'program files',
   'program files (x86)',
   'programdata',
@@ -136,13 +141,31 @@ const SYSTEM_TOPS = new Set([
   'recovery'
 ])
 /** Folders anywhere in the path that hold app data, keys or Lumen's own files. */
-const PRIVATE_PARTS = new Set(['appdata', '.ai-overlay', '.ssh', '.gnupg', '.aws', '.azure'])
+const PRIVATE_PARTS = new Set([
+  'appdata',
+  // The profile's legacy junctions into AppData.
+  'application data',
+  'local settings',
+  '.ai-overlay',
+  '.ssh',
+  '.gnupg',
+  '.aws',
+  '.azure'
+])
 
 /**
  * A local folder: drive-letter absolute, no `..`, not UNC or a device; not a drive root, a
- * system folder, the Users folder or a profile root, nor inside AppData or Lumen's data.
+ * system folder, the Users folder or a profile root, nor inside AppData or Lumen's data. The
+ * same checks run on its real path (junctions and 8.3 names resolved); `real` is the lookup.
  */
-export function folderAllowed(p: string): boolean {
+export function folderAllowed(p: string, real: (p: string) => string | null = realFolder): boolean {
+  if (!folderPathAllowed(p)) return false
+  const r = real(p)
+  return r === null || folderPathAllowed(r)
+}
+
+/** The checks on the path as written (pure). */
+export function folderPathAllowed(p: string): boolean {
   if (!/^[A-Za-z]:[\\/]/.test(p) || p.length > 260) return false
   const parts = p
     .slice(3)
@@ -151,7 +174,8 @@ export function folderAllowed(p: string): boolean {
   if (!parts.length) return false
   const bad = (x: string): boolean =>
     x === '..' || x === '.' || /[<>:"|?*]/.test(x) || [...x].some((c) => c.charCodeAt(0) < 32)
-  if (parts.some(bad)) return false
+  // 8.3 short names ("PROGRA~1") hide what folder they are.
+  if (parts.some(bad) || parts.some((x) => /~\d/.test(x))) return false
   const low = parts.map((x) => x.toLowerCase().replace(/[. ]+$/, ''))
   if (low.some((x) => PRIVATE_PARTS.has(x))) return false
   // C:\Users\<name>\Documents is fine; C:\Users and C:\Users\<name> are not.
@@ -200,8 +224,8 @@ export function clampPermissions(raw: unknown, ctx: ClampContext = {}): BuddyPer
     input,
     network,
     files: {
-      read: uniq(strings(files.read).filter(folderAllowed)),
-      write: uniq(strings(files.write).filter(folderAllowed))
+      read: uniq(strings(files.read).filter((f) => folderAllowed(f))),
+      write: uniq(strings(files.write).filter((f) => folderAllowed(f)))
     },
     connectors: uniq(
       strings(r.connectors).filter(
