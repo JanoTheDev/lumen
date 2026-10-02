@@ -10,6 +10,7 @@ import {
   type PresentCardsInput
 } from '../../src/main/cards/research'
 import { validateCards } from '../../src/main/cards/schema'
+import { fenceResult } from '../../src/main/agent-mode/subagents/run'
 import { strictCounts } from '../../src/main/ai/providers/anthropic'
 import { anthropicJsonSchema } from '../../src/main/ai/providers/structured'
 
@@ -154,6 +155,27 @@ describe('observedFrom', () => {
     if (!r.ok) throw new Error(r.error)
     expect(r.cards.cards[0].price).toBeUndefined()
     expect(r.dropped).toHaveLength(1)
+  })
+
+  it('a sub-agent summary marks its sources read but its numbers and times never count', () => {
+    const block = fenceResult(
+      {
+        role: 'researcher',
+        task: 'price of the lamp',
+        status: 'done',
+        text: 'Lamp costs €129, next delivery 08:15',
+        sources: ['https://shop.example/lamp'],
+        costUsd: 0
+      },
+      0
+    )
+    const o = observedFrom(run([{ name: 'run_subagents', input: {}, text: block }]))
+    expect(o.urls.has('shop.example/lamp')).toBe(true)
+    expect(o.text).not.toContain('129')
+    const r = buildAnswerCards(priced('https://shop.example/lamp', 129), o, NOW)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.cards.cards[0].price).toBeUndefined()
+    expect(r.dropped).toEqual(['Hotel Azur: price 129 is not on the pages read'])
   })
 
   it('a number counts only on the page the source names', () => {

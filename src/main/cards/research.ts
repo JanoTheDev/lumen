@@ -150,6 +150,9 @@ const FENCE_RE = /<observed source="web (https?:\/\/[^"]+)">([\s\S]*?)<\/observe
  */
 const READS_LINKS = (name: string): boolean => name === 'lookup_howto' || name.startsWith('mcp__')
 
+/** Tools whose result a model wrote (sub-agents, helper tasks): read for links only. */
+const MODEL_WRITTEN = new Set(['run_subagents', 'spawn_task'])
+
 /** Tools whose result is what the screen shows (the page in the browser, for a web page). */
 const READS_SCREEN = new Set(['observe', 'navigate', 'wait_for', 'act', 'keys', 'launch_app'])
 
@@ -232,7 +235,8 @@ export function observedFrom(
         screen.push(t)
         addText(current, t)
       }
-      if (size < MAX_OBSERVED_TEXT) {
+      // Helper summaries are their model's own words: their numbers and times never count.
+      if (!MODEL_WRITTEN.has(call.name) && size < MAX_OBSERVED_TEXT) {
         parts.push(t)
         size += t.length
       }
