@@ -267,6 +267,38 @@ describe('buddy store', () => {
     expect(plainPath('\\\\?\\UNC\\srv\\share')).toBe('\\\\srv\\share')
   })
 
+  it('limits buddies imported before the import limits, once (L3)', () => {
+    const perms = {
+      tools: ['read_file'],
+      apps: [],
+      input: false,
+      network: [],
+      files: { read: ['D:\\Notes'], write: ['D:\\Out'] },
+      connectors: []
+    }
+    const old = store.create({ name: 'Old Import', permissions: perms, budget: { perRunUsd: 4 } })
+    const fresh = store.create({ name: 'New Import', permissions: perms, budget: { perRunUsd: 4 } })
+    const mine = store.create({ name: 'My Own', permissions: perms, budget: { perRunUsd: 4 } })
+    const mark = (id: string, installedAt: string): void =>
+      writeFileSync(join(root, id, IMPORT_MARKER), JSON.stringify({ format: 1, id, installedAt }))
+    mark(old.id, '2026-09-20T10:00:00.000Z')
+    mark(fresh.id, '2026-10-03T10:00:00.000Z')
+    expect(store.limitOldImports()).toEqual([old.id])
+    const o = store.get(old.id)!
+    expect(o.permissions.files).toEqual({ read: [], write: [] })
+    expect(o.budget.perRunUsd).toBe(0.25)
+    expect(store.get(fresh.id)!.budget.perRunUsd).toBe(4)
+    expect(store.get(mine.id)!.permissions.files.read).toEqual(['D:\\Notes'])
+    // A folder the user adds afterwards stays.
+    store.save({
+      ...o,
+      permissions: { ...o.permissions, files: { read: ['D:\\Notes'], write: [] } }
+    })
+    expect(store.limitOldImports()).toEqual([])
+    expect(store.get(old.id)!.permissions.files.read).toEqual(['D:\\Notes'])
+    expect(JSON.parse(readFileSync(join(root, old.id, IMPORT_MARKER), 'utf8')).limited).toBe(true)
+  })
+
   it('removes a buddy folder', () => {
     const b = store.create({ name: 'Gone Soon' })
     store.appendNotebook(b.id, 'a note')

@@ -13,7 +13,7 @@ import {
   writeFileSync
 } from 'fs'
 import { join } from 'path'
-import { BUDDY_NOTEBOOK_MAX_BYTES, type Buddy } from '@shared/buddies'
+import { BUDDY_DEFAULT_PER_RUN_USD, BUDDY_NOTEBOOK_MAX_BYTES, type Buddy } from '@shared/buddies'
 import { splitFrontmatter, type YamlValue } from '../skills/frontmatter'
 import {
   buddyIdFor,
@@ -83,6 +83,18 @@ function atomicWrite(file: string, text: string): void {
     rmSync(tmp, { force: true })
     throw e
   }
+}
+
+const DEFAULT_RUN = BUDDY_DEFAULT_PER_RUN_USD
+/** Imports from before this time kept the pack's folders and budget (imports limited since). */
+const IMPORTS_LIMITED_AT = Date.parse('2026-10-02T02:00:00Z')
+
+/** A pack marker of an import from before the import limits, not limited since. */
+export function oldImport(marker: Record<string, unknown>): boolean {
+  if (marker.limited === true) return false
+  const at = typeof marker.installedAt === 'string' ? Date.parse(marker.installedAt) : NaN
+  // No readable install time: treat it as old (limiting a new import changes nothing).
+  return !(at >= IMPORTS_LIMITED_AT)
 }
 
 /** Writes buddy.md into a buddy folder as it is (the caller clamped it). */
@@ -155,6 +167,40 @@ export class BuddyStore {
       if (b) out.push(b)
     }
     return out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
+  }
+
+  /**
+   * Buddies imported before imports were limited keep no folders from the pack and a budget per
+   * run no higher than the default: applied once (the marker remembers it), so what the user
+   * changes later stays. Returns the ids it changed.
+   */
+  limitOldImports(): string[] {
+    if (!existsSync(this.root)) return []
+    const changed: string[] = []
+    for (const id of readdirSync(this.root)) {
+      if (!isBuddyId(id) || !this.imported(id)) continue
+      const markerFile = join(this.root, id, IMPORT_MARKER)
+      let marker: Record<string, unknown>
+      try {
+        marker = JSON.parse(readFileSync(markerFile, 'utf8')) as Record<string, unknown>
+      } catch {
+        continue
+      }
+      if (!oldImport(marker)) continue
+      const b = this.get(id)
+      if (!b) continue
+      const p = b.permissions
+      if (p.files.read.length || p.files.write.length || b.budget.perRunUsd > DEFAULT_RUN) {
+        this.save({
+          ...b,
+          permissions: { ...p, files: { read: [], write: [] } },
+          budget: { ...b.budget, perRunUsd: Math.min(b.budget.perRunUsd, DEFAULT_RUN) }
+        })
+        changed.push(id)
+      }
+      atomicWrite(markerFile, `${JSON.stringify({ ...marker, limited: true }, null, 2)}\n`)
+    }
+    return changed
   }
 
   /** Writes the buddy (clamped first; updatedAt now). Returns what was written. */

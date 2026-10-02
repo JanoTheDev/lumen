@@ -111,6 +111,13 @@ export function installBuddies(root = join(dirname(configPath()), 'buddies')): v
     },
     sensitive: (t) => isSensitive(t)
   })
+  // Buddies imported before imports were limited: no pack folders, the default budget (once).
+  try {
+    const limited = store.limitOldImports()
+    if (limited.length) console.log(`[buddies] import limits applied to ${limited.join(', ')}`)
+  } catch (e) {
+    console.warn(`[buddies] import limits: ${(e as Error).message}`)
+  }
   service = new Buddies({
     store,
     start: (input) => startBackgroundTask(input),
