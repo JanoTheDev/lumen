@@ -211,6 +211,16 @@ describe('run_subagents in a background task', () => {
     await m.wait(child.id)
     expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
   })
+
+  it('a skill run gets no run_subagents (review L1)', async () => {
+    const { m, parentReqs } = setup({
+      parent: () => reply(call('finish', { summary: 'ok' })),
+      job: () => reply(call('finish', { summary: 'x' }))
+    })
+    const t = m.start({ prompt: 'run my skill', origin: 'agent', skill: 'morning' })
+    await m.wait(t.id)
+    expect(parentReqs[0].tools.map((x) => x.name)).not.toContain('run_subagents')
+  })
 })
 
 describe('Home Tasks row', () => {

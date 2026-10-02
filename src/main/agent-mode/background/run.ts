@@ -228,7 +228,9 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
     defs: [],
     handlers: {}
   }
-  const sub = env.subagents && !task.parentId ? env.subagents : null
+  // Not in a helper or a skill run (CLAUDE.md, subagents.md): a skill's confirms and envelope
+  // stay with one task.
+  const sub = env.subagents && !task.parentId && !task.skill ? env.subagents : null
   const own = {
     ...createBackgroundHandlers(env.ports),
     ...(sub
