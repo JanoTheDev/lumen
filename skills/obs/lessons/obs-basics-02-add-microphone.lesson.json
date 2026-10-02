@@ -96,15 +96,9 @@
       "expect": {
         "type": "user-action",
         "check": {
-          "type": "anyOf",
-          "checks": [
-            {
-              "type": "uia-event",
-              "event": "invoked",
-              "match": { "name": "OK", "role": "Button" }
-            },
-            { "type": "window-title", "regex": "^OBS \\d" }
-          ]
+          "type": "uia-event",
+          "event": "invoked",
+          "match": { "name": "OK", "role": "Button" }
         }
       },
       "hints": ["Apply saves without closing; OK saves and closes.", "Press Enter to choose OK."],

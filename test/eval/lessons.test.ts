@@ -87,7 +87,7 @@ describe('lesson-check eval', () => {
   it('T15-G2: a value check on a role alone does not pass on another ComboBox', () => {
     expect(gapCases('T15-G2').filter(wrong)).toEqual([])
   })
-  it.fails('T15-G3: closing Settings with Cancel does not pass a save step', () => {
+  it('T15-G3: closing Settings with Cancel does not pass a save step', () => {
     expect(gapCases('T15-G3').filter(wrong)).toEqual([])
   })
   it.fails('T15-G4: a bridge fail is not overridden by a manual alternative', () => {

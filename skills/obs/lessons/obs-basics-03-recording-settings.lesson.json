@@ -150,7 +150,17 @@
               "event": "invoked",
               "match": { "name": "OK", "role": "Button" }
             },
-            { "type": "window-title", "regex": "^OBS \\d" }
+            {
+              "type": "allOf",
+              "checks": [
+                { "type": "window-title", "regex": "^OBS \\d" },
+                {
+                  "type": "bridge",
+                  "app": "obs",
+                  "expect": { "request": "GetRecordDirectory", "recordDirectoryChanged": true }
+                }
+              ]
+            }
           ]
         }
       },
