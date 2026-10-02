@@ -39,7 +39,7 @@ import { readGranted, type ReadResult } from './files'
 import { MAX_CHILDREN, type SpawnTaskInput } from './tools'
 import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
-import { doneLine, noticeVerdict, PRESENT_MS } from './presence'
+import { doneLine, HeldNotices, noticeVerdict, PRESENT_MS } from './presence'
 import { buddyRunHook, type BuddyTaskEnv } from './buddy-hook'
 import { checkRunLimit } from '../../usage/limits'
 import { registrySkill, runBackground } from './run'
@@ -67,7 +67,7 @@ const UNATTENDED_CONFIRM_MS = 120_000
 let store: TaskStore | null = null
 let routineShapes: (routineId: string) => ActionShape[] | null = () => null
 let turnActive = false
-let afterTurn: string[] = []
+const afterTurn = new HeldNotices()
 
 const newId = (): string => `bg_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`
 
@@ -147,10 +147,9 @@ export function userBusy(): boolean {
 
 function turnEnded(): void {
   turnActive = false
-  const queued = afterTurn
-  afterTurn = []
+  const queued = afterTurn.drain()
   // A little later, so the turn's own answer is heard first.
-  if (queued.length) setTimeout(() => queued.forEach(notice), 1500)
+  if (queued.length) setTimeout(() => queued.forEach((replay) => replay(notice)), 1500)
 }
 
 // ---- request_foreground ----
