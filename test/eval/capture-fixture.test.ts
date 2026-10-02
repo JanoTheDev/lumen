@@ -104,6 +104,18 @@ describe('capture fixture helpers', () => {
     expect(snap.root.rect.x).toBe(-2880)
   })
 
+  it('keeps selection / toggle / expand state on UIA nodes', () => {
+    const tab = { ...node('e1', 'notes.txt', -2800, 100), selected: true, expanded: false }
+    const box = { ...node('e2', 'Header Row', -2700, 100), toggled: 'mixed' }
+    const out = convertUia(
+      { snapshotId: 's2', root: node('e0', 'W', -2880, 0, [tab, box]) },
+      monitor
+    )
+    expect(out.root.children[0]).toMatchObject({ selected: true, expanded: false })
+    expect(out.root.children[1].toggled).toBe('mixed')
+    expect(out.root.selected).toBeUndefined()
+  })
+
   it('converts OCR words and lines', () => {
     const ocr = {
       words: [

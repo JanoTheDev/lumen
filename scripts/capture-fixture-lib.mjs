@@ -51,7 +51,10 @@ export function redactText(text) {
 
 // ---- conversion of agent results to the fixture format ------------------------------------
 
-/** UIA tree with monitor-relative rects; names / values redacted unless `redact` is false. */
+/**
+ * UIA tree with monitor-relative rects; names / values redacted unless `redact` is false.
+ * Every other field (state such as `selected` / `toggled` / `expanded`) is kept as is.
+ */
 export function convertUiaNode(node, monitor, redact = true) {
   const fix = (s) => (redact ? redactText(s) : s)
   const out = { ...node, name: fix(node.name ?? ''), rect: toMonitorRelative(node.rect, monitor) }

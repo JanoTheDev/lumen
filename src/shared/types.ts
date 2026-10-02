@@ -37,6 +37,12 @@ export interface ElementNode {
   focused?: boolean
   /** UIA IsPassword: a password field (its value is never read). */
   password?: boolean
+  /** UIA SelectionItem IsSelected (tab / list / tree items …); absent without the pattern. */
+  selected?: boolean
+  /** UIA Toggle state (check boxes, toggle buttons …); absent without the pattern. */
+  toggled?: 'on' | 'off' | 'mixed'
+  /** UIA ExpandCollapse state; absent on leaf nodes and without the pattern. */
+  expanded?: boolean
   patterns: ElementPattern[]
   children?: ElementNode[]
 }
