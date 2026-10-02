@@ -61,11 +61,16 @@ export function networkAllows(patterns: readonly string[], url: string): boolean
 
 export function backgroundSkills(
   skillName?: string,
-  onUse?: (name: string) => void
+  onUse?: (name: string) => void,
+  /** Which skills use_skill may load besides the input rule (a buddy's list). */
+  allow?: (name: string) => boolean
 ): BackgroundSkills {
   const tools = skillToolSet({
     // A background task cannot click or type: skills that need input stay foreground.
-    allow: (s) => !s.manifest.permissions.input && !!enabledSkill(s.manifest.name),
+    allow: (s) =>
+      !s.manifest.permissions.input &&
+      !!enabledSkill(s.manifest.name) &&
+      (!allow || allow(s.manifest.name)),
     ...(onUse ? { onUse: (s) => onUse(s.manifest.name) } : {})
   })
   if (!skillName) return tools

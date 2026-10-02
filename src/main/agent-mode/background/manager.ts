@@ -24,6 +24,8 @@ export interface StartInput {
   parentId?: string
   /** A routine's run. */
   routineId?: string
+  /** A buddy's run (08 T50; origin buddy). */
+  buddyId?: string
   /** Skip the queue (a parent waits on it: queueing could deadlock the slots). */
   immediate?: boolean
   /**
@@ -204,6 +206,7 @@ export class BackgroundManager {
       counters: { modelCalls: 0, costUsd: 0, startedAt: this.deps.now() },
       ...(input.parentId ? { parentId: input.parentId } : {}),
       ...(input.routineId ? { routineId: input.routineId } : {}),
+      ...(input.buddyId ? { buddyId: input.buddyId } : {}),
       ...(input.claude ? { claude: input.claude } : {})
     }
     const entry = this.newEntry(task)
@@ -307,7 +310,8 @@ export class BackgroundManager {
       title: t.title,
       skill: t.skill,
       origin: t.origin,
-      routineId: t.routineId
+      routineId: t.routineId,
+      ...(t.buddyId ? { buddyId: t.buddyId } : {})
     })
   }
 

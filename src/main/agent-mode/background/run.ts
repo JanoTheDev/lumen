@@ -68,6 +68,8 @@ export interface BgRunEnv {
    * offered tools and guarded handlers; absent = not offered.
    */
   subagents?: Pick<SubagentEnv, 'pool' | 'turn' | 'costOf' | 'now' | 'costCapUsd'>
+  /** More first-turn context after the task (a buddy's notebook, 08 T50). */
+  context?: string
 }
 
 /** Tools whose results are text the task observed (not the user's words). */
@@ -128,7 +130,7 @@ export function fileWriteText(tool: string, input: Record<string, unknown>): str
   return `save a file "${str('name') || str('title')}"`
 }
 
-async function registrySkill(name: string): Promise<RunSkillInfo | null> {
+export async function registrySkill(name: string): Promise<RunSkillInfo | null> {
   try {
     const { getSkillRegistry } = await import('../../skills')
     const reg = getSkillRegistry()
@@ -325,7 +327,9 @@ export async function runBackground(ctl: TaskControl, env: BgRunEnv): Promise<Ru
       skipPlan: true,
       system: BACKGROUND_SYSTEM,
       ...(skills?.index ? { systemExtra: skills.index } : {}),
-      firstTurn: backgroundTurn(task.prompt, new Date(env.now()), skills?.skill),
+      firstTurn: [backgroundTurn(task.prompt, new Date(env.now()), skills?.skill), env.context]
+        .filter(Boolean)
+        .join('\n'),
       caps: capsFor(env.caps),
       // "Keep going" grows a cap by its starting size.
       capStep: capsFor(env.caps),

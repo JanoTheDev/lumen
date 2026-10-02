@@ -27,6 +27,8 @@ export interface AuditEntry {
   t: string
   task: string
   origin: Origin
+  /** A buddy's run (08 T50). */
+  buddyId?: string
   action: Record<string, unknown>
   risk: Risk
   decision: AuditDecision

@@ -288,7 +288,9 @@ export interface BackgroundTask {
    */
   userText?: string
   skill?: string
-  origin: 'voice' | 'agent' | 'routine'
+  origin: 'voice' | 'agent' | 'routine' | 'buddy'
+  /** A buddy's run (08 T50): the buddy's id (its envelope, model, budget and notebook). */
+  buddyId?: string
   phase: BackgroundTaskPhase
   /** Newest last, capped. */
   progress: string[]

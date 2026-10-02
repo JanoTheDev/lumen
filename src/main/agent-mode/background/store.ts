@@ -32,7 +32,14 @@ export function parseTask(raw: unknown): BackgroundTask | null {
   if (typeof t.title !== 'string' || typeof t.prompt !== 'string') return null
   if (typeof t.phase !== 'string' || !PHASES.has(t.phase)) return null
   if (!t.counters || typeof t.counters.startedAt !== 'number') return null
-  if (t.origin !== 'voice' && t.origin !== 'agent' && t.origin !== 'routine') return null
+  if (
+    t.origin !== 'voice' &&
+    t.origin !== 'agent' &&
+    t.origin !== 'routine' &&
+    t.origin !== 'buddy'
+  )
+    return null
+  if (t.buddyId !== undefined && typeof t.buddyId !== 'string') delete t.buddyId
   if (t.userText !== undefined && typeof t.userText !== 'string') delete t.userText
   return {
     ...(t as BackgroundTask),

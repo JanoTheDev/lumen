@@ -8,6 +8,7 @@ import type { ActionShape } from '@shared/routines'
 import type { BackgroundTask } from '@shared/types'
 import { usageCost } from '../../ai/pricing'
 import { getProvider } from '../../ai/providers'
+import type { Usage } from '../../ai/providers/types'
 import type { Role } from '../../ai/models'
 import { memory, memorySearchFor } from '../../ai/memory/runtime'
 import { isSensitive } from '../../ai/memory'
@@ -39,7 +40,8 @@ import { MAX_CHILDREN, type SpawnTaskInput } from './tools'
 import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
 import { doneLine, noticeVerdict, PRESENT_MS } from './presence'
-import { runBackground } from './run'
+import { buddyRunHook, type BuddyTaskEnv } from './buddy-hook'
+import { registrySkill, runBackground } from './run'
 import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
 import { transcripts } from '../transcript-hub'
@@ -83,6 +85,7 @@ const manager = new BackgroundManager({
   record: (id, e) => transcripts().background(id, e),
   finished: (task) => {
     if (task.phase !== 'done' && task.phase !== 'failed') return
+    if (task.buddyId && buddyRunHook()?.silent(task)) return
     notice(doneLine(task.title, task.phase, task.result?.summary ?? ''))
   },
   now: () => Date.now(),
@@ -243,8 +246,10 @@ async function spawnChild(
   const child = manager.start({
     prompt: input.prompt,
     ...(input.skill ? { skill: input.skill } : {}),
-    origin: parent?.origin === 'routine' ? 'routine' : 'agent',
+    origin: parent?.origin === 'routine' || parent?.origin === 'buddy' ? parent.origin : 'agent',
     ...(parent?.routineId ? { routineId: parent.routineId } : {}),
+    // A buddy's helper runs under the buddy's envelope too.
+    ...(parent?.buddyId ? { buddyId: parent.buddyId } : {}),
     parentId,
     immediate: !!input.wait
   })
@@ -289,7 +294,7 @@ type AuditEntry = Parameters<typeof writeAudit>[0]
 
 /** One background audit line: the task's real origin, URLs, paths and reasons redacted. */
 export function backgroundAuditEntry(
-  task: Pick<BackgroundTask, 'id' | 'origin'>,
+  task: Pick<BackgroundTask, 'id' | 'origin' | 'buddyId'>,
   action: Record<string, unknown>,
   result: 'ok' | 'error' | 'denied',
   reason: string | undefined,
@@ -301,7 +306,8 @@ export function backgroundAuditEntry(
   return {
     t: now.toISOString(),
     task: `background:${task.id}`,
-    origin: task.origin === 'routine' ? 'routine' : 'agent',
+    origin: gateOrigin(task),
+    ...(task.buddyId ? { buddyId: task.buddyId } : {}),
     action: clean as AuditEntry['action'],
     risk: 'low',
     decision: result === 'denied' ? 'blocked' : 'auto',
@@ -309,6 +315,11 @@ export function backgroundAuditEntry(
     ms: 0,
     ...(reason ? { reason: redactForLog(reason) } : {})
   }
+}
+
+/** The policy origin of a background task's actions. */
+function gateOrigin(task: Pick<BackgroundTask, 'origin'>): 'routine' | 'buddy' | 'agent' {
+  return task.origin === 'routine' || task.origin === 'buddy' ? task.origin : 'agent'
 }
 
 /**
@@ -357,10 +368,12 @@ export function policyUserText(
 
 /** runTask, plus a run-history entry when the task runs a named skill. */
 async function runAndRecord(ctl: TaskControl): ReturnType<typeof runTask> {
-  const skill = ctl.task().skill
+  const task = ctl.task()
+  const skill = task.skill
   const startedAt = Date.now()
+  const hook = task.buddyId ? buddyRunHook() : null
   try {
-    const r = await runTask(ctl)
+    const r = await (hook ? hook.scope(task, () => runTask(ctl)) : runTask(ctl))
     if (skill) recordSkillRun(skill, backgroundRunRecord(r, startedAt, Date.now()))
     return r
   } catch (e) {
@@ -375,10 +388,7 @@ async function runTask(
 ): Promise<{ status: 'done' | 'failed'; summary: string; report?: string }> {
   const task = ctl.task()
   const id = task.id
-  const skills = backgroundSkills(task.skill, (name) => ctl.progress(`Using skill ${name}`))
-  if (skills.missing) return { status: 'failed', summary: skills.missing }
   const cfg = settings()
-  const role: Role = skills.skill?.role ?? 'fast'
   // A routine run: high-risk calls only when pre-approved (a run whose routine is gone: none).
   const shapes = task.origin === 'routine' ? (routineShapes(task.routineId ?? '') ?? []) : null
   const parent = task.parentId ? manager.get(task.parentId) : null
@@ -408,8 +418,23 @@ async function runTask(
       return /^(allow|yes|ok|okay|sure)\b/i.test(a.trim())
     }
   }
-  const envelopes = envelopesFor(task, host)
-  if (typeof envelopes === 'string') return { status: 'failed', summary: envelopes }
+  // A buddy's run (08 T50): its envelope, model, cost cap, skills and notebook.
+  let buddy: BuddyTaskEnv | null = null
+  if (task.buddyId) {
+    const b = buddyRunHook()?.forTask(task, host) ?? 'Buddies are not loaded.'
+    if (typeof b === 'string') return { status: 'failed', summary: b }
+    buddy = b
+  }
+  const skills = backgroundSkills(
+    task.skill,
+    (name) => ctl.progress(`Using skill ${name}`),
+    buddy ? (name) => buddy.allowSkill(name) : undefined
+  )
+  if (skills.missing) return { status: 'failed', summary: skills.missing }
+  const role: Role = buddy?.role ?? skills.skill?.role ?? 'fast'
+  const skillEnvelopes = envelopesFor(task, host)
+  if (typeof skillEnvelopes === 'string') return { status: 'failed', summary: skillEnvelopes }
+  const envelopes = buddy ? [...skillEnvelopes, buddy.envelope] : skillEnvelopes
   // A skill run may only reach the sites every envelope lists, on every redirect hop too.
   const reaches = (url: string): boolean => envelopes.every((e) => networkAllows(e.network, url))
   const ports: BgPorts = {
@@ -426,9 +451,14 @@ async function runTask(
     readFile: (path) => readUnder(path, cfg.readFolders, envelopes),
     memorySearch: (input) => memorySearchFor(input),
     // A skill run reaches only its own sites, so it gets no web lookups.
-    ...(envelopes.length ? {} : { howto: lookupHowto(task.parentId) }),
+    // A buddy only when its tool list has lookup_howto.
+    ...(skillEnvelopes.length || (buddy && !buddy.envelope.offers('lookup_howto'))
+      ? {}
+      : { howto: lookupHowto(task.parentId) }),
     memoryWrite: (fact) => {
       if (isSensitive(fact)) return 'rejected'
+      // A buddy writes to its own notebook, not the user's memory.
+      if (buddy) return buddy.memoryWrite(fact)
       const r = memory().remember(fact, { layer: 'working' })
       return r === 'disabled' ? 'disabled' : r === 'rejected' ? 'rejected' : 'ok'
     },
@@ -441,7 +471,8 @@ async function runTask(
       requestForeground(ctl, reason, steps, signal, {
         userText,
         observedText: seen.observedText,
-        skills: envelopes.map((e) => e.skill),
+        // A buddy's stand-in skill is not in the registry (it never offers request_foreground).
+        skills: skillEnvelopes.map((e) => e.skill),
         preapproved: !!shapes && allowsForeground(shapes)
       }),
     spawn: (input, signal) => spawnChild(id, input, signal),
@@ -452,7 +483,7 @@ async function runTask(
   return runBackground(ctl, {
     caps: {
       maxModelCalls: cfg.maxModelCalls,
-      maxCostUsd: cfg.maxCostUsd,
+      maxCostUsd: buddy?.maxCostUsd ?? cfg.maxCostUsd,
       maxWallMs: cfg.maxWallMin * 60_000
     },
     ports,
@@ -467,13 +498,19 @@ async function runTask(
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
     // Sub-agents (08 T49): the skill's model role when it names one, else Settings' choice.
-    subagents: {
-      pool: subagentPool(),
-      turn: subagentTurn(skills.skill?.role ?? subagentSettings().model),
-      costOf: (m, u) => usageCost(m, u).total,
-      now: () => Date.now(),
-      costCapUsd: subagentSettings().costCapUsd
-    },
+    // A buddy gets them only when it may.
+    ...(!buddy || buddy.subagents
+      ? {
+          subagents: {
+            pool: subagentPool(),
+            turn: subagentTurn(buddy?.role ?? skills.skill?.role ?? subagentSettings().model),
+            costOf: (m: string, u: Usage) => usageCost(m, u).total,
+            now: () => Date.now(),
+            costCapUsd: subagentSettings().costCapUsd
+          }
+        }
+      : {}),
+    ...(buddy?.context ? { context: buddy.context } : {}),
     skills: {
       ...skills,
       ...(skills.skill ? { skill: { name: skills.skill.name, text: skills.skill.text } } : {})
@@ -488,8 +525,9 @@ async function runTask(
       // File tools (docs-out, files/granted): the policy gate with this task's origin and
       // unattended confirms; reads, renames and moves only in the granted folders.
       const gateCtx = (): GateCtx => ({
-        origin: task.origin === 'routine' ? 'routine' : 'agent',
+        origin: gateOrigin(task),
         taskId: `background:${id}`,
+        ...(task.buddyId ? { buddyId: task.buddyId } : {}),
         userText,
         observedText: seen.observedText,
         unattended
@@ -509,6 +547,12 @@ async function runTask(
     },
     observe,
     fileSkills: envelopes.map((e) => e.skill),
+    ...(buddy
+      ? {
+          skillInfo: (name: string) =>
+            name === buddy.info.name ? Promise.resolve(buddy.info) : registrySkill(name)
+        }
+      : {}),
     ...(shapes ? { guard: routineGuard(shapes) } : {}),
     ...(envelopes.length
       ? {

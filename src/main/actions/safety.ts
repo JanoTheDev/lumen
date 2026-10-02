@@ -130,7 +130,15 @@ export function classifyHotkey(keys: string[] | string, ctx: KeyContext = {}): V
 
 export type Risk = 'low' | 'medium' | 'high' | 'blocked'
 /** claude-code: a permission prompt from a Claude Code session Lumen drives (08 T35). */
-export type Origin = 'user-direct' | 'agent' | 'lesson' | 'routine' | 'mcp' | 'claude-code'
+export type Origin =
+  | 'user-direct'
+  | 'agent'
+  | 'lesson'
+  | 'routine'
+  | 'mcp'
+  | 'claude-code'
+  /** A buddy's run (08 T50): rated like an agent. */
+  | 'buddy'
 /** config.agent.confirm: which risks wait for the user. High always waits. */
 export type ConfirmMode = 'always' | 'risky' | 'never'
 
@@ -233,7 +241,13 @@ const RANK: Record<Risk, number> = { low: 0, medium: 1, high: 2, blocked: 3 }
 export const FROM_PAGE = 'This came from the page, not from you.'
 
 function agentish(origin: Origin): boolean {
-  return origin === 'agent' || origin === 'routine' || origin === 'mcp' || origin === 'claude-code'
+  return (
+    origin === 'agent' ||
+    origin === 'routine' ||
+    origin === 'mcp' ||
+    origin === 'claude-code' ||
+    origin === 'buddy'
+  )
 }
 
 function lower(s: string | undefined): string {

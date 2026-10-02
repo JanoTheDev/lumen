@@ -14,6 +14,7 @@ import { askOwned, setConfirmUi } from './confirm'
 import { runningAgentTaskId } from './session'
 import { grants, installGrants } from './grants'
 import { installBackground, notice } from './background'
+import { installBuddies } from '../buddies'
 import { PRESENT_MS } from './background/presence'
 import { registerTasksIpc } from '../ipc/tasks'
 import { installTranscripts, interceptTaskChat } from './transcript-wire'
@@ -28,6 +29,7 @@ export function installAgentMode(): void {
   installAudit(join(root, 'audit'), audit.retentionDays)
   onBroadcast('settings:changed', () => setAuditStoreTypedText(loadConfig().audit.storeTypedText))
   installBackground(join(root, 'tasks'))
+  installBuddies(join(root, 'buddies'))
   installTranscripts(join(root, 'tasks', 'transcripts'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),

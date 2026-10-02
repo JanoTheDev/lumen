@@ -229,6 +229,8 @@ export type AppEvent =
   | { type: 'agent.task'; task: AgentTask | null }
   /** A background task changed (CONTRACTS C11). */
   | { type: 'task.changed'; task: BackgroundTask }
+  /** Buddies were added, changed or removed (08 T50); `ids` = which ones. */
+  | { type: 'buddies.changed'; ids: string[] }
   /**
    * The focused Claude Code session on the bar (08 T39): `show` puts it up, otherwise only a
    * view already shown is updated; null takes session `id` (or any) down.

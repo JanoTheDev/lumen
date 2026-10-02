@@ -36,6 +36,8 @@ import { setStatus } from '../windows/status'
 export interface GateCtx {
   origin: Origin
   taskId: string
+  /** A buddy's run (08 T50): its id goes on the audit line. */
+  buddyId?: string
   /** The user's words for this task (dictated combos, local hosts, injection check). */
   userText?: string
   observedText?: string
@@ -61,7 +63,11 @@ const ACTIVE_WINDOW_MS = 1500
 
 function needsWindow(a: EvalAction, ctx: GateCtx): boolean {
   if (needsFocus(a)) return true
-  const agentish = ctx.origin === 'agent' || ctx.origin === 'routine' || ctx.origin === 'mcp'
+  const agentish =
+    ctx.origin === 'agent' ||
+    ctx.origin === 'routine' ||
+    ctx.origin === 'mcp' ||
+    ctx.origin === 'buddy'
   return agentish && !!ctx.task && /^(click|uia_act)/.test(a.type)
 }
 
@@ -162,7 +168,11 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
   const activeWindow = needsWindow(action, ctx)
     ? await foregroundWindow({ focus: needsFocus(action) })
     : undefined
-  const agentish = ctx.origin === 'agent' || ctx.origin === 'routine' || ctx.origin === 'mcp'
+  const agentish =
+    ctx.origin === 'agent' ||
+    ctx.origin === 'routine' ||
+    ctx.origin === 'mcp' ||
+    ctx.origin === 'buddy'
   const cfg = loadConfig()
   const policyCtx: PolicyCtx = {
     origin: ctx.origin,
@@ -183,6 +193,7 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
       t: new Date().toISOString(),
       task: ctx.taskId,
       origin: ctx.origin,
+      ...(ctx.buddyId ? { buddyId: ctx.buddyId } : {}),
       action: summarizeAction(action, activeWindow?.process),
       risk: decision.risk,
       decision: verdict,
