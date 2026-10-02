@@ -263,6 +263,23 @@ describe('uia-event', () => {
     uia.emit({ kind: 'value', element: { name: 'Recording Path', value: 'D:\\Rec' } })
     expect(await h.result).toBe('pass')
   })
+
+  it('changed: the baseline comes from the exact match, not a name-contains hit', async () => {
+    const uia = fakeUia()
+    const spec: CheckSpec = {
+      type: 'uia-event',
+      event: 'value',
+      changed: true,
+      match: { name: 'Recording Path', role: 'Edit' }
+    }
+    // At step start only a look-alike is visible (the search's name-contains fallback).
+    uia.found = [node('Recording Path (Streaming)', 'edit', { value: 'C:\\Other' })]
+    const h = startCheck(spec, ctx({ uia: uia.port }))
+    expect(await h.evaluate()).toBe('unknown')
+    uia.found = [node('Recording Path', 'edit', { value: 'C:\\Videos' })]
+    expect(await h.evaluate()).toBe('unknown')
+    expect(await peek(h.result)).toBe('pending')
+  })
 })
 
 describe('keypress', () => {

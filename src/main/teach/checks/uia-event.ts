@@ -56,11 +56,16 @@ export function kindsFor(event: UiaEventKind): UiaEventKind[] {
   return [event]
 }
 
-/** The matching element's value when the step began; null when none was found. */
+/** The matching element's value when the step began; null when none was found. Only an
+ *  exact match counts (the search falls back to names that merely contain the name). */
 async function baselineValue(spec: UiaSpec, ctx: CheckContext): Promise<string | null> {
   const { name, role, automationId } = spec.match
+  const exact: Match = { name, role, automationId }
   const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
-  const el = els?.map((e) => withToggleValue(e, spec.match)).find((e) => e.value !== undefined)
+  const el = els
+    ?.filter((e) => elementMatches(exact, e))
+    .map((e) => withToggleValue(e, spec.match))
+    .find((e) => e.value !== undefined)
   return el?.value !== undefined ? norm(el.value) : null
 }
 
