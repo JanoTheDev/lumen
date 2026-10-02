@@ -69,6 +69,7 @@ import {
   preapprovalQuestion
 } from './draft'
 import { AutomationScheduler, type RunEnd } from './engine'
+import { limitSkip } from './limit-skip'
 import { folderAllowed, resolveFolderWith } from './folders'
 import { onAutomationRequest, onSecondLaunch, waitingAutomationRequests } from './instance'
 import { parseAutomationUtterance, parseTriggerText, type ParseOpts } from './parse'
@@ -149,6 +150,8 @@ async function runAutomation(
   ctx: { via: string; detail?: string }
 ): Promise<RunEnd> {
   const act = a.action
+  const skip = limitSkip(a)
+  if (skip) return skip
   if (act.kind === 'buddy') {
     if (!buddyRunner) return { result: 'failed', summary: 'Buddies are not loaded.' }
     const detail = detailLine(a, ctx.detail).trim()
