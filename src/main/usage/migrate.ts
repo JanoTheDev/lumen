@@ -79,7 +79,16 @@ export function migrateOldUsage(path = oldUsagePath()): number {
   try {
     let rows: UsageRow[] = []
     if (existsSync(path)) {
-      const file = JSON.parse(readFileSync(path, 'utf8')) as { days?: unknown }
+      const text = readFileSync(path, 'utf8')
+      let file: { days?: unknown }
+      try {
+        file = JSON.parse(text) as { days?: unknown }
+      } catch (e) {
+        // Not JSON: it never will be, so it is not read again at every start.
+        writeMarker(MARKER, JSON.stringify({ days: [], unreadable: true }))
+        console.warn(`[usage] usage.json is not valid JSON, not imported: ${(e as Error).message}`)
+        return 0
+      }
       const done = importedDays()
       rows = oldDaysToRows(Array.isArray(file.days) ? (file.days as OldDay[]) : []).filter(
         (r) => !done.has(dayKey(r.t))
@@ -90,7 +99,7 @@ export function migrateOldUsage(path = oldUsagePath()): number {
     if (rows.length) console.log(`[usage] imported ${rows.length} days from usage.json`)
     return rows.length
   } catch (e) {
-    // Tried again next start; the days that made it are skipped then.
+    // A read or write failure: tried again next start; the days that made it are skipped then.
     console.warn(`[usage] usage.json not imported: ${(e as Error).message}`)
     return 0
   }

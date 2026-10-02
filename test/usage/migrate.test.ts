@@ -80,4 +80,16 @@ describe('usage.json migration', () => {
     })
     expect(totals(rows)).toMatchObject({ calls: 4, usd: 3 })
   })
+
+  it('a usage.json that is not JSON is given up once, not re-read every start (s6 L5)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    writeFileSync(old, '{"days": [')
+    expect(migrateOldUsage(old)).toBe(0)
+    expect(existsSync(join(dir, 'usage', '.migrated-usage-json'))).toBe(true)
+    expect(warn).toHaveBeenCalledTimes(1)
+    // Fixed later or not, a second start leaves it alone.
+    writeFileSync(old, JSON.stringify({ version: 1, days: [oldDay('2026-10-01', 1, 1, 1)] }))
+    expect(migrateOldUsage(old)).toBe(0)
+    expect(warn).toHaveBeenCalledTimes(1)
+  })
 })
