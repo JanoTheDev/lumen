@@ -110,8 +110,22 @@ export function taskTurn(prompt: string, ctx: TaskContext, plan: string[] | null
   return `${contextBlock(ctx)}\n<task>${prompt}</task>${steps}\nStart with observe unless the plan's first step needs no screen.`
 }
 
+/**
+ * Removes every `<name …>` / `</name>` tag of the given names (an unterminated one: its
+ * `<name` part). Repeats until nothing changes, so nested pieces (`</obser</observed>ved>`)
+ * cannot join into a real tag once the inner one is gone.
+ */
+export function stripTags(text: string, names: readonly string[]): string {
+  const re = new RegExp(`<\\s*\\/?\\s*(?:${names.join('|')})(?:[^>]*>|(?![^>]*>))`, 'gi')
+  let out = text
+  for (;;) {
+    const next = out.replace(re, '')
+    if (next === out) return out
+    out = next
+  }
+}
+
 /** Observed content as the model sees it: fenced and labelled with its source. */
 export function observed(source: string, text: string): string {
-  const clean = text.replace(/<\/?observed[^>]*>/gi, '')
-  return `<observed source="${source}">\n${clean}\n</observed>`
+  return `<observed source="${source}">\n${stripTags(text, ['observed'])}\n</observed>`
 }

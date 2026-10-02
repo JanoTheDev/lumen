@@ -18,7 +18,7 @@ import type {
 } from '../../ai/providers/types'
 import { redactForModel } from '../../actions/redact'
 import { readUrls } from '../../cards/research'
-import { observed } from '../prompts'
+import { observed, stripTags } from '../prompts'
 import {
   runAgent,
   type RunnerDeps,
@@ -110,11 +110,13 @@ export function jobTurn(task: string, now: Date): string {
   return `<context>\ndate: ${when}\n</context>\n<job>${task}</job>`
 }
 
+const FENCE_TAGS = ['observed', 'sources'] as const
+
 /** A job's result as the parent model reads it: fenced, redacted, sources listed by Lumen. */
 export function fenceResult(r: JobResult, i: number): string {
-  // The model-written text may not fake the sources list or close the fence (observed() strips
-  // observed tags); only the URLs Lumen saw fetched go in <sources>.
-  const body = r.text.replace(/<\/?sources[^>]*>/gi, '')
+  // The model-written text may not fake the sources list or close the fence; only the URLs
+  // Lumen saw fetched go in <sources>. Both tags at once: removing one may not form the other.
+  const body = stripTags(r.text, FENCE_TAGS)
   const lines = [
     `job ${i + 1} (${r.role}): ${clip(r.task, TASK_SHOWN)}`,
     `status: ${r.status}`,
