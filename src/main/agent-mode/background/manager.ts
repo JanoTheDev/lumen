@@ -3,6 +3,8 @@
 // tools) is injected, so this file has no Electron and no providers.
 import type { BackgroundArtifact, BackgroundTask, BackgroundTaskPhase } from '@shared/types'
 import type { RunEvent } from '../transcript'
+import { withUsageScope } from '../../usage/scope'
+import { usageScopeForTask } from '../../usage/task-scope'
 
 export const MAX_PROGRESS = 20
 export const KEEP_TASKS = 50
@@ -407,7 +409,7 @@ export class BackgroundManager {
       }
     }
     const run = e.run ?? ((c: TaskControl) => this.deps.run(c))
-    void run(ctl)
+    void withUsageScope(usageScopeForTask(e.task), () => run(ctl))
       .then(
         (r) => {
           if (ac.signal.aborted) return this.end(id, { phase: 'cancelled' })

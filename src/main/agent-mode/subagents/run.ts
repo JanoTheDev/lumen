@@ -7,6 +7,7 @@
 // Budget: every job's model and tool cost counts toward the parent's cost cap; a job stops
 // before its next turn once the parent's remaining money is spent. Cancel: the parent's signal
 // ends every job (and takes waiting ones out of the pool). Pause: jobs wait between turns.
+import { currentUsageScope, runInUsageScope, withUsageScope } from '../../usage/scope'
 import type { SubJob } from '@shared/task-chat'
 import type {
   AgentMessage,
@@ -199,22 +200,25 @@ export async function runJob(
     costUsd: cost
   })
   try {
-    const r = await runAgent(
-      {
-        prompt: task,
-        context: {},
-        tools: ['finish'],
-        extraTools: defs,
-        cancelWindowMs: 0,
-        skipPlan: true,
-        system: spec.system,
-        firstTurn: jobTurn(task, new Date(env.now())),
-        caps: { ...caps, maxActions: NO_ACTION_CAP },
-        signal,
-        owner: `subagent:${parentId}`,
-        speakSummary: false
-      },
-      deps
+    // Ledger lines: origin subagent, inside the parent's scope (task, automation, buddy).
+    const r = await withUsageScope({ origin: 'subagent', feature: `subagent-${role}` }, () =>
+      runAgent(
+        {
+          prompt: task,
+          context: {},
+          tools: ['finish'],
+          extraTools: defs,
+          cancelWindowMs: 0,
+          skipPlan: true,
+          system: spec.system,
+          firstTurn: jobTurn(task, new Date(env.now())),
+          caps: { ...caps, maxActions: NO_ACTION_CAP },
+          signal,
+          owner: `subagent:${parentId}`,
+          speakSummary: false
+        },
+        deps
+      )
     )
     if (r.status === 'done') {
       const needs = r.needsUserAction?.trim()
@@ -264,6 +268,8 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
       if (!ctx.signal.aborted) env.onActive?.(active)
     }
     emit()
+    // The pool may start a job later, from another job's context: keep this task's scope.
+    const usage = currentUsageScope()
     let results: JobResult[]
     try {
       results = await Promise.all(
@@ -271,18 +277,11 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
           env.pool.run(
             async () => {
               try {
-                const r = await runJob(
-                  j.role,
-                  j.task,
-                  offered,
-                  env,
-                  budget,
-                  ctx,
-                  ctx.signal,
-                  (label, cost) => {
+                const r = await runInUsageScope(usage, () =>
+                  runJob(j.role, j.task, offered, env, budget, ctx, ctx.signal, (label, cost) => {
                     views[i] = { ...views[i], costUsd: cost, ...(label ? { step: label } : {}) }
                     emit()
-                  }
+                  })
                 )
                 views[i] = {
                   role: views[i].role,
