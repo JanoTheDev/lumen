@@ -1,6 +1,8 @@
 // Word (.docx) writer: the few WordprocessingML parts a document with headings, paragraphs,
 // bullet and numbered lists and tables needs (no library: `docx` is ~9 MB installed). Each
-// numbered list restarts at 1. Pure: returns the file bytes.
+// numbered list restarts at 1. The page is Letter or A4 (page-size.ts) with 1" margins. Pure:
+// returns the file bytes.
+import type { PageSize } from './page-size'
 import { runs, type Block, type DocContent } from './schema'
 import { XML_HEAD, xmlText } from './xml'
 import { writeZip } from './zip'
@@ -10,8 +12,12 @@ const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 const PKG = 'http://schemas.openxmlformats.org/package/2006/relationships'
 const OFFICE = 'application/vnd.openxmlformats-officedocument.wordprocessingml'
 
-/** Text width of an A4 page with 1" margins, in twentieths of a point. */
-const TEXT_WIDTH = 11906 - 2 * 1440
+/** Page sizes in twentieths of a point. */
+const PAGES: Record<PageSize, { w: number; h: number }> = {
+  A4: { w: 11906, h: 16838 },
+  Letter: { w: 12240, h: 15840 }
+}
+const MARGIN = 1440
 
 const CONTENT_TYPES = `${XML_HEAD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
 <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -79,9 +85,9 @@ function runsXml(text: string, bold = false): string {
 const para = (text: string, style?: string, extra = '', bold = false): string =>
   `<w:p>${style || extra ? `<w:pPr>${style ? `<w:pStyle w:val="${style}"/>` : ''}${extra}</w:pPr>` : ''}${runsXml(text, bold)}</w:p>`
 
-function table(rows: string[][]): string {
+function table(rows: string[][], textWidth: number): string {
   const width = Math.max(1, ...rows.map((r) => r.length))
-  const col = Math.floor(TEXT_WIDTH / width)
+  const col = Math.floor(textWidth / width)
   const grid = `<w:tblGrid>${`<w:gridCol w:w="${col}"/>`.repeat(width)}</w:tblGrid>`
   const tr = rows
     .map((r, ri) => {
@@ -99,7 +105,8 @@ function table(rows: string[][]): string {
   return `<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>${grid}${tr}</w:tbl>`
 }
 
-function body(doc: DocContent): { xml: string; numbered: number } {
+function body(doc: DocContent, page: PageSize): { xml: string; numbered: number } {
+  const size = PAGES[page]
   const out: string[] = []
   let numbered = 0
   if (doc.title) out.push(para(doc.title, 'Title'))
@@ -112,13 +119,12 @@ function body(doc: DocContent): { xml: string; numbered: number } {
       const numId = b.kind === 'bullets' ? 1 : 2 + numbered++
       const numPr = `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numId}"/></w:numPr>`
       for (const item of b.items) out.push(para(item, 'ListParagraph', numPr))
-    } else if (b.rows.length) out.push(table(b.rows))
+    } else if (b.rows.length) out.push(table(b.rows, size.w - 2 * MARGIN))
     else last = null
   }
   // A table may not end the body.
   if (last === 'table' || !out.length) out.push('<w:p/>')
-  const sect =
-    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>'
+  const sect = `<w:sectPr><w:pgSz w:w="${size.w}" w:h="${size.h}"/><w:pgMar w:top="${MARGIN}" w:right="${MARGIN}" w:bottom="${MARGIN}" w:left="${MARGIN}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`
   return {
     xml: `${XML_HEAD}<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body>${out.join('')}${sect}</w:body></w:document>`,
     numbered
@@ -129,8 +135,8 @@ function core(title: string): string {
   return `${XML_HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xmlText(title)}</dc:title><dc:creator>Lumen</dc:creator></cp:coreProperties>`
 }
 
-export function toDocx(doc: DocContent): Buffer {
-  const b = body(doc)
+export function toDocx(doc: DocContent, page: PageSize = 'A4'): Buffer {
+  const b = body(doc, page)
   return writeZip([
     { name: '[Content_Types].xml', data: CONTENT_TYPES },
     { name: '_rels/.rels', data: ROOT_RELS },

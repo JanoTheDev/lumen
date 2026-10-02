@@ -24,6 +24,7 @@ import {
 import { EXT, normalizeDoc, type CreateFileInput, type DocContent, type DocFormat } from './schema'
 import { toCsv, toHtml, toMarkdown, toText } from './text'
 import { toDocx } from './docx'
+import type { PageSize } from './page-size'
 import { toXlsx } from './xlsx'
 
 export interface MadeFile {
@@ -45,6 +46,8 @@ export interface WriteDeps {
   /** Exclusive unless `replace`; rejects with EEXIST when the file appeared meanwhile. */
   write(path: string, data: Buffer | string, replace: boolean): Promise<void>
   pdf(html: string): Promise<Buffer>
+  /** Letter or A4 for Word files (the system's region); A4 when absent. */
+  pageSize?(): PageSize
   gate(
     action: EvalAction,
     ctx: GateCtx
@@ -70,11 +73,12 @@ export interface CreateCtx extends GateCtx {
 export async function render(
   format: DocFormat,
   doc: DocContent,
-  pdf: (html: string) => Promise<Buffer>
+  pdf: (html: string) => Promise<Buffer>,
+  page?: PageSize
 ): Promise<Buffer | string> {
   switch (format) {
     case 'docx':
-      return toDocx(doc)
+      return toDocx(doc, page)
     case 'xlsx':
       return toXlsx(doc)
     case 'csv':
@@ -154,7 +158,7 @@ export async function createDocument(
   if (!g.ok) return { ok: false, error: `I did not save it: ${g.reason}`, denied: true }
   let undo: { commit(): void; discard(): void } | null = null
   try {
-    const data = bytes ?? (await render(format, doc, deps.pdf))
+    const data = bytes ?? (await render(format, doc, deps.pdf, deps.pageSize?.()))
     await deps.mkdir(dirname(target))
     undo = deps.prepareUndo(target, replacing ? 'changed' : 'created', ctx.taskId)
     if (!undo && replacing) {
@@ -216,6 +220,7 @@ export async function realWriteDeps(): Promise<WriteDeps> {
   const { gate } = await import('../actions/policy')
   const { prepareFileUndo } = await import('../undo')
   const { htmlToPdf } = await import('./pdf')
+  const { systemPageSize } = await import('./page-size')
   const { loadConfig } = await import('../config')
   const { expandRoot } = await import('../agent-mode/background/files')
   return {
@@ -240,6 +245,7 @@ export async function realWriteDeps(): Promise<WriteDeps> {
     },
     write: writeTarget,
     pdf: htmlToPdf,
+    pageSize: systemPageSize,
     gate: async (action, ctx) => {
       const g = await gate(action, ctx)
       return { ok: g.ok, reason: g.decision.reason, finish: (r) => g.finish(r) }
