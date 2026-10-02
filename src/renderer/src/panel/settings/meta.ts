@@ -26,6 +26,7 @@ export type SectionId =
   | 'connectors'
   | 'news'
   | 'privacy'
+  | 'diagnostics'
   | 'about'
 
 export interface SectionMeta {
@@ -154,6 +155,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.shield,
     keywords:
       'privacy screenshots telemetry data sent logs audit action log grants always allowed revoke permissions send without asking typed text'
+  },
+  {
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    icon: icons.cpu,
+    keywords:
+      'diagnostics debug developer latency speed slow timings stages budget perf performance'
   },
   {
     id: 'about',

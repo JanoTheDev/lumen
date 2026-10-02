@@ -8,6 +8,7 @@ import { Bridges } from './sections/Bridges'
 import { Buddies } from './sections/Buddies'
 import { ClaudeCode } from './sections/ClaudeCode'
 import { Connectors } from './sections/Connectors'
+import { Diagnostics } from './sections/Diagnostics'
 import { Accessibility } from './sections/Accessibility'
 import { General } from './sections/General'
 import { Helpers } from './sections/Helpers'
@@ -39,6 +40,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   connectors: Connectors,
   news: News,
   privacy: Privacy,
+  diagnostics: Diagnostics,
   about: About
 }
 

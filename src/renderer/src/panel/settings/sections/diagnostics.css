@@ -1,0 +1,26 @@
+/* Settings → Diagnostics (10 T11b): stage bars, over-budget ones in the danger colour (the text
+   says "over" too, so colour is never the only cue). Motion follows the global reduce-motion rule. */
+
+.perf-stages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 28rem;
+}
+
+.perf-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.perf-stage.is-over .ui-progress__head {
+  color: var(--danger);
+}
+
+.perf-stage.is-over .perf-stage__fill {
+  background: var(--danger);
+}
