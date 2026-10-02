@@ -6,6 +6,8 @@ import {
   JOB_STATUS_TEXT,
   jobLine,
   jobsLine,
+  jobStepsLine,
+  stepEntry,
   toolLine,
   TOOL_STATUS_TEXT
 } from './chat-view'
@@ -79,7 +81,29 @@ function JobsRow({ e, jobs }: { e: ToolEntry; jobs: SubJob[] }): JSX.Element {
                   </>
                 )}
               </dl>
+              <JobSteps job={j} />
             </details>
+          </li>
+        ))}
+      </ol>
+    </details>
+  )
+}
+
+/** A helper job's own steps, oldest first, each one a tool row that opens to its details. */
+function JobSteps({ job }: { job: SubJob }): JSX.Element | null {
+  const line = jobStepsLine(job)
+  if (!line) return null
+  return (
+    <details className="chat-tools chat-job__steps">
+      <summary>
+        <span className="chat-tools__count">Steps</span>
+        <span className="chat-tools__last">{line}</span>
+      </summary>
+      <ol className="chat-tools__list">
+        {(job.steps ?? []).map((st) => (
+          <li key={st.n}>
+            <ToolRow e={stepEntry(st)} />
           </li>
         ))}
       </ol>

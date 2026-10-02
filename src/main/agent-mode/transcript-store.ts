@@ -13,8 +13,8 @@ import {
   writeFileSync
 } from 'fs'
 import { join } from 'path'
-import { chatIdSchema, type ChatEntry } from '@shared/task-chat'
-import type { ChatMeta, TranscriptData } from './transcript'
+import { chatIdSchema, type ChatEntry, type JobStep, type SubJob } from '@shared/task-chat'
+import { MAX_JOB_STEPS, type ChatMeta, type TranscriptData } from './transcript'
 
 export const KEEP_OTHER = 30
 
@@ -22,18 +22,56 @@ const KINDS = new Set(['user', 'assistant', 'tool', 'question', 'status', 'error
 
 const validId = (id: string): boolean => chatIdSchema.safeParse(id).success
 
+const STEP_STATUS = new Set(['running', 'ok', 'error', 'denied'])
+
+const isStep = (st: unknown): st is JobStep =>
+  !!st &&
+  typeof st === 'object' &&
+  typeof (st as JobStep).n === 'number' &&
+  typeof (st as JobStep).label === 'string' &&
+  STEP_STATUS.has((st as JobStep).status)
+
+/** A job's saved steps: well-formed ones only, the newest MAX_JOB_STEPS. */
+function cleanJob(j: SubJob): SubJob {
+  if (j.steps === undefined) return j
+  const ok = Array.isArray(j.steps) ? j.steps.filter(isStep) : []
+  const steps = ok.slice(-MAX_JOB_STEPS)
+  const dropped =
+    (typeof j.stepsDropped === 'number' ? j.stepsDropped : 0) + ok.length - steps.length
+  const rest: SubJob = { ...j }
+  delete rest.steps
+  delete rest.stepsDropped
+  return {
+    ...rest,
+    ...(steps.length ? { steps } : {}),
+    ...(dropped ? { stepsDropped: dropped } : {})
+  }
+}
+
+function cleanEntry(e: ChatEntry): ChatEntry {
+  if (e.k !== 'tool' || e.jobs === undefined) return e
+  if (!Array.isArray(e.jobs)) {
+    const rest = { ...e }
+    delete rest.jobs
+    return rest
+  }
+  return { ...e, jobs: e.jobs.filter((j) => !!j && typeof j === 'object').map(cleanJob) }
+}
+
 export function parseTranscript(raw: unknown, id: string): TranscriptData | null {
   if (!raw || typeof raw !== 'object') return null
   const t = raw as Partial<TranscriptData>
   if (t.id !== id || !Array.isArray(t.entries)) return null
-  const entries = t.entries.filter(
-    (e): e is ChatEntry =>
-      !!e &&
-      typeof e === 'object' &&
-      typeof (e as ChatEntry).n === 'number' &&
-      typeof (e as ChatEntry).at === 'number' &&
-      KINDS.has((e as ChatEntry).k)
-  )
+  const entries = t.entries
+    .filter(
+      (e): e is ChatEntry =>
+        !!e &&
+        typeof e === 'object' &&
+        typeof (e as ChatEntry).n === 'number' &&
+        typeof (e as ChatEntry).at === 'number' &&
+        KINDS.has((e as ChatEntry).k)
+    )
+    .map(cleanEntry)
   const meta = t.meta && typeof t.meta === 'object' ? (t.meta as ChatMeta) : undefined
   return {
     id,

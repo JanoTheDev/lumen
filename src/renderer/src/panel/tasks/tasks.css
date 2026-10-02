@@ -333,6 +333,10 @@ div.chat-tool,
   gap: var(--space-2);
 }
 
+.chat-job__steps {
+  margin-left: 2.25rem;
+}
+
 .chat-job__role {
   font-weight: var(--weight-strong);
   text-transform: capitalize;

@@ -19,6 +19,21 @@ export interface SubJob {
   step?: string
   /** Short, redacted result. */
   result?: string
+  /** The job's own tool calls, oldest first (the newest few kept, redacted, cut short). */
+  steps?: JobStep[]
+  /** Older steps dropped by the per-job cap. */
+  stepsDropped?: number
+}
+
+/** One tool call inside a sub-agent job, as the task chat shows it under the job's row. */
+export interface JobStep {
+  /** Increasing per job. */
+  n: number
+  /** "Read example.com/page". */
+  label: string
+  args?: string
+  status: ToolStatus
+  result?: string
 }
 
 interface EntryBase {

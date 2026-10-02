@@ -28,7 +28,7 @@ import {
   type ToolHandler,
   type ToolOutcome
 } from '../runner'
-import { toolLabel } from '../transcript'
+import { toolLabel, type StepEvent } from '../transcript'
 import { jobCaps, isRole, RESULT_MAX, ROLES, roleTools, type SubagentRole } from './roles'
 import type { SubagentPool } from './pool'
 import { MAX_JOBS, runSubagentsInput } from './tool'
@@ -214,7 +214,9 @@ export async function runJob(
   budget: SharedBudget,
   parent: Pick<ToolCtx, 'task'>,
   signal: AbortSignal,
-  onStep?: (label: string, costUsd: number) => void
+  onStep?: (label: string, costUsd: number) => void,
+  /** The job's own tool calls and results (the task chat's steps under the job's row). */
+  onEvent?: (ev: StepEvent) => void
 ): Promise<JobResult> {
   const spec = ROLES[role]
   const defs = roleTools(role, offered.defs)
@@ -271,6 +273,13 @@ export async function runJob(
     handlers,
     publish: () => {},
     speak: () => {},
+    ...(onEvent
+      ? {
+          observe: (ev) => {
+            if (ev.type === 'call' || ev.type === 'result') onEvent(ev)
+          }
+        }
+      : {}),
     countdown: async () => 'go',
     // A job never grows past its caps: it stops and reports what it has.
     askContinue: async () => false,
@@ -420,10 +429,23 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
             async () => {
               try {
                 const r = await runInUsageScope(usage, () =>
-                  runJob(j.role, j.task, offered, env, budget, ctx, ctx.signal, (label, cost) => {
-                    views[i] = { ...views[i], costUsd: cost, ...(label ? { step: label } : {}) }
-                    emit()
-                  })
+                  runJob(
+                    j.role,
+                    j.task,
+                    offered,
+                    env,
+                    budget,
+                    ctx,
+                    ctx.signal,
+                    (label, cost) => {
+                      views[i] = { ...views[i], costUsd: cost, ...(label ? { step: label } : {}) }
+                      emit()
+                    },
+                    (ev) => {
+                      if (ctx.callId && !ctx.signal.aborted)
+                        ctx.report?.({ type: 'job', callId: ctx.callId, job: i, ev })
+                    }
+                  )
                 )
                 views[i] = {
                   role: views[i].role,

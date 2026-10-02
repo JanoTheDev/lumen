@@ -7,6 +7,7 @@ import type {
   ChatPhase,
   ChatSummary,
   ChatView,
+  JobStep,
   SubJob,
   ToolStatus
 } from '@shared/task-chat'
@@ -154,6 +155,33 @@ export function jobsLine(jobs: readonly SubJob[]): string {
 export function jobLine(j: SubJob): string {
   const now = j.status === 'running' && j.step ? ` · ${j.step}` : ''
   return `${j.role} · ${JOB_STATUS_TEXT[j.status]}${now}`
+}
+
+/** "12 steps · 1 failed · 4 earlier not kept", or null when the job kept no steps. */
+export function jobStepsLine(j: SubJob): string | null {
+  const steps = j.steps ?? []
+  const dropped = j.stepsDropped ?? 0
+  if (!steps.length && !dropped) return null
+  const total = steps.length + dropped
+  const parts = [`${total} ${total === 1 ? 'step' : 'steps'}`]
+  const failed = steps.filter((s) => s.status === 'error' || s.status === 'denied').length
+  if (failed) parts.push(`${failed} failed`)
+  if (dropped) parts.push(`${dropped} earlier not kept`)
+  return parts.join(' · ')
+}
+
+/** A job's step as a tool row (the same row the task's own steps use). */
+export function stepEntry(st: JobStep): Extract<ChatEntry, { k: 'tool' }> {
+  return {
+    k: 'tool',
+    n: st.n,
+    at: 0,
+    name: '',
+    label: st.label,
+    status: st.status,
+    ...(st.args ? { args: st.args } : {}),
+    ...(st.result ? { result: st.result } : {})
+  }
 }
 
 /** "Clicked “Reply” · ok". */

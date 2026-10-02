@@ -5,7 +5,7 @@
 // Privacy: every text goes through the secret redactor before it is kept; typed text is never
 // kept (only its length, like the audit log); results and observations are cut to a few
 // hundred characters; screenshots are never kept.
-import type { ChatEntry, ChatKind, ChatPhase, SubJob, ToolStatus } from '@shared/task-chat'
+import type { ChatEntry, ChatKind, ChatPhase, JobStep, SubJob, ToolStatus } from '@shared/task-chat'
 import type { ToolCall, ToolContent } from '../ai/providers/types'
 import { redactForLog } from '../actions/redact'
 
@@ -25,6 +25,11 @@ export type RunEvent =
   | { type: 'result'; call: ToolCall; outcome: { content: ToolContent[]; isError?: boolean } }
   /** run_subagents (08 T49): the state of its jobs, nested under the call's row. */
   | { type: 'jobs'; callId: string; jobs: readonly SubJob[] }
+  /** One event of job `job` (0-based) of a run_subagents call: its own steps under its row. */
+  | { type: 'job'; callId: string; job: number; ev: StepEvent }
+
+/** What a sub-agent job's runner reports (model text is not kept for jobs). */
+export type StepEvent = Extract<RunEvent, { type: 'model' | 'call' | 'result' }>
 
 /** The header facts kept with a transcript (foreground tasks and Claude sessions have no task file). */
 export interface ChatMeta {
@@ -196,7 +201,15 @@ function size(e: ChatEntry): number {
   let n = 40
   for (const v of Object.values(e)) if (typeof v === 'string') n += v.length
   if (e.k === 'tool' && e.jobs)
-    for (const j of e.jobs) n += 40 + j.task.length + (j.result ?? '').length
+    for (const j of e.jobs)
+      n += 40 + j.task.length + (j.result ?? '').length + stepsSize(j.steps ?? [])
+  return n
+}
+
+function stepsSize(steps: readonly JobStep[]): number {
+  let n = 0
+  for (const st of steps)
+    n += 30 + st.label.length + (st.args ?? '').length + (st.result ?? '').length
   return n
 }
 
@@ -204,6 +217,11 @@ function size(e: ChatEntry): number {
 export const MAX_JOBS = 6
 const JOB_TASK_MAX = 200
 const JOB_STEP_MAX = 120
+/** A job's own steps: at most this many, and about this many characters, newest kept. */
+export const MAX_JOB_STEPS = 60
+export const JOB_STEPS_CHARS = 10_000
+const STEP_ARGS_MAX = 120
+const STEP_RESULT_MAX = 200
 
 export interface RecorderOptions {
   now(): number
@@ -217,6 +235,8 @@ export class TranscriptRecorder {
   private next: number
   private chars: number
   private calls = new Map<string, number>()
+  /** "<callId>:<job>:<inner call id>" → that step's n. */
+  private jobCalls = new Map<string, number>()
   dropped: number
   meta?: ChatMeta
 
@@ -396,17 +416,75 @@ export class TranscriptRecorder {
   jobs(callId: string, jobs: readonly SubJob[]): void {
     const n = this.calls.get(callId)
     if (n === undefined) return
+    const old = this.toolRow(n)?.jobs ?? []
     const clean = jobs.slice(0, MAX_JOBS).map(
-      (j): SubJob => ({
+      (j, i): SubJob => ({
         role: this.clean(j.role, 20),
         task: this.clean(j.task, JOB_TASK_MAX),
         status: j.status,
         costUsd: Number.isFinite(j.costUsd) ? j.costUsd : 0,
         ...(j.step ? { step: this.clean(j.step, JOB_STEP_MAX) } : {}),
-        ...(j.result ? { result: this.clean(j.result, RESULT_MAX) } : {})
+        ...(j.result ? { result: this.clean(j.result, RESULT_MAX) } : {}),
+        // The jobs' list comes without steps: the recorder keeps them (jobStep).
+        ...(old[i]?.steps ? { steps: old[i].steps } : {}),
+        ...(old[i]?.stepsDropped ? { stepsDropped: old[i].stepsDropped } : {})
       })
     )
     this.replace(n, { jobs: clean })
+  }
+
+  private toolRow(n: number): Extract<ChatEntry, { k: 'tool' }> | undefined {
+    const e = this.list.find((x) => x.n === n)
+    return e?.k === 'tool' ? e : undefined
+  }
+
+  /** A job's own tool call or result, kept under its row (redacted, cut short, capped). */
+  jobStep(callId: string, job: number, ev: StepEvent): void {
+    if (ev.type === 'model') return
+    const n = this.calls.get(callId)
+    const row = n === undefined ? undefined : this.toolRow(n)
+    const j = row?.jobs?.[job]
+    if (n === undefined || !row?.jobs || !j || ev.call.name === 'finish') return
+    const key = `${callId}:${job}:${ev.call.id}`
+    let steps = [...(j.steps ?? [])]
+    let dropped = j.stepsDropped ?? 0
+    if (ev.type === 'call') {
+      const input = ev.call.input ?? {}
+      const args = argsSummary(ev.call.name, input)
+      const sn = steps.reduce((m, st) => Math.max(m, st.n), dropped) + 1
+      steps.push({
+        n: sn,
+        label: this.clean(toolLabel(ev.call.name, input), JOB_STEP_MAX),
+        ...(args ? { args: this.clean(args, STEP_ARGS_MAX) } : {}),
+        status: 'running'
+      })
+      this.jobCalls.set(key, sn)
+      while (
+        steps.length > 1 &&
+        (steps.length > MAX_JOB_STEPS || stepsSize(steps) > JOB_STEPS_CHARS)
+      ) {
+        steps.shift()
+        dropped++
+      }
+    } else {
+      const sn = this.jobCalls.get(key)
+      if (sn === undefined) return
+      this.jobCalls.delete(key)
+      const text = resultSummary(ev.outcome.content, STEP_RESULT_MAX)
+      steps = steps.map((st) =>
+        st.n === sn
+          ? {
+              ...st,
+              status: statusOf(ev.outcome.isError, text),
+              ...(text ? { result: this.clean(text, STEP_RESULT_MAX) } : {})
+            }
+          : st
+      )
+    }
+    const jobs = row.jobs.map((x, i) =>
+      i === job ? { ...x, steps, ...(dropped ? { stepsDropped: dropped } : {}) } : x
+    )
+    this.replace(n, { jobs })
   }
 
   /** Marks calls still running as stopped (the run ended under them). */
@@ -419,22 +497,32 @@ export class TranscriptRecorder {
           result: 'Stopped.',
           ...(e.jobs
             ? {
-                jobs: e.jobs.map((j) =>
-                  j.status === 'running' || j.status === 'queued'
-                    ? { ...j, status: 'stopped' as const }
-                    : j
-                )
+                jobs: e.jobs.map((j) => {
+                  const steps = j.steps?.map((st) =>
+                    st.status === 'running'
+                      ? { ...st, status: 'error' as const, result: 'Stopped.' }
+                      : st
+                  )
+                  const live = j.status === 'running' || j.status === 'queued'
+                  return {
+                    ...j,
+                    ...(live ? { status: 'stopped' as const } : {}),
+                    ...(steps ? { steps } : {})
+                  }
+                })
               }
             : {})
         })
     }
     this.calls.clear()
+    this.jobCalls.clear()
   }
 
   run(ev: RunEvent): void {
     if (ev.type === 'model') this.assistant(ev.text)
     else if (ev.type === 'call') this.toolStart(ev.call)
     else if (ev.type === 'jobs') this.jobs(ev.callId, ev.jobs)
+    else if (ev.type === 'job') this.jobStep(ev.callId, ev.job, ev.ev)
     else this.toolEnd(ev.call, ev.outcome)
   }
 }

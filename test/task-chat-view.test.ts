@@ -13,7 +13,9 @@ import {
   groupEntries,
   headerFacts,
   jobsLine,
-  rowChanged
+  jobStepsLine,
+  rowChanged,
+  stepEntry
 } from '../src/renderer/src/panel/tasks/chat-view'
 import { ChatEntries } from '../src/renderer/src/panel/tasks/ChatEntries'
 import { parseRoute } from '../src/renderer/src/panel/routes'
@@ -189,5 +191,65 @@ describe('sub-agent groups (08 T49)', () => {
     expect(html).toContain('Confirmed: 10 EUR')
     expect(html).toContain('Read a.example')
     expect(html.match(/chat-job"/g)?.length).toBe(2)
+  })
+})
+
+describe('sub-agent job steps', () => {
+  const steps = [
+    {
+      n: 5,
+      label: 'Read a.example/lamp',
+      args: 'url: https://a.example/lamp',
+      status: 'ok' as const,
+      result: 'Price: 10'
+    },
+    { n: 6, label: 'Searched memory', status: 'error' as const, result: 'It failed' }
+  ]
+  const job = {
+    role: 'researcher',
+    task: 'price at shop a',
+    status: 'done' as const,
+    costUsd: 0,
+    steps,
+    stepsDropped: 3
+  }
+
+  it('summarises the steps of a job', () => {
+    expect(jobStepsLine(job)).toBe('5 steps · 1 failed · 3 earlier not kept')
+    expect(jobStepsLine({ ...job, steps: [steps[0]], stepsDropped: undefined })).toBe('1 step')
+    expect(jobStepsLine({ ...job, steps: undefined, stepsDropped: undefined })).toBeNull()
+  })
+
+  it('turns a step into a tool row', () => {
+    expect(stepEntry(steps[0])).toEqual({
+      k: 'tool',
+      n: 5,
+      at: 0,
+      name: '',
+      label: 'Read a.example/lamp',
+      status: 'ok',
+      args: 'url: https://a.example/lamp',
+      result: 'Price: 10'
+    })
+  })
+
+  it('renders the steps under the job row', () => {
+    const row: ChatEntry = {
+      n: 60,
+      at: 60,
+      k: 'tool',
+      name: 'run_subagents',
+      label: 'Asked 1 helper',
+      status: 'ok',
+      jobs: [job]
+    }
+    const html = renderToStaticMarkup(
+      createElement(ChatEntries, { entries: [row], header, dropped: 0, onChoice: () => {} })
+    )
+    expect(html).toContain('chat-job__steps')
+    expect(html).toContain('5 steps · 1 failed · 3 earlier not kept')
+    expect(html).toContain('Read a.example/lamp')
+    expect(html).toContain('Price: 10')
+    expect(html).toContain('Searched memory')
   })
 })
