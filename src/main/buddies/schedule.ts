@@ -17,6 +17,7 @@ import type { RunBuddyOpts, RunBuddyResult } from './index'
 export const SKIP_BUDGET = 'Paused: monthly limit.'
 export const SKIP_PAUSED = 'Paused: all buddies are paused.'
 export const SKIP_OFF = 'Paused: the buddy is turned off.'
+export const SKIP_BUSY = 'Skipped: the buddy was still working on an earlier run.'
 
 /** The buddy an automation runs, if it is a buddy schedule. */
 export function scheduledBuddy(a: Pick<Automation, 'action'>): string | null {
@@ -152,6 +153,7 @@ export async function runScheduledBuddy(
       return { result: 'skipped', summary: SKIP_BUDGET }
     }
     if (r.code === 'E_OFF') return { result: 'skipped', summary: SKIP_OFF }
+    if (r.code === 'E_BUSY') return { result: 'skipped', summary: SKIP_BUSY }
     return { result: 'failed', summary: r.error }
   }
   const end = await deps.wait(r.task.id)

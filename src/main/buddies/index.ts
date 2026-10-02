@@ -19,7 +19,7 @@
 //   buddyNotebook(id): string
 //   setBuddyNotebook(id, text): 'ok'|'disabled'|'rejected'|'too-long'|'missing'
 //   runBuddy(id, {utterance?, trigger: 'call'|'schedule'|'manual'}): RunBuddyResult
-//       → {ok: true, task} | {ok: false, code: 'E_NOT_FOUND'|'E_OFF'|'E_BUDGET', error}
+//       → {ok: true, task} | {ok: false, code: 'E_NOT_FOUND'|'E_OFF'|'E_BUDGET'|'E_BUSY', error}
 //   buddyRuns(id, limit = 20): BuddyRunSummary[]     newest first, from the task store
 //   setBuddySpendReader(fn: BuddySpendReader | null)  monthly spend (default: usage ledger)
 // Events: bus `buddies.changed {ids}` after create / update / remove / run / notebook writes.

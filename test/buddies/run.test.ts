@@ -148,9 +148,23 @@ describe('runBuddy', () => {
     expect(overBudget(b, null)).toBeNull()
   })
 
+  it('runs one at a time: a second call while it works is refused', () => {
+    const b = inbox()
+    expect(svc.run(b.id, { trigger: 'manual' }).ok).toBe(true)
+    expect(svc.run(b.id, { trigger: 'schedule' })).toEqual({
+      ok: false,
+      code: 'E_BUSY',
+      error: 'Inbox Buddy is already working on it.'
+    })
+    expect(started).toHaveLength(1)
+    tasks[0].phase = 'done'
+    expect(svc.run(b.id, { trigger: 'manual' }).ok).toBe(true)
+  })
+
   it('lists its own runs newest first, without helpers', () => {
     const b = inbox()
     svc.run(b.id, { trigger: 'manual' })
+    tasks[0].phase = 'done'
     svc.run(b.id, { utterance: 'again', trigger: 'call' })
     tasks.push({ ...tasks[0], id: 'bg_child1', parentId: tasks[0].id })
     tasks.push({ ...tasks[0], id: 'bg_other1', buddyId: 'someone-else' })

@@ -16,6 +16,7 @@ import {
   scheduleIdChanges,
   setScheduleHost,
   SKIP_BUDGET,
+  SKIP_BUSY,
   SKIP_OFF,
   SKIP_PAUSED,
   type ScheduledRunDeps,
@@ -137,6 +138,13 @@ describe('a scheduled run', () => {
     })
     await runScheduledBuddy(a, { via: 'time' }, d)
     expect(notice).toHaveBeenCalledTimes(1)
+    const busy = deps({
+      run: () => ({ ok: false, code: 'E_BUSY', error: 'Inbox Buddy is already working on it.' })
+    })
+    expect(await runScheduledBuddy(a, { via: 'time' }, busy)).toEqual({
+      result: 'skipped',
+      summary: SKIP_BUSY
+    })
     expect(
       await runScheduledBuddy(a, { via: 'time' }, deps({ getBuddy: () => null }))
     ).toMatchObject({ result: 'failed' })

@@ -24,7 +24,7 @@ export type BuddySpendReader = (
 
 export type RunBuddyResult =
   | { ok: true; task: BackgroundTask }
-  | { ok: false; code: 'E_NOT_FOUND' | 'E_OFF' | 'E_BUDGET'; error: string }
+  | { ok: false; code: 'E_NOT_FOUND' | 'E_OFF' | 'E_BUDGET' | 'E_BUSY'; error: string }
 
 export interface BuddiesDeps {
   store: BuddyStore
@@ -99,6 +99,12 @@ export class Buddies {
   byName(name: string): Buddy | null {
     const want = buddyNameKey(name)
     return want ? (this.list().find((b) => buddyNameKey(b.name) === want) ?? null) : null
+  }
+
+  /** A run of the buddy is queued or running (in the background or on screen). */
+  isRunning(id: string): boolean {
+    const open = this.deps.tasks().some((t) => t.buddyId === id && !t.parentId && isOpen(t))
+    return open || this.screenRuns(id).some((r) => r.phase === 'running')
   }
 
   summaries(): BuddySummary[] {
@@ -187,6 +193,9 @@ export class Buddies {
     if (!b.enabled) return { ok: false, code: 'E_OFF', error: `${b.name} is turned off.` }
     const over = overBudget(b, this.deps.spend?.()?.(b.id, new Date(this.now())) ?? null)
     if (over) return { ok: false, code: 'E_BUDGET', error: over }
+    // One run at a time: a second call or schedule never doubles the work and the spend.
+    if (this.isRunning(b.id))
+      return { ok: false, code: 'E_BUSY', error: `${b.name} is already working on it.` }
     const task = this.deps.start(buddyStartInput(b, opts))
     this.deps.emit([b.id])
     return { ok: true, task }

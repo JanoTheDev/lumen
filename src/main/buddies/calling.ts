@@ -103,7 +103,7 @@ export function setBuddiesPaused(paused: boolean): void {
 export type CallOutcome =
   | { ok: true; lane: 'background'; task: BackgroundTask }
   | { ok: true; lane: 'foreground'; response: Promise<ModelResponse> }
-  | { ok: false; code: 'E_NOT_FOUND' | 'E_OFF' | 'E_BUDGET'; error: string }
+  | { ok: false; code: 'E_NOT_FOUND' | 'E_OFF' | 'E_BUDGET' | 'E_BUSY'; error: string }
 
 function foreground(b: Buddy, opts: RunBuddyOpts, signal: AbortSignal): Promise<ModelResponse> {
   onScreen = b.id
@@ -157,6 +157,8 @@ export function startBuddyNow(
     if (over) return { ok: false, code: 'E_BUDGET', error: over }
     const limit = runCheck?.(b.id)
     if (limit && !limit.ok) return { ok: false, code: 'E_BUDGET', error: limit.reason }
+    if (onScreen === b.id || buddies()?.isRunning(b.id))
+      return { ok: false, code: 'E_BUSY', error: `${b.name} is already working on it.` }
     log('plan', `buddy ${b.id} runs on screen (${opts.trigger})`)
     return {
       ok: true,
