@@ -182,6 +182,21 @@ export function buddyRunSettings(b: Buddy): BuddyRunSettings {
   }
 }
 
+/**
+ * A helper's cost cap: what is left of the run's budget after its parent and the parent's other
+ * helpers (like run_subagents, which spend from the parent's cap).
+ */
+export function helperCostCap(
+  b: Pick<Buddy, 'budget'>,
+  task: Pick<BackgroundTask, 'id' | 'parentId'>,
+  tasks: readonly Pick<BackgroundTask, 'id' | 'parentId' | 'counters'>[]
+): number {
+  const spent = tasks
+    .filter((t) => t.id !== task.id && (t.id === task.parentId || t.parentId === task.parentId))
+    .reduce((sum, t) => sum + t.counters.costUsd, 0)
+  return Math.max(0, b.budget.perRunUsd - spent)
+}
+
 export interface BuddyTaskDeps {
   envelope: EnvelopeFor
   notebook: string

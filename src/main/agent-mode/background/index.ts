@@ -434,6 +434,12 @@ async function runTask(
     buddy = b
     // Its notebook holds what earlier runs read: observed text for the gate, not user words.
     if (b.context) observe(b.context)
+    // A helper it spawns with a skill: only one of the buddy's own skills.
+    if (task.skill && !b.allowSkill(task.skill))
+      return {
+        status: 'failed',
+        summary: `E_DENIED: the buddy may not use the skill "${task.skill}".`
+      }
   }
   const skills = backgroundSkills(
     task.skill,

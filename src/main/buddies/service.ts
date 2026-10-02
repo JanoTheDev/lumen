@@ -7,7 +7,13 @@ import type { BuddyRunHook } from '../agent-mode/background/buddy-hook'
 import { isOpen, type StartInput } from '../agent-mode/background/manager'
 import { withUsageScope } from '../usage/scope'
 import { buddyNameKey, isBuddyId, safeBuddyName } from './clamp'
-import { buddyStartInput, buddyTaskEnv, type EnvelopeFor, type RunBuddyOpts } from './run'
+import {
+  buddyStartInput,
+  buddyTaskEnv,
+  helperCostCap,
+  type EnvelopeFor,
+  type RunBuddyOpts
+} from './run'
 import type { BuddyStore, NotebookWrite } from './store'
 
 /** This month's spend of one buddy (05 T45 usage ledger); null = not known. */
@@ -198,11 +204,15 @@ export class Buddies {
         const b = task.buddyId ? this.get(task.buddyId) : null
         if (!b) return 'This buddy was deleted.'
         if (!b.enabled) return `${b.name} is turned off.`
-        return buddyTaskEnv(b, task, host, {
+        const env = buddyTaskEnv(b, task, host, {
           envelope: this.deps.envelope,
           notebook: this.notebook(b.id),
           memoryWrite: (fact) => this.appendNotebook(b.id, fact)
         })
+        // A helper spends from its parent run's budget, not a budget of its own.
+        return task.parentId
+          ? { ...env, maxCostUsd: helperCostCap(b, task, this.deps.tasks()) }
+          : env
       },
       scope: (task, fn) =>
         withUsageScope({ origin: 'buddy', buddyId: task.buddyId, taskId: task.id }, fn),

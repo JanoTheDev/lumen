@@ -7,7 +7,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { z } from 'zod'
 import type { Buddy } from '@shared/buddies'
-import type { SkillTrust } from '@shared/types'
+import type { BackgroundTask, SkillTrust } from '@shared/types'
 import type { ToolCall, ToolTurnResult } from '../../src/main/ai/providers/types'
 import type { ToolOutcome } from '../../src/main/agent-mode/runner'
 
@@ -107,7 +107,7 @@ import { setBuddyRunHook } from '../../src/main/agent-mode/background/buddy-hook
 import { skillEnvelope } from '../../src/main/agent-mode/skill-envelope'
 import { Buddies } from '../../src/main/buddies/service'
 import { BuddyStore, IMPORT_MARKER } from '../../src/main/buddies/store'
-import { buddyContext } from '../../src/main/buddies/run'
+import { buddyContext, helperCostCap } from '../../src/main/buddies/run'
 
 const usage = { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 }
 let seq = 0
@@ -206,5 +206,45 @@ describe('an imported buddy (M5)', () => {
     if (!r.ok) throw new Error(r.error)
     await backgroundManager().wait(r.task.id)
     expect(String(h.ctxs[0].userText)).toContain('billing@example.com')
+  })
+})
+
+describe('helpers of a buddy run (L1)', () => {
+  it('a helper may preload only one of the buddy skills', async () => {
+    const b = writer()
+    h.script = [
+      reply(call('spawn_task', { prompt: 'help', skill: 'other-skill', wait: true })),
+      finish('parent done')
+    ]
+    const r = svc.run(b.id, { trigger: 'manual' })
+    if (!r.ok) throw new Error(r.error)
+    await backgroundManager().wait(r.task.id)
+    const child = backgroundManager()
+      .list()
+      .find((t) => t.parentId === r.task.id)
+    expect(child?.phase).toBe('failed')
+    expect(child?.result?.summary).toMatch(/E_DENIED: the buddy may not use the skill/)
+  })
+
+  it('a helper spends what is left of the run budget', () => {
+    const counters = (costUsd: number): BackgroundTask['counters'] => ({
+      modelCalls: 1,
+      costUsd,
+      startedAt: 0
+    })
+    const tasks = [
+      { id: 'p', counters: counters(0.1) },
+      { id: 'c1', parentId: 'p', counters: counters(0.05) },
+      { id: 'c2', parentId: 'p', counters: counters(0) },
+      { id: 'x', counters: counters(3) }
+    ]
+    const b = { budget: { perRunUsd: 0.25 } }
+    expect(helperCostCap(b, { id: 'c2', parentId: 'p' }, tasks)).toBeCloseTo(0.1)
+    expect(
+      helperCostCap(b, { id: 'c2', parentId: 'p' }, [
+        ...tasks,
+        { id: 'c3', parentId: 'p', counters: counters(1) }
+      ])
+    ).toBe(0)
   })
 })
