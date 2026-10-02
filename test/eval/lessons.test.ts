@@ -80,6 +80,29 @@ describe('lesson-check eval', () => {
     expect(report).toMatch(/\| deterministic \| all \| \d+ \|/)
   })
 
+  it('selected / toggled state also decides the not-done side', () => {
+    const verdict = (id: string): string | undefined =>
+      det().find((r) => r.case.id === id)?.out.verdict
+    expect(verdict('excel-header-row-off')).toBe('fail')
+    expect(verdict('excel-wrong-tab-selected')).toBe('fail')
+    expect(verdict('notepad-tab-already-selected')).toBe('unknown')
+  })
+
+  it('lists truth-fail cases that pass on the learner\'s "done" in their own section', () => {
+    const c = { id: 'x-manual-fail', truth: 'fail', category: 'stale-state', step: 'a#b' } as Case
+    const r: Result = {
+      case: c,
+      app: 'x',
+      strategy: 'deterministic',
+      out: { verdict: 'manual', latencyMs: 0 },
+      ...score(c, { verdict: 'manual', latencyMs: 0 })
+    }
+    expect(r.falsePass).toBe(false)
+    const report = formatReport([r], { date: '2026-10-02', sha: 'test' })
+    const section = report.split("## Passes on the learner's word")[1].split('## Undecided')[0]
+    expect(section).toContain('| x-manual-fail | a#b | stale-state |')
+  })
+
   // Known gaps: each names its note in plans/10-quality/tasks.md. Flip to it() once fixed.
   it('T15-G1: window-opened {name} does not pass on a same-named button', () => {
     expect(gapCases('T15-G1').filter(wrong)).toEqual([])

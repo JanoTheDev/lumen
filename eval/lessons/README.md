@@ -27,6 +27,14 @@ Verdicts: `pass`, `fail`, `unknown` (the lesson asks "Did it work?") and `manual
 passes only because an `anyOf` has a `manual` alternative, so the learner's "done" decides).
 `unknown` and `manual` are reported as undecided, not as false results.
 
+The `manual` rule, decided: `manual` on a truth-fail case is **not** scored as a false pass,
+even though production passes the step on the learner's "done" without asking. A `manual`
+alternative is the lesson author's explicit choice to trust the learner where no check can
+tell, and a connected bridge that says "not done" already overrules it (`overruleManual`).
+Those cases are still listed in the report's own section ("Passes on the learner's word")
+and counted in the "pass on "done" only" column, so a pack that leans on `manual` shows up.
+`unknown` is safe either way: the lesson asks "Did it work?" and only a "yes" passes.
+
 Strategies: `deterministic`, `mock` (right for about half the cases, tests the report).
 `vision` is listed as not run: it needs before/after frames and a model key.
 

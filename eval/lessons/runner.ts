@@ -450,6 +450,9 @@ export function formatReport(results: Result[], info: { date: string; sha: strin
     (r) =>
       r.strategy === 'deterministic' && (r.out.verdict === 'unknown' || r.out.verdict === 'manual')
   )
+  const onWord = results.filter(
+    (r) => r.strategy === 'deterministic' && r.case.truth === 'fail' && r.out.verdict === 'manual'
+  )
   const what = (c: Case): string => c.step ?? `inline ${c.expect?.type}`
   return [
     `# Lesson-check eval ${info.date} (${info.sha})`,
@@ -481,6 +484,19 @@ export function formatReport(results: Result[], info: { date: string; sha: strin
             (r) =>
               `| ${r.strategy} | ${r.case.id} | ${what(r.case)} | ${r.case.truth} | ${r.out.verdict} | ${r.case.knownGap ?? ''} |`
           )
+        ]
+      : ['None.']),
+    '',
+    "## Passes on the learner's word (deterministic)",
+    '',
+    'Truth-fail cases that pass only through a `manual` alternative: not counted as false',
+    'passes (the lesson author chose to trust "done" there), but listed so they stay visible.',
+    '',
+    ...(onWord.length
+      ? [
+          '| case | check | category |',
+          '| --- | --- | --- |',
+          ...onWord.map((r) => `| ${r.case.id} | ${what(r.case)} | ${r.case.category} |`)
         ]
       : ['None.']),
     '',
