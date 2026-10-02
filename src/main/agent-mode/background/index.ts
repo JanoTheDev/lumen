@@ -89,6 +89,13 @@ const manager = new BackgroundManager({
     if (task.buddyId && buddyRunHook()?.silent(task)) return
     notice(doneLine(task.title, task.phase, task.result?.summary ?? ''))
   },
+  // Monthly usage limits (05 T45): a paused automation / buddy run ends at once with the reason.
+  refuse: (input) => {
+    const limit = checkRunLimit(input)
+    if (limit.ok) return null
+    log('plan', `background run refused: ${limit.reason}`)
+    return limit.reason
+  },
   now: () => Date.now(),
   newId
 })
@@ -99,15 +106,6 @@ export function backgroundManager(): BackgroundManager {
 
 /** Starts a background task (voice "in the background …", a routine, a skill run). */
 export function startBackgroundTask(input: StartInput): BackgroundTask {
-  // Monthly usage limits (05 T45): a paused automation / buddy run ends at once with the reason.
-  const limit = checkRunLimit(input)
-  if (!limit.ok) {
-    log('plan', `background run refused: ${limit.reason}`)
-    return manager.start({
-      ...input,
-      run: async () => ({ status: 'failed', summary: limit.reason })
-    })
-  }
   const t = manager.start(input)
   log('plan', `background task ${t.id} ${t.phase}: "${t.title}"`)
   return t

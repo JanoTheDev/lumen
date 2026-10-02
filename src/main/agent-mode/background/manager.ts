@@ -92,6 +92,11 @@ export interface ManagerDeps {
   finished?(task: BackgroundTask): void
   /** The task's transcript (08 T43). */
   record?(id: string, e: TaskRecord): void
+  /**
+   * Why a new run may not start (monthly usage limits, 05 T45), else null. Checked for every
+   * start, "Run again" included; a refused run ends at once with the reason.
+   */
+  refuse?(input: StartInput): string | null
   now(): number
   newId(): string
 }
@@ -196,6 +201,8 @@ export class BackgroundManager {
   }
 
   start(input: StartInput): BackgroundTask {
+    const refused = input.run ? null : (this.deps.refuse?.(input) ?? null)
+    if (refused) input = { ...input, run: async () => ({ status: 'failed', summary: refused }) }
     const task: BackgroundTask = {
       id: this.deps.newId(),
       title: input.title?.trim() || taskTitle(input.prompt),
