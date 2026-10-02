@@ -37,6 +37,16 @@ export function markFreeModel(model: string, free = true): void {
   else freeModels.delete(model)
 }
 
+/** Local model or free tier (calls cost $0). */
+export function isFreeModel(model: string): boolean {
+  return freeModels.has(model)
+}
+
+/** OpenAI Whisper, USD per minute of audio (openai.com/api/pricing, 2026-10-02). */
+export const WHISPER_USD_PER_MIN = 0.006
+/** OpenAI tts-1, USD per million characters. */
+export const TTS1_USD_PER_MCHAR = 15
+
 /** A price a service reports for one of its models (e.g. OpenRouter's /models list). */
 export function registerModelPrice(model: string, rate: Rate): void {
   listed.set(model, rate)

@@ -211,8 +211,10 @@ export async function callModel(
   }
 }
 
-// Usage feeds the cost totals; every turn logs one latency/token record.
-onUsage(recordUsage)
+// Usage feeds the cost totals and the ledger; every turn logs one latency/token record.
+onUsage((model, usage, hasImage, meta) =>
+  recordUsage(model, usage, hasImage, new Date(), { provider: meta.provider, role: meta.role })
+)
 installTurnMetrics()
 
 // Warm the SDK connection pools at startup (after .env is loaded) and whenever the user starts

@@ -12,7 +12,6 @@ import { recordUsage } from '../ai/cost'
 import { parseJsonAs } from '../ai/json'
 import { getProvider, hasKey } from '../ai/providers'
 import { anthropicClient, toUsage } from '../ai/providers/anthropic'
-import { addDayUsage } from '../ai/usage-log'
 import { readingLevelPrompt } from '../coach'
 import { loadConfig } from '../config'
 import { log } from '../logger'
@@ -23,6 +22,7 @@ import { paidWebSearch, SEARCH_USD } from './search'
 import type { Complete } from './summarize'
 import { handleWebTurn, type WebDeps } from './turn'
 import { activeStyleBlock } from '../ai/style-runtime'
+import { withUsageFeature } from '../usage/scope'
 
 export { setNoteSaver, type NoteSaver, type WebNote } from './notes'
 export { clearWebContext } from './context'
@@ -41,17 +41,19 @@ const complete: Complete = async <T>(
   signal?: AbortSignal
 ): Promise<T | null> => {
   const { llm, model, effort } = getProvider('fast')
-  const res = await llm.complete(
-    {
-      model,
-      system: [{ text: system, cacheable: true }],
-      messages: [{ role: 'user', content: user }],
-      maxTokens,
-      effort,
-      schema,
-      schemaName: 'lumen_web'
-    },
-    signal
+  const res = await withUsageFeature('summarize', () =>
+    llm.complete(
+      {
+        model,
+        system: [{ text: system, cacheable: true }],
+        messages: [{ role: 'user', content: user }],
+        maxTokens,
+        effort,
+        schema,
+        schemaName: 'lumen_web'
+      },
+      signal
+    )
   )
   return res.data ?? parseJsonAs(res.text, schema)
 }
@@ -132,10 +134,14 @@ const deps: WebDeps = {
     const fast = getProvider('fast')
     const model = fast.provider === 'anthropic' ? fast.model : SEARCH_FALLBACK_MODEL
     const res = await paidWebSearch(query, anthropicClient(), model, styleLines(), signal)
-    if (res.usage) recordUsage(model, toUsage(res.usage))
-    if (res.searches) {
+    if (res.usage || res.searches) {
       const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
-      addDayUsage(res.searches * SEARCH_USD, zero, true)
+      recordUsage(model, res.usage ? toUsage(res.usage) : zero, false, new Date(), {
+        provider: 'anthropic',
+        searches: res.searches,
+        extraUsd: res.searches * SEARCH_USD,
+        feature: 'news'
+      })
     }
     return res
   },

@@ -1,9 +1,11 @@
 // Cost tracking: every model call adds to the current turn (router + main + verify + refine)
-// and to the session and day totals.
+// and to the session and day totals, and becomes one usage ledger line (usage/ledger) with the
+// usage scope of the work that made it.
 import { AsyncLocalStorage } from 'async_hooks'
 import { EMPTY_USAGE, type Usage } from './providers/types'
-import { formatUsage, knownCost, rateFor, roundUsd as round } from './pricing'
-import { addDayUsage, usageSummary, type UsageSummary } from './usage-log'
+import { formatUsage, isFreeModel, knownCost, rateFor, roundUsd as round } from './pricing'
+import { usageSummary, type UsageSummary } from './usage-log'
+import { recordCall, type UsageEntry } from '../usage/ledger'
 
 export interface TurnCost {
   usd: number
@@ -15,6 +17,8 @@ export interface TurnCost {
 
 const turns = new AsyncLocalStorage<TurnCost>()
 let sessionUsd = 0
+// Some call this session used a model without a known price.
+let unpriced = false
 let day = { key: '', usd: 0 }
 // Calls after the first one: how many read the prompt cache, and the input token share read.
 const cache = { calls: 0, hits: 0, input: 0, read: 0 }
@@ -23,16 +27,27 @@ function dayKey(now: Date): string {
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`
 }
 
-/** Records one call's usage: logs it, adds it to the current turn and the running totals. */
-export function recordUsage(model: string, usage: Usage, hasImage = false, now = new Date()): void {
-  console.log(formatUsage(model, usage, hasImage))
-  if (cache.calls++ > 0) {
-    cache.input += usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
-    cache.read += usage.cacheReadTokens
-    if (usage.cacheReadTokens > 0) cache.hits++
-  }
-  const cost = knownCost(model, usage).total
-  addDayUsage(cost, usage, rateFor(model).known, now)
+/** What the call site knows beyond tokens. */
+export interface CallMeta {
+  /** Backend (anthropic, openai, …); guessed from the model id when left out. */
+  provider?: string
+  role?: string
+  /** Paid web searches made in the call, with their fee in `extraUsd`. */
+  searches?: number
+  extraUsd?: number
+  /** Ledger feature for this call, over the scope's (e.g. 'how-to'). */
+  feature?: string
+}
+
+/** Backend from a model id, for call sites that do not pass one. */
+export function guessProvider(model: string): string {
+  if (/^claude-/.test(model)) return 'anthropic'
+  if (/^(gpt-|o\d|whisper|tts-)/.test(model)) return 'openai'
+  if (/^gemini/.test(model)) return 'gemini'
+  return 'unknown'
+}
+
+function addToTotals(cost: number, usage: Usage, now: Date): void {
   sessionUsd = round(sessionUsd + cost)
   const key = dayKey(now)
   day = { key, usd: round((day.key === key ? day.usd : 0) + cost) }
@@ -46,6 +61,53 @@ export function recordUsage(model: string, usage: Usage, hasImage = false, now =
     cacheReadTokens: turn.usage.cacheReadTokens + usage.cacheReadTokens,
     cacheWriteTokens: turn.usage.cacheWriteTokens + usage.cacheWriteTokens
   }
+}
+
+/**
+ * Records one call's usage: logs it, adds it to the current turn and the running totals, and
+ * writes its ledger line.
+ */
+export function recordUsage(
+  model: string,
+  usage: Usage,
+  hasImage = false,
+  now = new Date(),
+  meta: CallMeta = {}
+): void {
+  console.log(formatUsage(model, usage, hasImage))
+  if (cache.calls++ > 0) {
+    cache.input += usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens
+    cache.read += usage.cacheReadTokens
+    if (usage.cacheReadTokens > 0) cache.hits++
+  }
+  const known = rateFor(model).known
+  if (!known) unpriced = true
+  const cost = round(knownCost(model, usage).total + (meta.extraUsd ?? 0))
+  addToTotals(cost, usage, now)
+  recordCall({
+    t: now.getTime(),
+    provider: meta.provider ?? guessProvider(model),
+    model,
+    ...(meta.role ? { role: meta.role } : {}),
+    in: usage.inputTokens,
+    out: usage.outputTokens,
+    cacheRead: usage.cacheReadTokens,
+    cacheWrite: usage.cacheWriteTokens,
+    searches: meta.searches ?? 0,
+    usd: cost,
+    priced: known,
+    free: isFreeModel(model),
+    ...(meta.feature ? { feature: meta.feature } : {})
+  })
+}
+
+/**
+ * A call priced by something other than tokens (cloud speech: audio seconds, characters): adds
+ * `usd` to the totals and writes the ledger line.
+ */
+export function recordFlatCall(entry: UsageEntry & { usd: number }, now = new Date()): void {
+  addToTotals(round(entry.usd), { ...EMPTY_USAGE }, now)
+  recordCall({ ...entry, t: now.getTime() })
 }
 
 /** Marks the model that answered the current turn. */
@@ -66,7 +128,7 @@ export function costTotals(): { sessionUsd: number; dayUsd: number } {
 
 /** Session, today (persisted across restarts) and the last 30 days, plus a per-day estimate. */
 export function usageOverview(now = new Date()): UsageSummary {
-  return usageSummary(sessionUsd, now)
+  return usageSummary(sessionUsd, now, unpriced)
 }
 
 /** Runs one user turn with its own cost accumulator; `onDone` gets the total even on failure. */
@@ -95,5 +157,6 @@ export async function withTurnCost<T>(
 export function resetCostTotals(): void {
   Object.assign(cache, { calls: 0, hits: 0, input: 0, read: 0 })
   sessionUsd = 0
+  unpriced = false
   day = { key: '', usd: 0 }
 }

@@ -31,9 +31,18 @@ import {
 
 export * from './types'
 
-type UsageListener = (model: string, usage: Usage, hasImage: boolean) => void
+/** Who served a call: the backend and, for calls made through `getProvider`, the role. */
+export interface UsageCallMeta {
+  provider: ProviderId
+  role?: Role
+}
 
+type UsageListener = (model: string, usage: Usage, hasImage: boolean, meta: UsageCallMeta) => void
+
+const raw: Partial<Record<ProviderId, LlmProvider>> = {}
 const instances: Partial<Record<ProviderId, LlmProvider>> = {}
+// Per-role wrappers of the same backend, so the usage ledger knows the role of each call.
+const byRole = new Map<string, LlmProvider>()
 let listener: UsageListener = () => {}
 
 /** Receives the usage of every completed call (pricing + cost tracking). */
@@ -144,11 +153,11 @@ export function prepareRequest<R extends ChatRequest>(req: R): R {
   }
 }
 
-function withUsage(inner: LlmProvider): LlmProvider {
-  const usageListener: UsageListener = (model, usage, hasImage) => {
+function withUsage(inner: LlmProvider, role?: Role): LlmProvider {
+  const usageListener = (model: string, usage: Usage, hasImage: boolean): void => {
     if (inner.id === 'local' || inner.id === 'gemini')
       markFreeModel(model, isFreeProvider(inner.id))
-    listener(model, usage, hasImage)
+    listener(model, usage, hasImage, { provider: inner.id, ...(role ? { role } : {}) })
   }
   return {
     id: inner.id,
@@ -191,8 +200,20 @@ function withUsage(inner: LlmProvider): LlmProvider {
   }
 }
 
+const rawFor = (id: ProviderId): LlmProvider => (raw[id] ??= create(id))
+
 export function providerFor(id: ProviderId): LlmProvider {
-  return (instances[id] ??= withUsage(create(id)))
+  return (instances[id] ??= withUsage(rawFor(id)))
+}
+
+function providerForRole(id: ProviderId, role: Role): LlmProvider {
+  const key = `${id}|${role}`
+  let p = byRole.get(key)
+  if (!p) {
+    p = withUsage(rawFor(id), role)
+    byRole.set(key, p)
+  }
+  return p
 }
 
 /**
@@ -201,7 +222,7 @@ export function providerFor(id: ProviderId): LlmProvider {
  */
 export function getProvider(role: Role): RoleModel & { llm: LlmProvider } {
   const resolved = resolveRole(role)
-  const llm = providerFor(resolved.provider)
+  const llm = providerForRole(resolved.provider, role)
   if (llm.toolTurn && llm.supportsTools && !llm.supportsTools(resolved.model))
     return { ...resolved, llm: { ...llm, toolTurn: undefined } }
   return { ...resolved, llm }
@@ -209,8 +230,14 @@ export function getProvider(role: Role): RoleModel & { llm: LlmProvider } {
 
 /** Test hook: replace (or with null, reset) the provider used for an id. */
 export function setProvider(id: ProviderId, provider: LlmProvider | null): void {
-  if (provider) instances[id] = withUsage(provider)
-  else delete instances[id]
+  for (const key of [...byRole.keys()]) if (key.startsWith(`${id}|`)) byRole.delete(key)
+  if (provider) {
+    raw[id] = provider
+    instances[id] = withUsage(provider)
+  } else {
+    delete raw[id]
+    delete instances[id]
+  }
 }
 
 const WARM_INTERVAL_MS = 60_000

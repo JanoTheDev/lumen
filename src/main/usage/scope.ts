@@ -57,3 +57,20 @@ export function withUsageScope<T>(patch: Partial<UsageScope>, fn: () => T): T {
 export function withUsageFeature<T>(feature: string, fn: () => T): T {
   return withUsageScope({ feature }, fn)
 }
+
+/**
+ * Sets the feature of the running scope in place, once a turn knows what it is (the pipeline
+ * after routing). Scopes started earlier inside it keep theirs. No-op outside a scope.
+ */
+export function setUsageFeature(feature: string): void {
+  const s = storage.getStore()
+  if (s) s.feature = feature
+}
+
+/**
+ * Runs `fn` in exactly `scope` (captured earlier with currentUsageScope), for work a queue or
+ * pool starts later from another context.
+ */
+export function runInUsageScope<T>(scope: UsageScope, fn: () => T): T {
+  return storage.run({ ...scope }, fn)
+}

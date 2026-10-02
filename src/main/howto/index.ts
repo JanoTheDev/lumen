@@ -8,7 +8,6 @@ import { usageCost } from '../ai/pricing'
 import { getProvider, hasKey } from '../ai/providers'
 import { anthropicClient, toUsage as anthropicUsage } from '../ai/providers/anthropic'
 import { openaiClient, toUsage as openaiUsage } from '../ai/providers/openai'
-import { addDayUsage } from '../ai/usage-log'
 import * as commands from '../agent/commands'
 import { getAgent } from '../agent/instance'
 import { configPath, loadConfig } from '../config'
@@ -84,11 +83,13 @@ function paidSearch(): LookupDeps['paid'] {
 
 function recordPaid(a: PaidAnswer): number {
   let usd = a.searches * PAID_SEARCH_USD
-  if (a.usage) {
-    recordUsage(a.model, a.usage)
-    usd += usageCost(a.model, a.usage).total
-  }
-  if (a.searches) addDayUsage(a.searches * PAID_SEARCH_USD, ZERO, true)
+  if (a.usage) usd += usageCost(a.model, a.usage).total
+  if (a.usage || a.searches)
+    recordUsage(a.model, a.usage ?? ZERO, false, new Date(), {
+      searches: a.searches,
+      extraUsd: a.searches * PAID_SEARCH_USD,
+      feature: 'how-to'
+    })
   return usd
 }
 
