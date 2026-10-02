@@ -13,6 +13,7 @@ import { createBackgroundHandlers, type BgPorts } from '../background/handlers'
 import { BG_TOOLS } from '../background/tools'
 import type { ToolHandler } from '../runner'
 import type { SkillEnvelope } from '../skill-envelope'
+import { currentUsageScope } from '../../usage/scope'
 
 export interface ForegroundSubagentOpts {
   taskId: string
@@ -51,13 +52,16 @@ export function foregroundSubagentTools(o: ForegroundSubagentOpts): {
   // The task's own read_file (dropped files by id, already behind its guards).
   const dropped = o.defs.some((d) => d.name === 'read_file') ? o.handlers.read_file : undefined
   const offers = (name: string): boolean => !o.envelope || o.envelope.offers(name)
+  // Helpers of a buddy's on-screen run are audited as that buddy (its usage scope).
+  const buddyId = currentUsageScope().buddyId
+  const origin = buddyId ? ('buddy' as const) : ('agent' as const)
   const audit = (
     action: Record<string, unknown>,
     result: 'ok' | 'error' | 'denied',
     reason?: string
   ): void => {
     const e = backgroundAuditEntry(
-      { id: o.taskId, origin: 'agent' },
+      { id: o.taskId, origin, ...(buddyId ? { buddyId } : {}) },
       action,
       result,
       reason,
@@ -88,7 +92,7 @@ export function foregroundSubagentTools(o: ForegroundSubagentOpts): {
     read_document: grantedFileHandlers(
       () => granted,
       () => ({
-        origin: 'agent',
+        origin,
         taskId: o.taskId,
         userText: o.userText,
         observedText: o.observedText()

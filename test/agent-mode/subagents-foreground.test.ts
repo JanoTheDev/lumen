@@ -6,14 +6,16 @@ vi.mock('../../src/main/audit/log', () => ({ writeAudit: vi.fn() }))
 vi.mock('../../src/main/config', () => ({
   loadConfig: () => ({ agent: { background: { readFolders: [] } } })
 }))
+const auditTask = vi.hoisted(() => vi.fn((task: unknown) => ({ task })))
 vi.mock('../../src/main/agent-mode/background', () => ({
-  backgroundAuditEntry: () => ({}),
+  backgroundAuditEntry: auditTask,
   readUnder: () => ({ ok: false, error: 'E_DENIED: no folders are granted.' })
 }))
 
 const { foregroundSubagentTools, READER_READ_FILE } =
   await import('../../src/main/agent-mode/subagents/foreground')
 const { TOOLS } = await import('../../src/main/agent-mode/tools')
+const { withUsageScope } = await import('../../src/main/usage/scope')
 
 const ctx = { signal: new AbortController().signal } as ToolCtx
 const textOf = (o: { content: { type: string; text?: string }[] }): string =>
@@ -49,5 +51,24 @@ describe('foreground reader tools', () => {
     })
     expect(t.defs.map((d) => d.name)).toContain('read_file')
     expect(t.defs.find((d) => d.name === 'read_file')).not.toBe(READER_READ_FILE)
+  })
+
+  it('a buddy run helper read is audited as the buddy', async () => {
+    const t = withUsageScope({ origin: 'subagent', buddyId: 'inbox-buddy' }, () =>
+      foregroundSubagentTools({
+        taskId: 't3',
+        userText: 'x',
+        defs: [],
+        handlers: {},
+        observe: () => {},
+        observedText: () => ''
+      })
+    )
+    await t.handlers.read_file({ path: 'C:\\x.txt' }, ctx)
+    expect(auditTask).toHaveBeenCalled()
+    expect(auditTask.mock.calls.at(-1)?.[0]).toMatchObject({
+      origin: 'buddy',
+      buddyId: 'inbox-buddy'
+    })
   })
 })
