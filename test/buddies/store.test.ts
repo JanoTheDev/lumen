@@ -21,6 +21,7 @@ import {
   parseBuddyFile
 } from '../../src/main/buddies/store'
 import { buddyIdFor, clampBuddy, folderAllowed, isBuddyId } from '../../src/main/buddies/clamp'
+import { Buddies } from '../../src/main/buddies/service'
 
 let root: string
 let writable = true
@@ -76,6 +77,26 @@ describe('buddy store', () => {
     store.create({ name: 'Price Buddy' })
     expect(store.create({ name: 'Price Buddy' }).id).toBe('price-buddy-2')
     expect(store.list().map((b) => b.id)).toEqual(['price-buddy', 'price-buddy-2'])
+  })
+
+  it('keeps names unique: a new one gets a number, a rename to a taken name is refused', () => {
+    expect(store.create({ name: 'Price Buddy' }).name).toBe('Price Buddy')
+    expect(store.create({ name: 'price  buddy' }).name).toBe('price buddy 2')
+    const svc = new Buddies({
+      store,
+      start: () => {
+        throw new Error('no runs here')
+      },
+      tasks: () => [],
+      emit: () => {},
+      envelope: () => {
+        throw new Error('no envelopes here')
+      }
+    })
+    const other = store.create({ name: 'Inbox Buddy' })
+    expect(() => svc.update(other.id, { name: 'PRICE BUDDY' })).toThrow(/already have a buddy/)
+    expect(svc.update(other.id, { name: 'Inbox buddy' })?.name).toBe('Inbox buddy')
+    expect(svc.update(other.id, { enabled: false })?.enabled).toBe(false)
   })
 
   it('clamps a hand-edited buddy.md on load', () => {

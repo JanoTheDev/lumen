@@ -26,8 +26,10 @@ import {
   clampBuddy,
   clampPermissions,
   folderAllowed,
-  safeBuddyName
+  freeBuddyName
 } from './clamp'
+
+export { freeBuddyName }
 
 // ---- the model's output (strict structured output: every field required) ----
 
@@ -134,14 +136,6 @@ export function buddyComposeTurn(req: AuthorBuddyRequest): string {
 }
 
 const oneLine = (s: string, max: number): string => s.replace(/\s+/g, ' ').trim().slice(0, max)
-
-/** "Inbox Buddy" when free, else "Inbox Buddy 2" … */
-export function freeBuddyName(name: string, taken: (name: string) => boolean): string {
-  const base = safeBuddyName(oneLine(name, BUDDY_NAME_MAX - 3) || 'My Buddy')
-  if (!taken(base)) return base
-  for (let n = 2; n < 100; n++) if (!taken(`${base} ${n}`)) return `${base} ${n}`
-  return `${base} ${Date.now().toString(36).slice(-2)}`
-}
 
 /** A "when" phrase as a proposed schedule; a reason when it does not parse. */
 export function parseSchedule(

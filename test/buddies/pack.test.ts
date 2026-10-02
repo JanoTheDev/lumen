@@ -88,6 +88,19 @@ describe('buddy packs', () => {
     expect(new BuddyStore(away).get('inbox-buddy-2')!.trust).toBe('community-untrusted')
   })
 
+  it("an import named like one of the user's buddies gets another name", () => {
+    const b = makeInbox(new BuddyStore(home))
+    makeInbox(new BuddyStore(away))
+    const archive = exportBuddies([b])
+    const plan = planBuddyArchive(archive, away)
+    expect(plan[0].buddy.name).toBe('Inbox Buddy 2')
+    expect(plan[0].notes.join(' ')).toMatch(/already have a buddy called Inbox Buddy/)
+    expect(installBuddyArchive(archive, 'x.lumen', away)[0].name).toBe('Inbox Buddy 2')
+    expect(new BuddyStore(away).get('inbox-buddy-2')!.name).toBe('Inbox Buddy 2')
+    // Importing it again replaces that import; its own name does not count as taken.
+    expect(planBuddyArchive(archive, away)[0].buddy.name).toBe('Inbox Buddy 2')
+  })
+
   it('an import keeps no folders from the file', () => {
     const header = {
       tools: ['fetch_url', 'read_file'],

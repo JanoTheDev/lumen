@@ -15,7 +15,14 @@ import {
 import { join } from 'path'
 import { BUDDY_NOTEBOOK_MAX_BYTES, type Buddy } from '@shared/buddies'
 import { splitFrontmatter, type YamlValue } from '../skills/frontmatter'
-import { buddyIdFor, clampBuddy, isBuddyId, type ClampContext } from './clamp'
+import {
+  buddyIdFor,
+  buddyNameKey,
+  clampBuddy,
+  freeBuddyName,
+  isBuddyId,
+  type ClampContext
+} from './clamp'
 
 export const BUDDY_FILE = 'buddy.md'
 export const NOTEBOOK_FILE = 'memory.md'
@@ -153,13 +160,23 @@ export class BuddyStore {
     return clean
   }
 
-  /** A new buddy of the user's own (trust mine) under a free id made from its name. */
+  /** Another buddy (not `exceptId`) has this name, case and spacing ignored. */
+  nameTaken(name: string, exceptId?: string): boolean {
+    const key = buddyNameKey(name)
+    return this.list().some((b) => b.id !== exceptId && buddyNameKey(b.name) === key)
+  }
+
+  /**
+   * A new buddy of the user's own (trust mine) under a free id made from its name; a name another
+   * buddy has gets a number ("Inbox Buddy 2").
+   */
   create(fields: Partial<Omit<Buddy, 'id'>> & { name: string }): Buddy {
     const now = this.now()
-    const id = buddyIdFor(fields.name, (x) => existsSync(join(this.root, x)))
+    const name = freeBuddyName(fields.name, (n) => this.nameTaken(n))
+    const id = buddyIdFor(name, (x) => existsSync(join(this.root, x)))
     const b = clampBuddy(
       id,
-      { trust: 'mine', ...fields, createdAt: now, updatedAt: now },
+      { trust: 'mine', ...fields, name, createdAt: now, updatedAt: now },
       { ...this.opts.clamp?.(), now }
     )
     return this.save(b)

@@ -310,16 +310,20 @@ export function parseBuddyCommand(text: string, list: readonly BuddyRef[]): Budd
   return null
 }
 
-/** Which of `ids` these words name ("the price one", "Price Buddy"); null when not one. */
+/** Words around the answer to "which buddy?" that say nothing ("the first one, please"). */
+const WHICH_FILLER = new Set(['the', 'one', 'please', 'i', 'mean', 'that', 'oh', 'um', 'uh', 'yes'])
+
+/**
+ * Which of `ids` the whole reply names ("the price one", "Price Buddy", "the second"); null when
+ * the reply is anything else ("open the first email" is a new request, not an answer).
+ */
 export function resolveWhich(text: string, refs: readonly BuddyRef[]): string | null {
-  const toks = tokens(text).filter((t) => !['the', 'one', 'please', 'i', 'mean'].includes(t.w))
-  const all = aliases(refs)
-  for (let i = 0; i < toks.length; i++) {
-    const hit = nameAt(toks, i, all)
-    if (hit && hit.ids.length === 1) return hit.ids[0]
-  }
-  // "the first" / "the second".
-  const ord = ['first', 'second', 'third', 'fourth'].findIndex((o) => toks.some((t) => t.w === o))
+  const toks = tokens(text).filter((t) => !WHICH_FILLER.has(t.w))
+  if (!toks.length) return null
+  const hit = nameAt(toks, 0, aliases(refs))
+  if (hit && hit.ids.length === 1 && hit.next === toks.length) return hit.ids[0]
+  if (toks.length !== 1) return null
+  const ord = ['first', 'second', 'third', 'fourth'].indexOf(toks[0].w)
   return ord >= 0 && refs[ord] ? refs[ord].id : null
 }
 

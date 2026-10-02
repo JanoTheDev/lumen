@@ -6,7 +6,7 @@ import type { BackgroundTask } from '@shared/types'
 import type { BuddyRunHook } from '../agent-mode/background/buddy-hook'
 import { isOpen, type StartInput } from '../agent-mode/background/manager'
 import { withUsageScope } from '../usage/scope'
-import { isBuddyId } from './clamp'
+import { buddyNameKey, isBuddyId, safeBuddyName } from './clamp'
 import { buddyStartInput, buddyTaskEnv, type EnvelopeFor, type RunBuddyOpts } from './run'
 import type { BuddyStore, NotebookWrite } from './store'
 
@@ -91,13 +91,8 @@ export class Buddies {
 
   /** A name match, case and spacing ignored ("inbox buddy" → Inbox Buddy). */
   byName(name: string): Buddy | null {
-    const norm = (s: string): string =>
-      s
-        .toLowerCase()
-        .replace(/[^\p{L}\p{N}]+/gu, ' ')
-        .trim()
-    const want = norm(name)
-    return want ? (this.list().find((b) => norm(b.name) === want) ?? null) : null
+    const want = buddyNameKey(name)
+    return want ? (this.list().find((b) => buddyNameKey(b.name) === want) ?? null) : null
   }
 
   summaries(): BuddySummary[] {
@@ -135,6 +130,12 @@ export class Buddies {
   update(id: string, patch: Partial<Omit<Buddy, 'id' | 'trust' | 'createdAt'>>): Buddy | null {
     const b = this.get(id)
     if (!b) return null
+    // Names stay unique: a rename to another buddy's name is refused.
+    if (patch.name !== undefined) {
+      const name = safeBuddyName(patch.name.replace(/\s+/g, ' ').trim())
+      if (buddyNameKey(name) !== buddyNameKey(b.name) && this.deps.store.nameTaken(name, id))
+        throw new Error(`You already have a buddy called ${name}.`)
+    }
     const next = this.deps.store.save({
       ...b,
       ...patch,

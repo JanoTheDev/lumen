@@ -9,9 +9,10 @@
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { BUDDY_DEFAULT_PER_RUN_USD, type Buddy } from '@shared/buddies'
-import { buddyIdFor, clampBuddy, isBuddyId } from '../buddies/clamp'
+import { buddyIdFor, buddyNameKey, clampBuddy, freeBuddyName, isBuddyId } from '../buddies/clamp'
 import {
   BUDDY_FILE,
+  BuddyStore,
   buddyFileText,
   IMPORT_MARKER,
   parseBuddyFile,
@@ -66,8 +67,13 @@ export function buddyPackKind(opts: BuddyKindOptions = {}): PackKind {
  * file could name any), and a budget per run no higher than the default. `notes` say what was
  * left out, for the import preview.
  */
-export function importedBuddy(b: Buddy): { buddy: Buddy; notes: string[] } {
+export function importedBuddy(
+  b: Buddy,
+  nameTaken: (name: string) => boolean = () => false
+): { buddy: Buddy; notes: string[] } {
   const notes: string[] = []
+  const name = freeBuddyName(b.name, nameTaken)
+  if (name !== b.name) notes.push(`Named “${name}”: you already have a buddy called ${b.name}.`)
   const { read, write } = b.permissions.files
   if (read.length || write.length)
     notes.push(
@@ -81,6 +87,7 @@ export function importedBuddy(b: Buddy): { buddy: Buddy; notes: string[] } {
   return {
     buddy: {
       ...b,
+      name,
       permissions: { ...b.permissions, files: { read: [], write: [] } },
       budget: { ...b.budget, perRunUsd },
       scheduleIds: [],
@@ -123,9 +130,19 @@ export function planBuddyArchive(
   archive: Buffer,
   root: string
 ): { id: string; buddy: Buddy; updates: boolean; notes: string[] }[] {
-  return planPacks(readZip(archive, ZIP_LIMITS), kindFor(root)).map((p) => {
+  const packs = planPacks(readZip(archive, ZIP_LIMITS), kindFor(root))
+  // Names stay unique: not one of the user's other buddies (an earlier import this replaces
+  // does not count), nor one given earlier in this archive.
+  const replaced = new Set(packs.map((p) => p.id))
+  const names = new BuddyStore(root)
+    .list()
+    .filter((b) => !replaced.has(b.id))
+    .map((b) => buddyNameKey(b.name))
+  return packs.map((p) => {
     const file = p.files.find((f) => f.name === BUDDY_FILE)!
-    const { buddy, notes } = importedBuddy(buddyFromPackFile(file.data.toString('utf8'), p.id))
+    const raw = buddyFromPackFile(file.data.toString('utf8'), p.id)
+    const { buddy, notes } = importedBuddy(raw, (n) => names.includes(buddyNameKey(n)))
+    names.push(buddyNameKey(buddy.name))
     return { id: p.id, buddy, updates: existsSync(join(root, p.id)), notes }
   })
 }
@@ -142,8 +159,10 @@ export function installBuddyArchive(
   const plan = new Map(planBuddyArchive(archive, root).map((p) => [p.id, p.buddy]))
   return installPacks(archive, { kind: kindFor(root), destRoot: root, source }).map((p) => {
     const planned = plan.get(p.id)
-    const b = planned ?? buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id)
-    writeBuddyFileAt(p.dir, importedBuddy(b).buddy)
+    const b =
+      planned ??
+      importedBuddy(buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id)).buddy
+    writeBuddyFileAt(p.dir, b)
     return { id: p.id, name: b.name, updated: p.updated }
   })
 }

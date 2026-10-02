@@ -260,6 +260,18 @@ describe('BuddyVoice', () => {
     expect(deps.call).toHaveBeenCalledTimes(1)
   })
 
+  it('drops the which question when the next words are not an answer', async () => {
+    const { v, deps } = setup([
+      buddy('price-buddy', 'Price Buddy'),
+      buddy('prize-buddy', 'Prize Buddy')
+    ])
+    await v.turn('Prise Buddy, check headphones')
+    expect(await v.turn('open the first email')).toBeNull()
+    expect(deps.call).not.toHaveBeenCalled()
+    await v.turn('Prise Buddy, check headphones')
+    expect((await v.turn('the first one'))?.text).toBe('Price Buddy <check headphones>')
+  })
+
   it('tells about a name it does not know', async () => {
     const { v } = setup([buddy('inbox-buddy', 'Inbox Buddy')])
     expect((await v.turn('stop Foo Buddy'))?.text).toBe(

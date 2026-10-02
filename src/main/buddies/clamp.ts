@@ -93,6 +93,27 @@ export function safeBuddyName(name: string): string {
   return `${name.slice(0, BUDDY_NAME_MAX - 6).trimEnd()} Buddy`
 }
 
+/** A name as calls and the uniqueness check compare it: case, spacing and marks ignored. */
+export function buddyNameKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+/** "Inbox Buddy" when free, else "Inbox Buddy 2" … (a command-like name ends in "Buddy"). */
+export function freeBuddyName(name: string, taken: (name: string) => boolean): string {
+  const base = safeBuddyName(
+    name
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, BUDDY_NAME_MAX - 3) || 'My Buddy'
+  )
+  if (!taken(base)) return base
+  for (let n = 2; n < 100; n++) if (!taken(`${base} ${n}`)) return `${base} ${n}`
+  return `${base} ${Date.now().toString(36).slice(-2)}`
+}
+
 const oneLine = (s: unknown, max: number): string =>
   typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 const bool = (v: unknown, dflt = false): boolean => (typeof v === 'boolean' ? v : dflt)
