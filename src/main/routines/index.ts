@@ -51,6 +51,8 @@ import { INVALID, safeParse } from '../ipc/validate'
 import { onConfigPatched, patchConfig } from '../ipc/settings'
 import { log } from '../logger'
 import { listSkillSummaries } from '../skills'
+import { runInUsageScope } from '../usage/scope'
+import { reminderUsageScope } from '../usage/task-scope'
 import * as assistant from '../windows/assistant'
 import * as homeWin from '../windows/home'
 import {
@@ -159,7 +161,7 @@ async function runAutomation(
   }
   if (act.kind === 'remind') {
     if (userPresent()) {
-      notice(act.say)
+      runInUsageScope(reminderUsageScope(a.id), () => notice(act.say))
       return { result: 'done', summary: act.say }
     }
     return { result: 'done', summary: act.say, taskId: queueReminder(a, act.say) }

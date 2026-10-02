@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { usageScopeForTask } from '../../src/main/usage/task-scope'
+import { reminderUsageScope, usageScopeForTask } from '../../src/main/usage/task-scope'
+import { buildRow } from '../../src/main/usage/ledger'
+import { runInUsageScope, speechOrigin, withUsageScope } from '../../src/main/usage/scope'
 import { readEvent } from '../../src/main/claude-code/events'
 
 describe('background task usage scope', () => {
@@ -42,5 +44,21 @@ describe('Claude Code result usage', () => {
       cacheRead: 300,
       cacheWrite: 40
     })
+  })
+})
+
+describe('spoken reminder usage scope (review s6 L3)', () => {
+  it("counts a reminder's cloud voice as the automation's, also from inside a user turn", () => {
+    const row = withUsageScope({ origin: 'user-direct', feature: 'answer', taskId: 't1' }, () =>
+      runInUsageScope(reminderUsageScope('morning'), () =>
+        buildRow({ provider: 'openai', model: 'tts-1', chars: 20, origin: speechOrigin('tts') })
+      )
+    )
+    expect(row).toMatchObject({
+      origin: 'automation',
+      feature: 'reminder',
+      automationId: 'morning'
+    })
+    expect(row.taskId).toBeUndefined()
   })
 })

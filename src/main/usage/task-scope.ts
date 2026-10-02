@@ -36,3 +36,11 @@ export function taskUsageScope(
   for (const k of INHERITED) if (parent[k]) inherited[k] = parent[k]
   return { ...inherited, ...own }
 }
+
+/**
+ * The scope of an automation's spoken reminder: the automation's own spend, never the user's,
+ * also when "run now" starts it from inside a turn.
+ */
+export function reminderUsageScope(automationId: string): UsageScope {
+  return { origin: 'automation', feature: 'reminder', automationId }
+}
