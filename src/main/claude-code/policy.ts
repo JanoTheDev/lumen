@@ -148,6 +148,13 @@ const EVAL_RE = /\b(iex|invoke-expression|invoke-command|start-process)\b|\s-enc
 const WRITE_EXEC_FLAG_RE =
   /^(-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)|--?(output|outfile|out-file|outdir|out-dir|output-file|output-dir|pre|pre-glob|ext-diff|exec|upload-pack|receive-pack|config|global|system)(=.*)?)$/i
 
+/**
+ * go flags that run another program (-toolexec, -vettool, -exec, the linker's -extld via
+ * -ldflags, a gccgo compiler) or swap the files and module the build reads.
+ */
+const GO_PROGRAM_FLAG_RE =
+  /^--?(toolexec|vettool|exec|overlay|modfile|pgo|ldflags|compiler|gccgoflags)(=|$)/i
+
 const SCRIPT_RE =
   /^(test|lint|typecheck|type-check|check|build|format|format:check|lint:fix)(:[\w:-]+)?$/
 const NPX_TOOLS = new Set(['vitest', 'jest', 'eslint', 'tsc', 'prettier'])
@@ -263,6 +270,7 @@ function safeSimple(w: string[], req: ToolRequest, filter: boolean): boolean {
       const subs = cmd === 'go' ? /^(test|vet|build|fmt)$/ : /^(test|build)$/
       if (!subs.test(args[0] ?? '') || args.some((a) => /^-o$|^--?o(utput)?=/i.test(a)))
         return false
+      if (cmd === 'go' && args.some((a) => GO_PROGRAM_FLAG_RE.test(a))) return false
       return pathsInside(args, req)
     }
     case 'pytest':

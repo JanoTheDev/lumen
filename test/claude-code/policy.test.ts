@@ -239,6 +239,20 @@ describe('decidePermission', () => {
     expect(decidePermission(bash('ruff check .'), 'careful').verdict).toBe('allow')
   })
 
+  it('careful asks for go flags that run another program (review H2)', () => {
+    for (const c of [
+      'go build -toolexec=./x.sh ./...',
+      'go build -toolexec ./x.sh',
+      'go vet -vettool=./x.exe ./...',
+      'go vet -vettool ./x',
+      'go build -ldflags=-extld=./x ./...',
+      'go build -overlay=o.json ./...'
+    ])
+      expect(decidePermission(bash(c), 'careful').verdict, c).toBe('ask')
+    for (const c of ['go vet ./...', 'go build ./...', 'go build -tags dev ./...'])
+      expect(decidePermission(bash(c), 'careful').verdict, c).toBe('allow')
+  })
+
   it('careful never auto-approves edits to config that runs code', () => {
     for (const f of [
       `${P}\\.git\\config`,
