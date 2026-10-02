@@ -15,6 +15,8 @@ import { runningAgentTaskId } from './session'
 import { grants, installGrants } from './grants'
 import { installBackground, notice } from './background'
 import { installBuddies } from '../buddies'
+import { installBuddyCalling } from '../buddies/calling'
+import { registerBuddiesIpc } from '../buddies/ipc'
 import { PRESENT_MS } from './background/presence'
 import { registerTasksIpc } from '../ipc/tasks'
 import { installTranscripts, interceptTaskChat } from './transcript-wire'
@@ -30,6 +32,7 @@ export function installAgentMode(): void {
   onBroadcast('settings:changed', () => setAuditStoreTypedText(loadConfig().audit.storeTypedText))
   installBackground(join(root, 'tasks'))
   installBuddies(join(root, 'buddies'))
+  installBuddyCalling()
   installTranscripts(join(root, 'tasks', 'transcripts'))
   setConfirmUi({
     ask: (card) => assistant.requestConfirm(card),
@@ -58,6 +61,7 @@ export function installAgentMode(): void {
 
 export function registerAgentModeIpc(): void {
   registerTasksIpc()
+  registerBuddiesIpc()
   ipcMain.handle('agent:grants-list', (_e, ...args: unknown[]) =>
     args.length ? INVALID : grants().list()
   )

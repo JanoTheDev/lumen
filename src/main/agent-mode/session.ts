@@ -6,7 +6,7 @@ import type { AgentTask } from '@shared/events'
 import type { ModelResponse, SkillRunRecord } from '@shared/types'
 import { newTaskState } from '../actions/safety'
 import { usageCost } from '../ai/pricing'
-import { withUsageScope } from '../usage/scope'
+import { withUsageScope, type UsageScope } from '../usage/scope'
 import { getProvider } from '../ai/providers'
 import { skillContext } from '../ai/skills'
 import { announce } from '../a11y'
@@ -607,15 +607,30 @@ export function runAgentTask(
     observedText?: string
     /** ... and the permission envelopes of the skills that task runs under. */
     underSkills?: readonly string[]
+    /**
+     * A buddy on screen (08 T52): the task runs under this envelope (guard, tools, connectors,
+     * network) and adds `scope` to its usage scope (origin buddy, buddyId).
+     */
+    underEnvelope?: {
+      make: (taskId: string, host: SkillHost) => SkillEnvelope
+      scope?: Partial<UsageScope>
+    }
   } = {}
 ): Promise<ModelResponse> {
   paused = null
   const taskId = `t_${Date.now().toString(36)}${(seq++).toString(36)}`
-  const scope = { origin: 'agent' as const, feature: 'agent-step', taskId }
+  const base = { origin: 'agent' as const, feature: 'agent-step', taskId }
+  const scope = { ...base, ...opts.underEnvelope?.scope }
   return withUsageScope(opts.skill ? { ...scope, skillId: opts.skill } : scope, () => {
-    const { skill, skillArgs, userText, observedText, underSkills, ...extra } = opts
+    const { skill, skillArgs, userText, observedText, underSkills, underEnvelope, ...extra } = opts
     const env = newEnv(taskId, userText ?? prompt, observedText)
     const context = taskContext(ctx, prompt)
+    if (underEnvelope)
+      return run(prompt, env, context, signal, {
+        ...extra,
+        noSpawn: true,
+        envelope: underEnvelope.make(taskId, skillHost)
+      })
     if (underSkills?.length) {
       const list = underSkills.map((n) => enabledSkill(n))
       if (list.some((x) => !x)) throw new Error('A skill this task runs under is off or gone.')

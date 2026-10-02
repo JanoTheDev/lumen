@@ -217,6 +217,26 @@ export const usageTasksSchema = z
   .object({ ids: z.array(z.string().min(1).max(100)).max(50) })
   .strict()
 export const fileDropSchema = z.object({ path: z.string().min(3).max(1024) }).strict()
+/** Buddies (08 T52): ids are folder names (lowercase letters, digits, inner dashes). */
+export const buddyIdSchema = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/)
+export const buddyRunSchema = z
+  .object({ id: buddyIdSchema, text: z.string().trim().max(2000).optional() })
+  .strict()
+export const buddyEnableSchema = z.object({ id: buddyIdSchema, enabled: z.boolean() }).strict()
+export const buddyScheduleAddSchema = z
+  .object({
+    id: buddyIdSchema,
+    when: z.string().trim().min(2).max(200),
+    prompt: z.string().trim().max(2000).optional(),
+    wake: z.boolean().optional()
+  })
+  .strict()
+export const buddyScheduleRemoveSchema = z
+  .object({ id: buddyIdSchema, automationId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) })
+  .strict()
+export const buddyNotebookSetSchema = z
+  .object({ id: buddyIdSchema, text: z.string().max(64 * 1024) })
+  .strict()
 export const fileIdSchema = z.string().regex(/^f_[a-z0-9]{4,40}$/)
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([

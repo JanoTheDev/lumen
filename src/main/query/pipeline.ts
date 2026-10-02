@@ -44,6 +44,7 @@ import { matchTrigger } from '../skills'
 import { loadConfig } from '../config'
 import { webTurn } from '../web'
 import { cardsTurn } from '../cards/ask'
+import { buddyTurn } from '../buddies/calling'
 import { log, startTimer } from '../logger'
 
 export interface PipelineDeps {
@@ -287,6 +288,18 @@ async function runTurn(
       await present(result, prompt, deps.onGuide, undefined, scope.signal)
       return result
     }
+  }
+  // Buddies (08 T51/T52): making or editing one by voice, then calling one by name ("Inbox
+  // Buddy, what's new?", "ask Price Buddy to …", "stop Price Buddy"). Only words that start with
+  // or clearly address a buddy, so the rest of the turn is routed as usual.
+  const buddy = opts.lowDetail ? null : await buddyTurn(prompt, scope.signal)
+  if (buddy) {
+    scope.throwIfCancelled()
+    speakEarly(buddy, deps)
+    await present(buddy, prompt, deps.onGuide, undefined, scope.signal)
+    lastMode = buddy.mode
+    addToHistory(historyExchange(prompt, buddy))
+    return buddy
   }
   // Answer cards (05 T40): "the second one", "open the cheapest", "compare them", "cheaper ones".
   const cards = opts.lowDetail ? null : await cardsTurn(prompt, scope.signal)

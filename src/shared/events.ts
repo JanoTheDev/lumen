@@ -231,6 +231,8 @@ export type AppEvent =
   | { type: 'task.changed'; task: BackgroundTask }
   /** Buddies were added, changed or removed (08 T50); `ids` = which ones. */
   | { type: 'buddies.changed'; ids: string[] }
+  /** A buddy started (active) or stopped working on screen (08 T52; T53 tags the buddy). */
+  | { type: 'buddy.working'; buddyId: string; active: boolean }
   /**
    * The focused Claude Code session on the bar (08 T39): `show` puts it up, otherwise only a
    * view already shown is updated; null takes session `id` (or any) down.

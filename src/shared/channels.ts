@@ -29,6 +29,7 @@ import type { ActiveStyle, StyleInfo } from './styles'
 import type { CardActionRequest, CardActionResult, CardsView } from './cards'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
+import type { BuddiesView, BuddyDetail, BuddyRunResult, BuddyRunSummary } from './buddy-views'
 import type {
   BuddyComposePreview,
   BuddyComposeSaveResult,
@@ -491,6 +492,31 @@ export interface InvokeChannels {
       }
     ]
     result: { ok: boolean; id?: string; error?: string }
+  }
+  /** Buddies (08 T52): list with next runs, one buddy, run now, stop, on/off, pause all. */
+  'buddies:list': { args: []; result: BuddiesView }
+  'buddies:get': { args: [id: string]; result: BuddyDetail | null }
+  'buddies:run': { args: [req: { id: string; text?: string }]; result: BuddyRunResult }
+  'buddies:stop': { args: [id: string]; result: { ok: boolean; stopped: number } }
+  'buddies:set-enabled': { args: [req: { id: string; enabled: boolean }]; result: { ok: boolean } }
+  'buddies:pause-all': { args: [paused: boolean]; result: { ok: boolean } }
+  /** Deletes the buddy and its schedules. */
+  'buddies:remove': { args: [id: string]; result: { ok: boolean } }
+  /** Its runs, newest first (task ids open the task chat). */
+  'buddies:runs': { args: [id: string]; result: BuddyRunSummary[] }
+  /** A schedule from words ("every weekday at 8"); an automation with action buddy. */
+  'buddies:schedule-add': {
+    args: [req: { id: string; when: string; prompt?: string; wake?: boolean }]
+    result: { ok: boolean; automationId?: string; error?: string }
+  }
+  'buddies:schedule-remove': {
+    args: [req: { id: string; automationId: string }]
+    result: { ok: boolean }
+  }
+  'buddies:notebook-get': { args: [id: string]; result: string }
+  'buddies:notebook-set': {
+    args: [req: { id: string; text: string }]
+    result: { ok: boolean; error?: string }
   }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
@@ -1350,6 +1376,8 @@ export interface EventChannels {
   'tasks:chat-delta': [delta: ChatDelta]
   /** A card set changed (an image loaded): re-read it with `cards:get`. */
   'cards:changed': [id: string]
+  /** Buddies changed (added, edited, a run started or ended, paused): re-read `buddies:list`. */
+  'buddies:changed': [ids: string[]]
   /** New usage lines were recorded (Settings → Usage re-reads; at most every 2 s). */
   'usage:changed': []
 }
@@ -1480,6 +1508,18 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'automations:run-now',
   'automations:draft',
   'automations:create',
+  'buddies:list',
+  'buddies:get',
+  'buddies:run',
+  'buddies:stop',
+  'buddies:set-enabled',
+  'buddies:pause-all',
+  'buddies:remove',
+  'buddies:runs',
+  'buddies:schedule-add',
+  'buddies:schedule-remove',
+  'buddies:notebook-get',
+  'buddies:notebook-set',
   'audit:list',
   'helpers:journal-days',
   'helpers:journal-read',
@@ -1629,6 +1669,7 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'tasks:changed',
   'tasks:chat-delta',
   'cards:changed',
+  'buddies:changed',
   'usage:changed'
 ]
 
