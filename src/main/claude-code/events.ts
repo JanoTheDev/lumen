@@ -6,8 +6,17 @@ import type { ClaudeSessionView } from '@shared/claude-code'
 export interface EventEffect {
   patch: Partial<ClaudeSessionView>
   /** The turn ended (a `result` event). `costUsd` is the process total so far. */
-  turnEnded?: { text: string; isError: boolean; costUsd?: number }
+  turnEnded?: { text: string; isError: boolean; costUsd?: number; usage?: TurnUsage }
   controlResponse?: { requestId: string; ok: boolean }
+}
+
+/** Token counts of a `result` event (usage ledger, 05 T43). */
+export interface TurnUsage {
+  model?: string
+  in: number
+  out: number
+  cacheRead: number
+  cacheWrite: number
 }
 
 const LINE_MAX = 160
@@ -25,6 +34,22 @@ export function oneLine(text: string, max = LINE_MAX): string {
 
 function baseName(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).pop() ?? p
+}
+
+const count = (v: unknown): number => (typeof v === 'number' && v > 0 ? v : 0)
+
+function turnUsage(ev: Obj): TurnUsage | undefined {
+  const u = ev.usage as Obj | undefined
+  if (!u || typeof u !== 'object') return undefined
+  const models =
+    ev.modelUsage && typeof ev.modelUsage === 'object' ? Object.keys(ev.modelUsage) : []
+  return {
+    ...(models[0] ? { model: models[0] } : {}),
+    in: count(u.input_tokens),
+    out: count(u.output_tokens),
+    cacheRead: count(u.cache_read_input_tokens),
+    cacheWrite: count(u.cache_creation_input_tokens)
+  }
 }
 
 /** "Running npm test" / "Editing src/x.ts": the status line for a tool call. */
@@ -102,13 +127,19 @@ export function readEvent(ev: Obj): EventEffect {
     const text = str(ev.result) ?? ''
     const isError = ev.is_error === true || (str(ev.subtype) ?? 'success') !== 'success'
     const cost = typeof ev.total_cost_usd === 'number' ? ev.total_cost_usd : undefined
+    const usage = turnUsage(ev)
     return {
       patch: {
         phase: 'idle',
         ...(text.trim() ? { lastAnswer: text.trim(), lastLine: oneLine(text) } : {}),
         ...(isError && !text.trim() ? { lastLine: 'Stopped' } : {})
       },
-      turnEnded: { text: text.trim(), isError, ...(cost !== undefined ? { costUsd: cost } : {}) }
+      turnEnded: {
+        text: text.trim(),
+        isError,
+        ...(cost !== undefined ? { costUsd: cost } : {}),
+        ...(usage ? { usage } : {})
+      }
     }
   }
   if (type === 'control_response') {

@@ -5,7 +5,8 @@
 import { EventEmitter } from 'events'
 import type { AutopilotLevel, ClaudeSessionView } from '@shared/claude-code'
 import { buildArgs, command, type ClaudeArgsInput, type SpawnCommand } from './cli'
-import { readEvent } from './events'
+import { readEvent, type TurnUsage } from './events'
+import { recordCall } from '../usage/ledger'
 import { NdjsonParser } from './ndjson'
 
 export const INTERRUPT_WAIT_MS = 3000
@@ -64,6 +65,30 @@ export function userLine(text: string): string {
  * each user turn written, 'event' (id, event) for each stream-json event read.
  */
 export const sessionTaps = new EventEmitter()
+
+/**
+ * One usage ledger line per ended turn, in its own group: paid by the user's Claude Code login
+ * or key, never part of Lumen's spend (`billing: 'claude-code'`).
+ */
+function recordClaudeTurn(ccSession: string, usd: number, usage?: TurnUsage): void {
+  try {
+    recordCall({
+      provider: 'claude-code',
+      model: usage?.model ?? 'claude-code',
+      in: usage?.in ?? 0,
+      out: usage?.out ?? 0,
+      cacheRead: usage?.cacheRead ?? 0,
+      cacheWrite: usage?.cacheWrite ?? 0,
+      usd,
+      origin: 'claude-code-copilot',
+      feature: 'claude-code',
+      ccSession,
+      billing: 'claude-code'
+    })
+  } catch (e) {
+    console.warn(`[usage] claude turn not recorded: ${(e as Error).message}`)
+  }
+}
 
 export class ClaudeSession extends EventEmitter {
   view: ClaudeSessionView
@@ -343,7 +368,9 @@ export class ClaudeSession extends EventEmitter {
       this.inFlight = Math.max(0, this.inFlight - 1)
       this.interrupting = false
       if (interrupted) patch.lastLine = 'Interrupted'
+      const before = this.procCost
       if (fx.turnEnded.costUsd !== undefined) this.procCost = fx.turnEnded.costUsd
+      recordClaudeTurn(this.view.id, Math.max(0, this.procCost - before), fx.turnEnded.usage)
       patch.costUsd = this.costBase + this.procCost
       patch.turns = this.view.turns + 1
       patch.lastActive = this.deps.now()

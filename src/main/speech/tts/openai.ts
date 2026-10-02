@@ -1,4 +1,6 @@
 // Optional cloud voice (OpenAI). Only used when the user picked it and has an OpenAI key.
+import { recordFlatCall } from '../../ai/cost'
+import { TTS1_USD_PER_MCHAR } from '../../ai/pricing'
 import { openaiClient } from '../../ai/providers/openai'
 
 export const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
@@ -21,5 +23,12 @@ export async function synthOpenAi(text: string, voice: string, rate: number): Pr
     },
     { timeout: 30000 }
   )
+  recordFlatCall({
+    provider: 'openai',
+    model: 'tts-1',
+    chars: text.length,
+    usd: (text.length / 1_000_000) * TTS1_USD_PER_MCHAR,
+    feature: 'tts'
+  })
   return Buffer.from(await res.arrayBuffer()).toString('base64')
 }

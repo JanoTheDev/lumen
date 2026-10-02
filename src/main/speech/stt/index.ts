@@ -4,6 +4,8 @@
 // it hears.
 import { toFile } from 'openai'
 import type { SttStatus } from '@shared/channels'
+import { recordFlatCall } from '../../ai/cost'
+import { WHISPER_USD_PER_MIN } from '../../ai/pricing'
 import { openaiClient } from '../../ai/providers/openai'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
@@ -144,6 +146,14 @@ async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<
     },
     { timeout: 60000 }
   )
+  const audioSec = typeof result.duration === 'number' ? result.duration : 0
+  recordFlatCall({
+    provider: 'openai',
+    model: 'whisper-1',
+    audioSec,
+    usd: (audioSec / 60) * WHISPER_USD_PER_MIN,
+    feature: 'stt'
+  })
   const detected = lang === 'auto' ? result.language : undefined
   if (lang === 'auto') noteDetectedLanguage(detected)
   log('time', 'stt cloud', { timeMs: Date.now() - t0, ...(detected ? { lang: detected } : {}) })
