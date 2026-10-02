@@ -68,6 +68,7 @@ import { registerAnswerIpc } from './ipc/answer'
 import { registerGuidesIpc } from './ipc/guides'
 import { registerTeachIpc } from './ipc/teach'
 import { registerSkillsIpc } from './ipc/skills'
+import { registerBuddyCreationIpc } from './buddies/ipc-create'
 import { registerBridgesIpc } from './ipc/bridges'
 import { registerConnectorsIpc } from './ipc/connectors'
 import { registerPluginsIpc } from './plugins'
@@ -161,6 +162,7 @@ function registerIpc(): void {
   registerUsageIpc()
   registerAgentIpc()
   registerAgentModeIpc()
+  registerBuddyCreationIpc()
   registerRoutinesIpc()
   registerClaudeCodeIpc()
   registerKeysIpc()

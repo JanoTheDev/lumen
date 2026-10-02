@@ -71,6 +71,48 @@ export const skillTokenSchema = z.string().regex(/^[a-f0-9]{24}$/)
 /** "Write it for me": what the skill should do, in the user's words. */
 export const skillComposeSchema = z.string().trim().min(4).max(2000)
 
+/** Buddies (08 T51): "Make a buddy for me", saving a reviewed draft, export / import. */
+export const buddyComposeSchema = z
+  .object({ description: z.string().trim().min(4).max(2000) })
+  .strict()
+const buddyDraftSchema = z
+  .object({
+    name: z.string().trim().min(1).max(40),
+    look: z
+      .object({
+        color: z.string().max(7),
+        emoji: z.string().max(16).optional(),
+        initial: z.string().max(2).optional()
+      })
+      .strict(),
+    description: z.string().max(300),
+    instructions: z.string().max(8000),
+    // Clamped to least privilege on save (buddies/clamp).
+    permissions: z.record(z.string(), z.unknown()),
+    model: z.enum(['fast', 'main', 'planning']),
+    report: z.enum(['notify', 'spoken', 'silent', 'cards']),
+    budget: z
+      .object({
+        perRunUsd: z.number(),
+        perMonthUsd: z.number().optional(),
+        perMonthTokens: z.number().optional()
+      })
+      .strict(),
+    skills: z.array(z.string().max(64)).max(20),
+    subagents: z.boolean(),
+    // Only the phrase is used: it is parsed again on save.
+    schedule: z
+      .object({ text: z.string().max(120), trigger: z.unknown(), description: z.string().max(200) })
+      .strict()
+      .optional()
+  })
+  .strict()
+export const buddyComposeSaveSchema = z.object({ draft: buddyDraftSchema }).strict()
+export const buddyExportSchema = z
+  .object({ id: z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/) })
+  .strict()
+export const buddyImportSchema = z.object({ token: z.string().regex(/^[a-f0-9]{24}$/) }).strict()
+
 /** Onboarding practice board button labels. */
 export const practiceLabelSchema = z.enum(['Send', 'Save', 'Delete', 'Cancel'])
 /** App bridges (07 T23–T26). */

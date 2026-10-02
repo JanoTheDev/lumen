@@ -29,6 +29,13 @@ import type { ActiveStyle, StyleInfo } from './styles'
 import type { CardActionRequest, CardActionResult, CardsView } from './cards'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
+import type {
+  BuddyComposePreview,
+  BuddyComposeSaveResult,
+  BuddyDraft,
+  BuddyImportPreview,
+  BuddyImportResult
+} from './buddies'
 import type { BackgroundTask } from './types'
 import type { UsageCalls, UsageCallsFilter, UsageCost, UsageRange, UsageReport } from './usage'
 import type { ChatControlOp, ChatDelta, ChatSteerResult, ChatSummary, ChatView } from './task-chat'
@@ -602,6 +609,19 @@ export interface InvokeChannels {
     args: [token: string, text: string]
     result: { ok: true; name: string } | { ok: false; error: string; problems?: string[] }
   }
+  /** Buddies (08 T51) "Make a buddy for me": the model's draft from a description; nothing saved. */
+  'buddies:compose': { args: [req: { description: string }]; result: BuddyComposePreview }
+  /** Saves a reviewed draft as the user's own buddy (its schedule through the scheduler port). */
+  'buddies:compose-save': { args: [req: { draft: BuddyDraft }]; result: BuddyComposeSaveResult }
+  /** Saves a buddy as a `.lumen` file (save dialog; no notebook, schedules or folders). */
+  'buddies:export': {
+    args: [req: { id: string }]
+    result: { ok: boolean; path?: string; error?: string }
+  }
+  /** Import step 1: pick a `.lumen` file and show each buddy's permissions. */
+  'buddies:import-preview': { args: []; result: BuddyImportPreview }
+  /** Import step 2: install as community-untrusted. */
+  'buddies:import': { args: [req: { token: string }]; result: BuddyImportResult }
   /** App bridges (07 T23–T26): live status of each, for Settings → App helpers. */
   'bridges:status': { args: []; result: BridgeStatus[] }
   'bridges:test': { args: [id: BridgeId]; result: BridgeStatus }
@@ -1513,6 +1533,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'skills:runs',
   'skills:compose',
   'skills:compose-save',
+  'buddies:compose',
+  'buddies:compose-save',
+  'buddies:export',
+  'buddies:import-preview',
+  'buddies:import',
   'bridges:status',
   'bridges:test',
   'bridges:blender-addon',
