@@ -79,9 +79,38 @@ const CARD_GROUPS_RE =
 /** The text holds a number that passes the card check (Luhn), grouped or not (full-width
  * digits count as digits). */
 export function hasCardNumber(text: string): boolean {
+  return cardNumbers(text).length > 0
+}
+
+/** The digits of every number in text that passes the card check (Luhn). */
+export function cardNumbers(text: string): string[] {
   const t = text.normalize('NFKC')
-  if (findSensitive(t).some((h) => h.kind === 'card')) return true
-  return [...t.matchAll(CARD_GROUPS_RE)].some((m) => luhn(m[0].replace(/\D/g, '')))
+  const runs = [
+    ...findSensitive(t)
+      .filter((h) => h.kind === 'card')
+      .map((h) => t.slice(h.start, h.end)),
+    ...[...t.matchAll(CARD_GROUPS_RE)].map((m) => m[0])
+  ].map((r) => r.replace(/\D/g, ''))
+  return [...new Set(runs.filter((d) => luhn(d)))]
+}
+
+/**
+ * The digits also have a card network's prefix and length (Visa, Mastercard, Amex, Discover,
+ * JCB, Diners, UnionPay, Maestro). An IMEI or a long order number can pass Luhn without that.
+ */
+export function cardShaped(digits: string): boolean {
+  const n = digits.length
+  const p = (k: number): number => Number(digits.slice(0, k))
+  if (digits[0] === '4') return n === 13 || n === 16 || n === 19
+  if ((p(2) >= 51 && p(2) <= 55) || (p(4) >= 2221 && p(4) <= 2720)) return n === 16
+  if (p(2) === 34 || p(2) === 37) return n === 15
+  if (p(4) === 6011 || (p(3) >= 644 && p(3) <= 649) || p(2) === 65 || p(2) === 62)
+    return n >= 16 && n <= 19
+  if (p(4) >= 3528 && p(4) <= 3589) return n >= 16 && n <= 19
+  if ((p(3) >= 300 && p(3) <= 305) || p(2) === 36 || p(2) === 38 || p(2) === 39)
+    return n >= 14 && n <= 19
+  if (p(2) === 50 || (p(2) >= 56 && p(2) <= 69)) return n >= 12 && n <= 19
+  return false
 }
 
 function redactCardGroups(text: string): string {

@@ -3,7 +3,12 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('../../src/main/agent/instance', () => ({ getAgent: () => null }))
 
 import { findPrice, PRICE_NOT_READ, withCheckoutPrice } from '../../src/main/actions/checkout-price'
-import { hasCardNumber, redactForLog, redactForModel } from '../../src/main/actions/redact'
+import {
+  cardShaped,
+  hasCardNumber,
+  redactForLog,
+  redactForModel
+} from '../../src/main/actions/redact'
 import { luhn } from '../../src/main/ai/memory/sensitive'
 import type { Decision } from '../../src/main/actions/safety'
 
@@ -34,6 +39,19 @@ describe('hasCardNumber', () => {
   ])('finds %s (dots, underscores, double spaces, full-width digits; review M2)', (t) => {
     expect(hasCardNumber(t)).toBe(true)
   })
+})
+
+describe('cardShaped (review M5)', () => {
+  it.each([
+    '4242424242424242',
+    '5555555555554444',
+    '378282246310005',
+    '6011111111111117',
+    '3530111333300000'
+  ])('%s has a card network prefix and length', (d) => expect(cardShaped(d)).toBe(true))
+  it.each(['490154203237518', '12345678903', '9999999999999995'])('%s does not', (d) =>
+    expect(cardShaped(d)).toBe(false)
+  )
 })
 
 describe('payment redaction', () => {

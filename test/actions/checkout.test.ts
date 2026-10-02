@@ -258,6 +258,31 @@ describe('payment fields', () => {
     expect(d.reason).toMatch(/card number/)
   })
 
+  it('an IMEI passes Luhn but is no card: it asks instead of blocking (review M5)', () => {
+    const d = evaluate({ type: 'type', text: '490154203237518' }, field('IMEI'))
+    expect(d.risk).toBe('high')
+    expect(d.needsConfirm).toBe(true)
+    expect(d.reason).toContain('•••• 7518')
+  })
+
+  it.each([
+    ['Excel', { title: 'Orders.xlsx - Excel', process: 'EXCEL.EXE', focusName: 'A1' }],
+    ['a search box', { focusName: 'Search orders' }],
+    ['Notepad', { title: 'ids.txt - Notepad', process: 'notepad.exe', focusName: 'Text editor' }]
+  ])('a card-shaped number in %s asks instead of blocking (review M5)', (_where, w) => {
+    const d = evaluate(
+      { type: 'type', text: '4242424242424242' },
+      { origin: 'agent', activeWindow: { ...browser, focusKnown: true, focusRole: 'edit', ...w } }
+    )
+    expect(d.risk).toBe('high')
+  })
+
+  it('a card-shaped number in a form field stays blocked', () => {
+    expect(evaluate({ type: 'type', text: '4242 4242 4242 4242' }, field('IMEI')).risk).toBe(
+      'blocked'
+    )
+  })
+
   it('a number that fails Luhn is not a card', () => {
     const d = evaluate({ type: 'type', text: '4242 4242 4242 4241' }, field('Message'))
     expect(d.risk).not.toBe('blocked')

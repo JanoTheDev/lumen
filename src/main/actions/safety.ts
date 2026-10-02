@@ -4,13 +4,14 @@
 // helpers (assertSafeUrl, classifyHotkey) stay for Lumen's own UI and the a11y voice commands.
 import { domainToUnicode } from 'url'
 import type { InputStep } from '@shared/types'
-import { findSecrets, hasCardNumber, maskSecrets } from './redact'
+import { cardNumbers, cardShaped, findSecrets, maskSecrets } from './redact'
 import {
   checkoutName,
   isNoSendFieldName,
   isPaymentFieldName,
   isPersonalFieldName,
   isRecipientName,
+  isSearchFieldName,
   isSendName,
   mailRiskyName,
   riskyName
@@ -768,7 +769,7 @@ function typeFindings(
     const field = fieldName ?? w?.focusName
     // set_value replaces the value; typing appends to what the field holds.
     const before = fieldName === undefined ? w?.focusValue : undefined
-    if (paymentFindings(text, field, before, out)) return
+    if (paymentFindings(text, field, before, w, out)) return
     if (w?.focusKnown === false)
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
     if (isMail(w)) mailTypeFindings(text, field, ctx, out)
@@ -824,31 +825,62 @@ function checkoutFinding(word: string): Finding {
   return { risk: 'high', reason: `books or pays: “${word}”`, checkout: word }
 }
 
-/** The field's value plus the typed text makes a card number it did not hold before. */
-function completesCard(text: string, before: string | undefined): boolean {
-  if (!before || hasCardNumber(before)) return false
-  return hasCardNumber(before.slice(-40) + text)
+/** Card-check numbers the typed text holds, or makes with what the field held before. */
+function typedCardNumbers(text: string, before: string | undefined): string[] {
+  const own = cardNumbers(text)
+  if (!before) return own
+  const held = new Set(cardNumbers(before))
+  return [...new Set([...own, ...cardNumbers(before.slice(-40) + text)])].filter(
+    (d) => !held.has(d)
+  )
+}
+
+const SPREADSHEET_PROCESSES = new Set(['excel.exe', 'scalc.exe', 'soffice.bin', 'et.exe'])
+const EDITOR_PROCESSES = new Set([
+  'notepad.exe',
+  'notepad++.exe',
+  'winword.exe',
+  'swriter.exe',
+  'wordpad.exe',
+  'obsidian.exe',
+  'onenote.exe'
+])
+const SHEET_OR_EDITOR_TITLE_RE =
+  /(?:- (?:excel|word|notepad|libreoffice calc|libreoffice writer)|google (?:sheets|docs))/i
+
+/** A spreadsheet, a text editor or a search box: long numbers there are data, not a card. */
+function clearlyNotPayment(w: WindowInfo | undefined, field: string | undefined): boolean {
+  if (isSearchFieldName(field)) return true
+  const proc = lower(w?.process)
+  if (SPREADSHEET_PROCESSES.has(proc) || EDITOR_PROCESSES.has(proc) || isIde(w)) return true
+  return SHEET_OR_EDITOR_TITLE_RE.test(w?.title ?? '')
 }
 
 /**
  * Card numbers, CVCs and IBANs are the user's to type: an agent never types into a payment
- * field, and never types a number that passes the card check (Luhn) anywhere, also not in
- * parts ("4242 4242 " then "4242 4242").
+ * field, and never types a card number (Luhn check, a card network's prefix and length),
+ * also not in parts ("4242 4242 " then "4242 4242"). In a spreadsheet, editor or search box,
+ * or for a Luhn-valid number no card network uses (an IMEI), it asks instead.
  */
 function paymentFindings(
   text: string,
   field: string | undefined,
   before: string | undefined,
+  w: WindowInfo | undefined,
   out: Finding[]
 ): boolean {
   if (isPaymentFieldName(field)) {
     out.push({ risk: 'blocked', reason: 'never types into a payment field (you type those)' })
     return true
   }
-  if (hasCardNumber(text) || completesCard(text, before)) {
+  const cards = typedCardNumbers(text, before)
+  if (!cards.length) return false
+  if (cards.some(cardShaped) && !clearlyNotPayment(w, field)) {
     out.push({ risk: 'blocked', reason: 'never types a card number (you type those)' })
     return true
   }
+  const masked = cards.map((d) => `•••• ${d.slice(-4)}`).join(', ')
+  out.push({ risk: 'high', reason: `types a number that passes the card check (${masked})` })
   return false
 }
 

@@ -753,6 +753,11 @@ export function isPaymentFieldName(name: string | undefined): boolean {
   return PAYMENT_RE.test(plainWords(name))
 }
 
+/** A search box ("Search", "Search orders", "Zoeken"). */
+export function isSearchFieldName(name: string | undefined): boolean {
+  return !!name && SEARCH_RE.test(fold(name))
+}
+
 /** A name / email / phone / address / birth date field, any listed language. */
 export function isPersonalFieldName(name: string | undefined): boolean {
   if (!name?.trim() || SEARCH_RE.test(fold(name))) return false
