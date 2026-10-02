@@ -41,6 +41,10 @@ const NOUN =
   '(?:one|option|choice|result|card|item|hotel|place|room|apartment|flat|house|villa|hostel|product|deal|offer|flight|train|trip|recipe|restaurant|car)'
 const NUM_WORDS: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5 }
 
+/** Up to 12 cards: the web ordinals stop at tenth (news picks). */
+const cardOrdinal = (w: string): number | null =>
+  ({ eleventh: 10, '11th': 10, twelfth: 11, '12th': 11 })[w] ?? ordinal(w)
+
 /** The pick a phrase names ("the second one", "the cheapest", "the one near the beach"). */
 export function parsePick(raw: string): Pick | null {
   const full = clean(raw)
@@ -48,7 +52,7 @@ export function parsePick(raw: string): Pick | null {
   const t = full.replace(/^(?:the|that|this) /, '')
   const pos = new RegExp(`^(${POS})(?: ${NOUN})?$`).exec(t)
   if (pos) {
-    const i = ordinal(pos[1].replace(/^#/, ''))
+    const i = cardOrdinal(pos[1].replace(/^#/, ''))
     if (i !== null) return { by: 'index', index: i }
   }
   if (new RegExp(`^(?:cheapest|least expensive|lowest priced|lowest price)(?: ${NOUN})?$`).test(t))

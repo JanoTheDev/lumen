@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AnswerCards } from '../../src/shared/cards'
-import { parseCardIntent, parsePick, resolvePick } from '../../src/main/cards/followups'
+import {
+  foreignCardPhrase,
+  parseCardIntent,
+  parsePick,
+  resolvePick
+} from '../../src/main/cards/followups'
 import { CardsStore } from '../../src/main/cards/store'
 import {
   FOLLOWUP_TTL_MS,
@@ -106,6 +111,18 @@ describe('resolvePick', () => {
     mixed[1] = { ...mixed[1], price: { amount: 40, currency: 'EUR', sourceId: 's1' } }
     mixed[2] = { ...mixed[2], price: { amount: 30, currency: 'EUR', sourceId: 's1' } }
     expect(resolvePick({ by: 'cheapest' }, mixed)).toMatchObject({ ok: true, index: 2 })
+  })
+  it('picks the eleventh and twelfth of twelve cards', () => {
+    expect(parseCardIntent('open the eleventh one')).toEqual({
+      kind: 'open',
+      pick: { by: 'index', index: 10 }
+    })
+    expect(parseCardIntent('the 12th one')).toEqual({
+      kind: 'select',
+      pick: { by: 'index', index: 11 }
+    })
+    expect(foreignCardPhrase('de twaalfde', 'nl')).toBe('the twelfth one')
+    expect(parseCardIntent('the twelfth one')).toMatchObject({ pick: { by: 'index', index: 11 } })
   })
   it('says why when it cannot pick', () => {
     expect(resolvePick({ by: 'index', index: 7 }, cards)).toMatchObject({
@@ -266,6 +283,22 @@ describe('handleCardsTurn', () => {
     )
     resetCardFocus()
     expect(await handleCardsTurn('is it raining', signal, d)).toBeNull()
+  })
+
+  it('the card strip "More" on the twelfth card reaches that card', async () => {
+    const base = hotelCards()
+    const many: AnswerCards = {
+      ...base,
+      cards: Array.from({ length: 12 }, (_, i) => ({
+        ...base.cards[2],
+        id: `m${i + 1}`,
+        title: `Villa ${i + 1}`
+      }))
+    }
+    const r = await handleCardsTurn('Tell me more about the twelfth one', signal, setup({}, many))
+    expect(r && 'response' in r && r.response.mode === 'answer' && r.response.text).toMatch(
+      /^The twelfth one is Villa 12\./
+    )
   })
 
   it('without a model, "tell me more" reads the card', async () => {
