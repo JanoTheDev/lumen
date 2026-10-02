@@ -88,8 +88,8 @@ const COMMAND_VERBS = new Set([
  */
 export function safeBuddyName(name: string): string {
   const words = name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
-  if (!words.length || !COMMAND_VERBS.has(words[0]) || words[words.length - 1] === 'buddy')
-    return name
+  const [first, last] = [words[0], words[words.length - 1]]
+  if (!first || !COMMAND_VERBS.has(first) || last === 'buddy') return name
   return `${name.slice(0, BUDDY_NAME_MAX - 6).trimEnd()} Buddy`
 }
 
