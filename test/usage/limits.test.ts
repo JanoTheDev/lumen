@@ -163,4 +163,16 @@ describe('usage limits', () => {
     expect(limitState({ kind: 'overall' }).usd).toBe(0)
     expect(notices).toEqual([])
   })
+
+  it('warns the user again after a raised overall cap is passed (review L5)', () => {
+    limits = { monthlyUsd: 1, automations: {} }
+    call(2)
+    call(0.1, { origin: 'user-direct' })
+    expect(warnings).toHaveLength(1)
+    limits = { monthlyUsd: 10, automations: {} }
+    call(0.1)
+    call(8)
+    call(0.1, { origin: 'user-direct' })
+    expect(warnings).toHaveLength(2)
+  })
 })

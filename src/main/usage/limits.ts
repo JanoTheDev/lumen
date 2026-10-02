@@ -307,14 +307,21 @@ function bump(key: string, month: string, row: UsageRow): void {
   hit.tokens += row.in + row.out
 }
 
+/** Takes a scope out of paused; the overall cap's one also re-arms the user's warning. */
+function unpause(key: string, s: SavedState): void {
+  if (!s.paused.includes(key)) return
+  s.paused = s.paused.filter((k) => k !== key)
+  if (key === 'all') s.userWarned = false
+}
+
 function check(scope: LimitScope, s: SavedState): boolean {
   const st = limitState(scope)
   const key = scopeKey(scope)
   if (st.level === 'none' || st.level === 'ok') {
     // A raised cap: the next crossing gets its notice again.
     const before = s.warned.length + s.paused.length
+    unpause(key, s)
     s.warned = s.warned.filter((k) => k !== key)
-    s.paused = s.paused.filter((k) => k !== key)
     return s.warned.length + s.paused.length !== before
   }
   if (st.level === 'paused') {
@@ -328,7 +335,7 @@ function check(scope: LimitScope, s: SavedState): boolean {
   }
   let changed = false
   if (s.paused.includes(key)) {
-    s.paused = s.paused.filter((k) => k !== key)
+    unpause(key, s)
     changed = true
   }
   if (!s.warned.includes(key)) {
