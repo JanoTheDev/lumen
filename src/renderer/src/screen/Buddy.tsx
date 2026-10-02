@@ -40,6 +40,8 @@ export interface BuddyProps {
   view: Size
   cfg: BuddyConfig
   fontPx: number
+  /** A buddy working on screen (08 T53): its colour and a name tag beside the arrow. */
+  worker?: ScreenScene['worker']
 }
 
 const FADE_MS = 120
@@ -84,7 +86,8 @@ class BuddyMotion {
 
   constructor(
     private body: HTMLDivElement,
-    private pulse: HTMLDivElement
+    private pulse: HTMLDivElement,
+    private tag: HTMLDivElement | null = null
   ) {}
 
   dispose(): void {
@@ -97,6 +100,7 @@ class BuddyMotion {
     if (on === this.visible) return
     this.visible = on
     fade(this.body, on ? 1 : 0)
+    fade(this.tag, on ? 1 : 0)
   }
 
   /** Flies (or under reduced motion, fades) to the anchor. */
@@ -279,13 +283,15 @@ class BuddyMotion {
     const y = this.pos.y + Math.sin(rad) * offset
     this.body.style.transform = `translate3d(${x}px, ${y}px, 0) rotate(${this.angle}deg) scale(${this.scale})`
     this.pulse.style.transform = `translate3d(${this.pos.x}px, ${this.pos.y}px, 0)`
+    if (this.tag) this.tag.style.transform = `translate3d(${x}px, ${y}px, 0)`
   }
 }
 
 export function Buddy(props: BuddyProps): JSX.Element {
-  const { buddy, targetRect, avoid, cursor, view, cfg, fontPx } = props
+  const { buddy, targetRect, avoid, cursor, view, cfg, fontPx, worker } = props
   const bodyRef = useRef<HTMLDivElement>(null)
   const pulseRef = useRef<HTMLDivElement>(null)
+  const tagRef = useRef<HTMLDivElement>(null)
   const labelRef = useRef<HTMLDivElement>(null)
   const motion = useRef<BuddyMotion | null>(null)
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -293,7 +299,7 @@ export function Buddy(props: BuddyProps): JSX.Element {
   const showArrow = cfg.enabled
 
   useLayoutEffect(() => {
-    const m = new BuddyMotion(bodyRef.current!, pulseRef.current!)
+    const m = new BuddyMotion(bodyRef.current!, pulseRef.current!, tagRef.current)
     motion.current = m
     return () => m.dispose()
   }, [])
@@ -387,8 +393,22 @@ export function Buddy(props: BuddyProps): JSX.Element {
           style={{ left: -box, top: -box }}
         >
           <path className="sl-buddy__halo" d={d} />
-          <path className="sl-buddy__fill" d={d} style={{ fill: fillOf(cfg.color) }} />
+          <path
+            className="sl-buddy__fill"
+            d={d}
+            style={{ fill: fillOf(worker?.color ?? cfg.color) }}
+          />
         </svg>
+      </div>
+      <div
+        ref={tagRef}
+        className={`sl-buddy-tag${worker && showArrow ? '' : ' is-off'}`}
+        aria-hidden="true"
+      >
+        <span className="sl-buddy-tag__pill">
+          <span className="sl-buddy-tag__dot" style={{ background: fillOf(worker?.color ?? '') }} />
+          {worker?.name}
+        </span>
       </div>
       <div
         ref={labelRef}

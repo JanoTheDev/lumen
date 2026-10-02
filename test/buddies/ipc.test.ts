@@ -8,6 +8,7 @@ import type { BackgroundTask } from '@shared/types'
 const h = vi.hoisted(() => ({
   homeSend: vi.fn(),
   panelSend: vi.fn(),
+  setWorkingBuddy: vi.fn(),
   handlers: new Map<string, (...a: unknown[]) => unknown>()
 }))
 
@@ -18,6 +19,8 @@ vi.mock('electron', () => ({
 }))
 vi.mock('../../src/main/windows/home', () => ({ send: h.homeSend }))
 vi.mock('../../src/main/windows/settings', () => ({ send: h.panelSend }))
+vi.mock('../../src/main/windows/screen-layer', () => ({ setWorkingBuddy: h.setWorkingBuddy }))
+vi.mock('../../src/main/buddies/compose', () => ({ parseSchedule: vi.fn() }))
 vi.mock('../../src/main/agent-mode/background', () => ({ notice: vi.fn() }))
 vi.mock('../../src/main/routines', () => ({
   automations: () => ({ list: () => [] }),
@@ -34,7 +37,9 @@ vi.mock('../../src/main/buddies/index', () => ({
   buddyNotebook: () => '',
   buddyRuns: () => [],
   buddySummaries: () => [],
-  getBuddy: () => null,
+  getBuddy: (id: string) =>
+    id === 'price-buddy' ? { id, name: 'Price Buddy', look: { color: '#e0705a' } } : null,
+  updateBuddy: vi.fn(),
   removeBuddy: () => false,
   setBuddyEnabled: () => null,
   setBuddyNotebook: () => 'missing'
@@ -115,6 +120,11 @@ function deps(p: Partial<BuddiesIpcDeps> = {}): BuddiesIpcDeps {
     removeSchedule: vi.fn(() => true),
     notebook: () => 'notes',
     setNotebook: vi.fn(() => 'too-long' as const),
+    update: vi.fn((id: string, fields: Partial<Buddy>) => ({ id, ...fields }) as Buddy),
+    parseWhen: (when) =>
+      when.includes('weekday')
+        ? { ok: true, description: 'every weekday at 08:00' }
+        : { ok: false, error: 'Not a time I know.' },
     ...p
   }
 }
@@ -217,6 +227,56 @@ describe('buddies IPC handlers', () => {
   })
 })
 
+describe('buddies:update and schedule phrases (08 T53)', () => {
+  it('validates the fields, refuses unknown buddies and saves through the store', () => {
+    const d = deps()
+    const t = buddiesIpcHandlers(d)
+    expect(t['buddies:update']({ id: 'inbox-buddy' })).toEqual(INVALID)
+    expect(t['buddies:update']({ id: 'inbox-buddy', fields: { trust: 'mine' } })).toEqual(INVALID)
+    expect(t['buddies:update']({ id: 'inbox-buddy', fields: { model: 'huge' } })).toEqual(INVALID)
+    expect(t['buddies:update']({ id: 'nope', fields: { name: 'X' } })).toEqual({
+      ok: false,
+      error: 'There is no such buddy.'
+    })
+    const fields = {
+      name: 'Mail Buddy',
+      look: { color: '#4fb286', emoji: '📬' },
+      permissions: { input: false, network: ['https://example.org'] },
+      budget: { perRunUsd: 0.1, perMonthUsd: 3 },
+      subagents: true
+    }
+    expect(t['buddies:update']({ id: 'inbox-buddy', fields })).toMatchObject({
+      ok: true,
+      buddy: { id: 'inbox-buddy', name: 'Mail Buddy' }
+    })
+    expect(d.update).toHaveBeenCalledWith('inbox-buddy', fields)
+    const thrown = buddiesIpcHandlers(
+      deps({
+        update: () => {
+          throw new Error('disk full')
+        }
+      })
+    )
+    expect(thrown['buddies:update']({ id: 'inbox-buddy', fields: { subagents: false } })).toEqual({
+      ok: false,
+      error: 'disk full'
+    })
+  })
+
+  it('says a schedule phrase back or why not', () => {
+    const t = buddiesIpcHandlers(deps())
+    expect(t['buddies:schedule-parse']('')).toEqual(INVALID)
+    expect(t['buddies:schedule-parse']('every weekday at 8')).toEqual({
+      ok: true,
+      description: 'every weekday at 08:00'
+    })
+    expect(t['buddies:schedule-parse']('sometimes')).toEqual({
+      ok: false,
+      error: 'Not a time I know.'
+    })
+  })
+})
+
 describe('buddies:changed', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
@@ -231,6 +291,11 @@ describe('buddies:changed', () => {
     expect(h.homeSend).toHaveBeenCalledTimes(1)
     expect(h.homeSend).toHaveBeenCalledWith('buddies:changed', ['inbox-buddy', 'price-buddy'])
     expect(h.panelSend).toHaveBeenCalledWith('buddies:changed', ['inbox-buddy', 'price-buddy'])
+    // The on-screen buddy takes the working buddy's colour and name tag.
+    expect(h.setWorkingBuddy).toHaveBeenLastCalledWith({ name: 'Price Buddy', color: '#e0705a' })
+    bus.emit({ type: 'buddy.working', buddyId: 'price-buddy', active: false })
+    expect(h.setWorkingBuddy).toHaveBeenLastCalledWith(null)
+    vi.advanceTimersByTime(200)
     h.homeSend.mockClear()
     const task = { id: 'bg_x1', buddyId: 'inbox-buddy', phase: 'running' } as BackgroundTask
     bus.emit({ type: 'task.changed', task })

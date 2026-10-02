@@ -93,7 +93,10 @@ const drawingSchema = z.object({
     h: z.number().finite()
   })
 })
-const routeSchema = z.string().regex(/^(settings(\/[a-z-]{1,32})?|onboarding|home)$/)
+// settings/<section>, and settings/buddies/<id or _new> for one buddy's page (08 T53).
+const routeSchema = z
+  .string()
+  .regex(/^(settings(\/[a-z-]{1,32}(\/[a-z0-9_-]{1,40})?)?|onboarding|home)$/)
 
 const TRY_ANNOUNCE = 'This is how Lumen tells you what it is doing.'
 const RECENT_MAX = 5

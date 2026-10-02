@@ -98,6 +98,19 @@ describe('screen layer scene', () => {
     expect(lastScene(w).highlights).toHaveLength(0)
   })
 
+  it('tags the buddy with a working buddy through clear(), not in screenshots (08 T53)', () => {
+    const w = wins[0]
+    layer.setWorkingBuddy({ name: 'Price Buddy', color: '#e0705a' })
+    expect(lastScene(w).worker).toEqual({ name: 'Price Buddy', color: '#e0705a' })
+    layer.clear()
+    expect(lastScene(w).worker).toEqual({ name: 'Price Buddy', color: '#e0705a' })
+    layer.hide()
+    expect(lastScene(w).worker).toBeUndefined()
+    layer.show()
+    layer.setWorkingBuddy(null)
+    expect(lastScene(w).worker).toBeUndefined()
+  })
+
   it('shows failure for 1.5s', () => {
     const w = wins[0]
     layer.flashFailure({ x: 1, y: 1, w: 10, h: 10 })

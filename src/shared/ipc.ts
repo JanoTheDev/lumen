@@ -237,6 +237,15 @@ export const buddyScheduleRemoveSchema = z
 export const buddyNotebookSetSchema = z
   .object({ id: buddyIdSchema, text: z.string().max(64 * 1024) })
   .strict()
+/** Settings → Buddies (08 T53): changed fields of one buddy, clamped on save. */
+export const buddyUpdateSchema = z
+  .object({
+    id: buddyIdSchema,
+    fields: buddyDraftSchema.omit({ description: true, schedule: true }).partial().strict()
+  })
+  .strict()
+/** A schedule phrase checked before it is added ("every weekday at 8"). */
+export const buddyWhenSchema = z.string().trim().min(2).max(200)
 export const fileIdSchema = z.string().regex(/^f_[a-z0-9]{4,40}$/)
 export const confidenceSchema = z.enum(['high', 'medium', 'low']).optional()
 export const dwellPickSchema = z.enum([

@@ -145,6 +145,7 @@ export function ScreenApp(): JSX.Element {
         view={view}
         cfg={buddyCfg}
         fontPx={fontPx}
+        worker={scene?.worker}
       />
       <DwellRing />
       <CaptureLayer />

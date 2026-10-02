@@ -29,7 +29,15 @@ import type { ActiveStyle, StyleInfo } from './styles'
 import type { CardActionRequest, CardActionResult, CardsView } from './cards'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
-import type { BuddiesView, BuddyDetail, BuddyRunResult, BuddyRunSummary } from './buddy-views'
+import type {
+  BuddiesView,
+  BuddyDetail,
+  BuddyEditable,
+  BuddyRunResult,
+  BuddyRunSummary,
+  BuddyUpdateResult,
+  BuddyWhenResult
+} from './buddy-views'
 import type {
   BuddyComposePreview,
   BuddyComposeSaveResult,
@@ -527,6 +535,13 @@ export interface InvokeChannels {
     args: [req: { id: string; text: string }]
     result: { ok: boolean; error?: string }
   }
+  /** Settings → Buddies (08 T53): saves edited fields (clamped to least privilege). */
+  'buddies:update': {
+    args: [req: { id: string; fields: Partial<BuddyEditable> }]
+    result: BuddyUpdateResult
+  }
+  /** Checks a schedule phrase and says it back ("every weekday at 08:00"); nothing saved. */
+  'buddies:schedule-parse': { args: [when: string]; result: BuddyWhenResult }
   /** One day of the action audit log (YYYY-MM-DD), optionally one task's lines (08 T04). */
   'audit:list': { args: [query: { date: string; taskId?: string }]; result: AuditLine[] }
   /** Learning journal (11 T23): days with a note, newest first; one day's markdown. */
@@ -1530,6 +1545,8 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'buddies:schedule-remove',
   'buddies:notebook-get',
   'buddies:notebook-set',
+  'buddies:update',
+  'buddies:schedule-parse',
   'audit:list',
   'helpers:journal-days',
   'helpers:journal-read',

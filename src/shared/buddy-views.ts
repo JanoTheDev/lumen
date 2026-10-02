@@ -34,6 +34,24 @@ export interface BuddyDetail {
   onScreen: boolean
 }
 
+/** What Settings may change on a buddy (08 T53); main clamps it on save. */
+export type BuddyEditable = Pick<
+  Buddy,
+  | 'name'
+  | 'look'
+  | 'instructions'
+  | 'permissions'
+  | 'model'
+  | 'report'
+  | 'budget'
+  | 'skills'
+  | 'subagents'
+>
+
+export type BuddyUpdateResult = { ok: true; buddy: Buddy } | { ok: false; error: string }
+
+export type BuddyWhenResult = { ok: true; description: string } | { ok: false; error: string }
+
 export interface BuddyRunResult {
   ok: boolean
   /** The background task (Tasks list, task chat). */

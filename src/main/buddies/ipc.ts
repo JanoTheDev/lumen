@@ -10,8 +10,11 @@ import type { Buddy, BuddyRunSummary, BuddySummary } from '@shared/buddies'
 import type {
   BuddiesView,
   BuddyDetail,
+  BuddyEditable,
   BuddyRunResult,
-  BuddyScheduleView
+  BuddyScheduleView,
+  BuddyUpdateResult,
+  BuddyWhenResult
 } from '@shared/buddy-views'
 import {
   buddyEnableSchema,
@@ -19,13 +22,16 @@ import {
   buddyNotebookSetSchema,
   buddyRunSchema,
   buddyScheduleAddSchema,
-  buddyScheduleRemoveSchema
+  buddyScheduleRemoveSchema,
+  buddyUpdateSchema,
+  buddyWhenSchema
 } from '@shared/ipc'
 import { notice } from '../agent-mode/background'
 import { bus } from '../bus'
 import { INVALID, safeParse } from '../ipc/validate'
-import { automations, automationsLoaded } from '../routines'
+import { automations, automationsLoaded, resolveFolder } from '../routines'
 import * as home from '../windows/home'
+import * as screenLayer from '../windows/screen-layer'
 import * as panel from '../windows/settings'
 import {
   buddiesPaused,
@@ -42,8 +48,10 @@ import {
   getBuddy,
   removeBuddy,
   setBuddyEnabled,
-  setBuddyNotebook
+  setBuddyNotebook,
+  updateBuddy
 } from './index'
+import { parseSchedule } from './compose'
 import {
   addBuddySchedule,
   removeBuddySchedule,
@@ -73,6 +81,10 @@ export interface BuddiesIpcDeps {
   removeSchedule(id: string, automationId: string): boolean
   notebook(id: string): string
   setNotebook(id: string, text: string): NotebookWrite
+  /** Saves changed fields; the store clamps them (null = no such buddy). */
+  update(id: string, fields: Partial<BuddyEditable>): Buddy | null
+  /** A schedule phrase in words, or why it is not understood. */
+  parseWhen(when: string): BuddyWhenResult
   /** Spoken / shown when a foreground run started from Settings ends. */
   finished?(name: string, text: string): void
 }
@@ -209,6 +221,24 @@ export function buddiesIpcHandlers(d: BuddiesIpcDeps): Record<string, Handler> {
       if (!r) return INVALID
       const w = d.setNotebook(r.id, r.text)
       return w === 'ok' ? { ok: true } : { ok: false, error: NOTEBOOK_ERRORS[w] }
+    },
+    'buddies:update': (raw): BuddyUpdateResult | typeof INVALID => {
+      const r = safeParse('buddies:update', buddyUpdateSchema, raw)
+      if (!r) return INVALID
+      if (!d.get(r.id)) return { ok: false, error: 'There is no such buddy.' }
+      // The store clamps everything (known tools, https sites, local folders, budgets).
+      const fields = r.fields as Partial<BuddyEditable>
+      try {
+        const buddy = d.update(r.id, fields)
+        return buddy ? { ok: true, buddy } : { ok: false, error: 'There is no such buddy.' }
+      } catch (e) {
+        return { ok: false, error: (e as Error).message }
+      }
+    },
+    'buddies:schedule-parse': (raw): BuddyWhenResult | typeof INVALID => {
+      const when = safeParse('buddies:schedule-parse', buddyWhenSchema, raw)
+      if (when === undefined) return INVALID
+      return d.parseWhen(when)
     }
   }
 }
@@ -241,6 +271,14 @@ export function registerBuddiesIpc(): void {
     removeSchedule: removeBuddySchedule,
     notebook: buddyNotebook,
     setNotebook: setBuddyNotebook,
+    update: updateBuddy,
+    parseWhen: (when) => {
+      const r = parseSchedule(when, { now: Date.now(), resolveFolder })
+      if (!r) return { ok: false, error: 'Say when, like “every weekday at 8”.' }
+      return 'reason' in r
+        ? { ok: false, error: r.reason }
+        : { ok: true, description: r.schedule.description }
+    },
     finished: (name, text) => notice(text ? `${name}: ${text}` : `${name} is done.`)
   })
   for (const [channel, fn] of Object.entries(handlers))
@@ -261,7 +299,12 @@ export function registerBuddiesIpc(): void {
     }, PUSH_MS)
   }
   bus.on('buddies.changed', (e) => changed(e.ids))
-  bus.on('buddy.working', (e) => changed([e.buddyId]))
+  bus.on('buddy.working', (e) => {
+    changed([e.buddyId])
+    // The on-screen buddy takes the working buddy's colour and name tag (08 T53).
+    const b = e.active ? getBuddy(e.buddyId) : null
+    screenLayer.setWorkingBuddy(b ? { name: b.name, color: b.look.color } : null)
+  })
   // A buddy's task started, ended or moved on (running state, last result).
   const phases = new Map<string, string>()
   bus.on('task.changed', (e) => {

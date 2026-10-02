@@ -42,6 +42,8 @@ let lastCursor: Point | null = null
 let cursorDisplay: number | null = null
 let captureDisplay: number | null = null
 
+/** The buddy working on screen (08 T53); outside the scene so clear() keeps it. */
+let worker: ScreenScene['worker'] | null = null
 let created = false
 let locateTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -167,6 +169,7 @@ function needsLayer(l: Layer): boolean {
 function renderLayer(l: Layer): void {
   if (!l.ready) return
   const local = localize(visibleScene(), l.display)
+  if (worker && !suppressed) local.worker = worker
   l.hasScene = !emptyScene(local)
   l.hasBuddy = !!local.buddy
   if (local.buddy) sendCursorTo(l)
@@ -302,6 +305,13 @@ export function setScene(next: Partial<Scene>): void {
     locateTimer = null
   }
   scene = { ...scene, ...next }
+  render()
+}
+
+/** Colours the on-screen buddy and shows its name tag while a buddy works (null = done). */
+export function setWorkingBuddy(next: ScreenScene['worker'] | null): void {
+  if (next?.name === worker?.name && next?.color === worker?.color) return
+  worker = next ? { name: next.name, color: next.color } : null
   render()
 }
 

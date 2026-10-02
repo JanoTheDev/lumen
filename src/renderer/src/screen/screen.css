@@ -292,6 +292,53 @@ body,
     var(--shadow);
 }
 
+/* A buddy working on screen (08 T53): its name beside the arrow, the dot in its colour. */
+.sl-buddy-tag {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.sl-buddy-tag.is-off {
+  display: none;
+}
+
+.sl-buddy-tag__pill {
+  position: absolute;
+  left: 0.75rem;
+  top: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 16rem;
+  padding: 3px 10px 3px 6px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: max(13px, var(--text-sm));
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow:
+    0 0 0 1px var(--ring-halo-outer),
+    var(--shadow);
+}
+
+.sl-buddy-tag__dot {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--fg);
+  forced-color-adjust: none;
+}
+
 /* ---- Annotations ---- */
 
 .sl-ann path {
@@ -367,6 +414,7 @@ body,
 }
 
 :root[data-theme='high-contrast'] .sl-pill,
+:root[data-theme='high-contrast'] .sl-buddy-tag__pill,
 :root[data-theme='high-contrast'] .sl-buddy-label > span {
   box-shadow: 0 0 0 2px var(--fg);
 }

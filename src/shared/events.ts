@@ -96,6 +96,8 @@ export interface AgentTask {
 export interface ScreenScene {
   monitorId: number
   buddy?: { to: Point; label?: string; mode: 'idle' | 'fly' | 'point' | 'wait' }
+  /** A buddy working on screen (08 T53): the on-screen buddy takes its colour and name tag. */
+  worker?: { name: string; color: string }
   highlights: {
     id: string
     rect: Rect
