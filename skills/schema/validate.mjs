@@ -295,6 +295,8 @@ function validateLesson(lesson, ctx) {
       for (const c of collectChecks(expect.check)) {
         if (c.type === 'bridge' && bridgeKeys)
           bridgeExpectProblems(c, bridgeKeys).forEach((m) => push(`${sp}.expect.check`, m))
+        if (c.type === 'uia-event' && c.changed && c.event !== 'value')
+          push(`${sp}.expect.check`, '"changed" works only with event "value"')
         if (c.type === 'window-title' || (c.type === 'uia-event' && c.match?.value?.regex)) {
           const source = c.type === 'window-title' ? c.regex : c.match.value.regex
           try {

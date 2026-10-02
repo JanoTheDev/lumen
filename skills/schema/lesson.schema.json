@@ -146,6 +146,7 @@
           "properties": {
             "type": { "const": "uia-event" },
             "event": { "enum": ["invoked", "focused", "value", "selected", "window-opened"] },
+            "changed": { "const": true },
             "match": {
               "type": "object",
               "minProperties": 1,

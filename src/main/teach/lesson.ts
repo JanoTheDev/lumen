@@ -26,6 +26,8 @@ export type CheckSpec =
       type: 'uia-event'
       event: UiaEventKind
       match: { name?: string; role?: string; automationId?: string; value?: ValueMatch }
+      /** value only: passes when the value differs from the one when the step began. */
+      changed?: true
     }
   | { type: 'window-title'; regex: string }
   | { type: 'vision'; prompt: string }
@@ -110,9 +112,13 @@ export const checkSchema: z.ZodType<CheckSpec> = z.lazy(() =>
             automationId: z.string().optional(),
             value: valueMatch.optional()
           })
-          .strict()
+          .strict(),
+        changed: z.literal(true).optional()
       })
-      .strict(),
+      .strict()
+      .refine((c) => !c.changed || c.event === 'value', {
+        message: 'changed works only with event value'
+      }),
     z.object({ type: z.literal('window-title'), regex: z.string().min(1) }).strict(),
     z.object({ type: z.literal('vision'), prompt: z.string().min(3) }).strict(),
     z

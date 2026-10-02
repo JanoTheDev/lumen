@@ -3,7 +3,9 @@
 // Until 02 sends invoke/selection/value events, focus events stand in for "selected" and
 // "value" (Settings moves focus with the selection), and evaluate() reads the element now.
 // window-opened reads the foreground window's title, else a window / dialog element in the
-// snapshot (or the match's own role).
+// snapshot (or the match's own role). A value check with `changed` passes only when the
+// element's value differs from its value when the step began (a dialog field that applies
+// only on OK, so no bridge can see it yet).
 import type { CheckSpec, UiaEventKind, ValueMatch } from '../lesson'
 import type { CheckResult, UiaEvent } from '../ports'
 import type { CheckContext, CheckHandle } from './types'
@@ -54,13 +56,37 @@ export function kindsFor(event: UiaEventKind): UiaEventKind[] {
   return [event]
 }
 
+/** The matching element's value when the step began; null when none was found. */
+async function baselineValue(spec: UiaSpec, ctx: CheckContext): Promise<string | null> {
+  const { name, role, automationId } = spec.match
+  const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
+  const el = els?.map(withToggleValue).find((e) => e.value !== undefined)
+  return el?.value !== undefined ? norm(el.value) : null
+}
+
 export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
   const r = settleable()
+  const changedOnly = spec.event === 'value' && spec.changed === true
+  const baseline = changedOnly ? baselineValue(spec, ctx) : Promise.resolve(null)
+  /** `changed`: the value differs from the baseline (without one, only a real value event). */
+  const changed = async (value: string | undefined, kind?: string): Promise<boolean> => {
+    if (value === undefined) return false
+    const before = await baseline
+    return before === null ? kind === 'value' : norm(value) !== before
+  }
   const unsubscribe = ctx.ports.uia.subscribe(kindsFor(spec.event), (e) => {
-    if (elementMatches(spec.match, withToggleValue(e.element))) {
-      ctx.log(`uia ${e.kind} "${e.element.name ?? ''}" matched`)
-      r.settle('pass')
+    const el = withToggleValue(e.element)
+    if (!elementMatches(spec.match, el)) return
+    if (changedOnly) {
+      void changed(el.value, e.kind).then((yes) => {
+        if (!yes) return
+        ctx.log(`uia ${e.kind} "${e.element.name ?? ''}" changed`)
+        r.settle('pass')
+      })
+      return
     }
+    ctx.log(`uia ${e.kind} "${e.element.name ?? ''}" matched`)
+    r.settle('pass')
   })
 
   // A dialog is usually the foreground window itself (the snapshot root, which the element
@@ -84,6 +110,11 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
     if (!els) return 'unknown'
     const hits = els.filter((el) => elementMatches(spec.match, withToggleValue(el)))
+    if (changedOnly) {
+      if ((await baseline) === null) return 'unknown'
+      for (const el of hits) if (await changed(withToggleValue(el).value)) return 'pass'
+      return els.length ? 'fail' : 'unknown'
+    }
     if (spec.event === 'value') return hits.length ? 'pass' : els.length ? 'fail' : 'unknown'
     // focused / selected: the matching element has focus now (or, for selected, is selected).
     const now = (el: (typeof hits)[number]): boolean =>

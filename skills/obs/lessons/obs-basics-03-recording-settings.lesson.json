@@ -92,6 +92,12 @@
           "type": "anyOf",
           "checks": [
             {
+              "type": "uia-event",
+              "event": "value",
+              "changed": true,
+              "match": { "name": "Recording Path", "role": "Edit" }
+            },
+            {
               "type": "bridge",
               "app": "obs",
               "expect": { "request": "GetRecordDirectory", "recordDirectoryChanged": true }

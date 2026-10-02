@@ -9,7 +9,7 @@ import {
 } from '../../src/main/teach/checks'
 import { normalizeCombo } from '../../src/main/teach/checks/keypress'
 import { MAX_CALLS_PER_STEP } from '../../src/main/teach/checks/vision'
-import type { CheckSpec, LessonStep } from '../../src/main/teach/lesson'
+import { checkSchema, type CheckSpec, type LessonStep } from '../../src/main/teach/lesson'
 import { noopPorts, type Ports, type UiaEvent } from '../../src/main/teach/ports'
 
 const STEP: LessonStep = {
@@ -213,6 +213,55 @@ describe('uia-event', () => {
     expect(await pane.evaluate()).toBe('fail')
     uia.found = [node('Settings', 'pane')]
     expect(await pane.evaluate()).toBe('pass')
+  })
+
+  it('changed: passes only once the value differs from the one when the step began', async () => {
+    const uia = fakeUia()
+    const spec: CheckSpec = {
+      type: 'uia-event',
+      event: 'value',
+      changed: true,
+      match: { name: 'Recording Path', role: 'Edit' }
+    }
+    uia.found = [node('Recording Path', 'edit', { value: 'C:\\Videos' })]
+    const h = startCheck(spec, ctx({ uia: uia.port }))
+    expect(await h.evaluate()).toBe('fail')
+    const same = { name: 'Recording Path', role: 'edit', value: 'C:\\Videos' }
+    uia.emit({ kind: 'value', element: same })
+    uia.emit({ kind: 'focused', element: same })
+    expect(await peek(h.result)).toBe('pending')
+    uia.found = [node('Recording Path', 'edit', { value: 'D:\\Rec' })]
+    expect(await h.evaluate()).toBe('pass')
+
+    const live = startCheck(spec, ctx({ uia: uia.port }))
+    const el = { name: 'Recording Path', role: 'edit' }
+    uia.emit({ kind: 'focused', element: { ...el, value: 'D:\\Rec' } })
+    expect(await peek(live.result)).toBe('pending')
+    uia.emit({ kind: 'focused', element: { ...el, value: 'E:\\Clips' } })
+    expect(await live.result).toBe('pass')
+  })
+
+  it('changed is valid only on a value check', () => {
+    const base = { type: 'uia-event', changed: true, match: { name: 'Recording Path' } }
+    expect(checkSchema.safeParse({ ...base, event: 'value' }).success).toBe(true)
+    expect(checkSchema.safeParse({ ...base, event: 'invoked' }).success).toBe(false)
+  })
+
+  it('changed without a baseline: only a real value event passes, evaluate asks', async () => {
+    const uia = fakeUia()
+    const spec: CheckSpec = {
+      type: 'uia-event',
+      event: 'value',
+      changed: true,
+      match: { name: 'Recording Path' }
+    }
+    const h = startCheck(spec, ctx({ uia: uia.port }))
+    uia.found = [node('Recording Path', 'edit', { value: 'D:\\Rec' })]
+    expect(await h.evaluate()).toBe('unknown')
+    uia.emit({ kind: 'focused', element: { name: 'Recording Path', value: 'D:\\Rec' } })
+    expect(await peek(h.result)).toBe('pending')
+    uia.emit({ kind: 'value', element: { name: 'Recording Path', value: 'D:\\Rec' } })
+    expect(await h.result).toBe('pass')
   })
 })
 
