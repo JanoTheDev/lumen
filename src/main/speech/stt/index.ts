@@ -9,6 +9,7 @@ import { WHISPER_USD_PER_MIN } from '../../ai/pricing'
 import { openaiClient } from '../../ai/providers/openai'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
+import { speechOrigin } from '../../usage/scope'
 import { voiceLatency } from '../latency'
 import { chooseStt, wantsLocalModel, type SttAvailability } from './engine'
 import { appTermsFor } from '../dictation/dictionary'
@@ -152,7 +153,8 @@ async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<
     model: 'whisper-1',
     audioSec,
     usd: (audioSec / 60) * WHISPER_USD_PER_MIN,
-    feature: 'stt'
+    feature: 'stt',
+    origin: speechOrigin('stt', dictation)
   })
   const detected = lang === 'auto' ? result.language : undefined
   if (lang === 'auto') noteDetectedLanguage(detected)

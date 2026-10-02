@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { currentUsageScope, withUsageFeature, withUsageScope } from '../../src/main/usage/scope'
+import {
+  currentUsageScope,
+  speechOrigin,
+  withUsageFeature,
+  withUsageScope
+} from '../../src/main/usage/scope'
 
 describe('usage scope', () => {
   it('is system outside any scope', () => {
@@ -25,5 +30,15 @@ describe('usage scope', () => {
   it('does not leak out of the scope', () => {
     withUsageScope({ origin: 'agent', taskId: 'x' }, () => undefined)
     expect(currentUsageScope().origin).toBe('system')
+  })
+})
+
+describe('cloud speech origin (review L2)', () => {
+  it("is the user's for speech to text, the running scope's for a spoken reply", () => {
+    expect(speechOrigin('stt')).toBe('user-direct')
+    expect(speechOrigin('stt', true)).toBe('dictation')
+    expect(speechOrigin('tts')).toBe('user-direct')
+    expect(withUsageScope({ origin: 'buddy' }, () => speechOrigin('tts'))).toBe('buddy')
+    expect(withUsageScope({ origin: 'buddy' }, () => speechOrigin('stt'))).toBe('user-direct')
   })
 })

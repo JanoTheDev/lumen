@@ -2,6 +2,7 @@
 import { recordFlatCall } from '../../ai/cost'
 import { TTS1_USD_PER_MCHAR } from '../../ai/pricing'
 import { openaiClient } from '../../ai/providers/openai'
+import { speechOrigin } from '../../usage/scope'
 
 export const OPENAI_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const
 type OpenAiVoice = (typeof OPENAI_VOICES)[number]
@@ -28,7 +29,8 @@ export async function synthOpenAi(text: string, voice: string, rate: number): Pr
     model: 'tts-1',
     chars: text.length,
     usd: (text.length / 1_000_000) * TTS1_USD_PER_MCHAR,
-    feature: 'tts'
+    feature: 'tts',
+    origin: speechOrigin('tts')
   })
   return Buffer.from(await res.arrayBuffer()).toString('base64')
 }

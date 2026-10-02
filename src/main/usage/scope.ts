@@ -74,3 +74,14 @@ export function setUsageFeature(feature: string): void {
 export function runInUsageScope<T>(scope: UsageScope, fn: () => T): T {
   return storage.run({ ...scope }, fn)
 }
+
+/**
+ * The origin of a cloud speech call. Speech to text is always the user's own voice (dictation
+ * or a question), and starts before the turn's scope does. A spoken reply keeps the running
+ * scope's origin (a buddy's line is the buddy's) and is the user's when nothing set one.
+ */
+export function speechOrigin(kind: 'stt' | 'tts', dictation = false): UsageOrigin {
+  if (kind === 'stt') return dictation ? 'dictation' : 'user-direct'
+  const now = currentUsageScope().origin
+  return now === 'system' ? 'user-direct' : now
+}
