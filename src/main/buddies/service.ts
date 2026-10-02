@@ -8,6 +8,7 @@ import { isOpen, type StartInput } from '../agent-mode/background/manager'
 import { withUsageScope } from '../usage/scope'
 import { buddyNameKey, isBuddyId, safeBuddyName } from './clamp'
 import {
+  buddyPromptUtterance,
   buddyStartInput,
   buddyTaskEnv,
   helperCostCap,
@@ -225,7 +226,17 @@ export class Buddies {
       },
       scope: (task, fn) =>
         withUsageScope({ origin: 'buddy', buddyId: task.buddyId, taskId: task.id }, fn),
-      silent: (task) => (task.buddyId ? this.get(task.buddyId)?.report === 'silent' : false)
+      silent: (task) => (task.buddyId ? this.get(task.buddyId)?.report === 'silent' : false),
+      rerun: (task) => {
+        const b = task.buddyId && isBuddyId(task.buddyId) ? this.get(task.buddyId) : null
+        if (!b || !b.enabled || this.isRunning(b.id)) return null
+        const utterance = buddyPromptUtterance(task.prompt)
+        return buddyStartInput(b, {
+          trigger: 'manual',
+          ...(utterance ? { utterance } : {}),
+          ...(task.routineId ? { automationId: task.routineId } : {})
+        })
+      }
     }
   }
 }

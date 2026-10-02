@@ -1,7 +1,7 @@
 // Buddy tasks in the background manager and task store (08 T50): origin buddy and the buddy id
 // survive a start, Run again and a reload from disk.
 import { describe, expect, it } from 'vitest'
-import { BackgroundManager } from '../../src/main/agent-mode/background/manager'
+import { BackgroundManager, type StartInput } from '../../src/main/agent-mode/background/manager'
 import { parseTask } from '../../src/main/agent-mode/background/store'
 
 describe('buddy tasks', () => {
@@ -24,6 +24,27 @@ describe('buddy tasks', () => {
     await m.wait(t.id)
     const again = m.runAgain(t.id)
     expect(again).toMatchObject({ origin: 'buddy', buddyId: 'inbox-buddy' })
+  })
+
+  it('Run again takes the rebuilt start input, or refuses (buddies review M3)', async () => {
+    let n = 0
+    let rebuilt: StartInput | null | undefined = undefined
+    const m = new BackgroundManager({
+      max: () => 2,
+      run: async () => ({ status: 'done', summary: 'ok' }),
+      emit: () => {},
+      rerun: () => rebuilt,
+      now: () => 1000,
+      newId: () => `bg_test${++n}`
+    })
+    const t = m.start({ prompt: 'old', userText: 'old words', origin: 'buddy', buddyId: 'b' })
+    await m.wait(t.id)
+    rebuilt = { prompt: 'new', userText: 'new words', origin: 'buddy', buddyId: 'b' }
+    expect(m.runAgain(t.id)).toMatchObject({ prompt: 'new', userText: 'new words' })
+    rebuilt = null
+    expect(m.runAgain(t.id)).toBeNull()
+    rebuilt = undefined
+    expect(m.runAgain(t.id)).toMatchObject({ prompt: 'old', userText: 'old words' })
   })
 
   it('load from the task store', () => {

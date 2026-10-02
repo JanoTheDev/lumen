@@ -96,6 +96,9 @@ const manager = new BackgroundManager({
     log('plan', `background run refused: ${limit.reason}`)
     return limit.reason
   },
+  // A buddy's run starts again from the buddy as it is now (instructions, permissions, on/off).
+  rerun: (task) =>
+    task.buddyId && !task.parentId ? (buddyRunHook()?.rerun(task) ?? null) : undefined,
   now: () => Date.now(),
   newId
 })

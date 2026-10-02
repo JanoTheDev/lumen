@@ -219,6 +219,29 @@ describe('buddy run hook', () => {
     expect(currentUsageScope().origin).toBe('system')
   })
 
+  it('Run again rebuilds from the buddy as it is now (buddies review M3)', () => {
+    const b = inbox()
+    const r = svc.run(b.id, { utterance: 'anything from Ann?', trigger: 'call' })
+    if (!r.ok) throw new Error(r.error)
+    // Still running: no second run.
+    expect(svc.hook().rerun(r.task)).toBeNull()
+    tasks[0].phase = 'done'
+    svc.update(b.id, { instructions: 'Only list mail from Ann.' })
+    const input = svc.hook().rerun(r.task)!
+    expect(input.userText).toBe('Only list mail from Ann.\nanything from Ann?')
+    expect(input.prompt).toContain('Only list mail from Ann.')
+    expect(input.prompt).not.toContain('flag anything from my boss')
+    expect(input.prompt).toContain('The user asks you now: anything from Ann?')
+    expect(input).toMatchObject({ origin: 'buddy', buddyId: b.id })
+    // A run started without words stays without words.
+    const plain = { ...r.task, prompt: buddyStartInput(b, { trigger: 'schedule' }).prompt }
+    expect(svc.hook().rerun(plain)!.userText).toBe('Only list mail from Ann.')
+    svc.setEnabled(b.id, false)
+    expect(svc.hook().rerun(r.task)).toBeNull()
+    svc.remove(b.id)
+    expect(svc.hook().rerun(r.task)).toBeNull()
+  })
+
   it('has no notebook context when the notebook is empty', () => {
     expect(buddyContext('  \n')).toBe('')
   })

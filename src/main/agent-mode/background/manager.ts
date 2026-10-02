@@ -97,6 +97,12 @@ export interface ManagerDeps {
    * start, "Run again" included; a refused run ends at once with the reason.
    */
   refuse?(input: StartInput): string | null
+  /**
+   * "Run again" of a task that is rebuilt from where it came from (a buddy's run from the buddy
+   * as it is now): its start input, null to refuse (the buddy is off or gone), undefined to
+   * repeat the task as it was.
+   */
+  rerun?(task: BackgroundTask): StartInput | null | undefined
   now(): number
   newId(): string
 }
@@ -314,6 +320,9 @@ export class BackgroundManager {
   runAgain(id: string): BackgroundTask | null {
     const t = this.get(id)
     if (!t || isOpen(t) || t.claude || this.entries.get(id)?.run) return null
+    const rebuilt = this.deps.rerun?.(t)
+    if (rebuilt === null) return null
+    if (rebuilt) return this.start(rebuilt)
     return this.start({
       prompt: t.prompt,
       ...(t.userText !== undefined ? { userText: t.userText } : {}),

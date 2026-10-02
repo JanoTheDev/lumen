@@ -5,6 +5,7 @@ import type { BackgroundTask } from '@shared/types'
 import type { Role } from '../../ai/models'
 import type { SkillEnvelope } from '../skill-envelope'
 import type { GuardHost } from '../skill-run'
+import type { StartInput } from './manager'
 import type { RunSkillInfo } from './run'
 
 export interface BuddyTaskEnv {
@@ -34,6 +35,11 @@ export interface BuddyRunHook {
   scope<T>(task: BackgroundTask, fn: () => Promise<T>): Promise<T>
   /** The buddy's report style is silent. */
   silent(task: BackgroundTask): boolean
+  /**
+   * "Run again" of a buddy's run: the start input from the buddy as it is now, with what the
+   * user asked that time; null when the buddy is gone, off or already working.
+   */
+  rerun(task: BackgroundTask): StartInput | null
 }
 
 let hook: BuddyRunHook | null = null

@@ -132,6 +132,11 @@ export function buddyPrompt(b: Buddy, opts: RunBuddyOpts): string {
   ].join('\n')
 }
 
+/** What the user asked in a call, read back from the run's prompt ('' for none). */
+export function buddyPromptUtterance(prompt: string): string {
+  return clean(/^The user asks you now: (.*)$/m.exec(prompt)?.[1])
+}
+
 /** A run's title in the Tasks list and the buddy's history. */
 export function buddyRunTitle(b: Pick<Buddy, 'name'>, opts: RunBuddyOpts): string {
   const said = clean(opts.utterance)
