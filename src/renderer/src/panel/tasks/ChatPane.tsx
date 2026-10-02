@@ -6,6 +6,8 @@ import { announce, Button, icons, Toast } from '../../ui'
 import { prefersReducedMotion } from '../../ui/motion'
 import { invoke, useIpc } from '../../lib/ipc'
 import { ChatEntries } from './ChatEntries'
+import { costLine } from '../settings/sections/usage-view'
+import { useTaskCosts } from '../settings/sections/use-usage-cost'
 import {
   announcement,
   applyBuffered,
@@ -178,6 +180,10 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
   const pinned = useRef(true)
   const h = view?.header
   const now = useNow(!!h && isLive(h.phase) && !h.endedAt)
+  // Ledger spend with helpers (05 T44); Claude sessions are billed to the user's own plan.
+  const usage = costLine(
+    useTaskCosts(h && h.kind !== 'claude' ? [id] : [], `${h?.modelCalls}|${h?.phase}`)[id]
+  )
 
   // Focus lands on the task's name when another task opens.
   useEffect(() => {
@@ -259,6 +265,7 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
             <span className={`chat-phase is-${h.phase}`}>{PHASE_TEXT[h.phase]}</span>
             {h.project && <span> · {h.project}</span>}
             <span> · {headerFacts(h, now)}</span>
+            {usage && <span> · Usage {usage}</span>}
           </p>
         </div>
         <Controls h={h} onControl={onControl} />

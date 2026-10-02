@@ -10,6 +10,8 @@ import type {
   AutomationView
 } from '@shared/automations'
 import { Button, Card, Field, IconButton, Switch, TextField, announce, icons } from '../../../ui'
+import { costLine } from './usage-view'
+import { useAutomationCosts } from './use-usage-cost'
 
 const TIME_KINDS = new Set(['daily', 'every', 'monthly', 'once'])
 
@@ -67,11 +69,14 @@ function Runs({ runs }: { runs: AutomationRun[] }): JSX.Element | null {
 function Item({
   a,
   info,
+  cost,
   update,
   refresh
 }: {
   a: AutomationView
   info: AutomationsInfo | null
+  /** This month's spend from the usage ledger (05 T44), '' without calls. */
+  cost: string
   update: (u: AutomationUpdate, done: string) => Promise<void>
   refresh: () => void
 }): JSX.Element {
@@ -88,6 +93,7 @@ function Item({
         <span className="panel-list__title">{a.name}</span>
         <span className="ui-hint">{meta(a)}</span>
         <span className="ui-hint">It will {a.actionText}.</span>
+        {cost && <span className="ui-hint">This month: {cost}</span>}
         {a.problem && <span className="ui-hint">{a.problem}</span>}
         {a.disabledReason && !a.enabled && <span className="ui-hint">{a.disabledReason}</span>}
         <Switch
@@ -301,6 +307,7 @@ export function Automations(): JSX.Element {
       .catch(() => setList([]))
   }, [])
   useEffect(refresh, [refresh])
+  const costs = useAutomationCosts(list)
   useEffect(() => {
     window.lumen
       .invoke('automations:info')
@@ -328,7 +335,14 @@ export function Automations(): JSX.Element {
         ) : (
           <ul className="panel-list">
             {list.map((a) => (
-              <Item key={a.id} a={a} info={info} update={update} refresh={refresh} />
+              <Item
+                key={a.id}
+                a={a}
+                info={info}
+                cost={costLine(costs[a.id])}
+                update={update}
+                refresh={refresh}
+              />
             ))}
           </ul>
         )}

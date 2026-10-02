@@ -6,6 +6,8 @@ import type { BackgroundTask } from '@shared/types'
 import { Button, IconButton, icons } from '../../ui'
 import { invoke, send, useIpc } from '../../lib/ipc'
 import { taskRows, type TaskRow } from './tasks-view'
+import { costLine } from '../settings/sections/usage-view'
+import { useTaskCosts } from '../settings/sections/use-usage-cost'
 
 function useTasks(): [BackgroundTask[], () => void] {
   const [tasks, setTasks] = useState<BackgroundTask[]>([])
@@ -68,6 +70,11 @@ function Question({ row }: { row: TaskRow }): JSX.Element | null {
 export function Tasks(): JSX.Element | null {
   const [tasks] = useTasks()
   const rows = taskRows(tasks)
+  // Ledger spend with helpers (05 T44); Claude sessions are billed to the user's own plan.
+  const costs = useTaskCosts(
+    rows.filter((r) => !r.claude).map((r) => r.id),
+    tasks
+  )
   if (!rows.length) return null
   return (
     <section className="home-section" aria-labelledby="home-tasks">
@@ -96,6 +103,9 @@ export function Tasks(): JSX.Element | null {
                 <span className="home-task__status" aria-live="polite">
                   {r.status}
                 </span>
+                {!r.claude && costLine(costs[r.id]) && (
+                  <span className="home-task__status">{costLine(costs[r.id])}</span>
+                )}
               </button>
               {r.canCancel && (
                 <IconButton
