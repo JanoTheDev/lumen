@@ -122,7 +122,7 @@ Wake word: sherpa-onnx keyword spotting in the speech worker on the bar's mic st
 
 ## Settings
 
-Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/renderer/src/panel/settings/`, sections registered in `meta.ts` + `SettingsPage.tsx`): General, Voice, Accessibility (grouped Seeing / Hearing / Speaking / Thinking and focus / Moving, plus shortcuts), Buddy & look, Models & keys, Memory, Lessons, App helpers, Privacy (also agent send review, grants with revoke, the action log viewer), About (also third-party licences, `build/third_party/NOTICES.txt` shipped as `resources/third_party/`). Models & keys shows a cost-per-day estimate from `usage:get`. Text and number fields save on blur / Enter. Retired config fields (`ui.v2`, `hudAutoCloseMs`, `statusBubble`) are dropped when an old file loads.
+Tray icon → Home flyout or the panel window at `#/settings/<section>` (`src/renderer/src/panel/settings/`, sections registered in `meta.ts` + `SettingsPage.tsx`): General, Voice, Accessibility (grouped Seeing / Hearing / Speaking / Thinking and focus / Moving, plus shortcuts), Buddy & look, Models & keys, Memory, Lessons, App helpers, Privacy (also agent send review, grants with revoke, the action log viewer), Diagnostics (`debug.perfOverlay`: the last turn's stage bars against budgets from `@shared/perf`, read from `perf:last-turn`, which `ai/turn-metrics` keeps in memory), About (also third-party licences, `build/third_party/NOTICES.txt` shipped as `resources/third_party/`). Models & keys shows a cost-per-day estimate from `usage:get`. Text and number fields save on blur / Enter. Retired config fields (`ui.v2`, `hudAutoCloseMs`, `statusBubble`) are dropped when an old file loads.
 
 ## Config
 
