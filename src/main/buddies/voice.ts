@@ -3,8 +3,9 @@
 // rest of the words; "stop / pause / turn off / turn on <name>", "pause all buddies", "resume
 // buddies", "what are my buddies doing", "what did <name> find". Names match with or without
 // "buddy" and "the", any case, and with one wrong letter per word (speech recognition). A name
-// that is not "… Buddy" (or a bare short name) needs a comma, "hey" or a verb in front, so plain
-// requests never become buddy calls by accident. The grammar is pure; BuddyVoice adds the
+// that does not end in "Buddy" (or a bare short name) is a call only when addressed: a comma
+// after it, "hey" in front, or "ask / tell <name> to …", so plain requests ("send email to Bob")
+// never become buddy calls by accident. The grammar is pure; BuddyVoice adds the
 // "which one?" follow-up and the spoken replies through injected ports.
 import type { Buddy, BuddyRunSummary, BuddySummary } from '@shared/buddies'
 import type { ModelResponse } from '@shared/types'
@@ -85,10 +86,12 @@ interface Alias {
   id: string
   words: string[]
   /**
-   * The whole name with "buddy" in it or of two or more words: safe after a verb or without a
-   * comma. A short name ("Inbox" for Inbox Buddy, or a one-word name) needs a comma or "hey".
+   * The whole name ending in "buddy": safe after a verb or without a comma. Any other name
+   * ("Inbox" for Inbox Buddy, "Send Email") needs a comma, "hey" or "ask / tell … to".
    */
   strong: boolean
+  /** The whole name with "buddy" in it or of two or more words: enough for "stop <name>". */
+  whole: boolean
 }
 
 function aliases(list: readonly BuddyRef[]): Alias[] {
@@ -96,11 +99,12 @@ function aliases(list: readonly BuddyRef[]): Alias[] {
   for (const b of list) {
     const words = tokens(b.name).map((t) => t.w)
     if (!words.length) continue
-    const strong = words.some((w) => BUDDY_WORDS.has(w)) || words.length >= 2
-    out.push({ id: b.id, words, strong })
+    const strong = BUDDY_WORDS.has(words[words.length - 1])
+    const whole = strong || words.some((w) => BUDDY_WORDS.has(w)) || words.length >= 2
+    out.push({ id: b.id, words, strong, whole })
     const short = words.filter((w) => !BUDDY_WORDS.has(w))
     if (short.length && short.length < words.length)
-      out.push({ id: b.id, words: short, strong: false })
+      out.push({ id: b.id, words: short, strong: false, whole: false })
   }
   return out
 }
@@ -110,12 +114,19 @@ interface NameHit {
   /** Index of the first token after the name. */
   next: number
   strong: boolean
+  whole: boolean
 }
 
 /** The buddy name at token `i` (a leading "the" skipped); null when none. */
 function nameAt(toks: Tok[], i: number, all: Alias[]): NameHit | null {
   if (toks[i]?.w === 'the') i++
-  let best: { len: number; fuzzy: number; ids: Set<string>; strong: boolean } | null = null
+  let best: {
+    len: number
+    fuzzy: number
+    ids: Set<string>
+    strong: boolean
+    whole: boolean
+  } | null = null
   for (const a of all) {
     if (i + a.words.length > toks.length) continue
     let fuzzy = 0
@@ -131,13 +142,16 @@ function nameAt(toks: Tok[], i: number, all: Alias[]): NameHit | null {
     if (!ok) continue
     const len = a.words.length
     if (!best || len > best.len || (len === best.len && fuzzy < best.fuzzy))
-      best = { len, fuzzy, ids: new Set([a.id]), strong: a.strong }
+      best = { len, fuzzy, ids: new Set([a.id]), strong: a.strong, whole: a.whole }
     else if (len === best.len && fuzzy === best.fuzzy) {
       best.ids.add(a.id)
       best.strong ||= a.strong
+      best.whole ||= a.whole
     }
   }
-  return best ? { ids: [...best.ids], next: i + best.len, strong: best.strong } : null
+  return best
+    ? { ids: [...best.ids], next: i + best.len, strong: best.strong, whole: best.whole }
+    : null
 }
 
 /** The original text after token `i` (punctuation in front trimmed). */
@@ -222,7 +236,7 @@ export function parseBuddyCommand(text: string, list: readonly BuddyRef[]): Budd
   const control = (at: number, make: (id: string) => Built): BuddyCommand | null => {
     const hit = nameAt(toks, at, all)
     if (!hit) return unknown(at)
-    return hit.strong && onlyFiller(toks, hit.next) ? pick(hit, make) : null
+    return hit.whole && onlyFiller(toks, hit.next) ? pick(hit, make) : null
   }
   if (STOP.has(w0)) return control(1, (id) => ({ kind: 'stop', id }))
   if (OFF.has(w0)) return control(1, (id) => ({ kind: 'enable', id, on: false }))
@@ -233,7 +247,7 @@ export function parseBuddyCommand(text: string, list: readonly BuddyRef[]): Budd
     return control(2, (id) => ({ kind: 'enable', id, on: true }))
   if (w0 === 'turn' || w0 === 'switch') {
     const hit = nameAt(toks, 1, all)
-    if (hit?.strong) {
+    if (hit?.whole) {
       const rest = toks.slice(hit.next).map((t) => t.w)
       if (rest[0] === 'off' && onlyFiller(toks, hit.next + 1))
         return pick(hit, (id) => ({ kind: 'enable', id, on: false }))
@@ -274,7 +288,7 @@ export function parseBuddyCommand(text: string, list: readonly BuddyRef[]): Budd
       const u = unknown(1)
       return u && onlyFiller(toks, toks.findIndex((t) => BUDDY_WORDS.has(t.w)) + 1) ? u : null
     }
-    return hit.strong && onlyFiller(toks, hit.next)
+    return hit.whole && onlyFiller(toks, hit.next)
       ? pick(hit, (id) => ({ kind: 'call', id, utterance: '' }))
       : null
   }

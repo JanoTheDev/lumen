@@ -154,6 +154,15 @@ describe('buddy store', () => {
     expect(folderAllowed('C:\\a\\..\\b')).toBe(false)
   })
 
+  it('a name that starts like a command ends in Buddy', () => {
+    expect(store.create({ name: 'Send Email' }).name).toBe('Send Email Buddy')
+    expect(clampBuddy('x', { name: 'open outlook' }).name).toBe('open outlook Buddy')
+    expect(clampBuddy('x', { name: 'Send Buddy' }).name).toBe('Send Buddy')
+    expect(clampBuddy('x', { name: 'Inbox Buddy' }).name).toBe('Inbox Buddy')
+    expect(clampBuddy('x', { name: 'Openers' }).name).toBe('Openers')
+    expect(clampBuddy('x', { name: 'Find ' + 'x'.repeat(40) }).name.length).toBeLessThanOrEqual(40)
+  })
+
   it('refuses the profile root, system folders and app data', () => {
     for (const p of [
       'C:/Users',

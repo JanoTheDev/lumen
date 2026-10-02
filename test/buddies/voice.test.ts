@@ -64,6 +64,22 @@ describe('calling a buddy', () => {
     expect(p('stop the music')).toBeNull()
   })
 
+  it('a two-word name without "buddy" is a call only when addressed', () => {
+    const list = [
+      { id: 'open-outlook', name: 'Open Outlook' },
+      { id: 'send-email', name: 'Send Email' }
+    ]
+    const q = (t: string): ReturnType<typeof parseBuddyCommand> => parseBuddyCommand(t, list)
+    expect(q('open outlook and find the invoice from Bob')).toBeNull()
+    expect(q('send email to Bob saying I am late')).toBeNull()
+    expect(q('send emails to the team')).toBeNull()
+    expect(q('have send email write to Bob')).toBeNull()
+    expect(q('Send Email, write to Bob')).toMatchObject({ id: 'send-email' })
+    expect(q('hey send email write to Bob')).toMatchObject({ id: 'send-email' })
+    expect(q('ask Send Email to write to Bob')).toMatchObject({ id: 'send-email' })
+    expect(q('stop send email')).toEqual({ kind: 'stop', id: 'send-email' })
+  })
+
   it('asks which when two names fit equally', () => {
     const two = [
       { id: 'price-buddy', name: 'Price Buddy' },

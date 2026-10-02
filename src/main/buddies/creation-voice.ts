@@ -12,6 +12,7 @@
 import type { Buddy, BuddyDraft, BuddySchedule } from '@shared/buddies'
 import { matchDraftCommand } from '../skills/authoring'
 import { matchOfferAnswer } from '../skills/proposals'
+import { safeBuddyName } from './clamp'
 import { buddyFields, buddyPermissionWords, freeBuddyName, type AuthorBuddyResult } from './compose'
 import { diffBuddy, editedDraft, matchBuddyEditIntent, type BuddyEditOutput } from './edit'
 import { OFFER_LINE, matchOffersSwitch, type BuddyOfferStore, type OfferVerdict } from './offers'
@@ -304,7 +305,7 @@ export function createBuddyCreation(deps: BuddyCreationDeps): BuddyCreation {
   }
 
   function rename(target: Buddy, raw: string): string {
-    const name = titleName(raw)
+    const name = safeBuddyName(titleName(raw))
     if (!/\p{L}/u.test(name)) return 'That name has no letters I can use. Try another.'
     const other = deps.find(name)
     if (other && other.id !== target.id) return `You already have a buddy called ${other.name}.`

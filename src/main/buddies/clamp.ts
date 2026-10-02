@@ -61,6 +61,38 @@ export function buddyIdFor(name: string, taken: (id: string) => boolean = () => 
   return `${base}-${Date.now().toString(36)}`
 }
 
+/** First words of everyday commands: a buddy name never starts with one unless it ends in "Buddy". */
+const COMMAND_VERBS = new Set([
+  'open',
+  'send',
+  'search',
+  'click',
+  'close',
+  'delete',
+  'reply',
+  'write',
+  'call',
+  'play',
+  'stop',
+  'show',
+  'go',
+  'find',
+  'read',
+  'make',
+  'create'
+])
+
+/**
+ * A name that starts like a command ("Send Email") gets " Buddy" at the end ("Send Email
+ * Buddy"), so "send email to Bob" stays a request and the buddy is called by its full name.
+ */
+export function safeBuddyName(name: string): string {
+  const words = name.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []
+  if (!words.length || !COMMAND_VERBS.has(words[0]) || words[words.length - 1] === 'buddy')
+    return name
+  return `${name.slice(0, BUDDY_NAME_MAX - 6).trimEnd()} Buddy`
+}
+
 const oneLine = (s: unknown, max: number): string =>
   typeof s === 'string' ? s.replace(/\s+/g, ' ').trim().slice(0, max) : ''
 const bool = (v: unknown, dflt = false): boolean => (typeof v === 'boolean' ? v : dflt)
@@ -172,7 +204,7 @@ export function clampBuddy(
 ): Buddy {
   if (!isBuddyId(id)) throw new Error(`not a buddy id: ${id}`)
   const now = opts.now ?? Date.now()
-  const name = oneLine(raw.name, BUDDY_NAME_MAX) || id
+  const name = safeBuddyName(oneLine(raw.name, BUDDY_NAME_MAX) || id)
   const b = (raw.budget && typeof raw.budget === 'object' ? raw.budget : {}) as Record<
     string,
     unknown
