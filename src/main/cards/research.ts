@@ -1,7 +1,7 @@
 // Research → cards (05 T39): the strict `present_cards` tool that ends a research task with a
 // short spoken text plus typed cards, and the checks in front of `presentCards`. Every price and
 // rating must name a source page this task actually read (fetched, opened in the browser, or
-// returned by a lookup / helper task) and its number must appear in what the task read;
+// returned by a lookup) and its number must appear in what the task read on that page;
 // otherwise the field is dropped, never guessed. Pure (no Electron).
 import { z } from 'zod'
 import {
@@ -115,8 +115,14 @@ export const CARDS_RULE_BACKGROUND = `Options to choose from (hotels, flights, p
 export interface Observed {
   /** Normalized URLs of pages the task read (host without www + path). */
   urls: Set<string>
-  /** Text of every successful tool result, for the number check. */
+  /** Text of every successful tool result (trip times). */
   text: string
+  /**
+   * Per normalized URL, the text read from that page: a fetched page's body, the screen read
+   * while the browser showed it, or the result of a lookup / connector that named it. A price or
+   * rating counts only when its number is in the text of the source it cites.
+   */
+  pages: Map<string, string>
 }
 
 const MAX_OBSERVED_TEXT = 600_000
@@ -136,13 +142,22 @@ export function normUrl(raw: string): string | null {
 
 const URL_RE = /https?:\/\/[^\s"'<>()[\]{}]+/g
 const SOURCE_RE = /<observed source="web (https?:\/\/[^"]+)">/g
+const FENCE_RE = /<observed source="web (https?:\/\/[^"]+)">([\s\S]*?)<\/observed>/g
 
-/** Tools that read pages on the task's behalf: every link in their result counts as read. */
-const READS_LINKS = (name: string): boolean =>
-  name === 'lookup_howto' || name === 'spawn_task' || name.startsWith('mcp__')
+/**
+ * Tools that read pages on the task's behalf: every link in their result counts as read, with
+ * that result as its text. Not spawn_task: a helper's result is its model's own words.
+ */
+const READS_LINKS = (name: string): boolean => name === 'lookup_howto' || name.startsWith('mcp__')
 
-/** run_subagents (08 T49): the pages its sub-agents fetched, listed by Lumen (not the model). */
-const SUBAGENT_SOURCES_RE = /<sources>([\s\S]*?)<\/sources>/g
+/** Tools whose result is what the screen shows (the page in the browser, for a web page). */
+const READS_SCREEN = new Set(['observe', 'navigate', 'wait_for', 'act', 'keys', 'launch_app'])
+
+/**
+ * run_subagents (08 T49): the pages its sub-agents fetched, listed by Lumen (not the model) as
+ * the last block of each job's fence; an earlier <sources> (the job's task line) is not Lumen's.
+ */
+const SUBAGENT_SOURCES_RE = /<sources>\n((?:(?!<sources>)[\s\S])*?)\n<\/sources>\n<\/observed>/g
 
 /**
  * The URLs one successful tool result counts as read: the URL it opened or fetched, fetched
@@ -152,7 +167,7 @@ export function readUrls(name: string, input: Record<string, unknown>, text: str
   const out: string[] = []
   if ((name === 'navigate' || name === 'fetch_url') && typeof input.url === 'string')
     out.push(input.url)
-  for (const s of text.matchAll(SOURCE_RE)) out.push(s[1])
+  if (name === 'fetch_url') for (const s of text.matchAll(SOURCE_RE)) out.push(s[1])
   if (READS_LINKS(name)) out.push(...(text.match(URL_RE) ?? []))
   if (name === 'run_subagents')
     for (const block of text.matchAll(SUBAGENT_SOURCES_RE))
@@ -160,11 +175,14 @@ export function readUrls(name: string, input: Record<string, unknown>, text: str
   return out
 }
 
+const normLink = (raw: string): string | null => normUrl(raw.replace(/[.,;:!?]+$/, ''))
+
 /**
  * What a task read, from its conversation: successful tool results (text), the URLs it opened
  * (navigate) or fetched (fetch_url, the fetched page's final URL), and the links named by tools
- * that read pages for it (how-to lookups, helper tasks, connectors). `extraUrls`: pages known
- * another way (the browser's address bar now).
+ * that read pages for it (how-to lookups, connectors), each with the text read there. Screen
+ * reads belong to the page the browser was last sent to. `extraUrls`: the page in front now,
+ * which gets the screen read since the last navigate.
  */
 export function observedFrom(
   messages: readonly AgentMessage[],
@@ -172,12 +190,16 @@ export function observedFrom(
 ): Observed {
   const calls = new Map<string, ToolCall>()
   const urls = new Set<string>()
+  const pages = new Map<string, string>()
   const parts: string[] = []
   let size = 0
-  const addUrl = (raw: unknown): void => {
-    if (typeof raw !== 'string') return
-    const n = normUrl(raw.replace(/[.,;:!?]+$/, ''))
-    if (n) urls.add(n)
+  /** Screen text since the last navigate, and the page it belongs to. */
+  let current: string | null = null
+  let screen: string[] = []
+  const addText = (url: string | null, t: string): void => {
+    if (!url || !t) return
+    const had = pages.get(url) ?? ''
+    if (had.length < MAX_OBSERVED_TEXT) pages.set(url, had ? `${had}\n${t}` : t)
   }
   for (const m of messages) {
     if (m.role === 'assistant') {
@@ -187,17 +209,43 @@ export function observedFrom(
     for (const block of m.content) {
       if (block.type !== 'tool_result' || block.isError) continue
       const call = calls.get(block.id)
+      if (!call) continue
       const t = block.content.map((c) => (c.type === 'text' ? c.text : '')).join('\n')
-      if (call) readUrls(call.name, call.input, t).forEach(addUrl)
-      else for (const s of t.matchAll(SOURCE_RE)) addUrl(s[1])
+      for (const raw of readUrls(call.name, call.input, t)) {
+        const n = normLink(raw)
+        if (n) urls.add(n)
+      }
+      if (call.name === 'fetch_url') {
+        // The fetched body counts for the final URL and the one asked for (a redirect).
+        const asked = typeof call.input.url === 'string' ? normLink(call.input.url) : null
+        for (const f of t.matchAll(FENCE_RE)) {
+          addText(normLink(f[1]), f[2])
+          if (asked) addText(asked, f[2])
+        }
+      } else if (READS_LINKS(call.name)) {
+        for (const raw of t.match(URL_RE) ?? []) addText(normLink(raw), t)
+      } else if (READS_SCREEN.has(call.name)) {
+        if (call.name === 'navigate' && typeof call.input.url === 'string') {
+          current = normLink(call.input.url)
+          screen = []
+        }
+        screen.push(t)
+        addText(current, t)
+      }
       if (size < MAX_OBSERVED_TEXT) {
         parts.push(t)
         size += t.length
       }
     }
   }
-  for (const u of extraUrls) addUrl(u)
-  return { urls, text: parts.join('\n') }
+  for (const u of extraUrls) {
+    if (typeof u !== 'string') continue
+    const n = normLink(u)
+    if (!n) continue
+    urls.add(n)
+    if (n !== current) addText(n, screen.join('\n'))
+  }
+  return { urls, text: parts.join('\n'), pages }
 }
 
 /** Ways a number may be written on a page: 1299, 1,299, 1.299, 1 299, 1299.00, 8.6, 8,6. */
@@ -320,7 +368,7 @@ export function buildAnswerCards(
     const src = sourceOf(sourceId)
     if (!src) dropped.push(`${title}: ${what} has no known source`)
     else if (!read.has(src.id)) dropped.push(`${title}: ${what} source was not read in this task`)
-    else if (!numberSeen(value, seen.text))
+    else if (!numberSeen(value, seen.pages.get(normUrl(src.url) ?? '') ?? ''))
       dropped.push(`${title}: ${what} ${value} is not on the pages read`)
     else return true
     return false

@@ -209,7 +209,8 @@ describe('trip times from pages read', () => {
     }
     const seen = {
       urls: new Set([normUrl('https://trains.test/paris-lyon')!]),
-      text: '08:12 10:08'
+      text: '08:12 10:08',
+      pages: new Map()
     }
     const r = buildAnswerCards(input, seen, now)
     if (!r.ok) throw new Error(r.error)
@@ -238,7 +239,7 @@ describe('trip times from pages read', () => {
           }
         ]
       },
-      { urls: new Set(), text: '' },
+      { urls: new Set(), text: '', pages: new Map() },
       now
     )
     if (!r.ok) throw new Error(r.error)
