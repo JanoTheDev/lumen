@@ -17,6 +17,7 @@ import { News } from './sections/News'
 import { Models } from './sections/Models'
 import { Privacy } from './sections/Privacy'
 import { Skills } from './sections/Skills'
+import { Usage } from './sections/Usage'
 import { Voice } from './sections/Voice'
 
 const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
@@ -25,6 +26,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   accessibility: Accessibility,
   look: Look,
   models: Models,
+  usage: Usage,
   memory: Memory,
   lessons: Lessons,
   skills: Skills,

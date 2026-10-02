@@ -14,6 +14,7 @@ export type SectionId =
   | 'accessibility'
   | 'look'
   | 'models'
+  | 'usage'
   | 'memory'
   | 'lessons'
   | 'skills'
@@ -72,6 +73,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.cpu,
     keywords:
       'model provider anthropic openai claude gpt api key planning verify cost price spend per day budget'
+  },
+  {
+    id: 'usage',
+    label: 'Usage',
+    icon: icons.zoom,
+    keywords:
+      'usage cost spend money tokens dollars price bill calls cache per day per task automation buddy export csv claude code'
   },
   {
     id: 'memory',

@@ -38,6 +38,9 @@ export function ModelsCost(): JSX.Element {
             </table>
           )}
           {v.note && <p className="ui-hint">{v.note}</p>}
+          <p>
+            <a href="#/settings/usage">See usage</a>
+          </p>
         </>
       )}
     </Card>

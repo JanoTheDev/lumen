@@ -1,0 +1,174 @@
+/* Settings → Usage (05 T44). Series colours: six fixed categorical slots, checked for colour
+   vision deficiency separation on the dark and light surfaces; the per-day table is the text
+   equivalent. No motion on the chart. */
+
+:root {
+  --usage-you: #3987e5;
+  --usage-tasks: #d95926;
+  --usage-background: #199e70;
+  --usage-automations: #c98500;
+  --usage-buddies: #d55181;
+  --usage-other: #9085e9;
+}
+
+:root[data-theme='light'] {
+  --usage-you: #2a78d6;
+  --usage-tasks: #eb6834;
+  --usage-background: #1baf7a;
+  --usage-automations: #eda100;
+  --usage-buddies: #e87ba4;
+  --usage-other: #4a3aa7;
+}
+
+.usage-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.usage-tile {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.usage-tile dt {
+  font-size: var(--text-sm);
+  color: var(--fg-muted);
+}
+
+.usage-tile dd {
+  margin: 0;
+}
+
+.usage-tile__value {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.usage-table .usage-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.usage-sort,
+.usage-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.usage-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.usage-sort:focus-visible,
+.usage-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.usage-flag {
+  font-size: var(--text-sm);
+  color: var(--warning);
+}
+
+.usage-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: var(--space-3);
+}
+
+.usage-chart__base {
+  stroke: var(--border-subtle);
+  stroke-width: 1;
+}
+
+.usage-chart__hit {
+  fill: transparent;
+}
+
+.usage-chart__label {
+  fill: var(--fg-muted);
+  font-size: 11px;
+}
+
+.usage-chart__seg.is-you,
+.usage-swatch.is-you {
+  fill: var(--usage-you);
+  background: var(--usage-you);
+}
+.usage-chart__seg.is-tasks,
+.usage-swatch.is-tasks {
+  fill: var(--usage-tasks);
+  background: var(--usage-tasks);
+}
+.usage-chart__seg.is-background,
+.usage-swatch.is-background {
+  fill: var(--usage-background);
+  background: var(--usage-background);
+}
+.usage-chart__seg.is-automations,
+.usage-swatch.is-automations {
+  fill: var(--usage-automations);
+  background: var(--usage-automations);
+}
+.usage-chart__seg.is-buddies,
+.usage-swatch.is-buddies {
+  fill: var(--usage-buddies);
+  background: var(--usage-buddies);
+}
+.usage-chart__seg.is-other,
+.usage-swatch.is-other {
+  fill: var(--usage-other);
+  background: var(--usage-other);
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: var(--space-2) 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--fg);
+}
+
+.usage-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.usage-swatch {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+}
+
+@media (forced-colors: active) {
+  .usage-chart__seg,
+  .usage-swatch {
+    fill: CanvasText;
+    background: CanvasText;
+    forced-color-adjust: none;
+  }
+}
