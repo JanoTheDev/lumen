@@ -111,10 +111,12 @@ function harness(
     onActive: (n) => active.push(n),
     ...over
   }
-  const task: AgentTask = newTask('bg_parent1', 'compare lamps', Date.now())
+  let task: AgentTask = newTask('bg_parent1', 'compare lamps', Date.now())
   const ctx: ToolCtx = {
     task: () => task,
-    update: () => {},
+    update: (p) => {
+      task = { ...task, ...p }
+    },
     signal: ac.signal,
     retry: false,
     callId: 'call_sub',
@@ -271,7 +273,8 @@ describe('run_subagents', () => {
     // The model cannot add sources of its own.
     expect(t).not.toContain('<sources>https://fake.example</sources>')
     expect(h.fetched).toEqual(['https://shop.example/lamp'])
-    expect(out.costUsd).toBeCloseTo(0.003)
+    expect(out.costUsd).toBeUndefined()
+    expect(h.ctx.task().counters.costUsd).toBeCloseTo(0.003)
     expect(out.isError).toBeUndefined()
     expect(h.active[h.active.length - 1]).toBe(0)
     expect(Math.max(...h.active)).toBe(2)
@@ -355,7 +358,7 @@ describe('run_subagents', () => {
     expect(t).toContain("Stopped: the task's budget ran out.")
     expect(out.isError).toBe(true)
     // At most one turn per job past the limit.
-    expect(out.costUsd).toBeLessThanOrEqual(0.005 + 2 * 0.002)
+    expect(h.ctx.task().counters.costUsd).toBeLessThanOrEqual(0.005 + 2 * 0.002)
     expect(turns).toBeLessThanOrEqual(4)
   })
 
@@ -372,7 +375,7 @@ describe('run_subagents', () => {
     )
     const jobs = Array.from({ length: 6 }, (_, i) => ({ role: 'researcher', task: `job ${i}` }))
     const out = await runSubagentsHandler(h.env)({ jobs }, h.ctx)
-    expect(out.costUsd).toBeLessThanOrEqual(0.01 + 0.01)
+    expect(h.ctx.task().counters.costUsd).toBeLessThanOrEqual(0.01 + 0.01)
     expect(turns).toBeLessThanOrEqual(2)
     expect(textOf(out)).toContain("Stopped: the task's budget ran out.")
   })
@@ -418,6 +421,26 @@ describe('run_subagents', () => {
     expect(started).toBe(1)
     expect(h.env.pool.running).toBe(0)
     expect(h.env.pool.queued).toBe(0)
+  })
+
+  it('a cancelled parent still counts what its jobs spent (review L3)', async () => {
+    let turns = 0
+    const h = harness(
+      (_req, signal) => {
+        if (++turns === 1)
+          return Promise.resolve(reply(call('fetch_url', { url: 'https://a.example/' })))
+        return new Promise<ToolTurnResult>((_, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('aborted')))
+        )
+      },
+      { costOf: () => 0.004 }
+    )
+    const p = runSubagentsHandler(h.env)({ jobs: [{ role: 'researcher', task: 'a' }] }, h.ctx)
+    await tick(5)
+    expect(turns).toBe(2)
+    h.ac.abort()
+    await expect(p).rejects.toBeTruthy()
+    expect(h.ctx.task().counters.costUsd).toBeCloseTo(0.004)
   })
 
   it('stops a job at its wall cap inside a stuck call and frees its place (review M4)', async () => {

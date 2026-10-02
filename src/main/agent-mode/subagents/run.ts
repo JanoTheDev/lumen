@@ -93,10 +93,14 @@ export class SharedBudget {
   private waiters = new Set<() => void>()
   constructor(
     private readonly limit: number,
-    private readonly firstGuess = 0
+    private readonly firstGuess = 0,
+    /** Each spend as it happens (the parent's counter, so a cancel loses nothing). */
+    private readonly onSpend?: (usd: number) => void
   ) {}
   spend(usd: number): void {
-    if (Number.isFinite(usd) && usd > 0) this.spent += usd
+    if (!Number.isFinite(usd) || usd <= 0) return
+    this.spent += usd
+    this.onSpend?.(usd)
   }
   get left(): number {
     return this.limit - this.spent
@@ -354,9 +358,15 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
 
     const offered = await env.tools()
     // Before any turn is measured, one is guessed at a quarter of a job's cost cap.
+    // The jobs' spend goes on the parent's counter as it happens (not in the outcome), so a
+    // parent cancelled mid-call still counts it.
     const budget = new SharedBudget(
       ctx.remainingUsd?.() ?? Number.POSITIVE_INFINITY,
-      env.costCapUsd / 4
+      env.costCapUsd / 4,
+      (usd) => {
+        const c = ctx.task().counters
+        ctx.update({ counters: { ...c, costUsd: c.costUsd + usd } })
+      }
     )
     const views: SubJob[] = jobs.map((j) => ({
       role: j.role,
@@ -419,7 +429,6 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
     const head = `${done} of ${results.length} ${results.length === 1 ? 'job' : 'jobs'} finished.`
     return {
       content: text(`${head}\n${block}`),
-      costUsd: budget.total,
       label: `${results.length} ${results.length === 1 ? 'helper' : 'helpers'}, ${done} done`,
       ...(done ? {} : { isError: true })
     }
