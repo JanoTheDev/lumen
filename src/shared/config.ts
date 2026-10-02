@@ -822,6 +822,8 @@ export const configV2Schema = z.object({
   helpers: helpersSchema.default(HELPERS_DEFAULTS),
   web: webSchema.default(WEB_DEFAULTS),
   usage: usageSchema.default(USAGE_DEFAULTS),
+  /** Developer aids (10 T11b): perfOverlay shows the last turn's stage timings in Settings. */
+  debug: z.object({ perfOverlay: z.boolean() }).default({ perfOverlay: false }),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -949,7 +951,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   system: { startAtLogin: false, autoUpdate: true },
   helpers: HELPERS_DEFAULTS,
   web: WEB_DEFAULTS,
-  usage: USAGE_DEFAULTS
+  usage: USAGE_DEFAULTS,
+  debug: { perfOverlay: false }
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -1040,7 +1043,8 @@ const patchObject = z
     system: s2.system.partial().strict(),
     helpers: helpersSchema.partial().strict(),
     web: webSchema.partial().strict(),
-    usage: z.object({ limits: usageSchema.shape.limits.partial().strict() }).partial().strict()
+    usage: z.object({ limits: usageSchema.shape.limits.partial().strict() }).partial().strict(),
+    debug: s2.debug.unwrap().partial().strict()
   })
   .partial()
   .strict()

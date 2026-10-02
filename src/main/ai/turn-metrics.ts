@@ -5,6 +5,7 @@
 // No prompt or answer text is logged, only its length.
 import { bus } from '../bus'
 import { log } from '../logger'
+import { toPerfTurn, type PerfLastTurn } from '@shared/perf'
 
 export interface TurnRecord {
   mode: string
@@ -37,6 +38,7 @@ interface Open {
 export class TurnMetrics {
   private speechEnd: number | null = null
   private readonly open = new Map<string, Open>()
+  private last: PerfLastTurn | null = null
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -94,16 +96,27 @@ export class TurnMetrics {
       usd: c.usd ?? 0
     }
     this.out(record)
+    this.last = toPerfTurn(record, this.now())
     return record
+  }
+
+  /** The last finished turn's stage timings (Settings → Diagnostics), in memory only. */
+  lastTurn(): PerfLastTurn | null {
+    return this.last
   }
 }
 
-let installed = false
+let installed: TurnMetrics | null = null
+
+/** The app-wide recorder's last turn (`perf:last-turn`); null before the first turn. */
+export function lastTurn(): PerfLastTurn | null {
+  return installed?.lastTurn() ?? null
+}
 
 /** Subscribes the app-wide recorder to the bus (once). */
 export function installTurnMetrics(metrics = new TurnMetrics()): void {
   if (installed) return
-  installed = true
+  installed = metrics
   bus.on('voice.stopped', () => metrics.speechEnded())
   bus.on('query.started', ({ turnId, prompt }) => metrics.started(turnId, prompt))
   bus.on('query.delta', ({ turnId }) => metrics.firstByte(turnId))

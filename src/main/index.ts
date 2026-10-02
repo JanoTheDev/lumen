@@ -105,6 +105,7 @@ import { installLogFile } from './diagnostics/log-file'
 import { installCrashHandlers, startCrashReporter } from './diagnostics/crash'
 import { registerDiagnosticsIpc } from './diagnostics/ipc'
 import { registerFilesIpc } from './files/ipc'
+import { registerPerfIpc } from './ipc/perf'
 import { registerFirstRunIpc } from './first-run/ipc'
 import { applyAutostart, startedHidden } from './first-run/autostart'
 import { onConfigPatched } from './ipc/settings'
@@ -169,6 +170,7 @@ function registerIpc(): void {
   registerFirstRunIpc()
   registerDiagnosticsIpc()
   registerFilesIpc()
+  registerPerfIpc()
   registerSettingsIpc({ setHotkey, applyDictationHotkey, applyListenerState, applyDwellState })
   registerUiIpc({
     cancel: () => {
