@@ -4,11 +4,15 @@
 // older than 13 months are removed. Still recorded in private mode (there is no text in it).
 import {
   appendFileSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'fs'
 import { dirname, join } from 'path'
@@ -223,6 +227,31 @@ export function onUsageRecorded(fn: (row: UsageRow) => void): () => void {
   return () => listeners.delete(fn)
 }
 
+/** True when the file ends inside a line (a write cut short by a crash). */
+function endsMidLine(path: string): boolean {
+  let fd: number | undefined
+  try {
+    const size = statSync(path).size
+    if (!size) return false
+    fd = openSync(path, 'r')
+    const last = Buffer.alloc(1)
+    readSync(fd, last, 0, 1, size - 1)
+    return last[0] !== 0x0a
+  } catch {
+    return false
+  } finally {
+    if (fd !== undefined) closeSync(fd)
+  }
+}
+
+/**
+ * Appends whole lines. After a torn last line the new lines start on a line of their own, so
+ * the first one is not glued to the fragment (and lost on the next read).
+ */
+function appendLines(path: string, lines: string[]): void {
+  appendFileSync(path, (endsMidLine(path) ? '\n' : '') + lines.join('\n') + '\n', 'utf8')
+}
+
 /** Writes pending lines now. Never throws. */
 export function flushLedger(): void {
   if (timer) clearTimeout(timer)
@@ -236,7 +265,10 @@ export function flushLedger(): void {
   }
   for (const [month, rows] of pending) {
     try {
-      appendFileSync(fileFor(month), rows.map((r) => JSON.stringify(r)).join('\n') + '\n', 'utf8')
+      appendLines(
+        fileFor(month),
+        rows.map((r) => JSON.stringify(r))
+      )
       pending.delete(month)
     } catch (e) {
       console.warn(`[usage] ${month} not saved: ${(e as Error).message}`)
@@ -284,7 +316,7 @@ export function importRows(rows: UsageRow[]): void {
     load(month).push(row)
     if (!persist) continue
     mkdirSync(ledgerDir(), { recursive: true })
-    appendFileSync(fileFor(month), JSON.stringify(row) + '\n', 'utf8')
+    appendLines(fileFor(month), [JSON.stringify(row)])
   }
 }
 

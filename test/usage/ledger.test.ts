@@ -129,4 +129,14 @@ describe('usage ledger', () => {
     expect(ledgerMonths()).toEqual(['2025-10', '2026-10'])
     expect(existsSync(join(dir, '2025-09.ndjson'))).toBe(false)
   })
+
+  it('a torn last line does not swallow the next row (review L3)', () => {
+    writeFileSync(join(dir, '2026-10.ndjson'), '{"t":1,"mo')
+    recordCall({ provider: 'anthropic', model: 'm', in: 7, out: 1, usd: 0.01, t: at('2026-10-02') })
+    flushLedger()
+    resetLedgerCache()
+    const rows = queryUsage({ from: new Date(2026, 9, 1), to: new Date(2026, 10, 1) })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ in: 7 })
+  })
 })
