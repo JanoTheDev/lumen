@@ -46,7 +46,8 @@ export interface CopilotDeps {
    * the project); [] when the project has no skills.
    */
   pluginDirs?(key: string, project: string): string[]
-  decide(input: DecisionInput, signal?: AbortSignal): Promise<AutopilotDecision>
+  /** `session`: the Claude session the question came from (its usage scope). */
+  decide(input: DecisionInput, signal?: AbortSignal, session?: string): Promise<AutopilotDecision>
   claudeMd(project: string): string | undefined
   /** The user's memory profile facts, redacted (T36). */
   profile?(): string[]
@@ -304,13 +305,17 @@ export class ClaudeCopilot {
       e.s.update({ phase: 'thinking', lastLine: 'Lumen is choosing an answer' })
       try {
         const profile = this.deps.profile?.() ?? []
-        const d = await this.deps.decide({
-          question: q,
-          claudeMd: this.deps.claudeMd(v.project),
-          notes: this.deps.projects().find((p) => samePath(p.path, v.project))?.notes,
-          recent: e.recentUser,
-          ...(profile.length ? { profile } : {})
-        })
+        const d = await this.deps.decide(
+          {
+            question: q,
+            claudeMd: this.deps.claudeMd(v.project),
+            notes: this.deps.projects().find((p) => samePath(p.path, v.project))?.notes,
+            recent: e.recentUser,
+            ...(profile.length ? { profile } : {})
+          },
+          undefined,
+          v.id
+        )
         if (e.sent !== sent || !this.entries.has(v.id)) return
         if (shouldAutoAnswer(level, d, this.deps.settings().confidence)) {
           const a: ClaudeAutoAnswer = {

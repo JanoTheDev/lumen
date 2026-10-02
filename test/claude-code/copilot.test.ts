@@ -162,6 +162,8 @@ describe('ClaudeCopilot', () => {
     await h.c.open(project, { prompt: 'ASK' })
     await waitFor(() => h.decide.mock.calls.length)
     expect(h.decide.mock.calls[0][0]).toMatchObject({ profile: ['Prefers spaces'] })
+    // The session id rides along for the usage scope (review s6 L4).
+    expect(h.decide.mock.calls[0][2]).toBe(h.c.focused()!.id)
   })
 
   it('relays the question when the model is unsure', async () => {

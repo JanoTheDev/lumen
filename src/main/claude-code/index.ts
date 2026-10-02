@@ -441,7 +441,11 @@ export async function installClaudeCode(): Promise<void> {
         return []
       }
     },
-    decide: (input, signal) => copilotScope('autopilot', () => decideNow(input, signal)),
+    decide: (input, signal, session) =>
+      copilotScope('autopilot', () => decideNow(input, signal), {
+        ccSession: session,
+        taskId: session ? sessionTasks.get(session) : undefined
+      }),
     claudeMd,
     profile: profileFacts,
     notify: (text, kind) => notify(text, kind),

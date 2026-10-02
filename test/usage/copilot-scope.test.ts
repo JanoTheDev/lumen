@@ -10,4 +10,19 @@ describe('Claude Code copilot usage scope (review L1)', () => {
     )
     expect(seen).toEqual({ origin: 'claude-code-copilot', feature: 'autopilot' })
   })
+
+  it("carries the Claude session and its task, so the session's cost includes them (s6 L4)", async () => {
+    const seen = await withUsageScope({ origin: 'user-direct', taskId: 't_1' }, () =>
+      copilotScope('autopilot', async () => ({ ...currentUsageScope() }), {
+        ccSession: 'cc_1',
+        taskId: 'bg_1'
+      })
+    )
+    expect(seen).toEqual({
+      origin: 'claude-code-copilot',
+      feature: 'autopilot',
+      ccSession: 'cc_1',
+      taskId: 'bg_1'
+    })
+  })
 })
