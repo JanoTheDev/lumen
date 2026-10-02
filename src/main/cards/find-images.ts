@@ -11,6 +11,7 @@ import { effectiveLanguage } from '../speech/language'
 import { wikiSummary, type WikiSummary } from './entity'
 import { cardImages, commonsImage, imageFromPage, type CardImages } from './images'
 import { store } from './index'
+import { imageRefSchema, summarySchema } from './schema'
 
 export interface ImageFinder {
   fromPage(pageUrl: string, alt: string, signal: AbortSignal): Promise<ImageRef | null>
@@ -48,7 +49,8 @@ async function findSummaries(id: string, signal: AbortSignal): Promise<boolean> 
   await Promise.all(
     todo.map(async (card) => {
       const found = await lookup(card.title, signal).catch(() => null)
-      if (!found) return
+      // Only what the saved set can load again (an invalid part would refuse the whole set).
+      if (!found || !summarySchema.safeParse(found.summary).success) return
       card.summary = found.summary
       if (!card.subtitle && found.description) card.subtitle = found.description
       changed = true
@@ -92,6 +94,7 @@ async function findPictures(id: string, signal: AbortSignal): Promise<boolean> {
       } catch {
         ref = null
       }
+      if (ref && !imageRefSchema.safeParse(ref).success) ref = null
       const src = ref ? await finder.resolve(ref.sourceUrl).catch(() => null) : null
       if (src && ref) {
         card.image = ref

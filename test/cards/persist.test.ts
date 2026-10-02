@@ -58,6 +58,21 @@ describe('CardsFiles', () => {
     expect(parseSnapshot('{nope', set.id)).toBeNull()
   })
 
+  it('a set with a too long picture ref still loads, without that picture', async () => {
+    const dir = freshDir()
+    const files = new CardsFiles(() => dir)
+    const set = new CardsStore(Date.now, files).add('x', hotelCards())
+    await files.flush()
+    const file = join(dir, `${set.id}.json`)
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    saved.cards.cards[0].image.sourceUrl = `https://img.hotels.test/${'a'.repeat(3000)}.jpg`
+    writeFileSync(file, JSON.stringify(saved))
+    const back = await files.load(set.id)
+    expect(back?.cards.cards).toHaveLength(3)
+    expect(back?.cards.cards[0].image).toBeUndefined()
+    expect(back?.cards.cards[0].title).toBe('Hotel Azur')
+  })
+
   it('keeps the newest 30', async () => {
     const dir = freshDir()
     const files = new CardsFiles(() => dir)

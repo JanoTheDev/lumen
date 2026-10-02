@@ -33,11 +33,19 @@ const source = z.strictObject({
   checkedAt: z.number().int().nonnegative()
 })
 
-const image = z.strictObject({
+/** A card's remote picture ref (find-images checks one before keeping it). */
+export const imageRefSchema = z.strictObject({
   sourceUrl: https,
   pageUrl: https,
   alt: text(L.alt),
   attribution: text(L.value).optional()
+})
+
+/** An entity card's summary (find-images checks one before keeping it). */
+export const summarySchema = z.strictObject({
+  text: text(L.summary),
+  url: https,
+  source: text(L.label)
 })
 
 const price = z.strictObject({
@@ -66,8 +74,8 @@ const card = z.strictObject({
   kind: z.enum(CARD_KINDS),
   title: text(L.title),
   subtitle: text(L.subtitle).optional(),
-  summary: z.strictObject({ text: text(L.summary), url: https, source: text(L.label) }).optional(),
-  image: image.optional(),
+  summary: summarySchema.optional(),
+  image: imageRefSchema.optional(),
   price: price.optional(),
   rating: rating.optional(),
   facts: z.array(z.strictObject({ label: text(L.label), value: text(L.value) })).max(L.facts),

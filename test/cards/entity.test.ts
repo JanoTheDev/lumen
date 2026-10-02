@@ -110,4 +110,43 @@ describe('entity lookup after showing', () => {
     expect(persist).toHaveBeenCalledWith(shown.id)
     persist.mockRestore()
   })
+
+  it('a found picture ref too long to save again is not kept', async () => {
+    setCardsPorts({
+      showAnswer: vi.fn(),
+      openUrl: vi.fn(),
+      saveNote: vi.fn(),
+      openPanel: vi.fn(),
+      runQuery: vi.fn(),
+      say: vi.fn()
+    })
+    const shown = presentCards('A place', {
+      layout: 'carousel',
+      sources: [],
+      cards: [
+        {
+          id: 'p1',
+          kind: 'place',
+          title: 'Old Port',
+          facts: [],
+          links: [{ label: 'port.test', url: 'https://port.test/' }],
+          actions: []
+        }
+      ]
+    })
+    if (!shown.ok) throw new Error(shown.error)
+    const resolve = vi.fn(async () => 'data:image/jpeg;base64,AAAA')
+    setImageFinder({
+      fromPage: async () => ({
+        sourceUrl: `https://port.test/${'a'.repeat(3000)}.jpg`,
+        pageUrl: 'https://port.test/',
+        alt: 'Old Port'
+      }),
+      commons: async () => null,
+      resolve
+    })
+    await findCardImages(shown.id)
+    expect(resolve).not.toHaveBeenCalled()
+    expect(store.get(shown.id)?.cards.cards[0].image).toBeUndefined()
+  })
 })
