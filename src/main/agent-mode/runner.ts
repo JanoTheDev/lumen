@@ -42,6 +42,11 @@ export interface SharedBudget {
   capUsd(): number
   /** "Keep going" at the cost cap: raise the run's cap by one step. */
   extend(): void
+  /**
+   * Once the budget is spent this task ends without asking (a helper: only the run's top task
+   * asks to keep going, and a helper's "yes" would buy nothing).
+   */
+  final?: boolean
 }
 
 /** safety-policy §7. */
@@ -438,6 +443,7 @@ export async function runAgent(opts: RunOptions, deps: RunnerDeps): Promise<RunR
   }
 
   async function continuePast(reason: string): Promise<boolean> {
+    if (budget?.final && costLeft() <= 0) return false
     update({ phase: 'confirm' })
     const yes = await raced(deps.askContinue(reason, signal), signal)
     if (!yes) return false

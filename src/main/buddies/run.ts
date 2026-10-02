@@ -217,6 +217,8 @@ export class BuddyRunBudgets {
   for(b: Pick<Buddy, 'budget'>, task: Pick<BackgroundTask, 'id' | 'parentId'>): SharedBudget {
     const root = task.parentId ?? task.id
     return {
+      // A helper ends once the run's budget is spent; the top task asks to keep going.
+      final: !!task.parentId,
       othersUsd: () => othersSpendUsd(task, this.tasks()),
       capUsd: () => b.budget.perRunUsd * (1 + (this.steps.get(root) ?? 0)),
       extend: () => {

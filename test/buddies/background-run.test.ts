@@ -266,4 +266,24 @@ describe('helpers of a buddy run (L1)', () => {
     await m.wait(r.task.id)
     expect(m.get(r.task.id)?.result?.summary).toMatch(/stopped at the limit/)
   })
+
+  it('a helper started with the budget spent ends without asking (M2)', async () => {
+    const b = writer()
+    h.script = [
+      reply(call('spawn_task', { prompt: 'help', wait: true })),
+      finish('helped'),
+      finish('parent done')
+    ]
+    // The parent spends the whole $0.25 before it spawns the helper.
+    h.costs = [0.25, 0, 0]
+    const r = svc.run(b.id, { trigger: 'manual' })
+    if (!r.ok) throw new Error(r.error)
+    const m = backgroundManager()
+    await vi.waitFor(() => expect(m.get(r.task.id)?.question).toBeDefined())
+    const child = m.list().find((t) => t.parentId === r.task.id)
+    expect(child?.question).toBeUndefined()
+    expect(child?.result?.summary).toMatch(/stopped at the limit/)
+    m.answer(r.task.id, 'Stop')
+    await m.wait(r.task.id)
+  })
 })
