@@ -7,7 +7,7 @@
 // run is at most the default. A buddy whose name the user already has gets a free id instead
 // of replacing theirs. No Electron.
 import { existsSync, readdirSync, readFileSync } from 'fs'
-import { join } from 'path'
+import { basename, join } from 'path'
 import { BUDDY_DEFAULT_PER_RUN_USD, type Buddy } from '@shared/buddies'
 import {
   buddyIdFor,
@@ -34,6 +34,11 @@ export const BUDDY_PACK_KIND = 'buddy'
 export interface BuddyKindOptions {
   /** A folder with this id exists that is not an earlier import (the user's own buddy). */
   ownTaken?: (id: string) => boolean
+  /**
+   * Rewrites the staged buddy.md once it is valid, before any folder is installed: an import
+   * never makes the pack's own file visible, and a failed rewrite installs nothing.
+   */
+  rewrite?: (dir: string, id: string) => void
 }
 
 /** The buddy's header + instructions from a pack's buddy.md (clamped, untrusted). */
@@ -64,6 +69,7 @@ export function buddyPackKind(opts: BuddyKindOptions = {}): PackKind {
       } catch (e) {
         problems.push(`${BUDDY_FILE}: ${(e as Error).message}`)
       }
+      if (!problems.length) opts.rewrite?.(dir, basename(dir))
       return problems
     }
   }
@@ -138,9 +144,10 @@ export function exportBuddies(list: Buddy[]): Buffer {
 }
 
 /** The kind for the buddies folder `root`: the user's own buddies are never replaced. */
-function kindFor(root: string): PackKind {
+function kindFor(root: string, rewrite?: BuddyKindOptions['rewrite']): PackKind {
   return buddyPackKind({
-    ownTaken: (id) => existsSync(join(root, id)) && !existsSync(join(root, id, IMPORT_MARKER))
+    ownTaken: (id) => existsSync(join(root, id)) && !existsSync(join(root, id, IMPORT_MARKER)),
+    ...(rewrite ? { rewrite } : {})
   })
 }
 
@@ -178,16 +185,19 @@ export function installBuddyArchive(
   known: ClampContext = {}
 ): { id: string; name: string; updated: boolean }[] {
   const plan = new Map(planBuddyArchive(archive, root, known).map((p) => [p.id, p.buddy]))
-  return installPacks(archive, { kind: kindFor(root), destRoot: root, source }).map((p) => {
-    const planned = plan.get(p.id)
+  // Each buddy.md is rewritten in the staging folder, before it is installed.
+  const rewrite = (dir: string, id: string): void => {
     const b =
-      planned ??
+      plan.get(id) ??
       importedBuddy(
-        buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id),
+        buddyFromPackFile(readFileSync(join(dir, BUDDY_FILE), 'utf8'), id),
         () => false,
         known
       ).buddy
-    writeBuddyFileAt(p.dir, b)
-    return { id: p.id, name: b.name, updated: p.updated }
-  })
+    plan.set(id, b)
+    writeBuddyFileAt(dir, b)
+  }
+  return installPacks(archive, { kind: kindFor(root, rewrite), destRoot: root, source }).map(
+    (p) => ({ id: p.id, name: plan.get(p.id)?.name ?? p.id, updated: p.updated })
+  )
 }

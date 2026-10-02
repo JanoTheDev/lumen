@@ -1,7 +1,7 @@
 // Buddy `.lumen` packs (08 T51): export leaves the notebook, schedules and folders out; an import
 // is community-untrusted, never replaces the user's own buddy and holds buddy.md only.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type { Buddy } from '@shared/buddies'
@@ -12,7 +12,7 @@ import {
   installBuddyArchive,
   planBuddyArchive
 } from '../../src/main/packs/buddy-kind'
-import { PackError } from '../../src/main/packs/install'
+import { installPacks, PackError } from '../../src/main/packs/install'
 import { readZip } from '../../src/main/packs/zip-read'
 import { zip } from '../../src/main/packs/zip-write'
 
@@ -117,6 +117,27 @@ describe('buddy packs', () => {
     expect(b.permissions.files).toEqual({ read: [], write: [] })
     expect(b.permissions.network).toEqual(['https://evil.example.com'])
     expect(b.trust).toBe('community-untrusted')
+  })
+
+  it('the pack file is rewritten before it is installed; a failed rewrite installs nothing (L2)', () => {
+    const text = '---\nname: "Big Buddy"\nbudget: {"perRunUsd":5}\n---\n\nGo.\n'
+    const archive = zip([{ name: 'big-buddy/buddy.md', data: Buffer.from(text) }])
+    const seen: string[] = []
+    const kind = buddyPackKind({
+      rewrite: (dir, id) => {
+        seen.push(id)
+        expect(dir).not.toBe(join(away, id))
+        throw new Error('disk full')
+      }
+    })
+    expect(() => installPacks(archive, { kind, destRoot: away, source: 'b.lumen' })).toThrow(
+      'disk full'
+    )
+    expect(seen).toEqual(['big-buddy'])
+    expect(existsSync(join(away, 'big-buddy'))).toBe(false)
+    // The real import: the installed file already holds the capped budget.
+    installBuddyArchive(archive, 'b.lumen', away)
+    expect(readFileSync(join(away, 'big-buddy', 'buddy.md'), 'utf8')).not.toContain('"perRunUsd":5')
   })
 
   it('an import keeps a budget per run no higher than the default', () => {
