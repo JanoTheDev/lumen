@@ -128,6 +128,11 @@ describe('controls', () => {
     expect(p('what did Inbox Buddy find?')).toEqual({ kind: 'last', id: 'inbox-buddy' })
     expect(p('what has the Price Buddy found')).toEqual({ kind: 'last', id: 'price-buddy' })
   })
+
+  it('a short name never takes "what did … do / find" (L4)', () => {
+    expect(p('what did the price do today')).toBeNull()
+    expect(p('what did research find')).toBeNull()
+  })
 })
 
 describe('spoken lines', () => {

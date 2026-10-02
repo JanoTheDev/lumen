@@ -263,7 +263,8 @@ export function parseBuddyCommand(text: string, list: readonly BuddyRef[]): Budd
     const at = 2
     const hit = nameAt(toks, at, all)
     const v = hit ? toks[hit.next]?.w : undefined
-    if (hit && v && (LAST_VERBS.has(v) || v === 'found' || v === 'said'))
+    // The whole name: "what did the market do today" is a question, not Market Buddy's result.
+    if (hit?.whole && v && (LAST_VERBS.has(v) || v === 'found' || v === 'said'))
       return pick(hit, (id) => ({ kind: 'last', id }))
     if (!hit && toks.slice(at).some((t) => LAST_VERBS.has(t.w))) return unknown(at)
     return null
