@@ -19,7 +19,14 @@ import { isOpen } from '../agent-mode/background/manager'
 import { backgroundManager, startBackgroundTask } from '../agent-mode/background'
 import { memory } from '../ai/memory/runtime'
 import { bus } from '../bus'
-import { DECISION_SYSTEM, decisionPrompt, decisionSchema, profileForDecision } from './autopilot'
+import {
+  DECISION_SYSTEM,
+  decisionPrompt,
+  decisionSchema,
+  profileForDecision,
+  type AutopilotDecision,
+  type DecisionInput
+} from './autopilot'
 import { barView, pushLine, runClaudeTurn, sessionBusy, taskTitleFor } from './background'
 import { PermissionBridge, permissionSummary, type PendingPermission } from './bridge'
 import { findClaude } from './cli'
@@ -29,6 +36,7 @@ import { withTreeKill } from './kill-tree'
 import { applyHooks, previewHooks, writeSessionSettings } from './hooks-config'
 import { matchClaudeCodeIntent, type ClaudeIntent } from './intents'
 import { listClaudeProjects, matchProject, mergeProjects } from './projects'
+import { copilotScope } from './copilot-scope'
 import { CopilotStore } from './store'
 import { CodingSkillLibrary } from '../coding-skills/library'
 import { CodingSkills } from '../coding-skills/service'
@@ -76,7 +84,10 @@ export function copilotStore(): CopilotStore {
 let skills: CodingSkills | null = null
 let skillVoice: CodingSkillVoice | null = null
 
-const fastComplete: Complete = async (system, user, schema, maxTokens, signal) => {
+const fastComplete: Complete = (system, user, schema, maxTokens, signal) =>
+  copilotScope('coding-skill', () => fastCompleteNow(system, user, schema, maxTokens, signal))
+
+const fastCompleteNow: Complete = async (system, user, schema, maxTokens, signal) => {
   const { llm, model, effort } = getProvider('fast')
   const res = await llm.complete(
     {
@@ -93,12 +104,32 @@ const fastComplete: Complete = async (system, user, schema, maxTokens, signal) =
   return res.data ?? parseJsonAs(res.text, schema)
 }
 
+/** An autopilot answer from the fast model. */
+async function decideNow(input: DecisionInput, signal?: AbortSignal): Promise<AutopilotDecision> {
+  const { llm, model, effort } = getProvider('fast')
+  const res = await llm.complete(
+    {
+      model,
+      system: [{ text: DECISION_SYSTEM, cacheable: true }],
+      messages: [{ role: 'user', content: decisionPrompt(input) }],
+      maxTokens: 400,
+      effort,
+      schema: decisionSchema,
+      schemaName: 'claude_code_answer'
+    },
+    signal
+  )
+  const d = res.data ?? parseJsonAs(res.text, decisionSchema)
+  if (!d) throw new Error('decision did not match the schema')
+  return d
+}
+
 /** Coding skills (library, drafts, per-project attachments) for Lumen-started sessions. */
 export function codingSkills(): CodingSkills {
   skills ??= new CodingSkills({
     library: new CodingSkillLibrary(join(copilotStore().dir, 'coding-skills')),
     distill: { complete: fastComplete },
-    author: (req) => authorSkill(req),
+    author: (req) => copilotScope('coding-skill', () => authorSkill(req)),
     now: () => Date.now(),
     newId: () => `csd_${Date.now().toString(36)}${randomBytes(3).toString('hex')}`,
     changed: (projects) => void copilot?.reloadSkills(projects),
@@ -410,24 +441,7 @@ export async function installClaudeCode(): Promise<void> {
         return []
       }
     },
-    decide: async (input, signal) => {
-      const { llm, model, effort } = getProvider('fast')
-      const res = await llm.complete(
-        {
-          model,
-          system: [{ text: DECISION_SYSTEM, cacheable: true }],
-          messages: [{ role: 'user', content: decisionPrompt(input) }],
-          maxTokens: 400,
-          effort,
-          schema: decisionSchema,
-          schemaName: 'claude_code_answer'
-        },
-        signal
-      )
-      const d = res.data ?? parseJsonAs(res.text, decisionSchema)
-      if (!d) throw new Error('decision did not match the schema')
-      return d
-    },
+    decide: (input, signal) => copilotScope('autopilot', () => decideNow(input, signal)),
     claudeMd,
     profile: profileFacts,
     notify: (text, kind) => notify(text, kind),
