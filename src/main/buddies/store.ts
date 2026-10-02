@@ -118,6 +118,14 @@ export class BuddyStore {
     return isBuddyId(id) && existsSync(join(this.root, id, BUDDY_FILE))
   }
 
+  /**
+   * The buddy's folder is there, even when its buddy.md cannot be read now (locked by a sync
+   * tool, a broken header): only a missing folder means the buddy is gone.
+   */
+  hasFolder(id: string): boolean {
+    return isBuddyId(id) && existsSync(join(this.root, id))
+  }
+
   /** Imported (a pack marker in its folder): always community-untrusted. */
   imported(id: string): boolean {
     return isBuddyId(id) && existsSync(join(this.root, id, IMPORT_MARKER))

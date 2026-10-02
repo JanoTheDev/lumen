@@ -141,6 +141,8 @@ const NOT_LOADED: RunBuddyResult = {
 export const listBuddies = (): Buddy[] => service?.list() ?? []
 export const buddySummaries = (): BuddySummary[] => service?.summaries() ?? []
 export const getBuddy = (id: string): Buddy | null => service?.get(id) ?? null
+/** The buddy is not deleted (its buddy.md may still be unreadable for now). */
+export const buddyExists = (id: string): boolean => service?.exists(id) ?? false
 export const findBuddy = (name: string): Buddy | null => service?.byName(name) ?? null
 
 export function createBuddy(fields: Partial<Omit<Buddy, 'id'>> & { name: string }): Buddy {

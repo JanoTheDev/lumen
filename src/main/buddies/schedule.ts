@@ -180,6 +180,8 @@ export interface ScheduleHost {
   remove(id: string): boolean
   buddies(): Buddy[]
   getBuddy(id: string): Buddy | null
+  /** The buddy's folder is there (an unreadable buddy.md is not a deleted buddy). */
+  buddyExists(id: string): boolean
   setScheduleIds(id: string, scheduleIds: string[]): void
   /** The buddies are loaded (before that every buddy looks gone). */
   buddiesLoaded(): boolean
@@ -247,7 +249,8 @@ export function pruneOrphanSchedules(): number {
   const list = host.automations()
   if (!list) return 0
   let n = 0
-  for (const id of orphanSchedules(list, (b) => !!host?.getBuddy(b))) if (host.remove(id)) n++
+  // Gone = its folder is gone; a buddy.md that cannot be read now keeps its schedules.
+  for (const id of orphanSchedules(list, (b) => !!host?.buddyExists(b))) if (host.remove(id)) n++
   if (n) syncScheduleIds()
   return n
 }

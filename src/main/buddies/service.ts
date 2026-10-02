@@ -97,6 +97,11 @@ export class Buddies {
     return this.deps.store.get(id)
   }
 
+  /** The buddy's folder is there (readable or not): not deleted. */
+  exists(id: string): boolean {
+    return this.deps.store.hasFolder(id)
+  }
+
   /** A name match, case and spacing ignored ("inbox buddy" → Inbox Buddy). */
   byName(name: string): Buddy | null {
     const want = buddyNameKey(name)

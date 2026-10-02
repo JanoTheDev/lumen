@@ -207,7 +207,9 @@ describe('adding and removing schedules', () => {
   let ids: Record<string, string[]>
   let host: ScheduleHost
   let loaded: boolean
+  let folders: Set<string>
   beforeEach(() => {
+    folders = new Set()
     loaded = true
     list = [auto('au_other', { kind: 'buddy', buddyId: 'price-buddy' })]
     ids = {}
@@ -231,6 +233,7 @@ describe('adding and removing schedules', () => {
         buddy({ id: 'price-buddy', name: 'Price Buddy', scheduleIds: ids['price-buddy'] ?? [] })
       ],
       getBuddy: (id) => (id === 'inbox-buddy' ? buddy() : null),
+      buddyExists: (id) => id === 'inbox-buddy' || folders.has(id),
       setScheduleIds: (id, s) => (ids[id] = s),
       buddiesLoaded: () => loaded
     }
@@ -245,6 +248,13 @@ describe('adding and removing schedules', () => {
     loaded = true
     expect(pruneOrphanSchedules()).toBe(1)
     expect(list).toEqual([])
+  })
+
+  it('keeps the schedules of a buddy whose buddy.md cannot be read now (M3)', () => {
+    // price-buddy's folder is there, but getBuddy returns null (locked or broken header).
+    folders.add('price-buddy')
+    expect(pruneOrphanSchedules()).toBe(0)
+    expect(list.map((a) => a.id)).toEqual(['au_other'])
   })
 
   it('adds one and keeps scheduleIds in sync', async () => {

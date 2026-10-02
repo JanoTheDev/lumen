@@ -39,6 +39,7 @@ import { buddyCreationTurn, setBuddyScheduler } from './creation-voice'
 import { chooseLane, runBuddyForeground } from './foreground'
 import {
   buddies,
+  buddyExists,
   buddyNotebook,
   buddyRuns,
   buddySummaries,
@@ -309,6 +310,7 @@ export function installBuddyCalling(): void {
     remove: (id) => automations().remove(id),
     buddies: listBuddies,
     getBuddy,
+    buddyExists,
     setScheduleIds: (id, scheduleIds) => void updateBuddy(id, { scheduleIds }),
     buddiesLoaded: () => !!buddies()
   })
@@ -347,6 +349,6 @@ export function installBuddyCalling(): void {
   sync()
   // A deleted buddy takes its schedules with it.
   bus.on('buddies.changed', (e) => {
-    for (const id of e.ids) if (!getBuddy(id)) removeBuddySchedules(id)
+    for (const id of e.ids) if (!buddyExists(id)) removeBuddySchedules(id)
   })
 }
