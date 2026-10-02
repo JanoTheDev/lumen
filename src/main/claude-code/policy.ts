@@ -158,8 +158,9 @@ const GO_PROGRAM_FLAG_RE =
 const SCRIPT_RE =
   /^(test|lint|typecheck|type-check|check|build|format|format:check|lint:fix)(:[\w:-]+)?$/
 const NPX_TOOLS = new Set(['vitest', 'jest', 'eslint', 'tsc', 'prettier'])
+/** A tool from PATH, or from node_modules/.bin (code Claude can edit: that form always asks). */
 const BIN_RE =
-  /^(\.[\\/])?(node_modules[\\/]\.bin[\\/])?(vitest|jest|eslint|tsc|prettier)(\.cmd)?$/i
+  /^((\.[\\/])?node_modules[\\/]\.bin[\\/])?(vitest|jest|eslint|tsc|prettier)(\.cmd)?$/i
 /** A bare Python from PATH: a path (`./python`, `D:/x/python`, a UNC share) is never trusted. */
 const PYTHON_RE = /^python3?(\.exe)?$/i
 const GIT_READ = new Set([
@@ -311,8 +312,6 @@ function safeSimple(w: string[], req: ToolRequest, filter: boolean): boolean {
   return true
 }
 
-const CODE_TOOL_RE = /^(vitest|jest|eslint|prettier|playwright)$/i
-
 /**
  * An allowed shape that runs the project's own code: package scripts, test runners, linters and
  * formatters with JS configs, cargo build scripts and proc macros (build.rs), go test, MSBuild
@@ -333,8 +332,9 @@ function runsProjectCode(w: string[]): boolean {
     case 'mypy':
     case 'flake8':
       return true
+    // npx runs the project's node_modules copy (editable) or downloads a package of that name.
     case 'npx':
-      return CODE_TOOL_RE.test(args[0] ?? '')
+      return true
     case 'cargo':
       return args[0] !== 'fmt'
     case 'go':
@@ -343,7 +343,7 @@ function runsProjectCode(w: string[]): boolean {
   // `python -m x` puts the working folder first on sys.path, so a project `x.py` would run.
   if (PYTHON_RE.test(head)) return true
   const bin = BIN_RE.exec(head)
-  return !!bin && bin[3].toLowerCase() !== 'tsc'
+  return !!bin && (bin[1] !== undefined || bin[3].toLowerCase() !== 'tsc')
 }
 
 /** Commands outside the allowed shapes that plainly run project code (for the reason). */
@@ -372,9 +372,10 @@ function commandSafety(cmd: string, req: ToolRequest): 'read' | 'code' | null {
 }
 
 // Files whose contents decide what runs later (git config and hooks, Claude Code settings and
-// hooks, editor tasks, direnv): an edit there is never approved on its own, even in the project.
+// hooks, editor tasks, direnv, installed packages and virtualenvs): an edit there is never
+// approved on its own, even in the project.
 const EXEC_CONFIG_RE =
-  /(^|\/)(\.git|\.claude|\.vscode|\.idea|\.husky|\.githooks)(\/|$)|(^|\/)(\.envrc|\.gitmodules|\.npmrc|\.yarnrc(\.yml)?|\.mcp\.json)$/
+  /(^|\/)(\.git|\.claude|\.vscode|\.idea|\.husky|\.githooks|node_modules|\.venv|venv)(\/|$)|(^|\/)(\.envrc|\.gitmodules|\.npmrc|\.yarnrc(\.yml)?|\.mcp\.json)$/
 
 /** The path is a file that configures what runs (see EXEC_CONFIG_RE). */
 export function execConfigPath(project: string, p: string, cwd = project): boolean {

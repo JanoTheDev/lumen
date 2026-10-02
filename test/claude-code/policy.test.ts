@@ -88,7 +88,7 @@ describe('decidePermission', () => {
   })
 
   it('careful: approves checks, reads and edits inside the project', () => {
-    expect(decidePermission(bash('npx tsc --noEmit && cargo fmt --check'), 'careful').verdict).toBe(
+    expect(decidePermission(bash('tsc --noEmit && cargo fmt --check'), 'careful').verdict).toBe(
       'allow'
     )
     expect(decidePermission(bash('git status'), 'careful').verdict).toBe('allow')
@@ -165,9 +165,8 @@ describe('decidePermission', () => {
 
   it('careful still approves plain checks, reads and pipes into filters', () => {
     for (const c of [
-      'npx tsc --noEmit 2>&1 | tail -n 40',
+      'tsc --noEmit 2>&1 | tail -n 40',
       'go vet ./...',
-      'npx biome check src',
       'ruff check src',
       'black --check src',
       'git log --oneline -5',
@@ -251,6 +250,30 @@ describe('decidePermission', () => {
       expect(decidePermission(bash(c), 'careful').verdict, c).toBe('ask')
     for (const c of ['go vet ./...', 'go build ./...', 'go build -tags dev ./...'])
       expect(decidePermission(bash(c), 'careful').verdict, c).toBe('allow')
+  })
+
+  it('careful runs only a bare tsc on its own; npx and project copies ask (review M1)', () => {
+    for (const c of [
+      './tsc',
+      'cd sub && ./tsc',
+      'node_modules/.bin/tsc',
+      './node_modules/.bin/tsc.cmd',
+      'npx tsc --noEmit',
+      'npx biome check src'
+    ])
+      expect(decidePermission(bash(c), 'careful').verdict, c).toBe('ask')
+    expect(decidePermission(bash('npx biome check src'), 'careful').reason).toMatch(
+      /runs the project’s code/
+    )
+    for (const f of [
+      `${P}\\node_modules\\typescript\\lib\\tsc.js`,
+      `${P}\\.venv\\Lib\\site-packages\\ruff\\__main__.py`,
+      `${P}\\venv\\Scripts\\activate`
+    ])
+      expect(decidePermission(tool('Edit', { file_path: f }), 'careful').reason, f).toMatch(
+        /settings that run code/
+      )
+    expect(decidePermission(bash('tsc --noEmit'), 'careful').verdict).toBe('allow')
   })
 
   it('careful never auto-approves edits to config that runs code', () => {
