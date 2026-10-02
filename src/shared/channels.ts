@@ -30,6 +30,7 @@ import type { CardActionRequest, CardActionResult, CardsView } from './cards'
 import type { AssistantState, LessonCommand, ScreenScene } from './events'
 import type { DictationHistoryView, DictationStatsView, Note } from './dictation-history'
 import type { BackgroundTask } from './types'
+import type { UsageCalls, UsageCallsFilter, UsageCost, UsageRange, UsageReport } from './usage'
 import type { ChatControlOp, ChatDelta, ChatSteerResult, ChatSummary, ChatView } from './task-chat'
 import type {
   AutomationAction,
@@ -345,6 +346,22 @@ export interface InvokeChannels {
   'memory:delete-all': { args: [confirm: string]; result: MemoryResult }
   /** Model spend: today, this session, the last 30 days and a rough per-day estimate. */
   'usage:get': { args: []; result: UsageOverview }
+  /** Settings → Usage (05 T44): totals, per-day bars, top-20 tables, Claude Code group. */
+  'usage:report': { args: [req: { range: UsageRange }]; result: UsageReport }
+  /** One table row's calls, newest first, at most 500. */
+  'usage:calls': {
+    args: [req: { range: UsageRange; filter: UsageCallsFilter }]
+    result: UsageCalls
+  }
+  /** Saves the range's calls as CSV (counts only) where the user picks. */
+  'usage:export': {
+    args: [req: { range: UsageRange }]
+    result: { ok: boolean; path?: string; error?: string }
+  }
+  /** Spend of these tasks, each with its helpers (task chat header, Home Tasks rows). */
+  'usage:tasks': { args: [req: { ids: string[] }]; result: Record<string, UsageCost> }
+  /** This month's spend per automation id (Settings → Automations). */
+  'usage:by-automation': { args: []; result: Record<string, UsageCost> }
   /** Which OS agent is running (Settings shows it read-only). */
   'agent:info': { args: []; result: AgentImplInfo }
   /** Claude Code copilot (08 T33–T40): CLI, settings, live sessions, waiting permissions. */
@@ -1313,6 +1330,8 @@ export interface EventChannels {
   'tasks:chat-delta': [delta: ChatDelta]
   /** A card set changed (an image loaded): re-read it with `cards:get`. */
   'cards:changed': [id: string]
+  /** New usage lines were recorded (Settings → Usage re-reads; at most every 2 s). */
+  'usage:changed': []
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -1389,6 +1408,11 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'memory:export',
   'memory:delete-all',
   'usage:get',
+  'usage:report',
+  'usage:calls',
+  'usage:export',
+  'usage:tasks',
+  'usage:by-automation',
   'agent:info',
   'claude:status',
   'claude:settings-set',
@@ -1579,7 +1603,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'assistant:focus',
   'tasks:changed',
   'tasks:chat-delta',
-  'cards:changed'
+  'cards:changed',
+  'usage:changed'
 ]
 
 /** A file dropped on the assistant bar (08 T21), as the bar shows it. */
