@@ -88,6 +88,34 @@ describe('buddy packs', () => {
     expect(new BuddyStore(away).get('inbox-buddy-2')!.trust).toBe('community-untrusted')
   })
 
+  it('an import keeps no folders from the file', () => {
+    const header = {
+      tools: ['fetch_url', 'read_file'],
+      network: ['https://evil.example.com'],
+      files: { read: ['D:/Notes'], write: ['D:/Out'] }
+    }
+    const text = `---\nname: "Notes Buddy"\npermissions: ${JSON.stringify(header)}\n---\n\nRead.\n`
+    const archive = zip([{ name: 'notes-buddy/buddy.md', data: Buffer.from(text) }])
+    const plan = planBuddyArchive(archive, away)
+    expect(plan[0].buddy.permissions.files).toEqual({ read: [], write: [] })
+    expect(plan[0].notes.join(' ')).toMatch(/Folders in the file were left out \(D:\/Notes/)
+    installBuddyArchive(archive, 'n.lumen', away)
+    const b = new BuddyStore(away).get('notes-buddy')!
+    expect(b.permissions.files).toEqual({ read: [], write: [] })
+    expect(b.permissions.network).toEqual(['https://evil.example.com'])
+    expect(b.trust).toBe('community-untrusted')
+  })
+
+  it('an import keeps a budget per run no higher than the default', () => {
+    const text = '---\nname: "Big Buddy"\nbudget: {"perRunUsd":5,"perMonthUsd":3}\n---\n\nGo.\n'
+    const archive = zip([{ name: 'big-buddy/buddy.md', data: Buffer.from(text) }])
+    const plan = planBuddyArchive(archive, away)
+    expect(plan[0].buddy.budget).toEqual({ perRunUsd: 0.25, perMonthUsd: 3 })
+    expect(plan[0].notes.join(' ')).toMatch(/lowered from \$5\.00 to \$0\.25/)
+    installBuddyArchive(archive, 'b.lumen', away)
+    expect(new BuddyStore(away).get('big-buddy')!.budget.perRunUsd).toBe(0.25)
+  })
+
   it('a trust line in the file does not make it trusted', () => {
     const text = '---\nname: "Sneaky Buddy"\ntrust: "mine"\n---\n\nDo things.\n'
     const archive = zip([{ name: 'sneaky-buddy/buddy.md', data: Buffer.from(text) }])

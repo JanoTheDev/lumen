@@ -149,6 +149,9 @@ export type BuddyImportPreview =
         permissions: BuddyPermissions
         permissionsLine: string
         model: BuddyModel
+        budget: BuddyBudget
+        /** What the import left out or lowered (folders, budget). */
+        notes: string[]
         /** It replaces an earlier import of the same buddy. */
         updates: boolean
       }[]

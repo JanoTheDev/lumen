@@ -2,13 +2,21 @@
 // instructions). Export leaves out everything private or local: the notebook (memory.md), its
 // schedule ids, folders (paths of this PC) and its trust. An import installs through the
 // generic pack installer into ~/.ai-overlay/buddies with a `.lumen-pack.json` marker, so the
-// buddy store keeps it community-untrusted (every connector / on-screen action confirms). A
-// buddy whose name the user already has gets a free id instead of replacing theirs. No Electron.
+// buddy store keeps it community-untrusted (every connector / on-screen action confirms). An
+// import never keeps folders from the file (the user adds them in Settings) and its budget per
+// run is at most the default. A buddy whose name the user already has gets a free id instead
+// of replacing theirs. No Electron.
 import { existsSync, readdirSync, readFileSync } from 'fs'
 import { join } from 'path'
-import type { Buddy } from '@shared/buddies'
+import { BUDDY_DEFAULT_PER_RUN_USD, type Buddy } from '@shared/buddies'
 import { buddyIdFor, clampBuddy, isBuddyId } from '../buddies/clamp'
-import { BUDDY_FILE, buddyFileText, IMPORT_MARKER, parseBuddyFile } from '../buddies/store'
+import {
+  BUDDY_FILE,
+  buddyFileText,
+  IMPORT_MARKER,
+  parseBuddyFile,
+  writeBuddyFileAt
+} from '../buddies/store'
 import { installPacks, planPacks, type PackKind } from './install'
 import { readZip, ZIP_LIMITS } from './zip-read'
 import { zip } from './zip-write'
@@ -53,6 +61,35 @@ export function buddyPackKind(opts: BuddyKindOptions = {}): PackKind {
   }
 }
 
+/**
+ * What an import keeps of a pack's buddy: no folders (paths on someone else's PC; a hand-made
+ * file could name any), and a budget per run no higher than the default. `notes` say what was
+ * left out, for the import preview.
+ */
+export function importedBuddy(b: Buddy): { buddy: Buddy; notes: string[] } {
+  const notes: string[] = []
+  const { read, write } = b.permissions.files
+  if (read.length || write.length)
+    notes.push(
+      `Folders in the file were left out (${[...read, ...write].join(', ')}). Add folders in its settings after the import if it needs them.`
+    )
+  const perRunUsd = Math.min(b.budget.perRunUsd, BUDDY_DEFAULT_PER_RUN_USD)
+  if (perRunUsd < b.budget.perRunUsd)
+    notes.push(
+      `Its budget per run was lowered from $${b.budget.perRunUsd.toFixed(2)} to $${perRunUsd.toFixed(2)}.`
+    )
+  return {
+    buddy: {
+      ...b,
+      permissions: { ...b.permissions, files: { read: [], write: [] } },
+      budget: { ...b.budget, perRunUsd },
+      scheduleIds: [],
+      trust: 'community-untrusted'
+    },
+    notes
+  }
+}
+
 /** What leaves this PC: no notebook, schedules, folders or trust. */
 export function exportableBuddy(b: Buddy): Buddy {
   return {
@@ -85,26 +122,28 @@ function kindFor(root: string): PackKind {
 export function planBuddyArchive(
   archive: Buffer,
   root: string
-): { id: string; buddy: Buddy; updates: boolean }[] {
+): { id: string; buddy: Buddy; updates: boolean; notes: string[] }[] {
   return planPacks(readZip(archive, ZIP_LIMITS), kindFor(root)).map((p) => {
     const file = p.files.find((f) => f.name === BUDDY_FILE)!
-    return {
-      id: p.id,
-      buddy: buddyFromPackFile(file.data.toString('utf8'), p.id),
-      updates: existsSync(join(root, p.id))
-    }
+    const { buddy, notes } = importedBuddy(buddyFromPackFile(file.data.toString('utf8'), p.id))
+    return { id: p.id, buddy, updates: existsSync(join(root, p.id)), notes }
   })
 }
 
-/** Installs every buddy in the archive (marker: community-untrusted). Throws PackError. */
+/**
+ * Installs every buddy in the archive (marker: community-untrusted), each written as the plan
+ * shows it (no folders, budget capped). Throws PackError.
+ */
 export function installBuddyArchive(
   archive: Buffer,
   source: string,
   root: string
 ): { id: string; name: string; updated: boolean }[] {
-  return installPacks(archive, { kind: kindFor(root), destRoot: root, source }).map((p) => ({
-    id: p.id,
-    name: buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id).name,
-    updated: p.updated
-  }))
+  const plan = new Map(planBuddyArchive(archive, root).map((p) => [p.id, p.buddy]))
+  return installPacks(archive, { kind: kindFor(root), destRoot: root, source }).map((p) => {
+    const planned = plan.get(p.id)
+    const b = planned ?? buddyFromPackFile(readFileSync(join(p.dir, BUDDY_FILE), 'utf8'), p.id)
+    writeBuddyFileAt(p.dir, importedBuddy(b).buddy)
+    return { id: p.id, name: b.name, updated: p.updated }
+  })
 }

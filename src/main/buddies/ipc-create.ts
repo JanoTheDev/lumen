@@ -213,7 +213,7 @@ export function previewBuddyArchive(
   archive: Buffer,
   root: string
 ): Extract<BuddyImportPreview, { ok: true }>['buddies'] {
-  return planBuddyArchive(archive, root).map(({ id, buddy: b, updates }) => ({
+  return planBuddyArchive(archive, root).map(({ id, buddy: b, updates, notes }) => ({
     id,
     name: b.name,
     look: b.look,
@@ -221,6 +221,8 @@ export function previewBuddyArchive(
     permissions: b.permissions,
     permissionsLine: buddyPermissionWords(b.permissions),
     model: b.model,
+    budget: b.budget,
+    notes,
     updates
   }))
 }

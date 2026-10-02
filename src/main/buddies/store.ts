@@ -75,6 +75,11 @@ function atomicWrite(file: string, text: string): void {
   }
 }
 
+/** Writes buddy.md into a buddy folder as it is (the caller clamped it). */
+export function writeBuddyFileAt(dir: string, b: Buddy): void {
+  atomicWrite(join(dir, BUDDY_FILE), buddyFileText(b))
+}
+
 /** Keeps the newest lines that fit in `max` bytes. */
 export function capNotebook(text: string, max = BUDDY_NOTEBOOK_MAX_BYTES): string {
   if (Buffer.byteLength(text, 'utf8') <= max) return text

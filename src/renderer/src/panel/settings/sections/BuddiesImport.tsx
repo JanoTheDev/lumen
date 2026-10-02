@@ -83,6 +83,17 @@ export function BuddiesImport({ onDone }: { onDone: (ids: string[]) => void }): 
                 </div>
                 {b.description && <p className="ui-hint">{b.description}</p>}
                 <PermissionList permissions={b.permissions} />
+                <p className="ui-hint">
+                  Budget: ${b.budget.perRunUsd.toFixed(2)} a run
+                  {b.budget.perMonthUsd !== undefined
+                    ? `, $${b.budget.perMonthUsd.toFixed(2)} a month`
+                    : ', no monthly limit'}
+                </p>
+                {b.notes.map((n) => (
+                  <p key={n} className="ui-hint">
+                    {n}
+                  </p>
+                ))}
               </li>
             ))}
           </ul>
