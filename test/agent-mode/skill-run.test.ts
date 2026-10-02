@@ -1,6 +1,7 @@
 // Foreground skill runs (11 T04) with the app wiring faked: steps.json runs with no model call
 // through the input lane, permissions block and are announced, cancel stops mid-run.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { withUsageScope } from '../../src/main/usage/scope'
 import type { Action, ElementNode, SkillManifest } from '@shared/types'
 
 const h = vi.hoisted(() => ({
@@ -185,6 +186,19 @@ describe('skill steps in the foreground', () => {
       'The export png skill is not allowed to use the mouse and keyboard, so I blocked that.'
     ])
     expect(h.audit[0]).toMatchObject({ decision: 'blocked', result: 'denied', task: 't_skill' })
+  })
+
+  it('audits a denial inside a buddy run as the buddy', async () => {
+    await withUsageScope({ origin: 'buddy', buddyId: 'inbox-buddy' }, () =>
+      runStepsForeground(
+        skill({ input: false }),
+        env(),
+        [{ name: 'file', value: 'cat' }],
+        host,
+        new AbortController().signal
+      )
+    )
+    expect(h.audit[0]).toMatchObject({ origin: 'buddy', buddyId: 'inbox-buddy', result: 'denied' })
   })
 
   it('blocks input outside the skill apps', async () => {

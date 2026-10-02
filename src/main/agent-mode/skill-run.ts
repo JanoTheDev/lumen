@@ -30,6 +30,7 @@ import {
   type SkillStep,
   type StepsFile
 } from '../skills/steps'
+import { currentUsageScope } from '../usage/scope'
 import { askUser as askConfirm } from './confirm'
 import { askUser, type AskIo } from './ask'
 import type { TaskEnv } from './handlers'
@@ -133,10 +134,14 @@ export function skillGuard(
 }
 
 function deniedAudit(taskId: string, skill: string, call: SkillCall, reason: string): void {
+  // A buddy's run (its usage scope) is audited as the buddy, like its allowed actions.
+  const scope = currentUsageScope()
+  const buddy = scope.origin === 'buddy' ? scope.buddyId : undefined
   writeAudit({
     t: new Date().toISOString(),
     task: taskId,
-    origin: 'agent',
+    origin: buddy ? 'buddy' : 'agent',
+    ...(buddy ? { buddyId: buddy } : {}),
     action: {
       type: call.tool,
       element: `skill ${skill}`,
