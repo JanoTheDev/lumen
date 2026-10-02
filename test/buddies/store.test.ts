@@ -154,6 +154,24 @@ describe('buddy store', () => {
     expect(folderAllowed('C:\\a\\..\\b')).toBe(false)
   })
 
+  it('refuses the profile root, system folders and app data', () => {
+    for (const p of [
+      'C:/Users',
+      'C:\\Users\\sam',
+      'C:\\Users\\sam\\',
+      'C:\\Users\\sam\\AppData\\Roaming\\Lumen',
+      'C:\\Users\\sam\\.ai-overlay',
+      'C:\\Users\\sam\\.ssh',
+      'C:\\Windows\\System32',
+      'C:\\Program Files\\App',
+      'C:\\ProgramData',
+      'D:\\work\\AppData'
+    ])
+      expect(folderAllowed(p), p).toBe(false)
+    expect(folderAllowed('C:\\Users\\sam\\Documents\\Invoices')).toBe(true)
+    expect(folderAllowed('D:\\Photos')).toBe(true)
+  })
+
   it('removes a buddy folder', () => {
     const b = store.create({ name: 'Gone Soon' })
     store.appendNotebook(b.id, 'a note')

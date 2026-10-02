@@ -70,7 +70,25 @@ const uniq = (list: string[], max = MAX_LIST): string[] => [...new Set(list)].sl
 const num = (v: unknown, min: number, max: number): number | undefined =>
   typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined
 
-/** A local folder: drive-letter absolute, no `..`, not a drive root, not UNC or a device. */
+/** Top folders of a drive that hold Windows or programs, never a buddy's. */
+const SYSTEM_TOPS = new Set([
+  'windows',
+  'program files',
+  'program files (x86)',
+  'programdata',
+  'users',
+  'documents and settings',
+  '$recycle.bin',
+  'system volume information',
+  'recovery'
+])
+/** Folders anywhere in the path that hold app data, keys or Lumen's own files. */
+const PRIVATE_PARTS = new Set(['appdata', '.ai-overlay', '.ssh', '.gnupg', '.aws', '.azure'])
+
+/**
+ * A local folder: drive-letter absolute, no `..`, not UNC or a device; not a drive root, a
+ * system folder, the Users folder or a profile root, nor inside AppData or Lumen's data.
+ */
 export function folderAllowed(p: string): boolean {
   if (!/^[A-Za-z]:[\\/]/.test(p) || p.length > 260) return false
   const parts = p
@@ -80,7 +98,12 @@ export function folderAllowed(p: string): boolean {
   if (!parts.length) return false
   const bad = (x: string): boolean =>
     x === '..' || x === '.' || /[<>:"|?*]/.test(x) || [...x].some((c) => c.charCodeAt(0) < 32)
-  return !parts.some(bad)
+  if (parts.some(bad)) return false
+  const low = parts.map((x) => x.toLowerCase().replace(/[. ]+$/, ''))
+  if (low.some((x) => PRIVATE_PARTS.has(x))) return false
+  // C:\Users\<name>\Documents is fine; C:\Users and C:\Users\<name> are not.
+  if (low[0] === 'users' || low[0] === 'documents and settings') return low.length >= 3
+  return !SYSTEM_TOPS.has(low[0])
 }
 
 function look(raw: unknown, id: string, name: string): Buddy['look'] {
