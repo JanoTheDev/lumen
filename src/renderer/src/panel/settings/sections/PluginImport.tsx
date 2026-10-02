@@ -342,6 +342,13 @@ export function PluginImport({ onImported }: { onImported: () => void }): JSX.El
           Check
         </Button>
       </div>
+      {busy && (
+        <div className="panel-row">
+          <Button onClick={() => void invoke('plugins:cancel', 'running').catch(() => {})}>
+            Stop
+          </Button>
+        </div>
+      )}
       {msg && (
         <p className="ui-hint" role="status">
           {msg}

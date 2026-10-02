@@ -22,7 +22,7 @@ import { chosenEnv, convertPlugin } from './convert'
 import { fetchPack } from '../packs/fetch'
 import { findPlugins, type FoundPlugin, type RemoteEntry, type TreeFile } from './layout'
 import { planImport, uniquePluginNamer, type ImportPlan, type NameOwner } from './plan'
-import { fetchRemotePlugins } from './remote'
+import { fetchRemotePlugins, remoteNotFetched } from './remote'
 import { readClaudeHome, readFolder, readGithub, scanClaudeHome, SourceError } from './sources'
 
 const PENDING_MS = 10 * 60_000
@@ -69,7 +69,14 @@ function nameOwner(): NameOwner {
   }
 }
 
-async function plugins(trees: Trees['trees']): Promise<{
+/** Previews still reading, by the window that asked (plugins:cancel 'running' stops them). */
+const running = new Map<number, AbortController>()
+
+async function plugins(
+  trees: Trees['trees'],
+  online: boolean,
+  signal?: AbortSignal
+): Promise<{
   found: { plugin: FoundPlugin; converted: ReturnType<typeof convertPlugin> }[]
   skipped: ImportPlan['skipped']
 }> {
@@ -86,8 +93,13 @@ async function plugins(trees: Trees['trees']): Promise<{
       found.push({ plugin, converted: convertPlugin(t.files, plugin) })
     }
   }
-  if (remote.length) {
-    const r = await fetchRemotePlugins(remote, (url) => fetchPack(url))
+  if (remote.length && !online) skipped.push(...remoteNotFetched(remote))
+  else if (remote.length) {
+    const r = await fetchRemotePlugins(
+      remote,
+      (url, o) => fetchPack(url, { maxBytes: o.maxBytes, budget: o.budget, signal: o.signal }),
+      { signal }
+    )
     skipped.push(...r.skipped)
     for (const p of r.plugins) {
       const plugin = unique(p.plugin)
@@ -112,7 +124,23 @@ export async function previewPlugins(
     return { ok: false, error: e instanceof SourceError ? msg : `could not read it: ${msg}` }
   }
   if (!trees) return { ok: false, error: 'cancelled' }
-  const { found, skipped } = await plugins(trees.trees)
+  const stop = new AbortController()
+  const onGone = (): void => stop.abort()
+  const id = sender?.id
+  if (sender && id !== undefined) {
+    running.get(id)?.abort()
+    running.set(id, stop)
+    sender.once('destroyed', onGone)
+  }
+  let got: Awaited<ReturnType<typeof plugins>>
+  try {
+    got = await plugins(trees.trees, req.kind === 'github', stop.signal)
+  } finally {
+    if (id !== undefined && running.get(id) === stop) running.delete(id)
+    if (sender && !sender.isDestroyed()) sender.removeListener('destroyed', onGone)
+  }
+  if (stop.signal.aborted) return { ok: false, error: 'cancelled' }
+  const { found, skipped } = got
   if (!found.length)
     return { ok: false, error: 'no Claude Code plugin, marketplace or skills were found there' }
   const existing = connectors()
@@ -231,7 +259,13 @@ export function registerPluginsIpc(): void {
     const req = safeParse('plugins:import', importSchema, raw)
     return req ? importPlugins(req.token, req.connectors, req.env) : INVALID
   })
-  ipcMain.handle('plugins:cancel', (_e, raw: unknown) => {
+  ipcMain.handle('plugins:cancel', (e, raw: unknown) => {
+    // 'running': stop this window's preview that is still reading (downloads included).
+    if (raw === 'running') {
+      const c = running.get(e.sender.id)
+      c?.abort()
+      return { ok: !!c }
+    }
     const token = safeParse('plugins:cancel', importSchema.shape.token, raw)
     return { ok: token ? pending.delete(token) : false }
   })

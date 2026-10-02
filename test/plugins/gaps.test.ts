@@ -19,8 +19,11 @@ import {
   fetchRemotePlugins,
   githubRepo,
   remoteDownload,
+  remoteNotFetched,
+  type Fetcher,
   type RemoteDownload
 } from '../../src/main/plugins/remote'
+import { BUDGET_EXCEEDED, fetchPack } from '../../src/main/packs/fetch'
 import { zip } from '../../src/main/packs/zip-write'
 import { parseSkillFile } from '../../src/main/skills/manifest'
 
@@ -201,7 +204,13 @@ describe('remote marketplace sources', () => {
     expect(capped.plugins).toHaveLength(2)
     expect(capped.skipped.map((s) => s.what)).toEqual(['plugin "p2"', 'plugin "p3"'])
 
-    const big = await fetchRemotePlugins(many.slice(0, 2), async () => good, {
+    // A fetcher counts the shared budget down as data arrives (as packs/fetch does).
+    const counting: Fetcher = async (_url, o) => {
+      o.budget.left -= good.length
+      if (o.budget.left < 0) throw new Error(BUDGET_EXCEEDED)
+      return good
+    }
+    const big = await fetchRemotePlugins(many.slice(0, 2), counting, {
       maxBytes: good.length + 1
     })
     expect(big.plugins).toHaveLength(1)
@@ -376,5 +385,74 @@ describe('two plugins with the same name (review L1)', () => {
     expect(plan.skills.map((s) => s.preview.name)).toEqual(['one', 'two'])
     const keys = plan.servers.map((s) => s.preview.key)
     expect(new Set(keys).size).toBe(2)
+  })
+})
+
+describe('remote fetch budget and cancel (review M4)', () => {
+  const many = Array.from({ length: 6 }, (_, i) => ({
+    name: `p${i}`,
+    entry: {},
+    source: { source: 'github', repo: `a/p${i}` }
+  }))
+
+  it('stops starting downloads once the shared budget is spent', async () => {
+    const calls: number[] = []
+    const fetcher: Fetcher = async (_url, o) => {
+      calls.push(o.maxBytes)
+      o.budget.left -= 1000
+      if (o.budget.left < 0) throw new Error(BUDGET_EXCEEDED)
+      return Buffer.alloc(0)
+    }
+    const r = await fetchRemotePlugins(many, fetcher, { maxBytes: 500 })
+    // Three workers start at most one download each; none after the budget is gone.
+    expect(calls.length).toBeLessThanOrEqual(3)
+    expect(calls.every((m) => m <= 500)).toBe(true)
+    expect(r.plugins).toEqual([])
+    expect(r.skipped).toHaveLength(6)
+    for (const s of r.skipped) expect(s.why).toMatch(/too large together/)
+  })
+
+  it('hands cancel to running downloads and starts none after it', async () => {
+    const stop = new AbortController()
+    const seen: AbortSignal[] = []
+    const fetcher: Fetcher = (_url, o) => {
+      seen.push(o.signal)
+      return new Promise((_res, rej) =>
+        o.signal.addEventListener('abort', () => rej(new Error('download cancelled')))
+      )
+    }
+    const p = fetchRemotePlugins(many, fetcher, { signal: stop.signal })
+    await Promise.resolve()
+    stop.abort()
+    const r = await p
+    expect(seen.length).toBe(3)
+    expect(seen.every((s) => s.aborted)).toBe(true)
+    expect(r.plugins).toEqual([])
+    expect(r.skipped.map((s) => s.why).join(' | ')).toMatch(/cancelled/)
+
+    const none = await fetchRemotePlugins(many, fetcher, { signal: stop.signal })
+    expect(seen.length).toBe(3)
+    expect(none.skipped).toHaveLength(6)
+  })
+
+  it('fetchPack refuses a spent budget or a cancelled signal before connecting', async () => {
+    const url = 'https://codeload.github.com/a/b/zip/HEAD'
+    await expect(fetchPack(url, { budget: { left: 0 } })).rejects.toThrow(BUDGET_EXCEEDED)
+    await expect(fetchPack(url, { signal: AbortSignal.abort() })).rejects.toThrow(/cancelled/)
+  })
+
+  it('a folder import lists marketplace plugins from other places without fetching', () => {
+    const tree = [
+      f(
+        '.claude-plugin/marketplace.json',
+        JSON.stringify({
+          name: 'm',
+          owner: { name: 'o' },
+          plugins: [{ name: 'tidy', source: { source: 'github', repo: 'acme/tool' } }]
+        })
+      )
+    ]
+    const r = remoteNotFetched(findPlugins(tree).remote)
+    expect(r).toEqual([{ what: 'plugin "tidy"', why: expect.stringMatching(/stays offline/) }])
   })
 })

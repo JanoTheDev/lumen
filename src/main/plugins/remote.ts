@@ -10,6 +10,7 @@
 import { createHash } from 'crypto'
 import type { PluginSkipped } from '@shared/plugins'
 import { checkUrl, PACK_HOSTS } from '../downloads/verified-download'
+import { BUDGET_EXCEEDED } from '../packs/fetch'
 import { readZip, ZIP_LIMITS } from '../packs/zip-read'
 import {
   pluginAt,
@@ -31,7 +32,15 @@ export interface RemoteDownload {
   label: string
 }
 
-export type Fetcher = (url: string) => Promise<Buffer>
+export interface FetcherOptions {
+  /** One download's own cap (zip limit). */
+  maxBytes: number
+  /** What all downloads of this import may still take, counted down as data arrives. */
+  budget: { left: number }
+  signal: AbortSignal
+}
+
+export type Fetcher = (url: string, opts: FetcherOptions) => Promise<Buffer>
 
 /** At most this many plugins are fetched for one import; the rest are listed. */
 export const MAX_REMOTE_PLUGINS = 12
@@ -180,13 +189,26 @@ function unpack(archive: Buffer, d: RemoteDownload): TreeFile[] {
 }
 
 /**
+ * Marketplace plugins that live elsewhere, for a folder or ~/.claude import: those stay offline,
+ * so the plugins are only listed. A GitHub link import (already online) fetches them.
+ */
+export function remoteNotFetched(remote: readonly RemoteEntry[]): PluginSkipped[] {
+  return remote.map((r) => ({
+    what: `plugin "${r.name}"`,
+    why: 'it lives in another place and a folder import stays offline; import the marketplace’s GitHub link to fetch it'
+  }))
+}
+
+/**
  * Fetches the remote marketplace entries (each distinct download once, 3 at a time) and returns
- * them as plugins with their own file trees, plus what was left out.
+ * them as plugins with their own file trees, plus what was left out. All downloads share one
+ * running byte budget: once it is spent, the downloads still running stop and the rest are not
+ * started. `signal` (cancel) stops them the same way.
  */
 export async function fetchRemotePlugins(
   remote: readonly RemoteEntry[],
   fetcher: Fetcher,
-  opts: { max?: number; maxBytes?: number } = {}
+  opts: { max?: number; maxBytes?: number; signal?: AbortSignal } = {}
 ): Promise<{ plugins: RemotePlugin[]; skipped: PluginSkipped[] }> {
   const skipped: PluginSkipped[] = []
   const todo: { r: RemoteEntry; d: RemoteDownload }[] = []
@@ -203,20 +225,38 @@ export async function fetchRemotePlugins(
     else todo.push({ r, d: res.download })
   }
 
+  const budget = { left: opts.maxBytes ?? MAX_REMOTE_BYTES }
+  const stop = new AbortController()
+  const onCancel = (): void => stop.abort()
+  if (opts.signal?.aborted) stop.abort()
+  opts.signal?.addEventListener('abort', onCancel, { once: true })
+  let overBudget = false
+  // Each distinct download once; its buffer is dropped once every entry that uses it is unpacked.
+  const users = new Map<string, number>()
+  for (const { d } of todo) users.set(d.url, (users.get(d.url) ?? 0) + 1)
   const downloads = new Map<string, Promise<Buffer>>()
-  let bytes = 0
-  const budget = opts.maxBytes ?? MAX_REMOTE_BYTES
   const get = (url: string): Promise<Buffer> => {
     let p = downloads.get(url)
     if (!p) {
-      p = fetcher(url).then((b) => {
-        bytes += b.length
-        if (bytes > budget) throw new Error('the plugins from other places are too large together')
-        return b
+      p = fetcher(url, {
+        maxBytes: Math.min(ZIP_LIMITS.maxBytes, Math.max(0, budget.left)),
+        budget,
+        signal: stop.signal
+      }).catch((e: Error) => {
+        if (budget.left < 0 || e.message === BUDGET_EXCEEDED) {
+          overBudget = true
+          stop.abort()
+        }
+        throw e
       })
       downloads.set(url, p)
     }
     return p
+  }
+  const done = (url: string): void => {
+    const n = (users.get(url) ?? 1) - 1
+    users.set(url, n)
+    if (n <= 0) downloads.delete(url)
   }
 
   const out: (RemotePlugin | null)[] = new Array(todo.length).fill(null)
@@ -227,8 +267,22 @@ export async function fetchRemotePlugins(
       const i = next++
       const { r, d } = todo[i]
       const what = `plugin "${r.name}"`
+      if (stop.signal.aborted) {
+        failed[i] = {
+          what,
+          why: overBudget
+            ? 'the plugins from other places are too large together'
+            : 'the download was cancelled'
+        }
+        continue
+      }
       try {
-        let files = unpack(await get(d.url), d)
+        let files: TreeFile[]
+        try {
+          files = unpack(await get(d.url), d)
+        } finally {
+          done(d.url)
+        }
         if (d.subpath) files = under(files, d.subpath)
         if (!files.length) {
           failed[i] = { what, why: `its folder is empty or missing (${d.label})` }
@@ -240,12 +294,18 @@ export async function fetchRemotePlugins(
       } catch (e) {
         failed[i] = {
           what,
-          why: `it could not be downloaded from ${d.label} (${(e as Error).message.slice(0, 120)})`
+          why: overBudget
+            ? 'the plugins from other places are too large together'
+            : `it could not be downloaded from ${d.label} (${(e as Error).message.slice(0, 120)})`
         }
       }
     }
   }
-  await Promise.all([worker(), worker(), worker()])
+  try {
+    await Promise.all([worker(), worker(), worker()])
+  } finally {
+    opts.signal?.removeEventListener('abort', onCancel)
+  }
   skipped.push(...failed.filter((f): f is PluginSkipped => f !== null))
   return { plugins: out.filter((p): p is RemotePlugin => p !== null), skipped }
 }

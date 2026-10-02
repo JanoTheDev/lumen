@@ -67,12 +67,23 @@ export interface FetchOptions {
   maxRedirects?: number
   hosts?: readonly string[]
   signal?: AbortSignal
+  /**
+   * Bytes several downloads may still take together, counted down as data arrives; a download
+   * that would go below zero stops at once.
+   */
+  budget?: { left: number }
 }
+
+/** The message of a download stopped by its shared `budget`. */
+export const BUDGET_EXCEEDED = 'the downloads are too large together'
 
 /** GETs `url` into memory; https and allowlisted hosts only, on every hop. */
 export function fetchPack(url: string, opts: FetchOptions = {}, hop = 0): Promise<Buffer> {
   const max = opts.maxBytes ?? ZIP_LIMITS.maxBytes
+  const tooLarge = `the pack is larger than ${Math.round(max / (1024 * 1024))} MB`
   return new Promise((resolve, reject) => {
+    if (opts.signal?.aborted) return reject(new Error('download cancelled'))
+    if (opts.budget && opts.budget.left <= 0) return reject(new Error(BUDGET_EXCEEDED))
     let target: URL
     try {
       target = checkUrl(url, opts.hosts ?? PACK_HOSTS)
@@ -92,17 +103,23 @@ export function fetchPack(url: string, opts: FetchOptions = {}, hop = 0): Promis
         res.resume()
         return reject(new Error(`download failed (HTTP ${status})`))
       }
-      if (Number(res.headers['content-length'] || 0) > max) {
+      const length = Number(res.headers['content-length'] || 0)
+      if (length > max) {
         res.destroy()
-        return reject(new Error('the pack is larger than 50 MB'))
+        return reject(new Error(tooLarge))
+      }
+      if (opts.budget && length > opts.budget.left) {
+        res.destroy()
+        return reject(new Error(BUDGET_EXCEEDED))
       }
       const chunks: Buffer[] = []
       let bytes = 0
       res.on('data', (c: Buffer) => {
         bytes += c.length
-        if (bytes > max) {
+        if (opts.budget) opts.budget.left -= c.length
+        if (bytes > max || (opts.budget && opts.budget.left < 0)) {
           res.destroy()
-          reject(new Error('the pack is larger than 50 MB'))
+          reject(new Error(bytes > max ? tooLarge : BUDGET_EXCEEDED))
           return
         }
         chunks.push(c)
