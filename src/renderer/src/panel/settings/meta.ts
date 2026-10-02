@@ -19,6 +19,7 @@ export type SectionId =
   | 'lessons'
   | 'skills'
   | 'background'
+  | 'buddies'
   | 'helpers'
   | 'bridges'
   | 'claude-code'
@@ -106,6 +107,13 @@ export const SECTIONS: readonly SectionMeta[] = [
     icon: icons.repeat,
     keywords:
       'automations automatic background tasks routines schedule every day weekday monthly tomorrow task scheduler when i open close app file folder downloads idle away back online limits cost calls quiet mode do not disturb proactive reminders'
+  },
+  {
+    id: 'buddies',
+    label: 'Buddies',
+    icon: icons.hand,
+    keywords:
+      'buddies buddy helper assistant persona little helpers job schedule run now notebook budget per month export import lumen file'
   },
   {
     id: 'helpers',

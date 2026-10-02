@@ -1,0 +1,268 @@
+/* Buddies (08 T53): avatars, Settings → Buddies and the Home strip. Sizes in rem so text
+   scale grows them; colours from the buddy (with contrast-picked ink) or theme tokens. */
+
+.bd-avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  box-shadow: 0 0 0 1px var(--border);
+  forced-color-adjust: none;
+}
+
+.bd-avatar--sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  font-size: 0.8rem;
+}
+
+.bd-avatar--md {
+  width: 2rem;
+  height: 2rem;
+  font-size: 1rem;
+}
+
+.bd-avatar--lg {
+  width: 3rem;
+  height: 3rem;
+  font-size: 1.5rem;
+}
+
+.bd-badge {
+  align-self: flex-start;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--warning);
+  color: var(--fg);
+  font-size: var(--text-sm);
+}
+
+/* ---- list ---- */
+
+.bd-row__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bd-row__main:hover {
+  background: var(--accent-soft);
+}
+
+.bd-import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.bd-import__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.bd-import__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ---- editor ---- */
+
+.bd-fields,
+.bd-review,
+.bd-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.bd-look {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.bd-look__mark {
+  width: 6rem;
+}
+
+.bd-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bd-block__title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-strong);
+}
+
+.bd-perms {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.bd-perm {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-left: 3px solid transparent;
+}
+
+/* Wider permissions: a bar and a word, never colour alone. */
+.bd-perm.is-wider {
+  border-left-color: var(--warning);
+  background: var(--surface-sunken);
+}
+
+.bd-perm__tag {
+  flex: none;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bd-tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  border: 0;
+}
+
+.bd-tools legend {
+  margin-bottom: var(--space-2);
+}
+
+.bd-budget {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+
+/* ---- one buddy ---- */
+
+.bd-page > .ui-btn--quiet {
+  align-self: flex-start;
+}
+
+.bd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.bd-head__text {
+  flex: 1;
+  min-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bd-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.bd-run__link {
+  font-weight: var(--weight-strong);
+  color: var(--fg);
+}
+
+.bd-run__summary {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+/* ---- Home strip ---- */
+
+.home-buddies {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.home-buddy {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-in-out);
+}
+
+.home-buddy:hover {
+  background: var(--accent-soft);
+}
+
+.home-buddy.is-off .bd-avatar {
+  opacity: 0.55;
+}
+
+/* Working: a ring in the buddy's own colour would need inline styles; the accent ring says it. */
+.home-buddy.is-working .bd-avatar {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+
+.home-buddy__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-buddy__name {
+  font-weight: 600;
+}
+
+.home-buddy__meta {
+  color: var(--fg-muted);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-buddies__empty {
+  display: flex;
+  justify-content: flex-start;
+}

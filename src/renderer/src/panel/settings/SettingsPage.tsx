@@ -5,6 +5,7 @@ import { useConfig } from './useConfig'
 import { About } from './sections/About'
 import { Background } from './sections/Background'
 import { Bridges } from './sections/Bridges'
+import { Buddies } from './sections/Buddies'
 import { ClaudeCode } from './sections/ClaudeCode'
 import { Connectors } from './sections/Connectors'
 import { Accessibility } from './sections/Accessibility'
@@ -31,6 +32,7 @@ const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
   lessons: Lessons,
   skills: Skills,
   background: Background,
+  buddies: Buddies,
   helpers: Helpers,
   bridges: Bridges,
   'claude-code': ClaudeCode,

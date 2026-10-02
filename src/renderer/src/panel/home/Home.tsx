@@ -8,6 +8,7 @@ import { invoke, send, useIpc } from '../../lib/ipc'
 import { useConfig } from '../settings/useConfig'
 import { DEFAULT_SUGGESTIONS, moveIndex } from './suggestions'
 import { Tasks } from './Tasks'
+import { BuddiesStrip } from './BuddiesStrip'
 import { Notes } from './Notes'
 import { DictationHistory } from './DictationHistory'
 import { DictationStats } from './DictationStats'
@@ -171,6 +172,8 @@ export function Home(): JSX.Element {
       </form>
 
       <Tasks />
+
+      <BuddiesStrip />
 
       {cfg?.dictation.showStats && stats && <DictationStats stats={stats} refresh={refreshStats} />}
 
