@@ -343,6 +343,32 @@ export async function runJob(
   }
 }
 
+/**
+ * Connector calls of one call's jobs run one at a time: a call may need a confirm (the bar's
+ * card, or a question in the Tasks list), and a second card at once would replace the first,
+ * which then counts as a no nobody gave. Raced, so a stuck call does not hold the line.
+ */
+export function oneConnectorCallAtATime(offered: {
+  defs: ToolDef[]
+  handlers: Record<string, ToolHandler>
+}): { defs: ToolDef[]; handlers: Record<string, ToolHandler> } {
+  let line: Promise<unknown> = Promise.resolve()
+  const handlers: Record<string, ToolHandler> = {}
+  for (const [name, h] of Object.entries(offered.handlers)) {
+    handlers[name] = name.startsWith('mcp__')
+      ? (input, ctx) => {
+          const turn = line.then(() => {
+            if (ctx.signal.aborted) throw ctx.signal.reason
+            return raced(h(input, ctx), ctx.signal)
+          })
+          line = turn.catch(() => {})
+          return turn
+        }
+      : h
+  }
+  return { defs: offered.defs, handlers }
+}
+
 /** The run_subagents handler for one parent. */
 export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
   return async (raw, ctx): Promise<ToolOutcome> => {
@@ -356,7 +382,7 @@ export function runSubagentsHandler(env: SubagentEnv): ToolHandler {
     if (jobs.length > MAX_JOBS)
       return { content: text(`At most ${MAX_JOBS} jobs per call.`), isError: true }
 
-    const offered = await env.tools()
+    const offered = oneConnectorCallAtATime(await env.tools())
     // Before any turn is measured, one is guessed at a quarter of a job's cost cap.
     // The jobs' spend goes on the parent's counter as it happens (not in the outcome), so a
     // parent cancelled mid-call still counts it.

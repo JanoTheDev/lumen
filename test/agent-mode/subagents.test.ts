@@ -473,6 +473,35 @@ describe('run_subagents', () => {
     }
   })
 
+  it('runs connector calls of parallel jobs one at a time (review L2)', async () => {
+    let inFlight = 0
+    let peak = 0
+    let calls = 0
+    const h = harness(
+      async (req) =>
+        req.messages.length === 1 ? reply(call('mcp__github__search', {})) : finish('ok'),
+      {
+        tools: async () => ({
+          defs: [def('mcp__github__search')],
+          handlers: {
+            mcp__github__search: async () => {
+              calls++
+              peak = Math.max(peak, ++inFlight)
+              await tick(5)
+              inFlight--
+              return { content: [{ type: 'text', text: 'found' }] }
+            }
+          }
+        })
+      }
+    )
+    const jobs = [1, 2, 3].map((i) => ({ role: 'general', task: `job ${i}` }))
+    const out = await runSubagentsHandler(h.env)({ jobs }, h.ctx)
+    expect(textOf(out)).toContain('3 of 3 jobs finished.')
+    expect(calls).toBe(3)
+    expect(peak).toBe(1)
+  })
+
   it('waits between turns while the parent is paused', async () => {
     let paused = true
     let wake: (() => void) | null = null
