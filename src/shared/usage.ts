@@ -111,3 +111,26 @@ export interface UsageCost {
   calls: number
   unpriced: number
 }
+
+/** Monthly limits (05 T45): one scope's spend this month against its cap. */
+export interface UsageLimitRow {
+  kind: 'overall' | 'automation' | 'buddy'
+  /** '' for overall. */
+  id: string
+  name: string
+  usd: number
+  /** Input + output tokens. */
+  tokens: number
+  capUsd?: number
+  capTokens?: number
+  /** Highest share of a cap used (0 without a cap). */
+  ratio: number
+  level: 'none' | 'ok' | 'warn' | 'paused'
+}
+
+export interface UsageLimitsView {
+  overall: UsageLimitRow
+  automations: UsageLimitRow[]
+  /** Read-only here; the buddy's page edits its budget. */
+  buddies: UsageLimitRow[]
+}

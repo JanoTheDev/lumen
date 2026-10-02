@@ -466,6 +466,30 @@ export const WEB_DEFAULTS: WebConfig = {
   paidSearch: false
 }
 
+/**
+ * Usage limits (05 T45): optional monthly caps from the usage ledger, overall and per automation
+ * (USD; tokens = input + output, for free or local models). 0 or unset = no cap. At 80% one
+ * Tasks notice; at 100% automation and buddy runs pause until the next month (questions the user
+ * asks are never blocked). Buddy caps live in each buddy's budget.
+ */
+const usageCapSchema = z.object({
+  usd: z.number().min(0).max(100_000).optional(),
+  tokens: z.number().int().min(0).max(1_000_000_000_000).optional()
+})
+
+const usageSchema = z.object({
+  limits: z.object({
+    monthlyUsd: z.number().min(0).max(100_000).optional(),
+    monthlyTokens: z.number().int().min(0).max(1_000_000_000_000).optional(),
+    /** Per automation id. */
+    automations: z.record(z.string().regex(/^[a-z]{2}_[a-z0-9]{4,40}$/), usageCapSchema).default({})
+  })
+})
+
+export type UsageLimitsConfig = z.infer<typeof usageSchema>['limits']
+
+export const USAGE_DEFAULTS: z.infer<typeof usageSchema> = { limits: { automations: {} } }
+
 /** Backends a role can use. `auto` follows models.provider. */
 export const MODEL_PROVIDERS = ['anthropic', 'openai', 'gemini', 'compatible', 'local'] as const
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number]
@@ -797,6 +821,7 @@ export const configV2Schema = z.object({
   system: z.object({ startAtLogin: z.boolean(), autoUpdate: z.boolean() }),
   helpers: helpersSchema.default(HELPERS_DEFAULTS),
   web: webSchema.default(WEB_DEFAULTS),
+  usage: usageSchema.default(USAGE_DEFAULTS),
   legacy: z.record(z.string(), z.unknown()).optional()
 })
 
@@ -923,7 +948,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   onboarding: { done: false },
   system: { startAtLogin: false, autoUpdate: true },
   helpers: HELPERS_DEFAULTS,
-  web: WEB_DEFAULTS
+  web: WEB_DEFAULTS,
+  usage: USAGE_DEFAULTS
 }
 
 const V1_KEYS = new Set(Object.keys(configV1Schema.shape))
@@ -1013,7 +1039,8 @@ const patchObject = z
     onboarding: s2.onboarding.partial().strict(),
     system: s2.system.partial().strict(),
     helpers: helpersSchema.partial().strict(),
-    web: webSchema.partial().strict()
+    web: webSchema.partial().strict(),
+    usage: z.object({ limits: usageSchema.shape.limits.partial().strict() }).partial().strict()
   })
   .partial()
   .strict()
