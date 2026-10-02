@@ -254,6 +254,14 @@ function agentish(origin: Origin): boolean {
   )
 }
 
+/**
+ * Origins under the checkout, payment-field and personal-detail rules (05 T41): the agentish
+ * ones and a lesson's "do it for me" (lessons can be imported from a web tutorial).
+ */
+function guarded(origin: Origin): boolean {
+  return agentish(origin) || origin === 'lesson'
+}
+
 function lower(s: string | undefined): string {
   return (s ?? '').toLowerCase()
 }
@@ -631,7 +639,7 @@ const LEAVE_FIELD_COMBOS = new Set(['tab', 'shift+tab', 'esc', 'enter'])
  * there, so a card number cannot go in one digit (or one Ctrl+V) at a time.
  */
 function paymentKeyFindings(combo: string, ctx: PolicyCtx, out: Finding[]): boolean {
-  if (!agentish(ctx.origin) || LEAVE_FIELD_COMBOS.has(combo)) return false
+  if (!guarded(ctx.origin) || LEAVE_FIELD_COMBOS.has(combo)) return false
   if (!isPaymentFieldName(ctx.activeWindow?.focusName)) return false
   out.push({ risk: 'blocked', reason: 'never presses keys in a payment field (you type those)' })
   return true
@@ -683,12 +691,12 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   // Enter or Space on a focused Send / Delete / Pay button presses it (list rows are left out:
   // their names hold arbitrary subject text).
   const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
-  const buys = pressed && agentish(ctx.origin) ? checkoutIn(w?.focusName, w) : null
+  const buys = pressed && guarded(ctx.origin) ? checkoutIn(w?.focusName, w) : null
   if (buys) {
     out.push(checkoutFinding(buys))
     return
   }
-  const page = agentish(ctx.origin) && submitKey(combo, w) ? checkoutPageWord(w) : null
+  const page = guarded(ctx.origin) && submitKey(combo, w) ? checkoutPageWord(w) : null
   if (page) {
     out.push(checkoutPageFinding(page))
     return
@@ -770,10 +778,11 @@ function typeFindings(
     )
     return
   }
-  if (agentish(ctx.origin)) {
+  const agent = agentish(ctx.origin)
+  if (guarded(ctx.origin)) {
     // Fail closed when the focused element cannot be read: it may be a password field or an
     // IDE's terminal.
-    if (ideFocusUnclear(w)) {
+    if (agent && ideFocusUnclear(w)) {
       out.push({ risk: 'high', reason: 'may type into the editor’s terminal' })
       return
     }
@@ -781,9 +790,9 @@ function typeFindings(
     // set_value replaces the value; typing appends to what the field holds.
     const before = fieldName === undefined ? w?.focusValue : undefined
     if (paymentFindings(text, field, before, w, out)) return
-    if (w?.focusKnown === false)
+    if (agent && w?.focusKnown === false)
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
-    if (isMail(w)) mailTypeFindings(text, field, ctx, out)
+    if (agent && isMail(w)) mailTypeFindings(text, field, ctx, out)
     if (!(isMail(w) && isRecipientField(field))) personalFindings(text, field, ctx, out)
     const page = lineBreakSubmit(text, field) ? checkoutPageWord(w) : null
     if (page) out.push(checkoutPageFinding(page))
@@ -928,7 +937,7 @@ function checkoutPageFinding(word: string): Finding {
  */
 export function submitsBrowserForm(a: EvalAction, ctx: PolicyCtx): boolean {
   const w = ctx.activeWindow
-  if (!agentish(ctx.origin) || !isBrowserWindow(w)) return false
+  if (!guarded(ctx.origin) || !isBrowserWindow(w)) return false
   const keys = (k: string[] | string): boolean => submitKey(normalizeCombo(k), w)
   if (a.type === 'hotkey') return keys(a.keys ?? [])
   if (a.type === 'type') return lineBreakSubmit(a.text ?? '', w?.focusName)
@@ -1096,7 +1105,7 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
   }
   if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
-  const buys = agentish(ctx.origin) ? checkoutIn(name, ctx.activeWindow) : null
+  const buys = guarded(ctx.origin) ? checkoutIn(name, ctx.activeWindow) : null
   if (buys) return void out.push(checkoutFinding(buys))
   const mailWord = isMail(ctx.activeWindow) ? mailRiskyName(name) : null
   const word = riskyName(name) ?? mailWord

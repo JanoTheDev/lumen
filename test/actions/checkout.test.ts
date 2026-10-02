@@ -613,3 +613,29 @@ describe('shop-only checkout words (review L3)', () => {
     )
   })
 })
+
+describe('lesson "do it for me" (review L4)', () => {
+  const lesson = (name: string): PolicyCtx => ({ ...field(name), origin: 'lesson' })
+
+  it('never types into a payment field or presses keys there', () => {
+    expect(evaluate({ type: 'type', text: '12' }, lesson('Card number')).risk).toBe('blocked')
+    expect(evaluate({ type: 'hotkey', keys: ['ctrl', 'v'] }, lesson('CVC')).risk).toBe('blocked')
+  })
+
+  it('never types a card number', () => {
+    expect(evaluate({ type: 'type', text: '4242 4242 4242 4242' }, lesson('Notes')).risk).toBe(
+      'blocked'
+    )
+  })
+
+  it('a pay click is a priced checkout', () => {
+    const d = evaluate({ type: 'click_element', elementName: 'Pay now' }, { origin: 'lesson' })
+    expect(d.risk).toBe('high')
+    expect(d.needsConfirm).toBe(true)
+    expect(d.checkout).toBe('pay now')
+  })
+
+  it('personal details it was not given ask first', () => {
+    expect(evaluate({ type: 'type', text: 'Anna Berg' }, lesson('Full name')).risk).toBe('high')
+  })
+})
