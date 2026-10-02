@@ -48,6 +48,7 @@ import {
 import { setLessonContextProvider } from './context'
 import { pacingFor } from './hints'
 import { createLearning, type Learning } from './learning'
+import { elementHits } from './element-hits'
 import type { DoAction, ElementMatch, Lesson, LessonTarget } from './lesson'
 import { migrateGuides } from './migrate-guides'
 import type { Frame, Ports, ResolvedTarget, UiaEvent, WindowInfo } from './ports'
@@ -153,17 +154,6 @@ function recentForeground(maxAgeMs: number): Promise<commands.ActiveWindowInfo |
 }
 
 const norm = (s: string | undefined): string => (s ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
-
-function elementHits(nodes: ElementNode[], q: ElementMatch): ElementNode[] {
-  const byRole = nodes.filter(
-    (n) =>
-      (!q.role || norm(n.role) === norm(q.role)) &&
-      (!q.automationId || n.automationId === q.automationId)
-  )
-  if (!q.name) return byRole
-  const exact = byRole.filter((n) => norm(n.name) === norm(q.name))
-  return exact.length ? exact : byRole.filter((n) => norm(n.name).includes(norm(q.name)))
-}
 
 /** Elements of the foreground window matching the query, interactive ones first. */
 async function findElements(q: ElementMatch, signal?: AbortSignal): Promise<ElementNode[]> {
