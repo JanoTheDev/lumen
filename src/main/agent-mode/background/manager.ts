@@ -3,8 +3,8 @@
 // tools) is injected, so this file has no Electron and no providers.
 import type { BackgroundArtifact, BackgroundTask, BackgroundTaskPhase } from '@shared/types'
 import type { RunEvent } from '../transcript'
-import { withUsageScope } from '../../usage/scope'
-import { usageScopeForTask } from '../../usage/task-scope'
+import { currentUsageScope, runInUsageScope, type UsageScope } from '../../usage/scope'
+import { taskUsageScope } from '../../usage/task-scope'
 
 export const MAX_PROGRESS = 20
 export const KEEP_TASKS = 50
@@ -115,6 +115,8 @@ interface Entry {
   paused?: boolean
   /** Waiters held while paused (the task and its sub-agents). */
   wakers: Set<() => void>
+  /** The usage scope the run records under, fixed at start (05 T43). */
+  scope?: UsageScope
 }
 
 const ACTIVE: BackgroundTaskPhase[] = ['running', 'asking', 'needs-foreground']
@@ -210,6 +212,7 @@ export class BackgroundManager {
       ...(input.claude ? { claude: input.claude } : {})
     }
     const entry = this.newEntry(task)
+    entry.scope = taskUsageScope(task, this.parentScope(input.parentId))
     if (input.run) entry.run = input.run
     this.deps.record?.(task.id, { type: 'start', task })
     this.changed(task.id)
@@ -326,6 +329,18 @@ export class BackgroundManager {
   }
 
   // ---- internals ----
+
+  /**
+   * A helper's parent scope: the parent background task's, or the foreground task whose run is
+   * starting it (only when the running scope is that very task).
+   */
+  private parentScope(parentId?: string): UsageScope | undefined {
+    if (!parentId) return undefined
+    const own = this.entries.get(parentId)?.scope
+    if (own) return own
+    const now = currentUsageScope()
+    return now.taskId === parentId ? now : undefined
+  }
 
   private newEntry(task: BackgroundTask): Entry {
     let resolveDone!: (t: BackgroundTask) => void
@@ -463,7 +478,7 @@ export class BackgroundManager {
       }
     }
     const run = e.run ?? ((c: TaskControl) => this.deps.run(c))
-    void withUsageScope(usageScopeForTask(e.task), () => run(ctl))
+    void runInUsageScope(e.scope ?? taskUsageScope(e.task), () => run(ctl))
       .then(
         (r) => {
           if (ac.signal.aborted) return this.end(id, { phase: 'cancelled' })

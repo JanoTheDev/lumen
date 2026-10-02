@@ -18,3 +18,21 @@ export function usageScopeForTask(
   if (task.skill) scope.skillId = task.skill
   return scope
 }
+
+const INHERITED = ['automationId', 'buddyId', 'skillId', 'ccSession'] as const
+
+/**
+ * The exact scope a background task runs in, fixed when it is created: its own ids, plus, for a
+ * helper, the owner ids of its parent task's scope. Never the scope of whatever launches it from
+ * the queue (a queued task starts when another one finishes, inside that one's context).
+ */
+export function taskUsageScope(
+  task: Pick<BackgroundTask, 'id' | 'origin' | 'skill' | 'parentId' | 'routineId' | 'buddyId'>,
+  parent?: UsageScope
+): UsageScope {
+  const own = usageScopeForTask(task) as UsageScope
+  if (!task.parentId || !parent) return own
+  const inherited: Partial<UsageScope> = {}
+  for (const k of INHERITED) if (parent[k]) inherited[k] = parent[k]
+  return { ...inherited, ...own }
+}
