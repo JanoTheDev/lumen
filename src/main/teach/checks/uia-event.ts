@@ -69,10 +69,19 @@ async function baselineValue(spec: UiaSpec, ctx: CheckContext): Promise<string |
   return el?.value !== undefined ? norm(el.value) : null
 }
 
+/** A matching element was already selected when the step began. */
+async function selectedAtStart(spec: UiaSpec, ctx: CheckContext): Promise<boolean> {
+  const { name, role, automationId } = spec.match
+  const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
+  return !!els?.some((el) => elementMatches(spec.match, el) && selectedNow(el))
+}
+
 export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
   const r = settleable()
   const changedOnly = spec.event === 'value' && spec.changed === true
   const baseline = changedOnly ? baselineValue(spec, ctx) : Promise.resolve(null)
+  const wasSelected =
+    spec.event === 'selected' ? selectedAtStart(spec, ctx) : Promise.resolve(false)
   /** `changed`: the value differs from the baseline (without one, only a real value event). */
   const changed = async (value: string | undefined, kind?: string): Promise<boolean> => {
     if (value === undefined) return false
@@ -122,9 +131,11 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     }
     if (spec.event === 'value') return hits.length ? 'pass' : els.length ? 'fail' : 'unknown'
     // focused / selected: the matching element has focus now (or, for selected, is selected).
-    const now = (el: (typeof hits)[number]): boolean =>
-      el.focused === true || (spec.event === 'selected' && selectedNow(el))
-    return hits.some(now) ? 'pass' : els.length ? 'fail' : 'unknown'
+    // A selection that was already there when the step began proves nothing: ask instead.
+    if (hits.some((el) => el.focused === true)) return 'pass'
+    if (spec.event === 'selected' && hits.some(selectedNow))
+      return (await wasSelected) ? 'unknown' : 'pass'
+    return els.length ? 'fail' : 'unknown'
   }
 
   return {

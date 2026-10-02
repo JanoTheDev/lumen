@@ -30,15 +30,23 @@ const el = (role: string, name: string, extra: Partial<ElementNode> = {}): Eleme
   ...extra
 })
 
-function evaluate(check: CheckSpec, nodes: ElementNode[]): Promise<string> {
+/** Evaluates `check` on `nodes`; the step began on `atStart` (default: nothing found). */
+async function evaluate(
+  check: CheckSpec,
+  nodes: ElementNode[],
+  atStart: ElementNode[] = []
+): Promise<string> {
+  let found = atStart
   const ctx: CheckContext = {
-    ports: noopPorts({ uia: { find: async () => nodes, subscribe: () => () => {} } }),
+    ports: noopPorts({ uia: { find: async () => found, subscribe: () => () => {} } }),
     clock: realClock,
     step: STEP,
     budget: newBudget(),
     log: () => {}
   }
   const h = startCheck(check, ctx)
+  await new Promise((r) => setImmediate(r))
+  found = nodes
   return h.evaluate().finally(() => h.cancel())
 }
 
@@ -80,6 +88,13 @@ describe('uia-event evaluate with snapshot state', () => {
     expect(await evaluate(tabCheck, [el('tabitem', 'notes.txt', { selected: true })])).toBe('pass')
     expect(await evaluate(tabCheck, [el('tabitem', 'notes.txt', { selected: false })])).toBe('fail')
     expect(await evaluate(tabCheck, [el('tabitem', 'notes.txt')])).toBe('fail')
+  })
+
+  it('a tab already selected when the step began asks instead of passing', async () => {
+    const selected = [el('tabitem', 'notes.txt', { selected: true })]
+    expect(await evaluate(tabCheck, selected, selected)).toBe('unknown')
+    const before = [el('tabitem', 'notes.txt', { selected: false })]
+    expect(await evaluate(tabCheck, selected, before)).toBe('pass')
   })
 
   it('selection does not count for a focused step', async () => {
