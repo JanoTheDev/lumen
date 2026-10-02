@@ -119,9 +119,28 @@ describe('payment and personal field names', () => {
     expect(isPaymentFieldName(name)).toBe(true)
   })
 
-  it.each(['Search', 'Message', 'Promo code', 'Number of guests'])('not payment: %s', (name) => {
-    expect(isPaymentFieldName(name)).toBe(false)
+  it.each([
+    'MM / YY',
+    'MM/YYYY',
+    'Expires',
+    'Expiry',
+    'Valid thru',
+    '1234 1234 1234 1234',
+    '•••• •••• •••• 4242',
+    'Numero carta',
+    'Codice di sicurezza',
+    'Número do cartão',
+    'Numer karty'
+  ])('payment by mask, placeholder or it/pt/pl name: %s (review M2)', (name) => {
+    expect(isPaymentFieldName(name)).toBe(true)
   })
+
+  it.each(['Search', 'Message', 'Promo code', 'Number of guests', 'Phone', '+31 6 1234 5678'])(
+    'not payment: %s',
+    (name) => {
+      expect(isPaymentFieldName(name)).toBe(false)
+    }
+  )
 
   it.each([
     'First name',
@@ -250,6 +269,23 @@ describe('payment fields', () => {
       field('Notes')
     )
     expect(d.risk).toBe('blocked')
+  })
+
+  it('a card number typed in two parts into one field is blocked (review M2)', () => {
+    const d = evaluate(
+      { type: 'type', text: '4242 4242' },
+      field('Notes', { focusValue: 'Order notes: 4242 4242 ' })
+    )
+    expect(d.risk).toBe('blocked')
+    expect(d.reason).toMatch(/card number/)
+  })
+
+  it('a field that already held a card number does not block later typing', () => {
+    const d = evaluate(
+      { type: 'type', text: ' thanks' },
+      field('Notes', { focusValue: '4242 4242 4242 4242' })
+    )
+    expect(d.risk).not.toBe('blocked')
   })
 
   it('the user typing their own card (user-direct) is not blocked', () => {

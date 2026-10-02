@@ -25,6 +25,15 @@ describe('hasCardNumber', () => {
     expect(hasCardNumber('order 4242 4242 4242 4241')).toBe(false)
     expect(hasCardNumber('call 0612345678')).toBe(false)
   })
+
+  it.each([
+    '4242.4242.4242.4242',
+    '4242_4242_4242_4242',
+    '4242  4242  4242  4242',
+    '４２４２'.repeat(4)
+  ])('finds %s (dots, underscores, double spaces, full-width digits; review M2)', (t) => {
+    expect(hasCardNumber(t)).toBe(true)
+  })
 })
 
 describe('payment redaction', () => {

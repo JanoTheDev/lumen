@@ -178,6 +178,14 @@ describe('policy gate', () => {
       expect(f.executed).toEqual([])
     })
 
+    it('a card number typed in parts is blocked (valueTail, review M2)', async () => {
+      const f = fakeAgent({ title: 'Checkout - Chrome', process: 'chrome.exe' })
+      f.focus = { uia: true, role: 'edit', name: 'Notes', password: false, valueTail: '4242 4242 ' }
+      const r = await executeActions([{ type: 'type', text: '4242 4242' }], { origin: 'agent' })
+      expect(r.denied?.reason).toContain('card number')
+      expect(f.executed).toEqual([])
+    })
+
     it('asks before agent typing when the focus cannot be read', async () => {
       const f = fakeAgent()
       f.focus = null

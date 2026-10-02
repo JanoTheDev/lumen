@@ -344,7 +344,13 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'expiration date',
       'exp date',
       'mm yy',
-      'mm/yy',
+      'mm yyyy',
+      'mm aa',
+      'mm jj',
+      'expires',
+      'exp',
+      'valid thru',
+      'valid through',
       'cvc',
       'cvv',
       'cvc2',
@@ -361,7 +367,8 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'cc number',
       'cc exp',
       'cc csc',
-      'cc name'
+      'cc name',
+      'numer karty'
     ],
     personal: [
       'first name',
@@ -717,7 +724,15 @@ export function checkoutName(name: string | undefined): string | null {
   return listedCheckout(m[1] ?? m[2])
 }
 
-const PAYMENT_RE = wordsRe(allOf('payment'))
+/** Letters and digits only, single spaces: "MM / YY" → "mm yy", "cc-number" → "cc number". */
+const plainWords = (s: string): string =>
+  fold(s)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+
+const PAYMENT_RE = wordsRe(allOf('payment').map(plainWords))
+/** A card-number placeholder: "1234 1234 1234 1234", "•••• •••• •••• 4242" (13-19 places). */
+const CARD_PLACEHOLDER_RE = /^[\d•*·x]{13,19}$/i
 const PERSONAL_RE = wordsRe(allOf('personal'))
 const PERSONAL_EXACT = new Set(allOf('personalExact').map(fold))
 /** "Search email" or "Zoeken op plaats" is a search box, not a form field. */
@@ -733,7 +748,9 @@ function bareLabel(name: string): string {
 
 /** A card number / holder / expiry / CVC / IBAN / account number field, any listed language. */
 export function isPaymentFieldName(name: string | undefined): boolean {
-  return !!name && PAYMENT_RE.test(fold(name.trim()))
+  if (!name?.trim()) return false
+  if (CARD_PLACEHOLDER_RE.test(name.replace(/[\s.-]/g, ''))) return true
+  return PAYMENT_RE.test(plainWords(name))
 }
 
 /** A name / email / phone / address / birth date field, any listed language. */

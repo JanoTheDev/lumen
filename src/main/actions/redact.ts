@@ -70,15 +70,18 @@ const CVC_AFTER_CARD_RE =
 
 /**
  * Card numbers in their printed groups (4-4-4-4, Amex 4-6-5) even when more digits follow
- * ("4242 4242 4242 4242 12/27"), where the detector's longer run fails the Luhn check.
+ * ("4242 4242 4242 4242 12/27"), where the detector's longer run fails the Luhn check. Groups
+ * may be split by a space, two spaces, a dash, a dot or an underscore.
  */
 const CARD_GROUPS_RE =
-  /(?<![\d-])(?:\d{4}([ -]?)\d{4}\1\d{4}\1\d{4}|\d{4}([ -]?)\d{6}\2\d{5})(?![\d-])/g
+  /(?<![\d-])(?:\d{4}([ ._-]{0,2})\d{4}\1\d{4}\1\d{4}|\d{4}([ ._-]{0,2})\d{6}\2\d{5})(?![\d-])/g
 
-/** The text holds a number that passes the card check (Luhn), grouped or not. */
+/** The text holds a number that passes the card check (Luhn), grouped or not (full-width
+ * digits count as digits). */
 export function hasCardNumber(text: string): boolean {
-  if (findSensitive(text).some((h) => h.kind === 'card')) return true
-  return [...text.matchAll(CARD_GROUPS_RE)].some((m) => luhn(m[0].replace(/\D/g, '')))
+  const t = text.normalize('NFKC')
+  if (findSensitive(t).some((h) => h.kind === 'card')) return true
+  return [...t.matchAll(CARD_GROUPS_RE)].some((m) => luhn(m[0].replace(/\D/g, '')))
 }
 
 function redactCardGroups(text: string): string {
