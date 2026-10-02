@@ -271,4 +271,23 @@ describe('handleCardsTurn', () => {
       /^hotels in Nice for 3 to 5 May\. More options like Hotel Azur, Promenade des Anglais, Beach 2 min walk, Parking Yes, other than: Hotel Azur; Old Town Rooms; Villa Cimiez\.$/
     )
   })
+
+  it('card text from pages never becomes the policy user words (research follow-ups)', async () => {
+    const cards = hotelCards()
+    const email = ['bookings', 'evil.example'].join('@')
+    cards.cards[0].title = `Contact ${email}`
+    const ask = vi.fn(async () => ({ found: false, answer: '' }))
+    const d = setup({ ask }, cards)
+    const r = await handleCardsTurn('the first one, does it have parking?', signal, d)
+    if (!r || !('research' in r)) throw new Error('expected research')
+    expect(r.research).toContain(email)
+    expect(r.userText).toBe('the first one, does it have parking?')
+    expect(r.userText).not.toContain(email)
+    expect(r.observedText).toContain(email)
+    resetCardFocus()
+    const like = await handleCardsTurn('more like the first one', signal, d)
+    if (!like || !('research' in like)) throw new Error('expected research')
+    expect(like.userText).toBe('hotels in Nice for 3 to 5 May. more like the first one')
+    expect(like.observedText).toContain(email)
+  })
 })

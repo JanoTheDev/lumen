@@ -52,7 +52,13 @@ export interface CardsTurnDeps {
   ): Promise<{ text: string }>
 }
 
-export type CardsTurn = { response: ModelResponse } | { research: string }
+/**
+ * `research`: the task's goal, which quotes card text (written by a model from web pages);
+ * `userText`: only the user's own words, for the policy; `observedText`: the card text it quotes.
+ */
+export type CardsTurn =
+  | { response: ModelResponse }
+  | { research: string; userText: string; observedText: string }
 
 /** The card "it" / "that one" means: the last one picked, per card set. */
 let focus: { setId: string; cardId: string } | null = null
@@ -104,30 +110,53 @@ function cheapest(set: StoredCards): Card | null {
   return priced.reduce((a, b) => (b.price!.amount < a.price!.amount ? b : a))
 }
 
-function refinePrompt(set: StoredCards, how: 'cheaper' | 'better' | 'like', card?: Card): string {
+const cardText = (card: Card): string =>
+  [card.title, card.subtitle, ...card.facts.slice(0, 3).map((f) => `${f.label} ${f.value}`)]
+    .filter(Boolean)
+    .join(', ')
+
+/** The user's words a re-run goes by: their request for the set, then this follow-up. */
+const ownWords = (set: StoredCards, prompt: string): string =>
+  [set.request?.trim(), prompt.trim()].filter(Boolean).join('. ')
+
+function refine(
+  set: StoredCards,
+  prompt: string,
+  how: 'cheaper' | 'better' | 'like',
+  card?: Card
+): Extract<CardsTurn, { research: string }> {
+  // `set.request` is the user's own words; without it the set's spoken text (model-written).
   const base = (set.request ?? set.text).trim()
+  const observed: string[] = set.request ? [] : [set.text]
+  const done = (research: string): Extract<CardsTurn, { research: string }> => ({
+    research,
+    userText: ownWords(set, prompt),
+    observedText: observed.filter(Boolean).join('\n')
+  })
   if (how === 'cheaper') {
     const low = cheapest(set)
-    return low
-      ? `${base}. Only options cheaper than ${priceWords(low)} (the cheapest found so far was ${low.title}).`
-      : `${base}. Only cheaper options than before.`
+    if (low) observed.push(low.title)
+    return done(
+      low
+        ? `${base}. Only options cheaper than ${priceWords(low)} (the cheapest found so far was ${low.title}).`
+        : `${base}. Only cheaper options than before.`
+    )
   }
   if (how === 'better') {
     const rated = set.cards.cards.filter((c) => c.rating)
     const top = rated.length
       ? Math.max(...rated.map((c) => c.rating!.value / c.rating!.max)) * 10
       : null
-    return top !== null
-      ? `${base}. Only options rated higher than ${top.toFixed(1)} out of 10.`
-      : `${base}. Only better rated options.`
+    return done(
+      top !== null
+        ? `${base}. Only options rated higher than ${top.toFixed(1)} out of 10.`
+        : `${base}. Only better rated options.`
+    )
   }
-  const about = card
-    ? [card.title, card.subtitle, ...card.facts.slice(0, 3).map((f) => `${f.label} ${f.value}`)]
-        .filter(Boolean)
-        .join(', ')
-    : ''
+  const about = card ? cardText(card) : ''
   const others = set.cards.cards.map((c) => c.title).join('; ')
-  return `${base}. More options like ${about || 'these'}, other than: ${others}.`
+  observed.push(about, others)
+  return done(`${base}. More options like ${about || 'these'}, other than: ${others}.`)
 }
 
 /**
@@ -168,7 +197,7 @@ export async function handleCardsTurn(
         if (!r.ok) return fallsThrough(intent.pick, r) ? null : noPick(set, r)
         card = r.card
       }
-      return { research: refinePrompt(set, intent.how, card) }
+      return refine(set, prompt, intent.how, card)
     }
     case 'save': {
       const chosen: Card[] = []
@@ -236,7 +265,9 @@ export async function handleCardsTurn(
       if (a?.found) return reply(set, a.answer)
       if (a && !a.found)
         return {
-          research: `About ${card.title}${page ? ` (${page})` : ''}: ${question} Answer in one or two sentences with the source.`
+          research: `About ${card.title}${page ? ` (${page})` : ''}: ${question} Answer in one or two sentences with the source.`,
+          userText: prompt,
+          observedText: [cardText(card), page].filter(Boolean).join('\n')
         }
       // No model: what the card itself says.
       return reply(set, describeCard(card, r.index))

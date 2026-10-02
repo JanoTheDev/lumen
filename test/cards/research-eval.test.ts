@@ -199,4 +199,14 @@ describe('research → cards eval', () => {
     expect(r.cardsId).toBeUndefined()
     expect(r.summary).toBe('No options found.')
   })
+  it('keeps the user words as the set request, not a goal that quotes card text', async () => {
+    const d = deps([turn({ name: 'present_cards', input: CARDS })])
+    d.handlers.present_cards = presentCardsHandler({
+      background: false,
+      findImages: async () => {},
+      request: () => 'hotels in Nice. cheaper ones'
+    })
+    const r = await runAgent({ ...opts, prompt: 'hotels in Nice. Only cheaper than Old Town' }, d)
+    expect(store.get(r.cardsId!)?.request).toBe('hotels in Nice. cheaper ones')
+  })
 })

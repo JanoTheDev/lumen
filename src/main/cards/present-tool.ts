@@ -15,6 +15,11 @@ export interface PresentToolOptions {
   /** The browser's address now (the page in front counts as read). */
   pageUrl?(): Promise<string | null>
   now?(): number
+  /**
+   * The user's own words for the task (a card follow-up's goal quotes card text): kept as the
+   * set's `request`, which "cheaper ones" re-runs. Default: the task's prompt.
+   */
+  request?(): string
   /** Pictures for the cards (default: page og:image, else Wikimedia Commons). */
   findImages?(id: string): Promise<void>
 }
@@ -34,7 +39,7 @@ export function presentCardsHandler(opts: PresentToolOptions): ToolHandler {
     const built = buildAnswerCards(input.data, seen, (opts.now ?? Date.now)())
     if (!built.ok) return { content: text(`Not shown: ${built.error}`), isError: true }
     const shown = presentCards(built.text, built.cards, {
-      request: ctx.task().prompt,
+      request: opts.request?.() ?? ctx.task().prompt,
       ...(opts.background ? { show: false, conversation: false } : {})
     })
     if (!shown.ok) return { content: text(`Not shown: ${shown.error}`), isError: true }

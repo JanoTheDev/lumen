@@ -292,7 +292,9 @@ async function runTurn(
           ? await runAgentTask(
               cards.research,
               await captureContext(false, { signal: scope.signal }),
-              scope.signal
+              scope.signal,
+              // The goal quotes card text from web pages: only the user's words go to the policy.
+              { userText: cards.userText, observedText: cards.observedText }
             )
           : { mode: 'answer', text: 'Looking that up needs a model that can use tools.' }
     scope.throwIfCancelled()

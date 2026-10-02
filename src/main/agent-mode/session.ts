@@ -350,7 +350,11 @@ function deps(
     },
     ...(spawn ? { spawn_task: foregroundSpawnHandler(env.taskId) } : {}),
     // Research → cards (05 T39).
-    present_cards: presentCardsHandler({ background: false, pageUrl: browserPageUrl }),
+    present_cards: presentCardsHandler({
+      background: false,
+      pageUrl: browserPageUrl,
+      request: () => env.prompt
+    }),
     fetch_url: fetchUrlHandler({ onText: noteObserved })
   }
   if (sub) {
