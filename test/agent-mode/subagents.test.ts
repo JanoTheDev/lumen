@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { AgentTask } from '@shared/events'
 import type { SubJob } from '@shared/task-chat'
 import type {
@@ -400,6 +400,36 @@ describe('run_subagents', () => {
     expect(started).toBe(1)
     expect(h.env.pool.running).toBe(0)
     expect(h.env.pool.queued).toBe(0)
+  })
+
+  it('stops a job at its wall cap inside a stuck call and frees its place (review M4)', async () => {
+    vi.useFakeTimers()
+    try {
+      let seen: AbortSignal | null = null
+      const pool = new SubagentPool(() => 1)
+      const h = harness(async () => reply(call('mcp__github__search', {})), {
+        pool,
+        tools: async () => ({
+          defs: [def('mcp__github__search')],
+          handlers: {
+            mcp__github__search: (_i, ctx) => {
+              seen = ctx.signal
+              return new Promise(() => {})
+            }
+          }
+        })
+      })
+      const p = runSubagentsHandler(h.env)({ jobs: [{ role: 'general', task: 'stuck' }] }, h.ctx)
+      await vi.advanceTimersByTimeAsync(ROLES.general.caps.maxWallMs + 10)
+      const t = textOf(await p)
+      expect(t).toContain('status: stopped')
+      expect(t).toContain('3-minute limit')
+      expect((seen as AbortSignal | null)?.aborted).toBe(true)
+      expect(pool.running).toBe(0)
+      expect(h.ac.signal.aborted).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('waits between turns while the parent is paused', async () => {

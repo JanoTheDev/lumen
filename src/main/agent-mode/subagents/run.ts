@@ -70,6 +70,13 @@ class BudgetSpent extends Error {
   }
 }
 
+/** The job ran past its wall-clock cap (also while a tool or a model call was still waiting). */
+class JobTimeLimit extends Error {
+  constructor(ms: number) {
+    super(`it ran past its ${Math.max(1, Math.round(ms / 60_000))}-minute limit`)
+  }
+}
+
 /** Money shared by the jobs of one call: the parent's remaining budget. */
 export class SharedBudget {
   private spent = 0
@@ -215,6 +222,14 @@ export async function runJob(
     sources,
     costUsd: cost
   })
+  // The job's own signal: the parent's cancel, or its wall-clock cap even in the middle of a
+  // tool or model call (a confirm waiting in the Tasks list, a slow connector), so a stuck
+  // call cannot hold its pool place for ever. Handlers get this signal and stop with it.
+  const own = new AbortController()
+  const onParent = (): void => own.abort(signal.reason)
+  if (signal.aborted) own.abort(signal.reason)
+  else signal.addEventListener('abort', onParent, { once: true })
+  const timer = setTimeout(() => own.abort(new JobTimeLimit(caps.maxWallMs)), caps.maxWallMs)
   try {
     // Ledger lines: origin subagent, inside the parent's scope (task, automation, buddy).
     const r = await withUsageScope({ origin: 'subagent', feature: `subagent-${role}` }, () =>
@@ -229,7 +244,7 @@ export async function runJob(
           system: spec.system,
           firstTurn: jobTurn(task, new Date(env.now())),
           caps: { ...caps, maxActions: NO_ACTION_CAP },
-          signal,
+          signal: own.signal,
           owner: `subagent:${parentId}`,
           speakSummary: false
         },
@@ -249,7 +264,12 @@ export async function runJob(
   } catch (e) {
     if (signal.aborted) throw e
     if (e instanceof BudgetSpent) return result('stopped', `Stopped: ${e.message}.`)
+    if (own.signal.reason instanceof JobTimeLimit)
+      return result('stopped', `Stopped: ${own.signal.reason.message}.`)
     return result('failed', `It failed: ${(e as Error).message}`)
+  } finally {
+    clearTimeout(timer)
+    signal.removeEventListener('abort', onParent)
   }
 }
 
