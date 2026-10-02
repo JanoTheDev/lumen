@@ -59,6 +59,14 @@ const PATTERN_PROPS: [(UIA_PROPERTY_ID, &str); 7] = [
     (UIA_IsTextPatternAvailablePropertyId, "text"),
 ];
 
+/// State values read only for `tree::STATE_ROLES` nodes that support the pattern; fetched
+/// in the same cache round trip (a provider without the pattern answers "not supported").
+const STATE_PROPS: [UIA_PROPERTY_ID; 3] = [
+    UIA_SelectionItemIsSelectedPropertyId,
+    UIA_ToggleToggleStatePropertyId,
+    UIA_ExpandCollapseExpandCollapseStatePropertyId,
+];
+
 const BASE_PROPS: [UIA_PROPERTY_ID; 10] = [
     UIA_ControlTypePropertyId,
     UIA_NamePropertyId,
@@ -106,7 +114,12 @@ impl Client {
             let u: IUIAutomation = u2.cast().map_err(|e| com_err("IUIAutomation", e))?;
             let request = |scope: TreeScope| -> Result<IUIAutomationCacheRequest, AgentError> {
                 let cr = u.CreateCacheRequest().map_err(|e| com_err("CreateCacheRequest", e))?;
-                for pid in BASE_PROPS.iter().copied().chain(PATTERN_PROPS.iter().map(|(p, _)| *p)) {
+                for pid in BASE_PROPS
+                    .iter()
+                    .copied()
+                    .chain(PATTERN_PROPS.iter().map(|(p, _)| *p))
+                    .chain(STATE_PROPS.iter().copied())
+                {
                     cr.AddProperty(pid).map_err(|e| com_err("AddProperty", e))?;
                 }
                 cr.SetTreeScope(scope).map_err(|e| com_err("SetTreeScope", e))?;
@@ -154,6 +167,16 @@ fn cached_bool(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> bool {
     unsafe { el.GetCachedPropertyValue(pid) }.ok().and_then(|v| bool::try_from(&v).ok()).unwrap_or(false)
 }
 
+fn cached_opt_bool(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> Option<bool> {
+    // SAFETY: reading a cached property of a live element.
+    unsafe { el.GetCachedPropertyValue(pid) }.ok().and_then(|v| bool::try_from(&v).ok())
+}
+
+fn cached_i32(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> Option<i32> {
+    // SAFETY: reading a cached property of a live element.
+    unsafe { el.GetCachedPropertyValue(pid) }.ok().and_then(|v| i32::try_from(&v).ok())
+}
+
 fn cached_string(el: &IUIAutomationElement, pid: UIA_PROPERTY_ID) -> String {
     // SAFETY: reading a cached property of a live element.
     unsafe { el.GetCachedPropertyValue(pid) }
@@ -193,7 +216,23 @@ pub fn node_of(el: &IUIAutomationElement, mons: &[MonitorInfo]) -> Node {
         patterns,
         readonly: None,
         password: cached_bool(el, UIA_IsPasswordPropertyId).then_some(true),
+        selected: None,
+        toggled: None,
+        expanded: None,
     };
+    if tree::STATE_ROLES.contains(&node.role) {
+        let has = |p: &str| node.patterns.contains(&p);
+        let raw = tree::RawState {
+            is_selected: has("select")
+                .then(|| cached_opt_bool(el, UIA_SelectionItemIsSelectedPropertyId))
+                .flatten(),
+            toggle: has("toggle").then(|| cached_i32(el, UIA_ToggleToggleStatePropertyId)).flatten(),
+            expand: has("expand")
+                .then(|| cached_i32(el, UIA_ExpandCollapseExpandCollapseStatePropertyId))
+                .flatten(),
+        };
+        tree::apply_state(&mut node, raw);
+    }
     if node.patterns.contains(&"value") {
         let value = cached_string(el, UIA_ValueValuePropertyId);
         if cached_bool(el, UIA_IsPasswordPropertyId) {

@@ -98,6 +98,61 @@ pub struct Node {
     /// `Some(true)` on password fields (UIA IsPassword); absent otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<bool>,
+    /// SelectionItem IsSelected on item-like roles; absent when the pattern is missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selected: Option<bool>,
+    /// Toggle state "on" / "off" / "mixed"; absent when the pattern is missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub toggled: Option<&'static str>,
+    /// ExpandCollapse state; absent on leaf nodes and when the pattern is missing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expanded: Option<bool>,
+}
+
+/// Roles whose selection / toggle / expand state is put on snapshot nodes.
+pub const STATE_ROLES: &[&str] =
+    &["tabitem", "listitem", "treeitem", "checkbox", "radiobutton", "button", "menuitem", "dataitem"];
+
+/// Cached UIA state values of one element (`None` = not supported or not fetched).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RawState {
+    pub is_selected: Option<bool>,
+    /// ToggleState: 0 off, 1 on, 2 indeterminate.
+    pub toggle: Option<i32>,
+    /// ExpandCollapseState: 0 collapsed, 1 expanded, 2 partially expanded, 3 leaf.
+    pub expand: Option<i32>,
+}
+
+/// Sets `selected` / `toggled` / `expanded` on a node of a [`STATE_ROLES`] role that
+/// supports the matching pattern; other nodes stay without them.
+pub fn apply_state(node: &mut Node, raw: RawState) {
+    if !STATE_ROLES.contains(&node.role) {
+        return;
+    }
+    let has = |p: &str| node.patterns.contains(&p);
+    let selected = if has("select") { raw.is_selected } else { None };
+    let toggled = if has("toggle") {
+        match raw.toggle {
+            Some(0) => Some("off"),
+            Some(1) => Some("on"),
+            Some(2) => Some("mixed"),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let expanded = if has("expand") {
+        match raw.expand {
+            Some(0) => Some(false),
+            Some(1) | Some(2) => Some(true),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    node.selected = selected;
+    node.toggled = toggled;
+    node.expanded = expanded;
 }
 
 pub fn truncate(s: &str, max: usize) -> String {
@@ -258,6 +313,9 @@ mod tests {
             patterns: vec![],
             readonly: None,
             password: None,
+            selected: None,
+            toggled: None,
+            expanded: None,
         }
     }
 
@@ -334,5 +392,48 @@ mod tests {
         assert!(find(&flat, Some("save"), None, None, Some(9)).is_empty());
         assert_eq!(role_of(50000), "button");
         assert_eq!(role_of(12), "custom");
+    }
+
+    fn with(role: &'static str, patterns: Vec<&'static str>) -> Node {
+        let mut n = info(&Fake(role, "x", vec![]));
+        n.patterns = patterns;
+        n
+    }
+
+    #[test]
+    fn state_fields_only_with_pattern_and_role() {
+        let raw = RawState { is_selected: Some(true), toggle: Some(1), expand: Some(0) };
+        let mut tab = with("tabitem", vec!["select"]);
+        apply_state(&mut tab, raw);
+        assert_eq!((tab.selected, tab.toggled, tab.expanded), (Some(true), None, None));
+        let j = serde_json::to_value(&tab).unwrap();
+        assert_eq!(j["selected"], true);
+        assert!(j.get("toggled").is_none() && j.get("expanded").is_none());
+
+        let mut cb = with("checkbox", vec!["toggle"]);
+        for (t, want) in [(0, Some("off")), (1, Some("on")), (2, Some("mixed")), (7, None)] {
+            apply_state(&mut cb, RawState { toggle: Some(t), ..raw });
+            assert_eq!(cb.toggled, want);
+        }
+        apply_state(&mut cb, RawState { toggle: Some(2), ..raw });
+        assert_eq!(serde_json::to_value(&cb).unwrap()["toggled"], "mixed");
+
+        let mut tree = with("treeitem", vec!["select", "expand"]);
+        for (e, want) in [(0, Some(false)), (1, Some(true)), (2, Some(true)), (3, None)] {
+            apply_state(&mut tree, RawState { is_selected: Some(false), expand: Some(e), ..raw });
+            assert_eq!((tree.selected, tree.expanded), (Some(false), want));
+        }
+
+        // Pattern missing, unsupported value, or a role outside the list: nothing set.
+        let mut plain = with("button", vec!["invoke"]);
+        apply_state(&mut plain, raw);
+        assert_eq!((plain.selected, plain.toggled, plain.expanded), (None, None, None));
+        let mut unsupported = with("listitem", vec!["select"]);
+        apply_state(&mut unsupported, RawState::default());
+        assert_eq!(unsupported.selected, None);
+        let mut edit = with("edit", vec!["select", "toggle", "expand"]);
+        apply_state(&mut edit, raw);
+        let j = serde_json::to_value(&edit).unwrap();
+        assert!(j.get("selected").is_none() && j.get("toggled").is_none() && j.get("expanded").is_none());
     }
 }
