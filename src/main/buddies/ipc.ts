@@ -46,6 +46,7 @@ import {
   buddyRuns,
   buddySummaries,
   getBuddy,
+  ledgerSpend,
   removeBuddy,
   setBuddyEnabled,
   setBuddyNotebook,
@@ -81,6 +82,8 @@ export interface BuddiesIpcDeps {
   removeSchedule(id: string, automationId: string): boolean
   notebook(id: string): string
   setNotebook(id: string, text: string): NotebookWrite
+  /** This month's spend of one buddy (usage ledger). */
+  month?(id: string): { usd: number; tokens: number }
   /** Saves changed fields; the store clamps them (null = no such buddy). */
   update(id: string, fields: Partial<BuddyEditable>): Buddy | null
   /** A schedule phrase in words, or why it is not understood. */
@@ -150,7 +153,8 @@ export function buddiesIpcHandlers(d: BuddiesIpcDeps): Record<string, Handler> {
         buddy,
         schedules: scheduleViews(d.schedules(), id),
         running,
-        onScreen: d.onScreen() === id
+        onScreen: d.onScreen() === id,
+        ...(d.month ? { month: d.month(id) } : {})
       }
     },
     'buddies:run': (raw): BuddyRunResult | typeof INVALID => {
@@ -267,6 +271,7 @@ export function registerBuddiesIpc(): void {
       return ok
     },
     runs: (id) => buddyRuns(id),
+    month: (id) => ledgerSpend(id, new Date()) ?? { usd: 0, tokens: 0 },
     addSchedule: addBuddySchedule,
     removeSchedule: removeBuddySchedule,
     notebook: buddyNotebook,

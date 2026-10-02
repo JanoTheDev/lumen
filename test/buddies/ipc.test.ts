@@ -171,6 +171,11 @@ describe('buddies IPC handlers', () => {
     })
   })
 
+  it("adds this month's spend from the ledger, not the report's top 20", () => {
+    const t = buddiesIpcHandlers(deps({ month: () => ({ usd: 0.42, tokens: 1200 }) }))
+    expect(t['buddies:get']('inbox-buddy')).toMatchObject({ month: { usd: 0.42, tokens: 1200 } })
+  })
+
   it('runs now in the background or on screen', async () => {
     const d = deps()
     const t = buddiesIpcHandlers(d)

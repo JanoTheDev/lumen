@@ -32,6 +32,8 @@ export interface BuddyDetail {
   schedules: BuddyScheduleView[]
   running: boolean
   onScreen: boolean
+  /** This month's spend from the usage ledger (left out when unknown). */
+  month?: { usd: number; tokens: number }
 }
 
 /** What Settings may change on a buddy (08 T53); main clamps it on save. */

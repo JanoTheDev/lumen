@@ -372,7 +372,7 @@ export function BuddiesDetail({ id, onBack }: { id: string; onBack: () => void }
       )}
 
       <Card title="This month" description="From the usage log on this PC.">
-        <p>{monthLine(monthSpend(report, id), b.budget)}</p>
+        <p>{monthLine(detail.month ?? monthSpend(report, id), b.budget)}</p>
       </Card>
 
       <Card title="Details" description="Changes are saved together when you press Save changes.">
