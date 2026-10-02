@@ -9,6 +9,7 @@ import {
   addBuddySchedule,
   BuddyPauseFlag,
   orphanSchedules,
+  pruneOrphanSchedules,
   removeBuddySchedule,
   replaceBuddySchedule,
   resetBudgetNotices,
@@ -205,7 +206,9 @@ describe('adding and removing schedules', () => {
   let list: Automation[]
   let ids: Record<string, string[]>
   let host: ScheduleHost
+  let loaded: boolean
   beforeEach(() => {
+    loaded = true
     list = [auto('au_other', { kind: 'buddy', buddyId: 'price-buddy' })]
     ids = {}
     let n = 0
@@ -228,11 +231,21 @@ describe('adding and removing schedules', () => {
         buddy({ id: 'price-buddy', name: 'Price Buddy', scheduleIds: ids['price-buddy'] ?? [] })
       ],
       getBuddy: (id) => (id === 'inbox-buddy' ? buddy() : null),
-      setScheduleIds: (id, s) => (ids[id] = s)
+      setScheduleIds: (id, s) => (ids[id] = s),
+      buddiesLoaded: () => loaded
     }
     setScheduleHost(host)
   })
   afterEach(() => setScheduleHost(null))
+
+  it('removes schedules of buddies that are gone, once both lists are loaded', () => {
+    loaded = false
+    expect(pruneOrphanSchedules()).toBe(0)
+    expect(list.map((a) => a.id)).toEqual(['au_other'])
+    loaded = true
+    expect(pruneOrphanSchedules()).toBe(1)
+    expect(list).toEqual([])
+  })
 
   it('adds one and keeps scheduleIds in sync', async () => {
     const r = await addBuddySchedule('inbox-buddy', 'every weekday at 8', { prompt: 'be brief' })

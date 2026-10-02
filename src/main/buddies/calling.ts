@@ -52,6 +52,7 @@ import {
 } from './index'
 import {
   BuddyPauseFlag,
+  pruneOrphanSchedules,
   removeBuddySchedules,
   replaceBuddySchedule,
   runScheduledBuddy,
@@ -308,7 +309,8 @@ export function installBuddyCalling(): void {
     remove: (id) => automations().remove(id),
     buddies: listBuddies,
     getBuddy,
-    setScheduleIds: (id, scheduleIds) => void updateBuddy(id, { scheduleIds })
+    setScheduleIds: (id, scheduleIds) => void updateBuddy(id, { scheduleIds }),
+    buddiesLoaded: () => !!buddies()
   })
   setBuddyNamer((id) => getBuddy(id)?.name ?? null)
   // Buddy creation (T51): a new or changed schedule replaces the buddy's earlier ones.
@@ -332,8 +334,17 @@ export function installBuddyCalling(): void {
       now: () => Date.now()
     })
   )
-  onAutomationsChanged(syncScheduleIds)
-  syncScheduleIds()
+  // Schedules of buddies that are gone are removed once, when the automations have loaded.
+  let pruned = false
+  const sync = (): void => {
+    if (!pruned && automationsLoaded()) {
+      pruned = true
+      pruneOrphanSchedules()
+    }
+    syncScheduleIds()
+  }
+  onAutomationsChanged(sync)
+  sync()
   // A deleted buddy takes its schedules with it.
   bus.on('buddies.changed', (e) => {
     for (const id of e.ids) if (!getBuddy(id)) removeBuddySchedules(id)

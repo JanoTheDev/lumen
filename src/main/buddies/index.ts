@@ -49,6 +49,7 @@ import { monthTotals } from '../usage/ledger'
 import { canStartRun } from '../usage/limits'
 import { Buddies, type BuddySpendReader, type RunBuddyResult } from './service'
 import type { RunBuddyOpts } from './run'
+import { pruneOrphanSchedules } from './schedule'
 import { BuddyStore, type NotebookWrite } from './store'
 
 export type { BuddySpendReader, RunBuddyResult } from './service'
@@ -112,6 +113,8 @@ export const findBuddy = (name: string): Buddy | null => service?.byName(name) ?
 
 export function createBuddy(fields: Partial<Omit<Buddy, 'id'>> & { name: string }): Buddy {
   if (!service) throw new Error('Buddies are not loaded.')
+  // A schedule left from a gone buddy never attaches to a new one with the same id.
+  pruneOrphanSchedules()
   return service.create(fields)
 }
 

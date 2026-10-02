@@ -181,6 +181,8 @@ export interface ScheduleHost {
   buddies(): Buddy[]
   getBuddy(id: string): Buddy | null
   setScheduleIds(id: string, scheduleIds: string[]): void
+  /** The buddies are loaded (before that every buddy looks gone). */
+  buddiesLoaded(): boolean
 }
 
 let host: ScheduleHost | null = null
@@ -232,6 +234,21 @@ export function removeBuddySchedules(buddyId: string): number {
   let n = 0
   for (const a of host.automations() ?? [])
     if (scheduledBuddy(a) === buddyId && host.remove(a.id)) n++
+  return n
+}
+
+/**
+ * Removes the schedules of buddies that are gone (deleted while the automations were not
+ * loaded, or a folder removed by hand), so a later buddy with the same id never inherits them.
+ * Nothing happens until both lists are loaded.
+ */
+export function pruneOrphanSchedules(): number {
+  if (!host?.buddiesLoaded()) return 0
+  const list = host.automations()
+  if (!list) return 0
+  let n = 0
+  for (const id of orphanSchedules(list, (b) => !!host?.getBuddy(b))) if (host.remove(id)) n++
+  if (n) syncScheduleIds()
   return n
 }
 

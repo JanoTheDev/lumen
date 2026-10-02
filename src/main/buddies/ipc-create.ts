@@ -43,6 +43,7 @@ import {
 import { modelBuddyEditWords, buddyEditTurn } from './edit'
 import { BuddyOfferStore } from './offers'
 import { clampPermissions } from './clamp'
+import { pruneOrphanSchedules } from './schedule'
 
 const PENDING_MS = 15 * 60_000
 
@@ -275,6 +276,8 @@ export function importPending(token: string): BuddyImportResult {
   pending.delete(token)
   if (!p || Date.now() - p.at > PENDING_MS)
     return { ok: false, error: 'that import expired; choose the file again' }
+  // A schedule left from a gone buddy never attaches to an import with the same id.
+  pruneOrphanSchedules()
   const r = installArchive(p.archive, p.source, buddiesRoot())
   if (!r.ok) {
     log('fail', `buddy import from ${p.source} failed: ${r.error}`)
