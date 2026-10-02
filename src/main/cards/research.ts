@@ -302,9 +302,21 @@ export function clockTimes(value: string): string[] {
   return out
 }
 
-/** Every clock time of `value` appears in `text` (as 8:05, 08:05, 8.05 or 8h05). */
+/**
+ * Clock times on a page: 8:05 / 08:05 / 8h05, and 8.05 only with am / pm, so a price (€12.50) or
+ * a date (03.05.2026) never counts as a time.
+ */
+export function pageClockTimes(text: string): string[] {
+  const out: string[] = []
+  const re =
+    /(?<![\d:.,€$£¥])([01]?\d|2[0-3])(?:[:h]([0-5]\d)(?![\d]|[.,]\d)|\.([0-5]\d)\s?(?:am|pm|a\.m\.|p\.m\.)(?![a-z]))/gi
+  for (const m of text.matchAll(re)) out.push(`${Number(m[1])}:${m[2] ?? m[3]}`)
+  return out
+}
+
+/** Every clock time of `value` appears in `text` (as 8:05, 08:05, 8h05 or 8.05 pm). */
 export function timesSeen(value: string, text: string): boolean {
-  const have = new Set(clockTimes(text))
+  const have = new Set(pageClockTimes(text))
   return clockTimes(value).every((t) => have.has(t))
 }
 

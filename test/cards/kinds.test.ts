@@ -181,6 +181,12 @@ describe('trip times from pages read', () => {
     expect(timesSeen('08:12', 'Departure 8:12 Paris Gare de Lyon')).toBe(true)
     expect(timesSeen('08:15', 'Departure 8:12')).toBe(false)
     expect(timesSeen('1 h 56 min', 'anything')).toBe(true)
+    // Prices and dates on a page are not clock times.
+    expect(timesSeen('Departs 12:50', 'Ticket €12.50, 03.05.2026')).toBe(false)
+    expect(timesSeen('Departs 3:05', 'Travel date 03.05.2026')).toBe(false)
+    expect(timesSeen('Departs 12:50', 'Departure 12h50, €12.50')).toBe(true)
+    expect(timesSeen('Departs 20:05', 'leaves 8.05 pm')).toBe(false)
+    expect(timesSeen('Departs 8:05 pm', 'leaves 8.05 pm')).toBe(true)
   })
 
   it('drops trip times that are not on a page the task read', () => {
