@@ -4,7 +4,15 @@
 import { existsSync, readFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { configPath } from '../config'
-import { buildRow, hasMarker, importRows, ledgerPersisting, writeMarker } from './ledger'
+import {
+  buildRow,
+  dayKey,
+  hasMarker,
+  importRows,
+  ledgerPersisting,
+  queryUsage,
+  writeMarker
+} from './ledger'
 import type { UsageRow } from './ledger'
 
 const MARKER = '.migrated-usage-json'
@@ -53,26 +61,37 @@ export function oldDaysToRows(days: OldDay[]): UsageRow[] {
   return rows
 }
 
-/** Imports the old file once. Returns the number of days imported. Never throws. */
+/** Day keys (YYYY-MM-DD) of the migrated lines already in the ledger. */
+function importedDays(): Set<string> {
+  const days = new Set<string>()
+  for (const r of queryUsage({ from: 0, filter: { origin: 'system', feature: 'migrated' } }))
+    days.add(dayKey(r.t))
+  return days
+}
+
+/**
+ * Imports the old file once. Days already in the ledger (a run cut short before its marker) are
+ * skipped, so a second run never doubles them; the marker, written last with the imported day
+ * keys, is set only once every day is in. Returns the number of days imported. Never throws.
+ */
 export function migrateOldUsage(path = oldUsagePath()): number {
   if (!ledgerPersisting() || hasMarker(MARKER)) return 0
   try {
     let rows: UsageRow[] = []
     if (existsSync(path)) {
       const file = JSON.parse(readFileSync(path, 'utf8')) as { days?: unknown }
-      rows = oldDaysToRows(Array.isArray(file.days) ? (file.days as OldDay[]) : [])
+      const done = importedDays()
+      rows = oldDaysToRows(Array.isArray(file.days) ? (file.days as OldDay[]) : []).filter(
+        (r) => !done.has(dayKey(r.t))
+      )
       importRows(rows)
     }
-    writeMarker(MARKER)
+    writeMarker(MARKER, JSON.stringify({ days: rows.map((r) => dayKey(r.t)) }))
     if (rows.length) console.log(`[usage] imported ${rows.length} days from usage.json`)
     return rows.length
   } catch (e) {
+    // Tried again next start; the days that made it are skipped then.
     console.warn(`[usage] usage.json not imported: ${(e as Error).message}`)
-    try {
-      writeMarker(MARKER)
-    } catch {
-      // try again next start
-    }
     return 0
   }
 }

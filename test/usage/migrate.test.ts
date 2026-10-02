@@ -59,4 +59,25 @@ describe('usage.json migration', () => {
     writeFileSync(old, JSON.stringify({ version: 1, days: [oldDay('2026-10-01', 1, 1, 1)] }))
     expect(migrateOldUsage(old)).toBe(0)
   })
+
+  it('a run cut short before its marker never doubles days (review L4)', () => {
+    writeFileSync(old, JSON.stringify({ version: 1, days: [oldDay('2026-09-30', 2, 3, 100)] }))
+    expect(migrateOldUsage(old)).toBe(1)
+    // As if the app quit between the import and the marker.
+    rmSync(join(dir, 'usage', '.migrated-usage-json'))
+    writeFileSync(
+      old,
+      JSON.stringify({
+        version: 1,
+        days: [oldDay('2026-09-30', 2, 3, 100), oldDay('2026-10-01', 1, 1, 50)]
+      })
+    )
+    expect(migrateOldUsage(old)).toBe(1)
+    resetLedgerCache()
+    const rows = queryUsage({
+      from: new Date('2026-09-01T00:00:00'),
+      to: new Date('2026-11-01T00:00:00')
+    })
+    expect(totals(rows)).toMatchObject({ calls: 4, usd: 3 })
+  })
 })

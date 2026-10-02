@@ -466,10 +466,10 @@ export function resetLedgerCache(): void {
 }
 
 /** A small marker file in the ledger folder (one-time jobs such as the migration). */
-export function writeMarker(name: string): void {
+export function writeMarker(name: string, text = new Date().toISOString()): void {
   if (!persist) return
   mkdirSync(ledgerDir(), { recursive: true })
-  writeFileSync(join(ledgerDir(), name), new Date().toISOString(), 'utf8')
+  writeFileSync(join(ledgerDir(), name), text, 'utf8')
 }
 
 export function hasMarker(name: string): boolean {
