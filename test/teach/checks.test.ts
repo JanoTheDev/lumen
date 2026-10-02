@@ -174,6 +174,29 @@ describe('uia-event', () => {
     )
     expect(await inv.evaluate()).toBe('unknown')
   })
+
+  it('window-opened evaluate: a window role, never a same-named button', async () => {
+    const uia = fakeUia()
+    const title = 'OBS 30.2.3'
+    const window = { activeWindow: async () => ({ title }) }
+    const spec: CheckSpec = {
+      type: 'uia-event',
+      event: 'window-opened',
+      match: { name: 'Settings' }
+    }
+    const h = startCheck(spec, ctx({ uia: uia.port, window }))
+    uia.found = [node('Settings', 'button')]
+    expect(await h.evaluate()).toBe('fail')
+    uia.found = [node('Settings', 'dialog')]
+    expect(await h.evaluate()).toBe('pass')
+    const pane = startCheck(
+      { type: 'uia-event', event: 'window-opened', match: { name: 'Settings', role: 'Pane' } },
+      ctx({ uia: uia.port, window })
+    )
+    expect(await pane.evaluate()).toBe('fail')
+    uia.found = [node('Settings', 'pane')]
+    expect(await pane.evaluate()).toBe('pass')
+  })
 })
 
 describe('keypress', () => {

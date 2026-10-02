@@ -81,7 +81,7 @@ describe('lesson-check eval', () => {
   })
 
   // Known gaps: each names its note in plans/10-quality/tasks.md. Flip to it() once fixed.
-  it.fails('T15-G1: window-opened {name} does not pass on a same-named button', () => {
+  it('T15-G1: window-opened {name} does not pass on a same-named button', () => {
     expect(gapCases('T15-G1').filter(wrong)).toEqual([])
   })
   it.fails('T15-G2: a value check on a role alone does not pass on another ComboBox', () => {

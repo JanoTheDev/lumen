@@ -2,6 +2,7 @@
 // matches {name, role, automationId, value}. Names and roles compare case-insensitively.
 // Until 02 sends invoke/selection/value events, focus events stand in for "selected" and
 // "value" (Settings moves focus with the selection), and evaluate() reads the element now.
+// window-opened needs a window / dialog element (or the match's own role).
 import type { CheckSpec, UiaEventKind, ValueMatch } from '../lesson'
 import type { CheckResult, UiaEvent } from '../ports'
 import type { CheckContext, CheckHandle } from './types'
@@ -30,6 +31,14 @@ export function elementMatches(m: Match, el: UiaEvent['element']): boolean {
   return true
 }
 
+/** Roles a window-opened check accepts from a snapshot when the match names no role. */
+const WINDOW_ROLES = new Set(['window', 'dialog'])
+
+/** A found element that is the window itself, not a same-named button or tab. */
+function isWindowHit(m: Match, el: { role?: string }): boolean {
+  return m.role !== undefined || WINDOW_ROLES.has(norm(el.role))
+}
+
 /** Event kinds that can show `event` happened. */
 export function kindsFor(event: UiaEventKind): UiaEventKind[] {
   if (event === 'selected' || event === 'value') return [event, 'focused']
@@ -45,14 +54,23 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     }
   })
 
+  // A window / dialog element, not a same-named button or tab.
+  const windowOpenedNow = async (): Promise<CheckResult> => {
+    const { name, role, automationId } = spec.match
+    const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
+    if (!els) return 'unknown'
+    const hits = els.filter((el) => elementMatches(spec.match, el) && isWindowHit(spec.match, el))
+    return hits.length ? 'pass' : 'fail'
+  }
+
   const evaluate = async (): Promise<CheckResult> => {
     if (r.passed()) return 'pass'
     if (spec.event === 'invoked') return 'unknown'
+    if (spec.event === 'window-opened') return windowOpenedNow()
     const { name, role, automationId } = spec.match
     const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
     if (!els) return 'unknown'
     const hits = els.filter((el) => elementMatches(spec.match, el))
-    if (spec.event === 'window-opened') return hits.length ? 'pass' : 'fail'
     if (spec.event === 'value') return hits.length ? 'pass' : els.length ? 'fail' : 'unknown'
     // focused / selected: the matching element has focus now.
     return hits.some((el) => el.focused) ? 'pass' : els.length ? 'fail' : 'unknown'
