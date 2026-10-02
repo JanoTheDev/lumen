@@ -161,9 +161,60 @@ const all = (k: keyof LocaleNames): string[] => [
   ...new Set(Object.values(LOCALES).flatMap((l) => l[k]))
 ]
 
-/** Lower case, no accents, curly apostrophes straightened: "Löschen" → "loschen". */
-const fold = (s: string): string =>
-  s.normalize('NFD').replace(/\p{M}/gu, '').replace(/[’‘]/g, "'").toLowerCase()
+/** Cyrillic and Greek letters that look like Latin ones ("Pаy" with a Cyrillic а). */
+const LOOKALIKES: Record<string, string> = {
+  а: 'a',
+  в: 'b',
+  е: 'e',
+  ё: 'e',
+  к: 'k',
+  м: 'm',
+  н: 'h',
+  о: 'o',
+  р: 'p',
+  с: 'c',
+  т: 't',
+  у: 'y',
+  х: 'x',
+  і: 'i',
+  ї: 'i',
+  ј: 'j',
+  ѕ: 's',
+  ԁ: 'd',
+  һ: 'h',
+  ԛ: 'q',
+  ԝ: 'w',
+  α: 'a',
+  β: 'b',
+  ε: 'e',
+  ζ: 'z',
+  η: 'n',
+  ι: 'i',
+  κ: 'k',
+  μ: 'm',
+  ν: 'v',
+  ο: 'o',
+  ρ: 'p',
+  τ: 't',
+  υ: 'u',
+  χ: 'x'
+}
+const LOOKALIKE_RE = new RegExp(`[${Object.keys(LOOKALIKES).join('')}]`, 'g')
+
+/**
+ * Lower case, no accents, curly apostrophes straightened: "Löschen" → "loschen". Compatibility
+ * forms (full-width letters), invisible format characters (zero-width space, soft hyphen) and
+ * Cyrillic / Greek look-alikes are folded too, so a page cannot hide "Pay" from the lists.
+ */
+export const fold = (s: string): string =>
+  s
+    .normalize('NFKC')
+    .replace(/\p{Cf}/gu, '')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[’‘]/g, "'")
+    .toLowerCase()
+    .replace(LOOKALIKE_RE, (c) => LOOKALIKES[c])
 
 const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -266,6 +317,14 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'confirm order',
       'submit order',
       'confirm payment',
+      'complete order',
+      'complete payment',
+      'order now',
+      'submit payment',
+      'make payment',
+      'pay securely',
+      'continue to payment',
+      'confirm and book',
       'checkout',
       'check out',
       'proceed to checkout',
@@ -347,7 +406,12 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'nu kopen',
       'kopen',
       'afrekenen',
-      'bevestigen en betalen'
+      'bevestigen en betalen',
+      'nu bestellen',
+      'bestelling afronden',
+      'betaling afronden',
+      'doorgaan naar betalen',
+      'bestellen en betalen'
     ],
     payment: [
       'kaartnummer',
@@ -395,7 +459,14 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'jetzt kaufen',
       'kaufen',
       'zur kasse',
-      'bestätigen und bezahlen'
+      'bestätigen und bezahlen',
+      'kostenpflichtig bestellen',
+      'kostenpflichtig buchen',
+      'jetzt bestellen',
+      'jetzt zahlen',
+      'zahlen',
+      'zahlung abschließen',
+      'bestellung bestätigen'
     ],
     payment: [
       'kartennummer',
@@ -436,7 +507,13 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'commander',
       'acheter',
       'acheter maintenant',
-      'confirmer et payer'
+      'confirmer et payer',
+      'valider et payer',
+      'confirmer la commande',
+      'finaliser la commande',
+      'valider le paiement',
+      'procéder au paiement',
+      'commander et payer'
     ],
     payment: [
       'numéro de carte',
@@ -477,7 +554,12 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'finalizar compra',
       'comprar',
       'comprar ahora',
-      'confirmar y pagar'
+      'confirmar y pagar',
+      'confirmar pedido',
+      'confirmar compra',
+      'finalizar pedido',
+      'confirmar y reservar',
+      'continuar al pago'
     ],
     payment: [
       'número de tarjeta',
@@ -500,6 +582,86 @@ const CHECKOUT: Record<string, CheckoutNames> = {
       'fecha de nacimiento'
     ],
     personalExact: ['nombre', 'dirección', 'ciudad', 'móvil', 'correo']
+  },
+  it: {
+    checkout: [
+      'prenota',
+      'prenota ora',
+      'paga',
+      'paga ora',
+      'acquista',
+      'acquista ora',
+      'compra ora',
+      'conferma prenotazione',
+      'conferma ordine',
+      'effettua ordine',
+      'invia ordine',
+      'concludi ordine',
+      'procedi al pagamento',
+      'conferma e paga'
+    ],
+    payment: [
+      'numero carta',
+      'numero della carta',
+      'numero di carta',
+      'titolare della carta',
+      'titolare carta',
+      'data di scadenza',
+      'scadenza',
+      'codice di sicurezza',
+      'codice di verifica',
+      'numero di conto'
+    ],
+    personal: [
+      'cognome',
+      'nome e cognome',
+      'indirizzo email',
+      'indirizzo e-mail',
+      'numero di telefono',
+      'telefono',
+      'cellulare',
+      'codice postale',
+      'indirizzo di fatturazione',
+      'indirizzo di spedizione',
+      'data di nascita'
+    ],
+    personalExact: ['nome', 'indirizzo', 'città', 'cap']
+  },
+  pt: {
+    checkout: [
+      'pagar agora',
+      'comprar agora',
+      'reservar agora',
+      'finalizar pedido',
+      'fazer pedido',
+      'confirmar pagamento',
+      'ir para pagamento',
+      'concluir compra'
+    ],
+    payment: [
+      'número do cartão',
+      'número de cartão',
+      'nome no cartão',
+      'titular do cartão',
+      'validade',
+      'data de validade',
+      'código de segurança',
+      'número da conta'
+    ],
+    personal: [
+      'sobrenome',
+      'nome completo',
+      'telefone',
+      'celular',
+      'telemóvel',
+      'endereço de email',
+      'endereço de e-mail',
+      'rua',
+      'código postal',
+      'cep',
+      'data de nascimento'
+    ],
+    personalExact: ['nome', 'endereço', 'cidade']
   }
 }
 
@@ -507,27 +669,52 @@ const allOf = (k: keyof CheckoutNames): string[] => [
   ...new Set(Object.values(CHECKOUT).flatMap((l) => l[k]))
 ]
 
-const altOf = (names: string[]): string =>
+const GAP = '[\\s_-]+'
+/** "and" in a listed name also matches "&" ("Confirm & pay"). */
+const AND_WORDS = new Set(['and', 'en', 'und', 'et', 'y', 'e'])
+/** One word a name may hold after its first word: "Place your order", "Confirm my booking". */
+const FILLER = `(?:${GAP}(?:your|my|the|this|uw|je|mijn|de|het|ihre|deine|meine|die|den|votre|ma|mon|la|le|tu|su|mi|il|lo|o|a|seu|sua|meu|minha))?`
+
+const altOf = (names: string[], filler = false): string =>
   [...new Set(names.map(fold))]
     .sort((a, b) => b.length - a.length)
-    .map((n) => escape(n).replace(/ /g, '[\\s_-]+'))
+    .map((n) =>
+      n
+        .split(' ')
+        .map((w) => (AND_WORDS.has(w) ? `(?:${w}|&)` : escape(w)))
+        .map((w, i, ws) => (filler && i === 0 && ws.length > 1 ? w + FILLER : w))
+        .join(GAP)
+    )
     .join('|')
 
+/** "Confirm & pay" and "confirm and pay" → one key. */
+const andKey = (words: string[]): string => words.map((w) => (AND_WORDS.has(w) ? '&' : w)).join(' ')
+
 const CHECKOUT_ALL = allOf('checkout')
-const CHECKOUT_SHOWN = new Map(CHECKOUT_ALL.map((n) => [fold(n), n] as const))
+const CHECKOUT_SHOWN = new Map(CHECKOUT_ALL.map((n) => [andKey(fold(n).split(' ')), n] as const))
 // Any listed name at the start (after symbols: "→ Pay"), or a several-word name anywhere.
 const CHECKOUT_RE = new RegExp(
-  `^[^\\p{L}\\p{N}]*(${altOf(CHECKOUT_ALL)})${B}|(?:^|[^\\p{L}\\p{N}])(${altOf(CHECKOUT_ALL.filter((n) => n.includes(' ')))})${B}`,
+  `^[^\\p{L}\\p{N}]*(${altOf(CHECKOUT_ALL, true)})${B}|(?:^|[^\\p{L}\\p{N}])(${altOf(
+    CHECKOUT_ALL.filter((n) => n.includes(' ')),
+    true
+  )})${B}`,
   'iu'
 )
+
+/** The listed name a match stands for ("place your order" → "place order"). */
+function listedCheckout(matched: string): string {
+  const words = matched.split(/[\s_-]+/)
+  const listed =
+    CHECKOUT_SHOWN.get(andKey(words)) ?? CHECKOUT_SHOWN.get(andKey([words[0], ...words.slice(2)]))
+  return listed ?? words.join(' ')
+}
 
 /** The book / reserve / pay / order words of a button name ("Book now", "Pay €120"), or null. */
 export function checkoutName(name: string | undefined): string | null {
   if (!name) return null
   const m = CHECKOUT_RE.exec(fold(name.trim()))
   if (!m) return null
-  const word = (m[1] ?? m[2]).replace(/[\s_-]+/g, ' ')
-  return CHECKOUT_SHOWN.get(word) ?? word
+  return listedCheckout(m[1] ?? m[2])
 }
 
 const PAYMENT_RE = wordsRe(allOf('payment'))

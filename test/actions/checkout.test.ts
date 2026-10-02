@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   checkoutName,
   isPaymentFieldName,
-  isPersonalFieldName
+  isPersonalFieldName,
+  riskyName
 } from '../../src/main/actions/risk-names'
 import { evaluate, type PolicyCtx } from '../../src/main/actions/safety'
 
@@ -42,6 +43,41 @@ describe('checkoutName', () => {
     ['→ Pay', 'pay']
   ])('%s → %s', (name, word) => {
     expect(checkoutName(name)).toBe(word)
+  })
+
+  it.each([
+    ['Place your order', 'place order'],
+    ['Complete order', 'complete order'],
+    ['Order now', 'order now'],
+    ['Confirm and book', 'confirm and book'],
+    ['Confirm & pay', 'confirm and pay'],
+    ['Confirm my booking', 'confirm booking'],
+    ['Continue to payment', 'continue to payment'],
+    ['Make payment', 'make payment'],
+    ['Submit payment', 'submit payment'],
+    ['Kostenpflichtig bestellen', 'kostenpflichtig bestellen'],
+    ['Jetzt zahlen', 'jetzt zahlen'],
+    ['Valider et payer', 'valider et payer'],
+    ['Confirmer & payer', 'confirmer et payer'],
+    ['Paga ora', 'paga ora'],
+    ['Finalizar pedido', 'finalizar pedido']
+  ])('final button %s → %s (review M1)', (name, word) => {
+    expect(checkoutName(name)).toBe(word)
+  })
+
+  it.each([
+    ['zero-width space', 'P​ay now'],
+    ['soft hyphen', 'Pa­y now'],
+    ['Cyrillic а', 'Pаy now'],
+    ['Greek Ρ and Cyrillic у', 'Ρaу now'],
+    ['full-width letters', 'Ｐａｙ now']
+  ])('a disguised "Pay now" (%s) is still caught', (_label, name) => {
+    expect(checkoutName(name)).toBe('pay now')
+  })
+
+  it('the same folding hardens the send / delete names', () => {
+    expect(riskyName('S​end')).toBe('send')
+    expect(riskyName('Dеlete')).toBe('delete')
   })
 
   it.each([
