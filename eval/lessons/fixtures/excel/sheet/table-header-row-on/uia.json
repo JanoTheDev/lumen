@@ -28,7 +28,8 @@
         "enabled": true,
         "patterns": [
           "select"
-        ]
+        ],
+        "selected": false
       },
       {
         "id": "e2",
@@ -44,7 +45,8 @@
         "enabled": true,
         "patterns": [
           "select"
-        ]
+        ],
+        "selected": false
       },
       {
         "id": "e3",
@@ -60,7 +62,8 @@
         "enabled": true,
         "patterns": [
           "select"
-        ]
+        ],
+        "selected": true
       },
       {
         "id": "e4",
@@ -94,7 +97,8 @@
         "enabled": true,
         "patterns": [
           "toggle"
-        ]
+        ],
+        "toggled": "on"
       },
       {
         "id": "e6",
@@ -110,7 +114,8 @@
         "enabled": true,
         "patterns": [
           "toggle"
-        ]
+        ],
+        "toggled": "off"
       },
       {
         "id": "e7",
@@ -126,7 +131,8 @@
         "enabled": true,
         "patterns": [
           "toggle"
-        ]
+        ],
+        "toggled": "on"
       },
       {
         "id": "e8",

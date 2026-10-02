@@ -96,7 +96,7 @@ describe('lesson-check eval', () => {
   it.fails('T15-G5: window-opened evaluate sees the dialog that is the snapshot root', () => {
     expect(gapCases('T15-G5').filter(wrong)).toEqual([])
   })
-  it.fails('T15-G6: selected / checked state is readable without an event', () => {
+  it('T15-G6: selected / checked state is readable without an event', () => {
     expect(gapCases('T15-G6').filter(wrong)).toEqual([])
   })
 })

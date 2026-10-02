@@ -7,6 +7,7 @@ import type { CheckSpec, UiaEventKind, ValueMatch } from '../lesson'
 import type { CheckResult, UiaEvent } from '../ports'
 import type { CheckContext, CheckHandle } from './types'
 import { settleable } from './types'
+import { selectedNow, withToggleValue } from './element-state'
 
 type UiaSpec = Extract<CheckSpec, { type: 'uia-event' }>
 type Match = UiaSpec['match']
@@ -70,10 +71,12 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     const { name, role, automationId } = spec.match
     const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
     if (!els) return 'unknown'
-    const hits = els.filter((el) => elementMatches(spec.match, el))
+    const hits = els.filter((el) => elementMatches(spec.match, withToggleValue(el)))
     if (spec.event === 'value') return hits.length ? 'pass' : els.length ? 'fail' : 'unknown'
-    // focused / selected: the matching element has focus now.
-    return hits.some((el) => el.focused) ? 'pass' : els.length ? 'fail' : 'unknown'
+    // focused / selected: the matching element has focus now (or, for selected, is selected).
+    const now = (el: (typeof hits)[number]): boolean =>
+      el.focused === true || (spec.event === 'selected' && selectedNow(el))
+    return hits.some(now) ? 'pass' : els.length ? 'fail' : 'unknown'
   }
 
   return {

@@ -28,7 +28,8 @@
         "enabled": true,
         "patterns": [
           "select"
-        ]
+        ],
+        "selected": true
       },
       {
         "id": "e2",
@@ -44,7 +45,8 @@
         "enabled": true,
         "patterns": [
           "select"
-        ]
+        ],
+        "selected": false
       },
       {
         "id": "e3",
