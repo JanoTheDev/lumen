@@ -2,7 +2,11 @@
 import { describe, expect, it } from 'vitest'
 import { realClock } from '../../src/main/a11y/timings'
 import { newBudget, startCheck, type CheckContext } from '../../src/main/teach/checks'
-import { selectedNow, withToggleValue } from '../../src/main/teach/checks/element-state'
+import {
+  selectedNow,
+  toggleCounts,
+  withToggleValue
+} from '../../src/main/teach/checks/element-state'
 import type { CheckSpec, LessonStep } from '../../src/main/teach/lesson'
 import { noopPorts } from '../../src/main/teach/ports'
 import type { ElementNode } from '@shared/types'
@@ -40,12 +44,23 @@ function evaluate(check: CheckSpec, nodes: ElementNode[]): Promise<string> {
 
 describe('element state helpers', () => {
   it('uses the toggle state only when there is no value', () => {
-    expect(withToggleValue({ toggled: 'on' as const }).value).toBe('on')
-    expect(withToggleValue({ value: 'Yes', toggled: 'off' as const }).value).toBe('Yes')
-    expect(withToggleValue({}).value).toBeUndefined()
+    const box = { role: 'CheckBox' }
+    expect(withToggleValue({ toggled: 'on' as const }, box).value).toBe('on')
+    expect(withToggleValue({ value: 'Yes', toggled: 'off' as const }, box).value).toBe('Yes')
+    expect(withToggleValue({}, box).value).toBeUndefined()
     expect(selectedNow({ selected: true })).toBe(true)
     expect(selectedNow({ selected: false })).toBe(false)
     expect(selectedNow({})).toBe(false)
+  })
+
+  it('counts a toggle state only for a literal on / off / mixed or a toggle role', () => {
+    expect(toggleCounts({ name: 'Bold', value: 'ON' })).toBe(true)
+    expect(toggleCounts({ name: 'Wrap', role: 'Button', value: { regex: '.+' } })).toBe(true)
+    expect(toggleCounts({ name: 'Dark', role: 'RadioButton' })).toBe(true)
+    expect(toggleCounts({ name: 'Search', value: { regex: '\\S' } })).toBe(false)
+    expect(toggleCounts({ name: 'Search', role: 'Edit', value: 'on' })).toBe(true)
+    expect(toggleCounts({ name: 'Search', role: 'Edit' })).toBe(false)
+    expect(toggleCounts(undefined)).toBe(false)
   })
 })
 
@@ -83,5 +98,15 @@ describe('uia-event evaluate with snapshot state', () => {
       'fail'
     )
     expect(await evaluate(boxCheck, [el('checkbox', 'Header Row')])).toBe('fail')
+  })
+
+  it('a regex value check without a toggle role ignores a same-named toggle', async () => {
+    const typed: CheckSpec = {
+      type: 'uia-event',
+      event: 'value',
+      match: { name: 'Search', value: { regex: '\\S' } }
+    }
+    expect(await evaluate(typed, [el('button', 'Search', { toggled: 'off' })])).toBe('fail')
+    expect(await evaluate(typed, [el('edit', 'Search', { value: 'query' })])).toBe('pass')
   })
 })

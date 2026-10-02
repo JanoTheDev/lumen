@@ -60,7 +60,7 @@ export function kindsFor(event: UiaEventKind): UiaEventKind[] {
 async function baselineValue(spec: UiaSpec, ctx: CheckContext): Promise<string | null> {
   const { name, role, automationId } = spec.match
   const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
-  const el = els?.map(withToggleValue).find((e) => e.value !== undefined)
+  const el = els?.map((e) => withToggleValue(e, spec.match)).find((e) => e.value !== undefined)
   return el?.value !== undefined ? norm(el.value) : null
 }
 
@@ -75,7 +75,7 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     return before === null ? kind === 'value' : norm(value) !== before
   }
   const unsubscribe = ctx.ports.uia.subscribe(kindsFor(spec.event), (e) => {
-    const el = withToggleValue(e.element)
+    const el = withToggleValue(e.element, spec.match)
     if (!elementMatches(spec.match, el)) return
     if (changedOnly) {
       void changed(el.value, e.kind).then((yes) => {
@@ -109,10 +109,10 @@ export function start(spec: UiaSpec, ctx: CheckContext): CheckHandle {
     const { name, role, automationId } = spec.match
     const els = await ctx.ports.uia.find({ name, role, automationId }).catch(() => null)
     if (!els) return 'unknown'
-    const hits = els.filter((el) => elementMatches(spec.match, withToggleValue(el)))
+    const hits = els.filter((el) => elementMatches(spec.match, withToggleValue(el, spec.match)))
     if (changedOnly) {
       if ((await baseline) === null) return 'unknown'
-      for (const el of hits) if (await changed(withToggleValue(el).value)) return 'pass'
+      for (const el of hits) if (await changed(withToggleValue(el, spec.match).value)) return 'pass'
       return els.length ? 'fail' : 'unknown'
     }
     if (spec.event === 'value') return hits.length ? 'pass' : els.length ? 'fail' : 'unknown'
