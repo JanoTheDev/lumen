@@ -153,6 +153,8 @@ const SCRIPT_RE =
 const NPX_TOOLS = new Set(['vitest', 'jest', 'eslint', 'tsc', 'prettier'])
 const BIN_RE =
   /^(\.[\\/])?(node_modules[\\/]\.bin[\\/])?(vitest|jest|eslint|tsc|prettier)(\.cmd)?$/i
+/** A bare Python from PATH: a path (`./python`, `D:/x/python`, a UNC share) is never trusted. */
+const PYTHON_RE = /^python3?(\.exe)?$/i
 const GIT_READ = new Set([
   'status',
   'diff',
@@ -290,7 +292,7 @@ function safeSimple(w: string[], req: ToolRequest, filter: boolean): boolean {
       )
     }
   }
-  if (/(^|[\\/])python3?(\.exe)?$/i.test(head))
+  if (PYTHON_RE.test(head))
     return args[0] === '-m' && /^(pytest|mypy|ruff)$/.test(args[1] ?? '') && pathsInside(args, req)
   if (BIN_RE.test(head)) return pathsInside(args, req)
   if (!READERS.has(cmd)) return false
@@ -307,7 +309,8 @@ const CODE_TOOL_RE = /^(vitest|jest|eslint|prettier|playwright)$/i
  * An allowed shape that runs the project's own code: package scripts, test runners, linters and
  * formatters with JS configs, cargo build scripts and proc macros (build.rs), go test, MSBuild
  * targets, pytest conftest, mypy / flake8 plugins. Claude may just have edited that code, so
- * careful asks. tsc, cargo fmt, go vet / build / fmt, ruff, black --check and reads stay automatic.
+ * careful asks. Bare tsc, cargo fmt, go vet / build / fmt, ruff, black --check and reads stay
+ * automatic; `python -m` always asks (a project module of that name would run).
  */
 function runsProjectCode(w: string[]): boolean {
   const [head = '', ...args] = w
@@ -329,7 +332,8 @@ function runsProjectCode(w: string[]): boolean {
     case 'go':
       return args[0] === 'test'
   }
-  if (/(^|[\\/])python3?(\.exe)?$/i.test(head)) return args[1] !== 'ruff'
+  // `python -m x` puts the working folder first on sys.path, so a project `x.py` would run.
+  if (PYTHON_RE.test(head)) return true
   const bin = BIN_RE.exec(head)
   return !!bin && bin[3].toLowerCase() !== 'tsc'
 }

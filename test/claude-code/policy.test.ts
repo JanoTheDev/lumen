@@ -222,6 +222,23 @@ describe('decidePermission', () => {
     expect(decidePermission(bash('npm install x'), 'careful').reason).toMatch(/installs/)
   })
 
+  it('careful trusts only a bare python, and asks for python -m (review H1)', () => {
+    for (const c of [
+      '//evil/share/python.exe -m ruff',
+      String.raw`\evil\share\python.exe -m ruff`,
+      'C:/tmp/python.exe -m ruff',
+      'D:/x/python -m ruff check',
+      '../../x/python -m ruff',
+      './python -m ruff check .',
+      'python -m ruff check .'
+    ])
+      expect(decidePermission(bash(c), 'careful').verdict, c).toBe('ask')
+    expect(decidePermission(bash('python -m ruff check .'), 'careful').reason).toMatch(
+      /runs the project’s code/
+    )
+    expect(decidePermission(bash('ruff check .'), 'careful').verdict).toBe('allow')
+  })
+
   it('careful never auto-approves edits to config that runs code', () => {
     for (const f of [
       `${P}\\.git\\config`,
