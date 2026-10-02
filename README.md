@@ -239,7 +239,7 @@ CI runs typecheck, lint, Vitest, the Rust tests and clippy, and the bundle size 
 
 _Last updated: October 2026._
 
-**Where things stand:** every feature listed above is built, has automated tests (about 430 test files and over 5,200 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
+**Where things stand:** every feature listed above is built, has automated tests (about 430 test files and over 5,240 tests, plus the Rust helper's own tests) and passes CI. Most of it has **not yet been tried by hand in the real app** on a range of PCs, so expect rough edges until the hand-test pass below is done. There is no tagged release yet.
 
 ### Done
 
@@ -280,13 +280,14 @@ _Last updated: October 2026._
 - [x] Local voice commands, numbers, mouse grid, dwell click types, switch scanning, eye-gaze tuning, on-screen keyboard
 - [x] Point and say ("click this", "move this there")
 - [x] Screen reader output (NVDA, JAWS, Narrator), community labels, simple mode, text scale, reduced motion, high contrast
-- [x] Face-gesture input (webcam, local, opt-in)
+- [x] Face-gesture input (webcam, local, opt-in), with a head pointer that moves the mouse as you turn your head
 
 **Teaching and skills**
 
 - [x] App packs for ten apps, 50+ lessons, show me how, record my steps, practice challenges, saved progress, learning journal
 - [x] Blender and OBS app helpers for exact lesson checks
 - [x] Offline lesson-check accuracy test set (no false passes on the current cases)
+- [x] Record a lesson as a video: "record this lesson" saves the run with a step-by-step transcript in `Videos\Lumen`
 - [x] Lessons from tutorial transcripts, web pages and subtitle files; sharing as `.lumen` files
 - [x] Skills: `SKILL.md` format, starter skills, make by voice, by recording, by description, or "save that as a skill"
 - [x] Reply styles, Claude Code plugin import (also marketplace plugins from other GitHub repos)
@@ -295,11 +296,6 @@ _Last updated: October 2026._
 
 - [x] MCP connectors with per-tool permissions, integrations catalog with browser sign-in
 - [x] Claude Code by voice with optional autopilot, coding skills per project
-
-### In progress
-
-- [ ] **Record a lesson as a video:** say "record this lesson" to save the run as a video with a step-by-step transcript in `Videos\Lumen` (built into Lumen, no extra download)
-- [ ] **Head pointer:** move the mouse by turning your head, with the face-gesture camera input
 
 ### After that
 
