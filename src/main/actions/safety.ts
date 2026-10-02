@@ -683,7 +683,7 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
   // Enter or Space on a focused Send / Delete / Pay button presses it (list rows are left out:
   // their names hold arbitrary subject text).
   const pressed = (combo === 'enter' || combo === 'space') && focusIsButton(w)
-  const buys = pressed && agentish(ctx.origin) ? checkoutName(w?.focusName) : null
+  const buys = pressed && agentish(ctx.origin) ? checkoutIn(w?.focusName, w) : null
   if (buys) {
     out.push(checkoutFinding(buys))
     return
@@ -836,6 +836,34 @@ function mailTypeFindings(
 
 function checkoutFinding(word: string): Finding {
   return { risk: 'high', reason: `books or pays: “${word}”`, checkout: word }
+}
+
+/** Desktop shops, where "Purchase" or "Check out" buys too. */
+const SHOP_PROCESSES = new Set([
+  'steam.exe',
+  'steamwebhelper.exe',
+  'epicgameslauncher.exe',
+  'winstore.app.exe',
+  'eadesktop.exe',
+  'ubisoftconnect.exe',
+  'battle.net.exe',
+  'gog galaxy.exe',
+  'galaxyclient.exe'
+])
+/** Checkout words with other meanings outside a shop: Git "Check out branch", ERP "Purchase
+ * order", German accounting "Buchen" (post an entry). */
+const SHOP_ONLY_WORDS = new Set(['check out', 'checkout', 'purchase', 'buchen'])
+
+/**
+ * The checkout words of a control name, in this window: the shop-only words count in a browser
+ * or a desktop shop (or when the window is not known), not in an IDE or an accounting app.
+ */
+function checkoutIn(name: string | undefined, w: WindowInfo | undefined): string | null {
+  const word = checkoutName(name)
+  if (!word || !SHOP_ONLY_WORDS.has(word)) return word
+  const known = !!(w?.process || w?.title)
+  if (!known || isBrowserWindow(w) || SHOP_PROCESSES.has(lower(w?.process))) return word
+  return null
 }
 
 const BROWSER_PROCESSES = new Set([
@@ -1068,7 +1096,7 @@ function clickFindings(name: string, ctx: PolicyCtx, out: Finding[], how: ClickH
   }
   if (double && isExplorer(ctx.activeWindow) && RUNNABLE_RE.test(name.trim()))
     out.push({ risk: 'high', reason: `opens “${name.trim()}” (runs a program)` })
-  const buys = agentish(ctx.origin) ? checkoutName(name) : null
+  const buys = agentish(ctx.origin) ? checkoutIn(name, ctx.activeWindow) : null
   if (buys) return void out.push(checkoutFinding(buys))
   const mailWord = isMail(ctx.activeWindow) ? mailRiskyName(name) : null
   const word = riskyName(name) ?? mailWord

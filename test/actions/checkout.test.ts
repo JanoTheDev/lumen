@@ -582,3 +582,34 @@ describe('form submits on a checkout page (review H2)', () => {
     ).toBe('low')
   })
 })
+
+describe('shop-only checkout words (review L3)', () => {
+  const inApp = (process: string, title: string): PolicyCtx => ({
+    origin: 'agent',
+    activeWindow: { title, process }
+  })
+
+  it.each([
+    ['Check out branch', 'Code.exe', 'repo - Visual Studio Code'],
+    ['Purchase order', 'erp.exe', 'Orders - ERP'],
+    ['Buchen', 'lexware.exe', 'Buchhaltung']
+  ])('%s in %s is not a checkout', (name, process, title) => {
+    const d = evaluate({ type: 'click_element', elementName: name }, inApp(process, title))
+    expect(d.checkout).toBeUndefined()
+  })
+
+  it.each([
+    ['Checkout', 'chrome.exe', 'Basket - Google Chrome'],
+    ['Purchase', 'steam.exe', 'Steam'],
+    ['Buchen', 'msedge.exe', 'Hotel - Microsoft Edge']
+  ])('%s in %s still is', (name, process, title) => {
+    const d = evaluate({ type: 'click_element', elementName: name }, inApp(process, title))
+    expect(d.checkout).toBeTruthy()
+  })
+
+  it('without a known window the word still counts', () => {
+    expect(evaluate({ type: 'click_element', elementName: 'Checkout' }, agent).checkout).toBe(
+      'checkout'
+    )
+  })
+})
