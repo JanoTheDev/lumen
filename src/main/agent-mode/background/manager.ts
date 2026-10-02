@@ -128,6 +128,8 @@ interface Entry {
   wakers: Set<() => void>
   /** The usage scope the run records under, fixed at start (05 T43). */
   scope?: UsageScope
+  /** Refused at start (monthly limits): ended at once, may still be run again. */
+  refused?: boolean
 }
 
 const ACTIVE: BackgroundTaskPhase[] = ['running', 'asking', 'needs-foreground']
@@ -227,6 +229,7 @@ export class BackgroundManager {
     const entry = this.newEntry(task)
     entry.scope = taskUsageScope(task, this.parentScope(input.parentId))
     if (input.run) entry.run = input.run
+    if (refused) entry.refused = true
     this.deps.record?.(task.id, { type: 'start', task })
     this.changed(task.id)
     if (input.immediate || input.run || this.slotted() < this.deps.max()) this.launch(task.id)
@@ -319,7 +322,8 @@ export class BackgroundManager {
 
   runAgain(id: string): BackgroundTask | null {
     const t = this.get(id)
-    if (!t || isOpen(t) || t.claude || this.entries.get(id)?.run) return null
+    const e = this.entries.get(id)
+    if (!t || isOpen(t) || t.claude || (e?.run && !e.refused)) return null
     const rebuilt = this.deps.rerun?.(t)
     if (rebuilt === null) return null
     if (rebuilt) return this.start(rebuilt)

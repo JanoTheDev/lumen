@@ -30,5 +30,12 @@ describe('monthly limits on Run again (M2)', () => {
       phase: 'failed',
       result: { summary: refuse }
     })
+    // A raised cap: the refused row runs again for real.
+    refuse = null
+    const third = m.runAgain(again!.id)
+    await tick()
+    expect(third).not.toBeNull()
+    expect(runs).toEqual([first.id, third!.id])
+    expect(m.get(third!.id)?.phase).toBe('done')
   })
 })
