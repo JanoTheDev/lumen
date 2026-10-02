@@ -199,18 +199,27 @@ describe('handleCardsTurn', () => {
     )
   })
 
-  it('"book the second one" starts the booking with the user words', async () => {
-    const book = vi.fn(async () => ({ text: 'Booked Old Town Rooms. Reference AB12.' }))
+  it('"book the first one" starts the booking with the user words', async () => {
+    const book = vi.fn(async () => ({ text: 'Booked Hotel Azur. Reference AB12.' }))
     const d = setup({ book })
-    const r = await handleCardsTurn('Book the second one', signal, d)
+    const r = await handleCardsTurn('Book the first one', signal, d)
     expect(book).toHaveBeenCalledWith(
-      expect.objectContaining({ title: 'Old Town Rooms' }),
+      expect.objectContaining({ title: 'Hotel Azur' }),
       store.latest(),
-      'Book the second one',
+      'Book the first one',
       signal
     )
     expect(r && 'response' in r && r.response.mode === 'answer' && r.response.text).toBe(
-      'Booked Old Town Rooms. Reference AB12.'
+      'Booked Hotel Azur. Reference AB12.'
+    )
+  })
+
+  it('a card without a booking button is not booked', async () => {
+    const book = vi.fn(async () => ({ text: '' }))
+    const r = await handleCardsTurn('book the second one', signal, setup({ book }))
+    expect(book).not.toHaveBeenCalled()
+    expect(r && 'response' in r && r.response.mode === 'answer' && r.response.text).toMatch(
+      /^I can't book Old Town Rooms from here/
     )
   })
 

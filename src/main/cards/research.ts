@@ -386,6 +386,11 @@ export function buildAnswerCards(
   }
   const sourceOf = (id: string): CardSource | undefined => sources.find((s) => s.id === id.trim())
 
+  const readHosts = [...seen.urls].map((u) => u.split('/')[0])
+  const onReadSite = (url: string): boolean => {
+    const h = hostOf(url).toLowerCase()
+    return readHosts.some((r) => r === h || h.endsWith(`.${r}`) || r.endsWith(`.${h}`))
+  }
   const pageOf = (src: CardSource): string => seen.pages.get(normUrl(src.url) ?? '') ?? ''
   const check = (
     title: string,
@@ -477,7 +482,12 @@ export function buildAnswerCards(
     actions.push({ kind: 'save' }, { kind: 'more' })
     if (many) actions.push({ kind: 'compare' })
     const doLabel = cut(c.doLabel, L.label)
-    if (doLabel && card.links.length) actions.push({ kind: 'do', label: doLabel })
+    // Booking (an agent task at the link) only on a site this task read: a page could name a
+    // look-alike site as the link.
+    if (doLabel && link) {
+      if (onReadSite(link)) actions.push({ kind: 'do', label: doLabel })
+      else dropped.push(`${title}: no booking button, ${hostOf(link)} was not read in this task`)
+    }
     card.actions = actions
     cards.push(card)
   }

@@ -240,6 +240,9 @@ export async function handleCardsTurn(
       const r = pickCard(intent.pick)
       if (!r.ok) return fallsThrough(intent.pick, r) ? null : noPick(set, r)
       if (!deps.book) return reply(set, 'Booking is not ready yet.')
+      // Only a card with a booking button: its link is on a site the research read.
+      if (!r.card.actions.some((a) => a.kind === 'do'))
+        return reply(set, `I can't book ${r.card.title} from here. Say "open it" to see its page.`)
       const res = await deps.book(r.card, set, prompt, signal)
       return reply(set, res.text, false)
     }

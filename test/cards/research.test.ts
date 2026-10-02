@@ -310,6 +310,26 @@ describe('buildAnswerCards', () => {
     expect(rescaled.dropped).toEqual(['Hotel Azur: rating 4.5/5 is not on the pages read'])
   })
 
+  it('offers booking only at a link on a site the task read', () => {
+    const r = buildAnswerCards(
+      input({
+        cards: [
+          card({ link: 'https://www.hotels.test/azur', doLabel: 'Book it' }),
+          card({ title: 'Look-alike', link: 'https://hotels-test.example/azur', doLabel: 'Book' })
+        ]
+      }),
+      seen('', 'https://hotels.test/nice'),
+      NOW
+    )
+    if (!r.ok) throw new Error(r.error)
+    const [own, other] = r.cards.cards
+    expect(own.actions.some((a) => a.kind === 'do')).toBe(true)
+    expect(other.actions.some((a) => a.kind === 'do')).toBe(false)
+    expect(r.dropped).toEqual([
+      'Look-alike: no booking button, hotels-test.example was not read in this task'
+    ])
+  })
+
   it('refuses no cards or no text', () => {
     expect(buildAnswerCards(input({ cards: [] }), seen(''), NOW).ok).toBe(false)
     expect(buildAnswerCards(input({ text: ' ' }), seen(''), NOW).ok).toBe(false)
