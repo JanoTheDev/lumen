@@ -37,7 +37,7 @@ export function setBookPorts(p: BookPorts | null): void {
 export interface BookOptions {
   /** The card set the card is from (its sources give a link when the card has none). */
   cards?: AnswerCards
-  /** The user's own words ("book the second one"); the policy's userText. */
+  /** The user's own words ("book the second one"); the policy's userText. None: "Book this". */
   userText?: string
   signal?: AbortSignal
   /** The caller shows the reply text itself (the pipeline); the card is still shown. */
@@ -169,12 +169,14 @@ export async function startBooking(card: Card, opts: BookOptions = {}): Promise<
     if (!(await p.openUrl(link)))
       return tell({ status: 'failed', text: 'I could not open the booking page.' })
     const goal = `${bookingGoal(card, link)}\n\n${BOOKING_GUIDANCE}`
-    const said = opts.userText?.trim() || `Book ${card.title}`
+    // The card's title and button label were written from web pages: never the user's words.
+    const said = opts.userText?.trim() || 'Book this'
     const observedText = [
       card.title,
       card.subtitle,
       priceText(card),
-      ...card.facts.map((f) => `${f.label}: ${f.value}`)
+      ...card.facts.map((f) => `${f.label}: ${f.value}`),
+      card.actions.find((a) => a.kind === 'do')?.label
     ]
       .filter(Boolean)
       .join('\n')

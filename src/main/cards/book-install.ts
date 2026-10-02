@@ -45,6 +45,7 @@ export function installBooking(): void {
   bus.on('cards.do', (e) => {
     const set = store.get(e.id)
     const card = set?.cards.cards.find((c) => c.id === e.cardId)
-    if (set && card) void startBooking(card, { cards: set.cards, userText: e.label })
+    // The button's label was written by the model from web pages: not the user's words.
+    if (set && card) void startBooking(card, { cards: set.cards })
   })
 }
