@@ -39,8 +39,17 @@ export interface TaskControl {
   signal: AbortSignal
   update(patch: Partial<BackgroundTask>): void
   progress(line: string): void
-  /** A queued question: the task waits (phase asking) until the user answers in the list. */
-  ask(text: string, choices?: string[], phase?: 'asking' | 'needs-foreground'): Promise<string>
+  /**
+   * A queued question: the task waits (phase asking) until the user answers in the list.
+   * Questions asked at once (parallel sub-agents) wait in line, shown one at a time. `signal`
+   * withdraws the question when the caller stops waiting (a job's own time limit).
+   */
+  ask(
+    text: string,
+    choices?: string[],
+    phase?: 'asking' | 'needs-foreground',
+    signal?: AbortSignal
+  ): Promise<string>
   /** Before each model turn: waits while paused, then hands over the user's steer messages. */
   between?(signal: AbortSignal): Promise<string[]>
   /** Waits while the task is paused (its sub-agents, between their turns). */
@@ -85,11 +94,19 @@ export interface ManagerDeps {
   newId(): string
 }
 
+interface Ask {
+  text: string
+  choices?: string[]
+  phase: 'asking' | 'needs-foreground'
+  resolve(answer: string): void
+}
+
 interface Entry {
   task: BackgroundTask
   run?: (ctl: TaskControl) => Promise<RunOutcome>
   ac?: AbortController
-  answer?: (text: string) => void
+  /** Open questions, oldest first; the first one is shown. */
+  asks: Ask[]
   done: Promise<BackgroundTask>
   resolveDone: (t: BackgroundTask) => void
   steers: string[]
@@ -218,15 +235,15 @@ export class BackgroundManager {
     return true
   }
 
-  /** Answers the task's queued question. */
+  /** Answers the task's shown question; the next one in line is shown then. */
   answer(id: string, text: string): boolean {
     const e = this.entries.get(id)
-    const a = e?.answer
+    const a = e?.asks[0]
     if (!e || !a || !text.trim()) return false
-    e.answer = undefined
+    e.asks.shift()
     this.deps.record?.(id, { type: 'answer', text: text.trim() })
-    this.patch(id, { phase: 'running', question: undefined })
-    a(text.trim())
+    this.showAsk(id)
+    a.resolve(text.trim())
     return true
   }
 
@@ -310,7 +327,7 @@ export class BackgroundManager {
   private newEntry(task: BackgroundTask): Entry {
     let resolveDone!: (t: BackgroundTask) => void
     const done = new Promise<BackgroundTask>((r) => (resolveDone = r))
-    const entry: Entry = { task, done, resolveDone, steers: [] }
+    const entry: Entry = { task, done, resolveDone, steers: [], asks: [] }
     this.entries.set(task.id, entry)
     return entry
   }
@@ -329,6 +346,19 @@ export class BackgroundManager {
     this.changed(id)
   }
 
+  /** Shows the first open question, or goes back to running when none is left. */
+  private showAsk(id: string): void {
+    const e = this.entries.get(id)
+    if (!e || !isOpen(e.task)) return
+    const a = e.asks[0]
+    if (!a) return this.patch(id, { phase: 'running', question: undefined })
+    this.deps.record?.(id, { type: 'question', text: a.text, choices: a.choices })
+    this.patch(id, {
+      phase: a.phase,
+      question: { text: a.text, ...(a.choices?.length ? { choices: a.choices } : {}) }
+    })
+  }
+
   /** A progress line from the manager itself (paused, going on). */
   private note(id: string, line: string): void {
     const t = this.entries.get(id)?.task
@@ -338,7 +368,7 @@ export class BackgroundManager {
   private end(id: string, p: Partial<BackgroundTask>): void {
     const e = this.entries.get(id)
     if (!e || !isOpen(e.task)) return
-    e.answer = undefined
+    e.asks = []
     e.paused = false
     if (e.steers.length) this.deps.record?.(id, { type: 'unread', texts: e.steers })
     e.steers = []
@@ -383,20 +413,39 @@ export class BackgroundManager {
         if (!text || t.progress[t.progress.length - 1] === text) return
         this.patch(id, { progress: [...t.progress, text].slice(-MAX_PROGRESS) })
       },
-      ask: (text, choices, phase = 'asking') =>
+      ask: (text, choices, phase = 'asking', signal) =>
         new Promise<string>((resolve, reject) => {
           if (ac.signal.aborted) return reject(ac.signal.reason)
-          const onAbort = (): void => reject(ac.signal.reason)
-          ac.signal.addEventListener('abort', onAbort, { once: true })
-          e.answer = (answer) => {
+          if (signal?.aborted) return reject(signal.reason)
+          const stop = (): void => {
             ac.signal.removeEventListener('abort', onAbort)
-            resolve(answer)
+            signal?.removeEventListener('abort', onWithdraw)
           }
-          this.deps.record?.(id, { type: 'question', text, choices: choices?.slice(0, 4) })
-          this.patch(id, {
+          const onAbort = (): void => {
+            stop()
+            reject(ac.signal.reason)
+          }
+          // The caller stopped waiting: take the question out of the line.
+          const onWithdraw = (): void => {
+            stop()
+            const at = e.asks.indexOf(ask)
+            if (at >= 0) e.asks.splice(at, 1)
+            if (at === 0) this.showAsk(id)
+            reject(signal?.reason)
+          }
+          const ask: Ask = {
+            text,
+            ...(choices?.length ? { choices: choices.slice(0, 4) } : {}),
             phase,
-            question: { text, ...(choices?.length ? { choices: choices.slice(0, 4) } : {}) }
-          })
+            resolve: (answer) => {
+              stop()
+              resolve(answer)
+            }
+          }
+          ac.signal.addEventListener('abort', onAbort, { once: true })
+          signal?.addEventListener('abort', onWithdraw, { once: true })
+          e.asks.push(ask)
+          if (e.asks.length === 1) this.showAsk(id)
         }),
       between: async (signal) => {
         await hold(signal)

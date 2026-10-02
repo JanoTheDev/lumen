@@ -152,6 +152,27 @@ describe('BackgroundManager', () => {
     expect(m.answer(t.id, 'again')).toBe(false)
   })
 
+  it('questions asked at once wait in line; a withdrawn one leaves it (review H1)', async () => {
+    const { m, runs } = setup()
+    const t = m.start({ prompt: 'two helpers', origin: 'voice' })
+    const ctl = runs[0].ctl
+    const first = ctl.ask('Allow A?', ['Allow', 'Deny'])
+    const gone = new AbortController()
+    const withdrawn = ctl.ask('Allow B?', ['Allow', 'Deny'], 'asking', gone.signal)
+    const second = ctl.ask('Allow C?', ['Allow', 'Deny'])
+    expect(m.get(t.id)!.question?.text).toBe('Allow A?')
+    expect(m.answer(t.id, 'Allow')).toBe(true)
+    await expect(first).resolves.toBe('Allow')
+    expect(m.get(t.id)!.question?.text).toBe('Allow B?')
+    gone.abort(new Error('job time limit'))
+    await expect(withdrawn).rejects.toThrow('job time limit')
+    expect(m.get(t.id)).toMatchObject({ phase: 'asking', question: { text: 'Allow C?' } })
+    expect(m.answer(t.id, 'Deny')).toBe(true)
+    await expect(second).resolves.toBe('Deny')
+    expect(m.get(t.id)!.phase).toBe('running')
+    expect(m.get(t.id)!.question).toBeUndefined()
+  })
+
   it('progress lines are capped, trimmed and not repeated', () => {
     const { m, runs } = setup()
     const t = m.start({ prompt: 'watch a page', origin: 'voice' })

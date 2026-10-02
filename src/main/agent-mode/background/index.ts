@@ -400,7 +400,11 @@ async function runTask(
     // Confirm-every-action skills: the question waits in the Tasks list.
     confirm: async (text, signal) => {
       notice(`Task “${task.title}” needs your OK. It waits in the Tasks list.`)
-      const a = await raced(ctl.ask(`${text}. Allow it?`, ['Allow', 'Deny']), signal)
+      // The signal withdraws the question when the caller stops (a helper's time limit).
+      const a = await raced(
+        ctl.ask(`${text}. Allow it?`, ['Allow', 'Deny'], 'asking', signal),
+        signal
+      )
       return /^(allow|yes|ok|okay|sure)\b/i.test(a.trim())
     }
   }
@@ -431,7 +435,7 @@ async function runTask(
     notify: (text) => notice(`${task.title}: ${text}`),
     ask: (question, choices, signal) => {
       notice(`Task “${task.title}” has a question. It waits in the Tasks list.`)
-      return raced(ctl.ask(question, choices), signal)
+      return raced(ctl.ask(question, choices, 'asking', signal), signal)
     },
     requestForeground: (reason, steps, signal) =>
       requestForeground(ctl, reason, steps, signal, {
