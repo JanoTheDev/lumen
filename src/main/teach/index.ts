@@ -11,7 +11,7 @@ import type {
   LessonProgressView,
   RecordingStatus
 } from '@shared/channels'
-import type { LessonCommand } from '@shared/events'
+import type { AssistantState, LessonCommand } from '@shared/events'
 import type { ElementNode, InputStep, Point, Rect } from '@shared/types'
 import { bus } from '../bus'
 import { loadConfig, saveConfig } from '../config'
@@ -80,6 +80,8 @@ import {
 import { tutorialSchema } from './importers/tutorial'
 import { pinnedFetch } from '../web/net'
 import { withUsageScope } from '../usage/scope'
+import { installLessonVideo } from './video'
+import type { LessonVideo } from './video/session'
 
 const CAPTURE_TIMEOUT_MS = 4000
 const UIA_TIMEOUT_MS = 2500
@@ -99,6 +101,10 @@ let runner: LessonRunner | null = null
 let offer: ResumeOffer | null = null
 let learning: Learning | null = null
 let recorder: Recorder | null = null
+/** Lesson recording (T30) and the lesson's last bar state, shown with its red dot. */
+let video: LessonVideo | null = null
+let lessonState: AssistantState | null = null
+let videoDot = false
 /** The last "show me how" lesson, for "save this lesson". */
 let lastGenerated: { lesson: Lesson; skill: Skill | null } | null = null
 let skillsRoot = ''
@@ -670,7 +676,10 @@ function realPorts(): Ports {
       capture: (o) => capture(!!o?.low).catch(() => null),
       diff,
       emitScene: (scene) => bus.emit({ type: 'lesson.scene', scene }),
-      emitState: (state) => bus.emit({ type: 'lesson.state', state })
+      emitState: (state) => {
+        lessonState = state
+        emitLessonState()
+      }
     },
     target: {
       resolveTarget: (t, ctx) => resolveTarget(t, ctx.skill, ctx.signal).catch(() => null)
@@ -757,10 +766,18 @@ function realPorts(): Ports {
         })
     },
     events: {
-      stepStarted: (lessonId, step) => bus.emit({ type: 'lesson.step-started', lessonId, step }),
-      stepCompleted: (lessonId, step) =>
-        bus.emit({ type: 'lesson.step-completed', lessonId, step }),
-      done: (lessonId, completed) => bus.emit({ type: 'lesson.done', lessonId, completed })
+      stepStarted: (lessonId, step) => {
+        video?.stepStarted(step)
+        bus.emit({ type: 'lesson.step-started', lessonId, step })
+      },
+      stepCompleted: (lessonId, step) => {
+        video?.stepPassed(step)
+        bus.emit({ type: 'lesson.step-completed', lessonId, step })
+      },
+      done: (lessonId, completed) => {
+        video?.lessonDone(completed)
+        bus.emit({ type: 'lesson.done', lessonId, completed })
+      }
     },
     log: (tag, msg) => log(tag as LogTag, msg)
   })
@@ -986,6 +1003,11 @@ export function interceptLesson(utterance: string): unknown | undefined {
         }
       : { mode: 'answer', text: 'I could not save that lesson.' }
   }
+  // Lesson recording (T30): "record this lesson" / "stop recording the lesson".
+  if (runner.running()) {
+    const rec = video?.intercept(utterance)
+    if (rec !== undefined) return rec
+  }
   const cmd = parseLessonCommand(utterance)
   const running = runner.running()
   if (running && cmd && runner.command(cmd)) {
@@ -1049,6 +1071,41 @@ export function interceptLesson(utterance: string): unknown | undefined {
     if (hit && startLesson(hit.id)) return HANDLED
   }
   return undefined
+}
+
+/** The lesson's bar state, with a red dot while the lesson is being recorded (T30). */
+function emitLessonState(): void {
+  const st = lessonState
+  const dotted =
+    st && videoDot ? { ...st, statusText: `● REC · ${st.statusText ?? st.caption ?? ''}` } : st
+  bus.emit({ type: 'lesson.state', state: dotted })
+}
+
+function installVideo(): void {
+  video = installLessonVideo({
+    lesson: () => {
+      const st = runner?.running() ? runner.state : null
+      if (!st?.lesson) return null
+      return {
+        title: st.lesson.title,
+        app: registry?.get(st.skillId ?? st.lesson.app)?.name ?? st.lesson.app,
+        index: st.index,
+        says: st.lesson.steps.map((s) => s.say)
+      }
+    },
+    stepEnd: (index) => {
+      const st = runner?.state
+      const id = st?.lesson?.steps[index]?.id
+      return id ? st?.stats[id] : undefined
+    },
+    appRect: async () => (await recentForeground(2000))?.rect ?? null,
+    showDot: (on) => {
+      videoDot = on
+      if (lessonState) emitLessonState()
+    },
+    say: (text) => announce(text, { kind: 'answer' }),
+    handled: HANDLED
+  })
 }
 
 /** Pauses the lesson when its app has been out of focus for a minute (not for Windows itself). */
@@ -1163,6 +1220,7 @@ export function installTeach(): void {
   watchFocus()
   installLearning()
   installRecorder(base)
+  installVideo()
   installPackSupport({ registry: () => registry, skillsRoot: () => skillsRoot })
   installChallenges({ registry: () => registry, store: () => store })
   installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
