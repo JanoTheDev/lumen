@@ -224,7 +224,7 @@ describe('buildAnswerCards', () => {
           })
         ]
       }),
-      seen('€140 per night, 4.4/5', 'https://hotels.test/nice'),
+      seen('€140 per night, 4.4/5 (1,203 reviews)', 'https://hotels.test/nice'),
       NOW
     )
     if (!r.ok) throw new Error(r.error)
@@ -291,6 +291,23 @@ describe('buildAnswerCards', () => {
     expect(r.cards.cards.every((c) => c.links.length === 0)).toBe(true)
     expect(r.cards.sources).toEqual([])
     expect(validateCards(r.cards).ok).toBe(true)
+  })
+
+  it('keeps a rating only with its scale and review count as read', () => {
+    const rated = (value: number, max: number, count: number): PresentCardsInput =>
+      input({ cards: [card({ rating: [{ value, max, count, sourceId: 's1' }] })] })
+    const page = seen('Guests say 4.5 out of 10 (87 reviews)', 'https://hotels.test/nice')
+    const ok = buildAnswerCards(rated(4.5, 10, 87), page, NOW)
+    if (!ok.ok) throw new Error(ok.error)
+    expect(ok.cards.cards[0].rating).toEqual({ value: 4.5, max: 10, count: 87, sourceId: 's1' })
+    const invented = buildAnswerCards(rated(4.5, 10, 1203), page, NOW)
+    if (!invented.ok) throw new Error(invented.error)
+    expect(invented.cards.cards[0].rating).toEqual({ value: 4.5, max: 10, sourceId: 's1' })
+    expect(invented.dropped).toEqual(['Hotel Azur: 1203 reviews is not on the pages read'])
+    const rescaled = buildAnswerCards(rated(4.5, 5, 0), page, NOW)
+    if (!rescaled.ok) throw new Error(rescaled.error)
+    expect(rescaled.cards.cards[0].rating).toBeUndefined()
+    expect(rescaled.dropped).toEqual(['Hotel Azur: rating 4.5/5 is not on the pages read'])
   })
 
   it('refuses no cards or no text', () => {

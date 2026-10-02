@@ -284,6 +284,16 @@ export function numberSeen(n: number, text: string): boolean {
   )
 }
 
+/** "4.4/5", "4.4 out of 5", "8,6 / 10", "4.4 of 5 stars": the value with its scale. */
+export function ratingSeen(value: number, max: number, text: string): boolean {
+  const alt = (n: number): string => numberForms(n).map(escapeRe).join('|')
+  const re = new RegExp(
+    `(?<![\\d.,])(?:${alt(value)})\\s*(?:/|out of|of|von|sur|de|op|uit)\\s*(?:${alt(max)})(?![\\d]|[.,]\\d)`,
+    'i'
+  )
+  return re.test(text)
+}
+
 /** Clock times in a fact value ("08:12", "8.05 pm" → "8:05", "14h30" → "14:30"). */
 export function clockTimes(value: string): string[] {
   const out: string[] = []
@@ -364,12 +374,19 @@ export function buildAnswerCards(
   }
   const sourceOf = (id: string): CardSource | undefined => sources.find((s) => s.id === id.trim())
 
-  const check = (title: string, what: string, sourceId: string, value: number): boolean => {
+  const pageOf = (src: CardSource): string => seen.pages.get(normUrl(src.url) ?? '') ?? ''
+  const check = (
+    title: string,
+    what: string,
+    sourceId: string,
+    shown: string,
+    onPage: (text: string) => boolean
+  ): boolean => {
     const src = sourceOf(sourceId)
     if (!src) dropped.push(`${title}: ${what} has no known source`)
     else if (!read.has(src.id)) dropped.push(`${title}: ${what} source was not read in this task`)
-    else if (!numberSeen(value, seen.pages.get(normUrl(src.url) ?? '') ?? ''))
-      dropped.push(`${title}: ${what} ${value} is not on the pages read`)
+    else if (!onPage(pageOf(src)))
+      dropped.push(`${title}: ${what} ${shown} is not on the pages read`)
     else return true
     return false
   }
@@ -407,7 +424,9 @@ export function buildAnswerCards(
       const raw = p.currency.trim().toUpperCase()
       const currency = CURRENCY[raw] ?? raw
       if (!/^[A-Z]{3}$/.test(currency)) dropped.push(`${title}: price has no currency code`)
-      else if (check(title, 'price', p.sourceId, p.amount)) {
+      else if (
+        check(title, 'price', p.sourceId, String(p.amount), (t) => numberSeen(p.amount, t))
+      ) {
         const src = sourceOf(p.sourceId)!
         const note = cut(
           `from ${hostOf(src.url)}${p.note.trim() ? `, ${p.note.trim()}` : ''}, may change`,
@@ -421,9 +440,18 @@ export function buildAnswerCards(
     const r = c.rating[0]
     if (r && Number.isFinite(r.value) && r.max > 0 && r.max <= 100 && r.value >= 0) {
       if (r.value > r.max) dropped.push(`${title}: rating above its maximum`)
-      else if (check(title, 'rating', r.sourceId, r.value)) {
-        card.rating = { value: r.value, max: r.max, sourceId: sourceOf(r.sourceId)!.id }
-        if (Number.isInteger(r.count) && r.count > 0) card.rating.count = r.count
+      else if (
+        check(title, 'rating', r.sourceId, `${r.value}/${r.max}`, (t) =>
+          ratingSeen(r.value, r.max, t)
+        )
+      ) {
+        const src = sourceOf(r.sourceId)!
+        card.rating = { value: r.value, max: r.max, sourceId: src.id }
+        if (Number.isInteger(r.count) && r.count > 0) {
+          // The review count too only as read on that page.
+          if (numberSeen(r.count, pageOf(src))) card.rating.count = r.count
+          else dropped.push(`${title}: ${r.count} reviews is not on the pages read`)
+        }
       }
     }
     const badges = c.badges
