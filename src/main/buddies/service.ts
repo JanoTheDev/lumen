@@ -66,17 +66,31 @@ export function overBudget(b: Buddy, spent: { usd: number; tokens: number } | nu
 /** A buddy's on-screen runs (08 T52), newest first; `running` while one is open. */
 export type ScreenRunsReader = (buddyId: string) => BuddyRunSummary[]
 
+/**
+ * The buddy is busy on screen: its foreground run is starting or running (`onScreen`, set
+ * before the run's row exists), or its newest on-screen run is paused and still resumable.
+ */
+export function screenRunBusy(
+  id: string,
+  now: { onScreen: string | null; newest?: BuddyRunSummary; pausedHeld: boolean }
+): boolean {
+  if (now.onScreen === id) return true
+  return !!now.newest && now.newest.phase === 'paused' && now.pausedHeld
+}
+
 const newestFirst = (a: BuddyRunSummary, b: BuddyRunSummary): number => b.startedAt - a.startedAt
 
 export class Buddies {
   private screenRuns: ScreenRunsReader = () => []
+  private screenBusy: (id: string) => boolean = () => false
   private readonly budgets = new BuddyRunBudgets(() => this.deps.tasks())
 
   constructor(private readonly deps: BuddiesDeps) {}
 
   /** Where the buddy's on-screen runs come from (calling.ts sets it). */
-  setScreenRuns(read: ScreenRunsReader): void {
+  setScreenRuns(read: ScreenRunsReader, busy?: (id: string) => boolean): void {
     this.screenRuns = read
+    if (busy) this.screenBusy = busy
   }
 
   /** Background runs and on-screen runs, newest first. */
@@ -108,10 +122,13 @@ export class Buddies {
     return want ? (this.list().find((b) => buddyNameKey(b.name) === want) ?? null) : null
   }
 
-  /** A run of the buddy is queued or running (in the background or on screen). */
+  /**
+   * A run of the buddy is queued or running (in the background or on screen, starting or
+   * paused there too).
+   */
   isRunning(id: string): boolean {
     const open = this.deps.tasks().some((t) => t.buddyId === id && !t.parentId && isOpen(t))
-    return open || this.screenRuns(id).some((r) => r.phase === 'running')
+    return open || this.screenBusy(id) || this.screenRuns(id).some((r) => r.phase === 'running')
   }
 
   summaries(): BuddySummary[] {

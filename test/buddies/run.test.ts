@@ -11,7 +11,7 @@ import type { GuardHost } from '../../src/main/agent-mode/skill-run'
 import type { LoadedSkill } from '../../src/main/skills/registry'
 import { checkSkillCall } from '../../src/main/skills/permissions'
 import { currentUsageScope } from '../../src/main/usage/scope'
-import { Buddies, overBudget } from '../../src/main/buddies/service'
+import { Buddies, overBudget, screenRunBusy } from '../../src/main/buddies/service'
 import { BuddyStore, IMPORT_MARKER } from '../../src/main/buddies/store'
 import {
   buddyConfirmsEveryAction,
@@ -98,6 +98,30 @@ const inbox = (): ReturnType<Buddies['create']> =>
   })
 
 describe('runBuddy', () => {
+  it('is busy while its on-screen run starts or is paused (L5)', () => {
+    const b = inbox()
+    let starting: string | null = b.id
+    svc.setScreenRuns(
+      () => [],
+      (id) => screenRunBusy(id, { onScreen: starting, pausedHeld: false })
+    )
+    expect(svc.run(b.id, { trigger: 'schedule' })).toMatchObject({ ok: false, code: 'E_BUSY' })
+    starting = null
+    const paused = {
+      taskId: 'fg_1',
+      title: 'x',
+      phase: 'paused',
+      startedAt: 1,
+      costUsd: 0
+    }
+    const at = (pausedHeld: boolean): boolean =>
+      screenRunBusy(b.id, { onScreen: null, newest: paused, pausedHeld })
+    expect(at(true)).toBe(true)
+    // A pause nobody can resume any more no longer blocks the buddy.
+    expect(at(false)).toBe(false)
+    expect(svc.run(b.id, { trigger: 'schedule' }).ok).toBe(true)
+  })
+
   it('starts a background task with origin buddy and the user words', () => {
     const b = inbox()
     const r = svc.run(b.id, { utterance: "  what's new? ", trigger: 'call' })

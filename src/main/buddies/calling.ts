@@ -14,6 +14,7 @@ import { PRESENT_MS } from '../agent-mode/background/presence'
 import { skillEnvelope } from '../agent-mode/skill-envelope'
 import {
   agentRunning,
+  hasPausedTask,
   runAgentTask,
   runningAgentTaskId,
   stopAgentTask
@@ -61,7 +62,7 @@ import {
   syncScheduleIds
 } from './schedule'
 import { ScreenRuns } from './screen-runs'
-import { overBudget } from './service'
+import { overBudget, screenRunBusy } from './service'
 import { BuddyVoice } from './voice'
 
 let pause: BuddyPauseFlag | null = null
@@ -303,7 +304,15 @@ let installed = false
 export function installBuddyCalling(): void {
   if (installed) return
   installed = true
-  buddies()?.setScreenRuns((id) => screenRunLog().list(id))
+  buddies()?.setScreenRuns(
+    (id) => screenRunLog().list(id),
+    (id) =>
+      screenRunBusy(id, {
+        onScreen,
+        newest: screenRunLog().list(id)[0],
+        pausedHeld: hasPausedTask()
+      })
+  )
   setScheduleHost({
     automations: () => (automationsLoaded() ? automations().all() : null),
     add: (input) => addAutomation(input),
