@@ -258,7 +258,19 @@ export interface FaceCalibrateResult {
 }
 
 /** renderer → main, request/response (`ipcRenderer.invoke`). */
+/** Lesson recording (07 T30): what the hidden recorder window captures. */
+export interface RecorderConfig {
+  /** desktopCapturer screen source of the lesson's monitor. */
+  sourceId: string
+  fps: number
+  maxWidth: number
+  maxHeight: number
+  bitsPerSecond: number
+}
+
 export interface InvokeChannels {
+  /** Lesson recorder window: its capture config, null when no recording is starting. */
+  'recorder:begin': { args: []; result: RecorderConfig | null }
   /** Face-gesture input (11 T25): face renderer assets, Settings state / install / calibration. */
   'face:assets': { args: []; result: FaceAssets }
   'face:state': { args: []; result: FaceState }
@@ -715,6 +727,9 @@ export interface SendChannels {
   /** Face renderer: one frame's gesture scores (about 15 a second) and its state. */
   'face:frame': [frame: FaceFrame]
   'face:status': [status: { state: 'running' | 'error'; error?: string }]
+  /** Lesson recorder window: the next piece of the webm file, in order, and its state. */
+  'recorder:chunk': [chunk: Uint8Array]
+  'recorder:status': [status: { state: 'running' | 'stopped' | 'error'; error?: string }]
   'assistant:show': []
   'assistant:close': []
   'assistant:cancel': []
@@ -1407,6 +1422,8 @@ export interface EventChannels {
   'buddies:changed': [ids: string[]]
   /** New usage lines were recorded (Settings → Usage re-reads; at most every 2 s). */
   'usage:changed': []
+  /** Lesson recorder window: finish the recording (last chunk, then "stopped"). */
+  'recorder:stop': []
 }
 
 export type InvokeChannel = keyof InvokeChannels
@@ -1414,6 +1431,7 @@ export type SendChannel = keyof SendChannels
 export type EventChannel = keyof EventChannels
 
 export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
+  'recorder:begin',
   'face:assets',
   'face:state',
   'face:install',
@@ -1664,7 +1682,9 @@ export const SEND_CHANNELS: readonly SendChannel[] = [
   'a11y:keyboard-key',
   'a11y:try',
   'face:frame',
-  'face:status'
+  'face:status',
+  'recorder:chunk',
+  'recorder:status'
 ]
 
 export const EVENT_CHANNELS: readonly EventChannel[] = [
@@ -1701,7 +1721,8 @@ export const EVENT_CHANNELS: readonly EventChannel[] = [
   'tasks:chat-delta',
   'cards:changed',
   'buddies:changed',
-  'usage:changed'
+  'usage:changed',
+  'recorder:stop'
 ]
 
 /** A file dropped on the assistant bar (08 T21), as the bar shows it. */

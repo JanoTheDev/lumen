@@ -25,7 +25,8 @@ export default defineConfig({
           screen: resolve('src/renderer/screen.html'),
           panel: resolve('src/renderer/panel.html'),
           a11y: resolve('src/renderer/a11y.html'),
-          face: resolve('src/renderer/face.html')
+          face: resolve('src/renderer/face.html'),
+          recorder: resolve('src/renderer/recorder.html')
         }
       }
     }

@@ -343,6 +343,18 @@ export const faceCalibrateSchema = z.union([
   z.object({ step: z.literal('gesture'), gesture: z.enum(FACE_GESTURES) }).strict()
 ])
 
+/** Lesson recorder window (07 T30): webm pieces (about one a second) and its state. */
+export const RECORDER_CHUNK_MAX = 16 * 1024 * 1024
+export const recorderChunkSchema = z
+  .instanceof(Uint8Array)
+  .refine((b) => b.byteLength > 0 && b.byteLength <= RECORDER_CHUNK_MAX, 'chunk size')
+export const recorderStatusSchema = z
+  .object({
+    state: z.enum(['running', 'stopped', 'error']),
+    error: z.string().max(300).optional()
+  })
+  .strict()
+
 export class InvalidPayloadError extends Error {
   readonly code = 'E_INVALID'
   constructor(channel: string, detail: string) {
