@@ -192,7 +192,12 @@ export function convertBody(
   params.sort((a, b) => rank(a) - rank(b))
   if (params.length + (usesArgs ? 1 : 0) > MAX_PARAMS) {
     notes.push('it takes more arguments than a Lumen skill can; say the rest in your request')
-    params.length = MAX_PARAMS - (usesArgs ? 1 : 0)
+    // The dropped ones go back to their own text, so no placeholder is left without a param.
+    for (const p of params.splice(MAX_PARAMS - (usesArgs ? 1 : 0))) {
+      const m = /^arg(\d+)$/.exec(p)
+      const back = m ? `$ARGUMENTS[${Number(m[1]) - 1}]` : `$${p}`
+      out = out.split(`{${p}}`).join(back)
+    }
   }
   if (params.length) notes.push(`its arguments become values you can give: ${params.join(', ')}`)
   if (/\$\{(?:CLAUDE_[A-Z_]+|user_config\.[\w.]+)\}/.test(out))

@@ -342,3 +342,15 @@ describe('plugin folder variables with a default (review L2)', () => {
     expect(why).toMatch(/connector "b".*runs a program from inside the plugin/)
   })
 })
+
+describe('more arguments than a skill can take (review L4)', () => {
+  it('leaves no {argN} placeholder without a param', () => {
+    const body = ['Do $ARGUMENTS.', ...Array.from({ length: 20 }, (_, i) => `$ARGUMENTS[${i}]`)]
+    const r = convertBody(body.join(' '))
+    const used = [...r.body.matchAll(/\{(\w+)\}/g)].map((m) => m[1])
+    const known = new Set([...r.params, ...(r.usesArgs ? ['arguments'] : [])])
+    expect(used.filter((n) => !known.has(n))).toEqual([])
+    expect(r.body).toContain('$ARGUMENTS[19]')
+    expect(r.notes.join(' ')).toMatch(/more arguments than a Lumen skill can/)
+  })
+})
