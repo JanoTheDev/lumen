@@ -41,6 +41,7 @@ import type { BgPorts, ForegroundAnswer } from './handlers'
 import { BackgroundManager, type StartInput, type TaskControl } from './manager'
 import { doneLine, noticeVerdict, PRESENT_MS } from './presence'
 import { buddyRunHook, type BuddyTaskEnv } from './buddy-hook'
+import { checkRunLimit } from '../../usage/limits'
 import { registrySkill, runBackground } from './run'
 import { backgroundRunRecord, backgroundSkills, networkAllows } from './skills'
 import { TaskStore } from './store'
@@ -98,6 +99,15 @@ export function backgroundManager(): BackgroundManager {
 
 /** Starts a background task (voice "in the background …", a routine, a skill run). */
 export function startBackgroundTask(input: StartInput): BackgroundTask {
+  // Monthly usage limits (05 T45): a paused automation / buddy run ends at once with the reason.
+  const limit = checkRunLimit(input)
+  if (!limit.ok) {
+    log('plan', `background run refused: ${limit.reason}`)
+    return manager.start({
+      ...input,
+      run: async () => ({ status: 'failed', summary: limit.reason })
+    })
+  }
   const t = manager.start(input)
   log('plan', `background task ${t.id} ${t.phase}: "${t.title}"`)
   return t

@@ -4,11 +4,12 @@ import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'el
 import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { usageCallsSchema, usageReportSchema, usageTasksSchema } from '@shared/ipc'
-import type { UsageRange } from '@shared/usage'
+import type { UsageLimitRow, UsageLimitsView, UsageRange } from '@shared/usage'
 import { usageOverview } from '../ai/cost'
 import { enableUsageLog, flushUsage } from '../ai/usage-log'
-import { backgroundManager } from '../agent-mode/background'
+import { backgroundManager, notice, startBackgroundTask } from '../agent-mode/background'
 import { transcripts } from '../agent-mode/transcript-hub'
+import { getBuddy, listBuddies } from '../buddies'
 import { LUMEN_FOLDER } from '../docs-out/place'
 import { log } from '../logger'
 import { automations } from '../routines'
@@ -21,6 +22,8 @@ import {
   usageReport,
   type UsageNames
 } from '../usage/report'
+import { installUsageLimits, limitState, type LimitScope } from '../usage/limits'
+import { setUsageVoiceScopes, type NamedScope } from '../usage/voice'
 import * as panel from '../windows/settings'
 import { INVALID, safeParse } from './validate'
 
@@ -28,12 +31,58 @@ const PUSH_MS = 2000
 
 const names: UsageNames = {
   automation: (id) => automations().get(id)?.name,
-  task: (id) => backgroundManager().get(id)?.title ?? transcripts().meta(id)?.title
+  task: (id) => backgroundManager().get(id)?.title ?? transcripts().meta(id)?.title,
+  buddy: (id) => getBuddy(id)?.name
 }
 
 /** Lets a feature outside this module name its ids (buddies). */
 export function setUsageNameLookup(more: Partial<UsageNames>): void {
   Object.assign(names, more)
+}
+
+function limitRow(scope: LimitScope, name: string): UsageLimitRow {
+  const st = limitState(scope)
+  return {
+    kind: scope.kind,
+    id: scope.kind === 'overall' ? '' : scope.id,
+    name,
+    usd: st.usd,
+    tokens: st.tokens,
+    ...(st.cap.usd !== undefined ? { capUsd: st.cap.usd } : {}),
+    ...(st.cap.tokens !== undefined ? { capTokens: st.cap.tokens } : {}),
+    ratio: st.ratio,
+    level: st.level
+  }
+}
+
+/** Settings → Usage limits: this month against each cap. */
+function usageLimits(): UsageLimitsView {
+  return {
+    overall: limitRow({ kind: 'overall' }, 'All of Lumen'),
+    automations: automations()
+      .all()
+      .map((a) => limitRow({ kind: 'automation', id: a.id }, a.name)),
+    buddies: listBuddies().map((b) => limitRow({ kind: 'buddy', id: b.id }, b.name))
+  }
+}
+
+function namedScopes(): NamedScope[] {
+  return [
+    ...automations()
+      .all()
+      .map((a) => ({ kind: 'automation' as const, id: a.id, name: a.name })),
+    ...listBuddies().map((b) => ({ kind: 'buddy' as const, id: b.id, name: b.name }))
+  ]
+}
+
+/** A limit notice as a finished row in the Tasks list (no model call, takes no slot). */
+function limitNotice(text: string): void {
+  startBackgroundTask({
+    prompt: text,
+    title: 'Monthly usage limit',
+    origin: 'agent',
+    run: async () => ({ status: 'done', summary: text })
+  })
 }
 
 async function exportCsv(
@@ -87,6 +136,26 @@ export function registerUsageIpc(): void {
   ipcMain.handle('usage:by-automation', (_e, ...args: unknown[]) =>
     args.length ? INVALID : usageByAutomation()
   )
+  ipcMain.handle('usage:limits', (_e, ...args: unknown[]) =>
+    args.length ? INVALID : usageLimits()
+  )
+
+  installUsageLimits({
+    buddy: (id) => {
+      const b = getBuddy(id)
+      return b
+        ? {
+            name: b.name,
+            perMonthUsd: b.budget.perMonthUsd,
+            perMonthTokens: b.budget.perMonthTokens
+          }
+        : null
+    },
+    automationName: (id) => automations().get(id)?.name,
+    notify: limitNotice,
+    warn: (text) => notice(text)
+  })
+  setUsageVoiceScopes(namedScopes)
 
   let timer: NodeJS.Timeout | null = null
   onUsageRecorded(() => {

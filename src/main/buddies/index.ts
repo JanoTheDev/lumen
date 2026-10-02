@@ -44,6 +44,7 @@ import { skillEnvelope } from '../agent-mode/skill-envelope'
 import { bus } from '../bus'
 import { configPath } from '../config'
 import { monthTotals } from '../usage/ledger'
+import { canStartRun } from '../usage/limits'
 import { Buddies, type BuddySpendReader, type RunBuddyResult } from './service'
 import type { RunBuddyOpts } from './run'
 import { BuddyStore, type NotebookWrite } from './store'
@@ -120,7 +121,12 @@ export const removeBuddy = (id: string): boolean => service?.remove(id) ?? false
 export const buddyNotebook = (id: string): string => service?.notebook(id) ?? ''
 export const setBuddyNotebook = (id: string, text: string): NotebookWrite =>
   service?.setNotebook(id, text) ?? 'missing'
-export const runBuddy = (id: string, opts: RunBuddyOpts): RunBuddyResult =>
-  service?.run(id, opts) ?? NOT_LOADED
+export function runBuddy(id: string, opts: RunBuddyOpts): RunBuddyResult {
+  if (!service) return NOT_LOADED
+  // Monthly usage limits (05 T45): the overall cap pauses every buddy.
+  const limit = canStartRun({ buddyId: id })
+  if (!limit.ok && service.get(id)) return { ok: false, code: 'E_BUDGET', error: limit.reason }
+  return service.run(id, opts)
+}
 export const buddyRuns = (id: string, limit = 20): BuddyRunSummary[] =>
   service?.runs(id, limit) ?? []

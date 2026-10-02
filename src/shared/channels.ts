@@ -38,7 +38,14 @@ import type {
   BuddyImportResult
 } from './buddies'
 import type { BackgroundTask } from './types'
-import type { UsageCalls, UsageCallsFilter, UsageCost, UsageRange, UsageReport } from './usage'
+import type {
+  UsageCalls,
+  UsageCallsFilter,
+  UsageCost,
+  UsageLimitsView,
+  UsageRange,
+  UsageReport
+} from './usage'
 import type { ChatControlOp, ChatDelta, ChatSteerResult, ChatSummary, ChatView } from './task-chat'
 import type {
   AutomationAction,
@@ -370,6 +377,8 @@ export interface InvokeChannels {
   'usage:tasks': { args: [req: { ids: string[] }]; result: Record<string, UsageCost> }
   /** This month's spend per automation id (Settings → Automations). */
   'usage:by-automation': { args: []; result: Record<string, UsageCost> }
+  /** This month against the monthly limits: overall, per automation, per buddy (05 T45). */
+  'usage:limits': { args: []; result: UsageLimitsView }
   /** Which OS agent is running (Settings shows it read-only). */
   'agent:info': { args: []; result: AgentImplInfo }
   /** Claude Code copilot (08 T33–T40): CLI, settings, live sessions, waiting permissions. */
@@ -1461,6 +1470,7 @@ export const INVOKE_CHANNELS: readonly InvokeChannel[] = [
   'usage:export',
   'usage:tasks',
   'usage:by-automation',
+  'usage:limits',
   'agent:info',
   'claude:status',
   'claude:settings-set',
