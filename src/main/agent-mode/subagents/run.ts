@@ -119,7 +119,8 @@ export function fenceResult(r: JobResult, i: number): string {
   // Lumen saw fetched go in <sources>. Both tags at once: removing one may not form the other.
   const body = stripTags(r.text, FENCE_TAGS)
   const lines = [
-    `job ${i + 1} (${r.role}): ${clip(r.task, TASK_SHOWN)}`,
+    // The parent model wrote the task line: it may not list sources either.
+    `job ${i + 1} (${r.role}): ${clip(stripTags(r.task, FENCE_TAGS), TASK_SHOWN)}`,
     `status: ${r.status}`,
     body
   ]
