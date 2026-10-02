@@ -16,7 +16,9 @@ const h = vi.hoisted(() => ({
   guard: null as null | ((tool: string) => Promise<unknown>),
   finished: [] as unknown[],
   remembered: [] as unknown[],
-  noAnswer: false
+  noAnswer: false,
+  scopes: [] as unknown[],
+  scopeOf: null as null | (() => unknown)
 }))
 
 vi.mock('../../src/main/ai/providers', () => ({
@@ -26,6 +28,7 @@ vi.mock('../../src/main/ai/providers', () => ({
       complete: async () => ({ data: null, model: 'fake', usage: {} }),
       toolTurn: async (req: unknown) => {
         h.turns.push(req)
+        h.scopes.push(h.scopeOf?.())
         const next = h.script.shift()
         if (!next) throw new Error('no more turns')
         return next
@@ -109,6 +112,7 @@ vi.mock('../../src/main/connectors', () => ({
 }))
 
 import { resumeAgentTask, runAgentTask } from '../../src/main/agent-mode/session'
+import { currentUsageScope, withUsageScope } from '../../src/main/usage/scope'
 import type { QueryContext } from '../../src/main/query/context'
 import { permissionsSchema } from '../../src/main/skills/manifest'
 
@@ -259,5 +263,32 @@ describe('skill runs', () => {
     await resumed
     expect(h.acts).toBe(0)
     expect(toolNames(0)).toEqual(['observe', 'act', 'ask_user', 'finish', 'mcp__github__search'])
+  })
+
+  it('"resume the task" records under the task’s own usage scope (review usage M1)', async () => {
+    h.scopeOf = () => ({ ...currentUsageScope() })
+    h.scopes = []
+    h.noAnswer = true
+    h.script = [reply(call('ask_user', { question: 'Which file?' }))]
+    const first = await withUsageScope({ origin: 'buddy', buddyId: 'b' }, () =>
+      runAgentTask('export png', ctx, signal())
+    )
+    expect(first.text).toMatch(/Paused/)
+    const taskScope = h.scopes[0] as { taskId: string }
+    expect(taskScope).toMatchObject({ origin: 'agent', buddyId: 'b' })
+    h.scopes = []
+    h.script = [reply(call('finish', { summary: 'Done.' }))]
+    const resumed = withUsageScope({ origin: 'user-direct', feature: 'answer' }, () =>
+      resumeAgentTask(signal())
+    )
+    expect(resumed).not.toBeNull()
+    await resumed
+    expect(h.scopes[0]).toMatchObject({
+      origin: 'agent',
+      feature: 'agent-step',
+      buddyId: 'b',
+      taskId: taskScope.taskId
+    })
+    h.scopeOf = null
   })
 })

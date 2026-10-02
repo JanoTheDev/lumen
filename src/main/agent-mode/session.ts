@@ -6,7 +6,7 @@ import type { AgentTask } from '@shared/events'
 import type { ModelResponse, SkillRunRecord } from '@shared/types'
 import { newTaskState } from '../actions/safety'
 import { usageCost } from '../ai/pricing'
-import { withUsageScope, type UsageScope } from '../usage/scope'
+import { currentUsageScope, runInUsageScope, withUsageScope, type UsageScope } from '../usage/scope'
 import { getProvider } from '../ai/providers'
 import type { Role } from '../ai/models'
 import { isSensitive } from '../ai/memory/sensitive'
@@ -94,6 +94,8 @@ interface PausedRun {
   envelope?: SkillEnvelope
   noSpawn?: boolean
   under?: RunSettings
+  /** The task's usage scope: "resume the task" records under it, not the resuming turn's. */
+  scope: UsageScope
 }
 
 /**
@@ -590,6 +592,7 @@ async function run(
             env,
             context,
             until: Date.now() + PAUSE_KEEP_MS,
+            scope: currentUsageScope(),
             ...(envelope ? { envelope } : {}),
             ...(noSpawn ? { noSpawn } : {}),
             ...(under ? { under } : {})
@@ -830,11 +833,13 @@ export function resumeAgentTask(signal: AbortSignal): Promise<ModelResponse> | n
   if (!hasPausedTask()) return null
   const p = paused!
   paused = null
-  // A skill run resumes inside the same envelope (guard, tools, connectors).
-  return run(p.saved.task.prompt, p.env, p.context, signal, {
-    resume: p.saved,
-    ...(p.envelope ? { envelope: p.envelope } : {}),
-    ...(p.noSpawn ? { noSpawn: true } : {}),
-    ...(p.under ? { under: p.under } : {})
-  })
+  // A skill run resumes inside the same envelope (guard, tools, connectors) and usage scope.
+  return runInUsageScope(p.scope, () =>
+    run(p.saved.task.prompt, p.env, p.context, signal, {
+      resume: p.saved,
+      ...(p.envelope ? { envelope: p.envelope } : {}),
+      ...(p.noSpawn ? { noSpawn: true } : {}),
+      ...(p.under ? { under: p.under } : {})
+    })
+  )
 }
