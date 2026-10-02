@@ -29,6 +29,8 @@ import {
   type ChartMetric,
   type SortKey
 } from './usage-view'
+import type { SectionProps } from '../meta'
+import { UsageLimits } from './UsageLimits'
 import './usage.css'
 
 const RANGE_OPTIONS = USAGE_RANGES.map((value) => ({ value, label: RANGE_LABEL[value] }))
@@ -413,7 +415,7 @@ function ClaudeCodeGroup({
   )
 }
 
-export function Usage(): JSX.Element {
+export function Usage({ cfg, patch }: SectionProps): JSX.Element {
   const [range, setRange] = useState<UsageRange>('7d')
   const [group, setGroup] = useState<UsageGroup>('feature')
   const [report, setReport] = useState<UsageReport | null>(null)
@@ -463,6 +465,7 @@ export function Usage(): JSX.Element {
           </>
         )}
       </Card>
+      <UsageLimits cfg={cfg} patch={patch} />
       {report && (
         <Card title="Where it went" description="Biggest first; pick a row to see its calls.">
           <SegmentedControl<UsageGroup>
