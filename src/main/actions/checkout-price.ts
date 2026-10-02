@@ -5,7 +5,14 @@
 import { getAgent } from '../agent/instance'
 import type { ActiveWindowInfo, OcrResult } from '../agent/commands'
 import { log } from '../logger'
-import type { Decision } from './safety'
+import { checkoutName } from './risk-names'
+import {
+  asCheckout,
+  submitsBrowserForm,
+  type Decision,
+  type EvalAction,
+  type PolicyCtx
+} from './safety'
 
 export const PRICE_NOT_READ = 'price not read, check the page'
 
@@ -148,4 +155,36 @@ export async function withCheckoutPrice(
     ...d,
     reason: `${d.reason}; ${price ? `price on the page now: ${price}` : PRICE_NOT_READ}`
   }
+}
+
+/** A book / pay / order button on the page: a short line that is one ("Place order"). */
+export function checkoutButtonIn(text: string): string | null {
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim()
+    const word = t && t.length <= 40 ? checkoutName(t) : null
+    if (word) return word
+  }
+  return null
+}
+
+/**
+ * The decision with the checkout guard for form submits (review H2): an agent's Enter, typed
+ * line break or Space on a "Continue" button in a browser counts as a checkout when the page
+ * shows a book / pay / order button (HTML submits the form with its first submit button).
+ * Checkout decisions get the price on the page now; the page is read once for both.
+ */
+export async function withCheckoutGuard(
+  action: EvalAction,
+  ctx: PolicyCtx,
+  d: Decision,
+  read: () => Promise<string> = windowText
+): Promise<Decision> {
+  if (d.checkout || d.risk === 'blocked' || !submitsBrowserForm(action, ctx))
+    return withCheckoutPrice(d, read)
+  const text = await read().catch((e: Error) => {
+    log('fail', `checkout check: ${e.message}`)
+    return ''
+  })
+  const word = checkoutButtonIn(text)
+  return word ? withCheckoutPrice(asCheckout(d, word), async () => text) : d
 }

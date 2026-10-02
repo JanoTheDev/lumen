@@ -515,3 +515,70 @@ describe('keys into a payment field (review H1)', () => {
     expect(d.risk).toBe('low')
   })
 })
+
+describe('form submits on a checkout page (review H2)', () => {
+  const page = (
+    focusName: string,
+    focusRole = 'edit',
+    title = 'Checkout – Shop - Google Chrome'
+  ): PolicyCtx => ({
+    origin: 'agent',
+    activeWindow: { title, process: 'chrome.exe', focusKnown: true, focusName, focusRole }
+  })
+
+  it('Enter in a form field is high with the checkout flag', () => {
+    const d = evaluate({ type: 'hotkey', keys: ['enter'] }, page('Postcode'))
+    expect(d.risk).toBe('high')
+    expect(d.checkout).toBe('checkout')
+  })
+
+  it('typed text with a line break is high', () => {
+    const d = evaluate({ type: 'type', text: 'Jo\n' }, page('Postcode'))
+    expect(d.risk).toBe('high')
+    expect(d.checkout).toBeTruthy()
+  })
+
+  it('an input batch ending in Enter is high', () => {
+    const d = evaluate(
+      {
+        type: 'input',
+        steps: [
+          { t: 'type', text: '1012 AB' },
+          { t: 'keys', combo: 'enter' }
+        ]
+      },
+      page('Postcode')
+    )
+    expect(d.checkout).toBeTruthy()
+  })
+
+  it('Space on a focused Continue button is high', () => {
+    expect(evaluate({ type: 'hotkey', keys: ['space'] }, page('Continue', 'button')).risk).toBe(
+      'high'
+    )
+  })
+
+  it('Enter in a search box stays low', () => {
+    expect(evaluate({ type: 'hotkey', keys: ['enter'] }, page('Search')).risk).toBe('low')
+    expect(
+      evaluate(
+        { type: 'hotkey', keys: ['enter'] },
+        page('Search', 'combobox', 'Google Search - Google Chrome')
+      ).risk
+    ).toBe('low')
+  })
+
+  it('Enter outside a browser or on a plain page stays low', () => {
+    const excel: PolicyCtx = {
+      origin: 'agent',
+      activeWindow: { title: 'Payments.xlsx - Excel', process: 'EXCEL.EXE', focusName: 'A1' }
+    }
+    expect(evaluate({ type: 'hotkey', keys: ['enter'] }, excel).risk).toBe('low')
+    expect(
+      evaluate(
+        { type: 'hotkey', keys: ['enter'] },
+        page('Postcode', 'edit', 'Shop - Google Chrome')
+      ).risk
+    ).toBe('low')
+  })
+})

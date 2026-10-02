@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from 'vitest'
 
 vi.mock('../../src/main/agent/instance', () => ({ getAgent: () => null }))
 
-import { findPrice, PRICE_NOT_READ, withCheckoutPrice } from '../../src/main/actions/checkout-price'
+import {
+  findPrice,
+  PRICE_NOT_READ,
+  withCheckoutGuard,
+  withCheckoutPrice
+} from '../../src/main/actions/checkout-price'
 import {
   cardShaped,
   hasCardNumber,
@@ -10,7 +15,7 @@ import {
   redactForModel
 } from '../../src/main/actions/redact'
 import { luhn } from '../../src/main/ai/memory/sensitive'
-import type { Decision } from '../../src/main/actions/safety'
+import { evaluate, type Decision, type PolicyCtx } from '../../src/main/actions/safety'
 
 describe('luhn', () => {
   it.each(['4242424242424242', '4111111111111111', '378282246310005', '5555555555554444'])(
@@ -174,5 +179,46 @@ describe('withCheckoutPrice', () => {
 
   it('without an agent the price is not read', async () => {
     expect((await withCheckoutPrice(d)).reason).toContain(PRICE_NOT_READ)
+  })
+})
+
+describe('withCheckoutGuard (review H2)', () => {
+  const ctx: PolicyCtx = {
+    origin: 'agent',
+    activeWindow: {
+      title: 'Your basket - Shop - Google Chrome',
+      process: 'chrome.exe',
+      focusKnown: true,
+      focusName: 'Postcode',
+      focusRole: 'edit'
+    }
+  }
+  const enter = { type: 'hotkey', keys: ['enter'] }
+
+  it('Enter in a form on a page with a pay button is a priced checkout', async () => {
+    const low = evaluate(enter, ctx)
+    expect(low.risk).toBe('low')
+    const d = await withCheckoutGuard(enter, ctx, low, async () =>
+      ['Delivery address', 'Order total: €42.00', 'Place your order'].join('\n')
+    )
+    expect(d.risk).toBe('high')
+    expect(d.needsConfirm).toBe(true)
+    expect(d.checkout).toBe('place order')
+    expect(d.reason).toContain('€42.00')
+  })
+
+  it('a page without one is left alone', async () => {
+    const low = evaluate(enter, ctx)
+    const d = await withCheckoutGuard(enter, ctx, low, async () => 'Delivery address\nContinue')
+    expect(d).toBe(low)
+  })
+
+  it('other keys and the user never read the page', async () => {
+    const read = vi.fn(async () => 'Pay now')
+    const tab = { type: 'hotkey', keys: ['tab'] }
+    await withCheckoutGuard(tab, ctx, evaluate(tab, ctx), read)
+    const user = { ...ctx, origin: 'user-direct' as const }
+    await withCheckoutGuard(enter, user, evaluate(enter, user), read)
+    expect(read).not.toHaveBeenCalled()
   })
 })

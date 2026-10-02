@@ -16,7 +16,7 @@ import {
   type WindowInfo
 } from './safety'
 import { describeActions } from '../a11y/captions'
-import { withCheckoutPrice } from './checkout-price'
+import { withCheckoutGuard } from './checkout-price'
 import { redactForLog } from './redact'
 import { getAgent } from '../agent/instance'
 import type { ActiveWindowInfo, FocusInfoResult } from '../agent/commands'
@@ -191,8 +191,9 @@ export async function gate(action: EvalAction, ctx: GateCtx, prevType?: string):
     confirmMode: ctx.confirmMode ?? (agentish ? cfg.agent.confirm : undefined),
     allowSendWithoutReview: cfg.agent.allowSendWithoutReview
   }
-  // A book / pay / order click: the card shows the price on the page now (05 T41).
-  const decision = await withCheckoutPrice(evaluate(action, policyCtx))
+  // A book / pay / order click, or a form submit on a page with one: the card shows the price
+  // on the page now (05 T41).
+  const decision = await withCheckoutGuard(action, policyCtx, evaluate(action, policyCtx))
   const audit = (verdict: AuditDecision, result: AuditResult): void =>
     writeAudit({
       t: new Date().toISOString(),

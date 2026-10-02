@@ -7,6 +7,7 @@ import type { InputStep } from '@shared/types'
 import { cardNumbers, cardShaped, findSecrets, maskSecrets } from './redact'
 import {
   checkoutName,
+  fold,
   isNoSendFieldName,
   isPaymentFieldName,
   isPersonalFieldName,
@@ -687,6 +688,11 @@ function keyFindings(keys: string[] | string, ctx: PolicyCtx, out: Finding[]): v
     out.push(checkoutFinding(buys))
     return
   }
+  const page = agentish(ctx.origin) && submitKey(combo, w) ? checkoutPageWord(w) : null
+  if (page) {
+    out.push(checkoutPageFinding(page))
+    return
+  }
   const focusWord = pressed
     ? (riskyName(w?.focusName) ?? (isMail(w) ? mailRiskyName(w?.focusName) : null))
     : null
@@ -779,6 +785,8 @@ function typeFindings(
       out.push({ risk: 'medium', reason: 'cannot tell which field has the focus' })
     if (isMail(w)) mailTypeFindings(text, field, ctx, out)
     if (!(isMail(w) && isRecipientField(field))) personalFindings(text, field, ctx, out)
+    const page = lineBreakSubmit(text, field) ? checkoutPageWord(w) : null
+    if (page) out.push(checkoutPageFinding(page))
   }
   const secrets = findSecrets(text)
   if (secrets.length) {
@@ -828,6 +836,92 @@ function mailTypeFindings(
 
 function checkoutFinding(word: string): Finding {
   return { risk: 'high', reason: `books or pays: “${word}”`, checkout: word }
+}
+
+const BROWSER_PROCESSES = new Set([
+  'chrome.exe',
+  'msedge.exe',
+  'firefox.exe',
+  'brave.exe',
+  'opera.exe',
+  'vivaldi.exe',
+  'arc.exe',
+  'iexplore.exe'
+])
+
+/** A web browser window (process, else the title's browser suffix). */
+export function isBrowserWindow(w: WindowInfo | undefined): boolean {
+  if (!w) return false
+  return BROWSER_PROCESSES.has(lower(w.process)) || BROWSER_TITLE_RE.test(w.title ?? '')
+}
+
+/** Titles of checkout, payment and booking pages (en/nl/de/fr/es/it/pt). */
+const CHECKOUT_TITLE_RE =
+  /(?:^|[^\p{L}])(checkout|check-out|payment|pay|place order|order review|review your order|secure booking|complete your booking|kasse|afrekenen|betalen|betaling|bezahlen|zahlung|paiement|paiement securise|pago|pagamento|cassa|finalizar compra)(?=$|[^\p{L}])/iu
+
+/** The word that makes the browser page in front a checkout page, or null. */
+function checkoutPageWord(w: WindowInfo | undefined): string | null {
+  if (!isBrowserWindow(w)) return null
+  return CHECKOUT_TITLE_RE.exec(fold(w?.title ?? ''))?.[1] ?? null
+}
+
+/** Buttons that send a form on ("Continue", "Confirm", "Weiter", "Volgende"). */
+const SUBMIT_NAME_RE =
+  /(?:^|[^\p{L}])(submit|continue|confirm|complete|next|place|proceed|finish|done|ok|weiter|doorgaan|volgende|bevestig\p{L}*|bestatig\p{L}*|continuer|valider|confirmer|continuar|confirmar|siguiente|continua|conferma|avanti|prosseguir)(?=$|[^\p{L}])/iu
+
+/**
+ * Enter in a form field (HTML implicit submission presses the form's first submit button), or
+ * Enter / Space on a nameless or "Continue" / "Confirm"-style button. Not a search box.
+ */
+function submitKey(combo: string, w: WindowInfo | undefined): boolean {
+  if (combo !== 'enter' && combo !== 'space') return false
+  const name = w?.focusName ?? ''
+  if (isSearchFieldName(name)) return false
+  if (focusIsButton(w)) return !name.trim() || SUBMIT_NAME_RE.test(fold(name))
+  return combo === 'enter'
+}
+
+/** Typed text with a line break: the native side sends it as Enter. */
+function lineBreakSubmit(text: string, field: string | undefined): boolean {
+  return /[\r\n]/.test(text) && !isSearchFieldName(field)
+}
+
+function checkoutPageFinding(word: string): Finding {
+  return {
+    risk: 'high',
+    reason: `submits the form on a checkout page (“${word}”)`,
+    checkout: word
+  }
+}
+
+/**
+ * An agent's Enter / line break / Space that may submit a form in a browser (05 T41, review
+ * H2): the gate then reads the page and treats it as checkout when a book / pay button is on it.
+ */
+export function submitsBrowserForm(a: EvalAction, ctx: PolicyCtx): boolean {
+  const w = ctx.activeWindow
+  if (!agentish(ctx.origin) || !isBrowserWindow(w)) return false
+  const keys = (k: string[] | string): boolean => submitKey(normalizeCombo(k), w)
+  if (a.type === 'hotkey') return keys(a.keys ?? [])
+  if (a.type === 'type') return lineBreakSubmit(a.text ?? '', w?.focusName)
+  if (a.type === 'input')
+    return (a.steps ?? []).some((s) =>
+      s.t === 'keys' ? keys(s.combo) : s.t === 'type' && lineBreakSubmit(s.text, w?.focusName)
+    )
+  return false
+}
+
+/** The decision for a form submit on a page that shows `word` ("Place order"): high, priced. */
+export function asCheckout(d: Decision, word: string): Decision {
+  const reason = `submits a form on a page with “${word}”`
+  return {
+    ...d,
+    risk: 'high',
+    reason: d.risk === 'high' ? `${d.reason}; ${reason}` : reason,
+    needsConfirm: true,
+    grantScope: undefined,
+    checkout: word
+  }
 }
 
 /** Card-check numbers the typed text holds, or makes with what the field held before. */
