@@ -256,6 +256,7 @@ pub mod engine {
         };
         if let Err(e) = set() {
             *applied = Applied::default();
+            *VOICES.lock().unwrap() = None;
             return Err(e.into());
         }
         let text = HSTRING::from(req.text.as_str());
