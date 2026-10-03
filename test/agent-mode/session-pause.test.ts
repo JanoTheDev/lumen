@@ -111,8 +111,10 @@ vi.mock('../../src/main/connectors', () => ({
 }))
 
 import { askUser, ownedConfirmId, setConfirmUi } from '../../src/main/agent-mode/confirm'
+import { askPending, askUser as askQuestion } from '../../src/main/agent-mode/ask'
 import {
   agentTaskPaused,
+  agentUtteranceKind,
   interceptAgentUtterance,
   pauseAgentTask,
   resumePausedAgentTask,
@@ -232,5 +234,76 @@ describe('the task’s own confirm card', () => {
     await runAgentTask('send it', ctx, new AbortController().signal, { skipPlan: true })
     setConfirmUi(null)
     expect(seen).toEqual([null, 'card1', null, null])
+  })
+})
+
+describe('voice words while a task runs', () => {
+  it('sorts the words: wait holds, stop ends, keep going only on its own card', () => {
+    expect(agentUtteranceKind('wait', {})).toBe('hold')
+    expect(agentUtteranceKind('Hold on.', {})).toBe('hold')
+    expect(agentUtteranceKind('one sec', {})).toBe('hold')
+    expect(agentUtteranceKind('one moment please', {})).toBe('hold')
+    expect(agentUtteranceKind('stop', {})).toBe('stop')
+    expect(agentUtteranceKind('pause the task', {})).toBe('pause')
+    expect(agentUtteranceKind('go', { countdown: true })).toBe('go')
+    expect(agentUtteranceKind('keep going', { continueCard: true })).toBe('keep-going')
+    expect(agentUtteranceKind('Carry on.', { continueCard: true })).toBe('keep-going')
+    expect(agentUtteranceKind('no', { continueCard: true })).toBeNull()
+    // While a question waits, only stop words end the task; "no" is an answer.
+    expect(agentUtteranceKind('cancel the task', { asking: true })).toBe('stop')
+    expect(agentUtteranceKind('stop', { asking: true })).toBe('stop')
+    expect(agentUtteranceKind('no', { asking: true })).toBeNull()
+    expect(agentUtteranceKind('wait', { asking: true })).toBeNull()
+  })
+
+  it('"wait" pauses the running task instead of stopping it', async () => {
+    h.script = [
+      reply(call('act', { op: 'click', target: { kind: 'text', ref: 'OK' } })),
+      reply(call('finish', { summary: 'Done.' }))
+    ]
+    let id = ''
+    h.onAct = () => {
+      id = runningAgentTaskId() ?? ''
+      expect(interceptAgentUtterance('hold on')).toBe(true)
+    }
+    const run = runAgentTask('click ok', ctx, new AbortController().signal, { skipPlan: true })
+    await tick(50)
+    expect(agentTaskPaused(id)).toBe(true)
+    expect(runningAgentTaskId()).toBe(id)
+    expect(interceptAgentUtterance('resume')).toBe(true)
+    await expect(run).resolves.toMatchObject({ text: 'Done.' })
+  })
+
+  it('"stop" ends the task while its question waits; "no" answers it', async () => {
+    h.script = [
+      reply(call('act', { op: 'click', target: { kind: 'text', ref: 'OK' } })),
+      reply(call('finish', { summary: 'Done.' }))
+    ]
+    const io = { speak: () => {}, listen: () => {} }
+    let answered: Promise<string | null> | null = null
+    h.onAct = () => {
+      answered = askQuestion('Which one?', io, new AbortController().signal)
+      expect(interceptAgentUtterance('no')).toBe(true)
+    }
+    await runAgentTask('click ok', ctx, new AbortController().signal, { skipPlan: true })
+    await expect(answered).resolves.toBe('no')
+
+    h.script = [
+      reply(call('act', { op: 'click', target: { kind: 'text', ref: 'OK' } })),
+      reply(call('finish', { summary: 'Done.' }))
+    ]
+    let stopped = false
+    h.onAct = async () => {
+      void askQuestion('Which one?', io, new AbortController().signal)
+      stopped = interceptAgentUtterance('cancel the task')
+    }
+    const run = runAgentTask('click ok', ctx, new AbortController().signal, { skipPlan: true })
+    await expect(run).rejects.toBeTruthy()
+    expect(stopped).toBe(true)
+    expect(runningAgentTaskId()).toBeNull()
+    // The test's own question is still open: answer it so nothing waits.
+    expect(askPending()).toBe(true)
+    interceptAgentUtterance('done')
+    expect(askPending()).toBe(false)
   })
 })

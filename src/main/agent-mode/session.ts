@@ -68,7 +68,7 @@ import { observed } from './prompts'
 import { CancelledError } from '../query/cancel'
 import { takeFilesFor } from '../files/attach'
 import { transcripts } from './transcript-hub'
-import { askOwned } from './confirm'
+import { askOwned, ownedConfirmId } from './confirm'
 import { presentCardsHandler } from '../cards/present-tool'
 import { browserPageUrl } from '../cards/browser-url'
 import { FETCH_URL_TOOL, fetchUrlHandler } from '../cards/fetch-tool'
@@ -204,41 +204,85 @@ const words = (s: string): string =>
     .trim()
 
 const GO_RE = /^(go|go ahead|go now|start|start now|do it now|now)$/
-const STOP_RE = /^(stop|wait|no|cancel|abort|stop it|hold on|not now|don t)$/
+const STOP_RE = /^(stop|no|cancel|abort|stop it|not now|don t)$/
 const RESUME_RE = /^(resume|resume the task|continue the task|carry on|keep going|continue)$/
 const PAUSE_RE = /^(pause|pause it|pause the task|pause task|pause the agent)$/
+/** "wait" / "hold on" hold the task (pause); they never end it. */
+const HOLD_RE =
+  /^(wait|wait a (moment|second|sec|minute)|hold on|hang on|one moment|one sec|one second|one minute|just a (moment|second|sec|minute)|give me a (moment|second|sec|minute))$/
+/** While the task asks a question, only these end it; anything else is the answer. */
+const ASK_STOP_RE =
+  /^(stop|stop it|stop the task|stop everything|cancel|cancel it|cancel the task|abort|abort it|abort the task)$/
+/** The task's own "Keep going?" card: these say yes there (and only there). */
+const KEEP_GOING_RE =
+  /^(yes )?(keep going|carry on|go on|continue|keep at it|keep working|continue the task)$/
+
+/** The running task's "Keep going?" card is up: its task id. */
+let continueCard: string | null = null
+
+/** Words a foreground task takes while it runs (pure; tests). */
+export function agentUtteranceKind(
+  utterance: string,
+  state: { asking?: boolean; countdown?: boolean; continueCard?: boolean }
+): 'go' | 'stop' | 'hold' | 'pause' | 'resume' | 'keep-going' | null {
+  const w = words(utterance)
+  if (state.asking) return ASK_STOP_RE.test(w) ? 'stop' : null
+  if (state.continueCard) return KEEP_GOING_RE.test(w) ? 'keep-going' : null
+  if (state.countdown && GO_RE.test(w)) return 'go'
+  if (STOP_RE.test(w)) return 'stop'
+  if (HOLD_RE.test(w)) return 'hold'
+  if (PAUSE_RE.test(w)) return 'pause'
+  if (RESUME_RE.test(w)) return 'resume'
+  return null
+}
 
 export function isResumeRequest(utterance: string): boolean {
   return RESUME_RE.test(words(utterance))
 }
 
 /**
- * Voice and typed input while a task runs, before normal routing: an answer to ask_user,
- * "go" / "stop" during the countdown, "stop" / "wait" / "no" while running. Returns true when
- * the utterance was used up here.
+ * Voice and typed input while a task runs, before normal routing: an answer to ask_user (but
+ * "stop" / "cancel the task" end the task), "keep going" on its "Keep going?" card, "go" /
+ * "stop" during the countdown, "stop" / "no" while running, "wait" / "hold on" / "pause" hold
+ * it until "resume". Returns true when the utterance was used up here.
  */
 export function interceptAgentUtterance(utterance: string): boolean {
-  if (askPending()) return answerQuestion(utterance)
-  // A confirm card (policy, cap, replace task) takes its own yes / no.
-  if (!running || assistant.confirmPending()) return false
-  const w = words(utterance)
-  if (countdownAnswer) {
-    if (GO_RE.test(w)) {
-      countdownAnswer('go')
+  if (askPending()) {
+    // "stop" / "cancel the task" end the task instead of becoming its answer.
+    if (running && agentUtteranceKind(utterance, { asking: true }) === 'stop') {
+      running.abort()
       return true
     }
-    if (STOP_RE.test(w)) {
-      countdownAnswer('cancel')
+    return answerQuestion(utterance)
+  }
+  if (!running) return false
+  if (assistant.confirmPending()) {
+    // The task's own "Keep going?" card: "keep going" / "carry on" are a yes there. Every
+    // other card (policy, replace task) takes its own yes / no.
+    const mine = !!continueCard && ownedConfirmId(continueCard) !== null
+    if (mine && agentUtteranceKind(utterance, { continueCard: true }) === 'keep-going') {
+      assistant.command({ type: 'confirm' })
       return true
     }
     return false
   }
-  if (STOP_RE.test(w)) {
+  const kind = agentUtteranceKind(utterance, { countdown: !!countdownAnswer })
+  if (countdownAnswer) {
+    if (kind === 'go') countdownAnswer('go')
+    else if (kind === 'hold' || kind === 'pause') {
+      // "wait": start, but hold before the first step until "resume".
+      if (pauseAgentTask(running.taskId)) countdownAnswer('go')
+      else countdownAnswer('cancel')
+    } else if (kind === 'stop') countdownAnswer('cancel')
+    else return false
+    return true
+  }
+  if (kind === 'stop') {
     running.abort()
     return true
   }
-  if (PAUSE_RE.test(w)) return pauseAgentTask(running.taskId)
-  if (RESUME_RE.test(w) && hold) return resumePausedAgentTask(running.taskId)
+  if (kind === 'hold' || kind === 'pause') return pauseAgentTask(running.taskId)
+  if (kind === 'resume' && hold) return resumePausedAgentTask(running.taskId)
   return false
 }
 
@@ -458,12 +502,18 @@ function deps(
         countdownAnswer = finish
         signal.addEventListener('abort', onAbort, { once: true })
       }),
-    askContinue: (reason) => {
-      // The task's own card: its chat may answer it (askOwned tags it with the task id).
-      return askOwned(env.taskId, {
-        summary: `This task reached its limit of ${reason}. Keep going?`,
-        risk: 'medium'
-      })
+    askContinue: async (reason) => {
+      // The task's own card: its chat may answer it (askOwned tags it with the task id), and
+      // "keep going" / "carry on" by voice say yes to it.
+      continueCard = env.taskId
+      try {
+        return await askOwned(env.taskId, {
+          summary: `This task reached its limit of ${reason}. Keep going?`,
+          risk: 'medium'
+        })
+      } finally {
+        if (continueCard === env.taskId) continueCard = null
+      }
     },
     costOf: (m, u) => usageCost(m, u).total,
     now: () => Date.now(),
