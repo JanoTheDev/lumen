@@ -75,31 +75,41 @@ function cleanName(s: string | undefined): string | null {
 }
 
 /**
- * `<verb> [the|my] <name> <noun>` or `<verb> [the|my] <noun> [called|named] <name>`; the name,
- * or null when the words are not that shape.
+ * `<verb> [the|my] <name> <noun>` or `<verb> [the|my] <noun> [called|named] <name>`, matched by
+ * `verbNoun`.
  */
-function verbNoun(n: string, verbs: string, noun: string): string | null {
-  const m = new RegExp(
-    `^(?:${verbs}) (?:the |my )?(?:(.+?) ${noun}|${noun} (?:called |named )?(.+))$`
-  ).exec(n)
+const verbNounRe = (verbs: string, noun: string): RegExp =>
+  new RegExp(`^(?:${verbs}) (?:the |my )?(?:(.+?) ${noun}|${noun} (?:called |named )?(.+))$`)
+
+/** The name, or null when the words are not that shape. */
+function verbNoun(n: string, re: RegExp): string | null {
+  const m = re.exec(n)
   return m ? cleanName(m[1] ?? m[2]) : null
 }
 
+type OnOffRes = readonly [RegExp, RegExp, RegExp]
+
+const onOffRes = (noun: string): OnOffRes => [
+  new RegExp(`^(?:turn|switch) (off|on) (?:the |my )?(.+?) ${noun}$`),
+  new RegExp(`^(?:turn|switch) (?:the |my )?(.+?) ${noun} (off|on|back on)$`),
+  new RegExp(
+    `^(disable|deactivate|pause|enable|activate|resume|unpause) (?:the |my )?(.+?) ${noun}$`
+  )
+]
+
 /** "turn off the X <noun>", "turn the X <noun> off", "disable the X <noun>": [name, on]. */
-function onOff(n: string, noun: string): [string, boolean] | null {
-  let m = new RegExp(`^(?:turn|switch) (off|on) (?:the |my )?(.+?) ${noun}$`).exec(n)
+function onOff(n: string, [verbFirst, stateLast, verbOnly]: OnOffRes): [string, boolean] | null {
+  let m = verbFirst.exec(n)
   if (m) {
     const name = cleanName(m[2])
     return name ? [name, m[1] === 'on'] : null
   }
-  m = new RegExp(`^(?:turn|switch) (?:the |my )?(.+?) ${noun} (off|on|back on)$`).exec(n)
+  m = stateLast.exec(n)
   if (m) {
     const name = cleanName(m[1])
     return name ? [name, m[2] !== 'off'] : null
   }
-  m = new RegExp(
-    `^(disable|deactivate|pause|enable|activate|resume|unpause) (?:the |my )?(.+?) ${noun}$`
-  ).exec(n)
+  m = verbOnly.exec(n)
   if (m) {
     const name = cleanName(m[2])
     return name ? [name, !/^(?:disable|deactivate|pause)$/.test(m[1])] : null
@@ -111,6 +121,14 @@ const DELETE = 'delete|remove|erase|get rid of|cancel|uninstall'
 
 const TASK = '(?:background )?(?:task|job)'
 const AUTOMATION = '(?:automation|routine|reminder)'
+
+const AUTOMATION_ON_OFF = onOffRes(AUTOMATION)
+const AUTOMATION_DELETE_RE = verbNounRe(DELETE, AUTOMATION)
+const AUTOMATION_RUN_RE = verbNounRe('run|trigger|start', `${AUTOMATION}(?: now| right now)?`)
+const SKILL_ON_OFF = onOffRes('skill')
+const SKILL_DELETE_RE = verbNounRe(DELETE, 'skill')
+const CONNECTOR_TEST_RE = verbNounRe('test|check|try', 'connector')
+const GUIDE_DELETE_RE = verbNounRe(DELETE, '(?:saved )?guide')
 
 const TASKS_LIST_RE =
   /^(?:what are you (?:working on|busy with|doing in the background)|whats running|what is running|what tasks (?:are running|do i have|are there)|(?:list|tell me) (?:all )?(?:of )?(?:my |the )?(?:background )?tasks|what are my tasks)(?: right now| now)?$/
@@ -181,12 +199,102 @@ const DIAGNOSTICS_RE =
   /^(?:(?:export|save|make|create|write)(?: me)? (?:a |the )?diagnostics?(?: file| zip| report)?|(?:send|make|create|save|export|write)(?: me)? (?:a )?bug report(?: file)?)$/
 
 const BUDDY_WORD = '(?:buddy|buddie|body)'
+const BUDDY_DELETE_RE = new RegExp(
+  `^(?:${DELETE}) (?:the |my )?(?:(.+? ${BUDDY_WORD})|${BUDDY_WORD} (?:called |named )?(.+))$`
+)
+const BUDDY_ONLY_RE = new RegExp(`^${BUDDY_WORD}$`)
+const RUN_NOW_RE = /^(?:run|trigger) (?:the |my )?(.+?) (?:now|right now)$/
+
+/**
+ * Every first word a pattern above can start with, after `normalize`; any other utterance is
+ * not a management command.
+ */
+const FIRST_WORDS = new Set([
+  // tasks
+  'what',
+  'whats',
+  'which',
+  'is',
+  'list',
+  'tell',
+  'stop',
+  'cancel',
+  'abort',
+  'end',
+  'kill',
+  'pause',
+  'resume',
+  'unpause',
+  'continue',
+  'run',
+  'do',
+  'start',
+  'rerun',
+  'restart',
+  'redo',
+  'approve',
+  'accept',
+  'deny',
+  'decline',
+  'reject',
+  // on / off, delete, run
+  'turn',
+  'switch',
+  'disable',
+  'deactivate',
+  'enable',
+  'activate',
+  'delete',
+  'remove',
+  'erase',
+  'get',
+  'uninstall',
+  'trigger',
+  // grants
+  'revoke',
+  'clear',
+  'reset',
+  'forget',
+  'dont',
+  'no',
+  // notes, memory
+  'read',
+  'throw',
+  'export',
+  'download',
+  'back',
+  'backup',
+  'save',
+  'wipe',
+  // connectors
+  'test',
+  'check',
+  'try',
+  'sign',
+  'signin',
+  'signinto',
+  'log',
+  'login',
+  'loginto',
+  'connect',
+  // diagnostics
+  'make',
+  'create',
+  'write',
+  'send'
+])
 
 /** The management command in these words, or null when they are not one. */
 export function parseManageCommand(text: string): ManageCommand | null {
   const n = normalize(text)
   if (!n || n.length > 200) return null
+  const space = n.indexOf(' ')
+  if (!FIRST_WORDS.has(space < 0 ? n : n.slice(0, space))) return null
+  return parseManageWords(n)
+}
 
+/** The management command in normalized words, without the first-word check. */
+export function parseManageWords(n: string): ManageCommand | null {
   // ---- tasks ----
   if (TASKS_LIST_RE.test(n)) return { kind: 'tasks-list' }
   let m = TASKS_ALL_RE.exec(n)
@@ -219,18 +327,18 @@ export function parseManageCommand(text: string): ManageCommand | null {
   }
 
   // ---- automations ----
-  const autoOnOff = onOff(n, AUTOMATION)
+  const autoOnOff = onOff(n, AUTOMATION_ON_OFF)
   if (autoOnOff) return { kind: 'automation-enable', name: autoOnOff[0], on: autoOnOff[1] }
-  let name = verbNoun(n, DELETE, AUTOMATION)
+  let name = verbNoun(n, AUTOMATION_DELETE_RE)
   if (name) return { kind: 'automation-delete', name }
-  name = verbNoun(n, 'run|trigger|start', `${AUTOMATION}(?: now| right now)?`)
+  name = verbNoun(n, AUTOMATION_RUN_RE)
   if (name) return { kind: 'automation-run', name, loose: false }
 
   // ---- skills ----
   if (SKILLS_LIST_RE.test(n)) return { kind: 'skills-list' }
-  const skillOnOff = onOff(n, 'skill')
+  const skillOnOff = onOff(n, SKILL_ON_OFF)
   if (skillOnOff) return { kind: 'skill-enable', name: skillOnOff[0], on: skillOnOff[1] }
-  name = verbNoun(n, DELETE, 'skill')
+  name = verbNoun(n, SKILL_DELETE_RE)
   if (name) return { kind: 'skill-delete', name }
 
   // ---- grants ----
@@ -253,7 +361,7 @@ export function parseManageCommand(text: string): ManageCommand | null {
 
   // ---- connectors ----
   if (CONNECTORS_LIST_RE.test(n)) return { kind: 'connectors-list' }
-  name = verbNoun(n, 'test|check|try', 'connector')
+  name = verbNoun(n, CONNECTOR_TEST_RE)
   if (name) return { kind: 'connector-test', name }
   m = CONNECTOR_SIGN_IN_RE.exec(n) ?? CONNECT_RE.exec(n)
   if (m) {
@@ -263,21 +371,19 @@ export function parseManageCommand(text: string): ManageCommand | null {
 
   // ---- guides, diagnostics ----
   if (GUIDES_LIST_RE.test(n)) return { kind: 'guides-list' }
-  name = verbNoun(n, DELETE, '(?:saved )?guide')
+  name = verbNoun(n, GUIDE_DELETE_RE)
   if (name) return { kind: 'guide-delete', name }
   if (DIAGNOSTICS_RE.test(n)) return { kind: 'diagnostics-export' }
 
   // ---- buddies (after every other noun: "delete the buddy skill" is a skill) ----
-  m = new RegExp(
-    `^(?:${DELETE}) (?:the |my )?(?:(.+? ${BUDDY_WORD})|${BUDDY_WORD} (?:called |named )?(.+))$`
-  ).exec(n)
+  m = BUDDY_DELETE_RE.exec(n)
   if (m) {
     const b = cleanName(m[1] ?? m[2])
-    if (b && !new RegExp(`^${BUDDY_WORD}$`).test(b)) return { kind: 'buddy-delete', name: b }
+    if (b && !BUDDY_ONLY_RE.test(b)) return { kind: 'buddy-delete', name: b }
   }
 
   // "run the morning briefing now": an automation's name (service.ts checks it is one).
-  m = /^(?:run|trigger) (?:the |my )?(.+?) (?:now|right now)$/.exec(n)
+  m = RUN_NOW_RE.exec(n)
   if (m) {
     const a = cleanName(m[1])
     if (a) return { kind: 'automation-run', name: a, loose: true }
