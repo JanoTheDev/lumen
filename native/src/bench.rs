@@ -116,6 +116,9 @@ fn run_all() -> Vec<Stats> {
     let (s, out, e) = time(10, || uia::cmd_snapshot(&snap, &token).map_err(err));
     let nodes = out.as_ref().and_then(|v| v.get("root")).map_or(0, count_nodes);
     rows.push(Stats { name: "uia.warm", note: e.unwrap_or(format!("{nodes} nodes")), samples: s });
+    let (s, out, e) = time(20, || uia::cmd_focus_info(&token).map_err(err));
+    let role = out.as_ref().and_then(|v| v.get("role")).cloned().unwrap_or(Value::Null);
+    rows.push(Stats { name: "focus_info", note: e.unwrap_or(format!("focused {role}")), samples: s });
 
     let chars = TYPE_TEXT.chars().count();
     let (s, keys, _) = time(200, || Ok(sendinput::key_inputs(&sendinput::text_events(TYPE_TEXT)).len()));

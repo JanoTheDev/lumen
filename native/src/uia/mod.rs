@@ -80,6 +80,18 @@ const BASE_PROPS: [UIA_PROPERTY_ID; 10] = [
     UIA_ValueIsReadOnlyPropertyId,
 ];
 
+/// What the input guard and `focus_info` read from the focused element, in one round trip.
+const FOCUS_PROPS: [UIA_PROPERTY_ID; 8] = [
+    UIA_ClassNamePropertyId,
+    UIA_NamePropertyId,
+    UIA_IsPasswordPropertyId,
+    UIA_ControlTypePropertyId,
+    UIA_IsValuePatternAvailablePropertyId,
+    UIA_ValueIsReadOnlyPropertyId,
+    UIA_IsTextEditPatternAvailablePropertyId,
+    UIA_BoundingRectanglePropertyId,
+];
+
 pub const ACTIONS: &[&str] =
     &["invoke", "toggle", "select", "expand", "collapse", "set_value", "scroll_into_view", "focus"];
 
@@ -97,6 +109,8 @@ pub struct Client {
     pub tree_cr: IUIAutomationCacheRequest,
     /// Same properties for a single element (focus events, focused element).
     pub elem_cr: IUIAutomationCacheRequest,
+    /// [`FOCUS_PROPS`] of the focused element, whatever its view.
+    focus_cr: IUIAutomationCacheRequest,
 }
 
 thread_local! {
@@ -134,7 +148,19 @@ impl Client {
                 cr.SetTreeFilter(&filter).map_err(|e| com_err("SetTreeFilter", e))?;
                 Ok(cr)
             };
-            Ok(Client { tree_cr: request(TreeScope_Subtree)?, elem_cr: request(TreeScope_Element)?, u })
+            let focus_cr = u.CreateCacheRequest().map_err(|e| com_err("CreateCacheRequest", e))?;
+            for pid in FOCUS_PROPS {
+                focus_cr.AddProperty(pid).map_err(|e| com_err("AddProperty", e))?;
+            }
+            focus_cr.SetTreeScope(TreeScope_Element).map_err(|e| com_err("SetTreeScope", e))?;
+            let all = u.CreateTrueCondition().map_err(|e| com_err("condition", e))?;
+            focus_cr.SetTreeFilter(&all).map_err(|e| com_err("SetTreeFilter", e))?;
+            Ok(Client {
+                tree_cr: request(TreeScope_Subtree)?,
+                elem_cr: request(TreeScope_Element)?,
+                focus_cr,
+                u,
+            })
         }
     }
 
@@ -632,12 +658,21 @@ fn target_info(el: &IUIAutomationElement) -> TargetInfo {
     }
 }
 
+/// The keyboard-focused element with [`FOCUS_PROPS`] cached.
+fn focused_cached(client: &Client) -> Option<IUIAutomationElement> {
+    // SAFETY: COM call on this thread's client.
+    unsafe { client.u.GetFocusedElementBuildCache(&client.focus_cr) }.ok()
+}
+
 /// The keyboard-focused element, for the input target guard.
 pub fn focused_target() -> Option<TargetInfo> {
     let client = Client::get().ok()?;
-    // SAFETY: COM call on this thread's client.
-    let el = unsafe { client.u.GetFocusedElement() }.ok()?;
-    Some(target_info(&el))
+    let el = focused_cached(&client)?;
+    Some(TargetInfo {
+        class: cached_string(&el, UIA_ClassNamePropertyId),
+        name: cached_string(&el, UIA_NamePropertyId),
+        password: cached_bool(&el, UIA_IsPasswordPropertyId),
+    })
 }
 
 /// `focus_info`: foreground process plus the keyboard-focused element.
@@ -649,23 +684,17 @@ pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
         "windowClass": info["className"],
     });
     let client = Client::get()?;
-    // SAFETY: COM call on this thread's client.
-    let Ok(el) = (unsafe { client.u.GetFocusedElement() }) else { return Ok(out) };
+    let Some(el) = focused_cached(&client) else { return Ok(out) };
     token.check()?;
-    let prop = |pid: UIA_PROPERTY_ID| {
-        // SAFETY: current-property read on a live element.
-        unsafe { el.GetCurrentPropertyValue(pid) }.ok()
-    };
-    let as_bool = |pid| prop(pid).and_then(|v| bool::try_from(&v).ok()).unwrap_or(false);
-    let role =
-        tree::role_of(prop(UIA_ControlTypePropertyId).and_then(|v| i32::try_from(&v).ok()).unwrap_or(0));
+    let as_bool = |pid| cached_bool(&el, pid);
+    let role = tree::role_of(cached_i32(&el, UIA_ControlTypePropertyId).unwrap_or(0));
     let password = as_bool(UIA_IsPasswordPropertyId);
     let has_value = as_bool(UIA_IsValuePatternAvailablePropertyId);
     let readonly = has_value.then(|| as_bool(UIA_ValueIsReadOnlyPropertyId));
     let has_text_edit = as_bool(UIA_IsTextEditPatternAvailablePropertyId);
-    let text =
-        |pid| prop(pid).and_then(|v| BSTR::try_from(&v).ok()).map(|b| b.to_string()).unwrap_or_default();
-    let value = if has_value && !password { text(UIA_ValueValuePropertyId) } else { String::new() };
+    let text = |pid| cached_string(&el, pid);
+    let value =
+        if has_value && !password { current_string(&el, UIA_ValueValuePropertyId) } else { String::new() };
     let tail: String = {
         let chars: Vec<char> = value.chars().collect();
         chars[chars.len().saturating_sub(FOCUS_VALUE_TAIL)..].iter().collect()
@@ -678,8 +707,8 @@ pub fn cmd_focus_info(token: &CancelToken) -> CmdResult {
     out["valueTail"] = json!(tail);
     out["className"] = json!(tree::truncate(&text(UIA_ClassNamePropertyId), tree::NAME_MAX));
     // Where to show the dictation pill: the text caret, else the focused element.
-    // SAFETY: current-property read on a live element.
-    let rect = unsafe { el.CurrentBoundingRectangle() }.ok().map(Rect::from).filter(|r| !r.is_empty());
+    // SAFETY: cached-property read on a live element.
+    let rect = unsafe { el.CachedBoundingRectangle() }.ok().map(Rect::from).filter(|r| !r.is_empty());
     out["rect"] = rect.map_or(Value::Null, Rect::to_json);
     out["caret"] = system_caret().map_or(Value::Null, Rect::to_json);
     Ok(out)
