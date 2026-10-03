@@ -59,12 +59,35 @@ function inline(schema: ZodType): Json {
   return json
 }
 
-/** Anthropic `output_config.format` schema: optional fields stay optional. */
-export function anthropicJsonSchema(schema: ZodType): Json {
-  return strict(inline(schema), false) as Json
+function deepFreeze<T>(node: T): T {
+  if (node && typeof node === 'object' && !Object.isFrozen(node)) {
+    Object.freeze(node)
+    for (const v of Object.values(node)) deepFreeze(v)
+  }
+  return node
 }
 
-/** OpenAI strict `json_schema` body: every field required, optional ones nullable. */
+const anthropicCache = new WeakMap<ZodType, Json>()
+const openaiCache = new WeakMap<ZodType, Json>()
+
+function cached(cache: WeakMap<ZodType, Json>, schema: ZodType, nullable: boolean): Json {
+  let json = cache.get(schema)
+  if (!json) {
+    json = deepFreeze(strict(inline(schema), nullable) as Json)
+    cache.set(schema, json)
+  }
+  return json
+}
+
+/**
+ * Anthropic `output_config.format` schema: optional fields stay optional. One frozen object
+ * per zod schema, so request bodies built from it stay identical.
+ */
+export function anthropicJsonSchema(schema: ZodType): Json {
+  return cached(anthropicCache, schema, false)
+}
+
+/** OpenAI strict `json_schema` body: every field required, optional ones nullable. Frozen. */
 export function openaiStrictSchema(schema: ZodType): Json {
-  return strict(inline(schema), true) as Json
+  return cached(openaiCache, schema, true)
 }

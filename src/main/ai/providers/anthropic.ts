@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import type Anthropic from '@anthropic-ai/sdk'
 import { parseJsonAs } from '../json'
 import { anthropicJsonSchema } from './structured'
 import {
@@ -23,9 +23,11 @@ import {
 
 let client: Anthropic | null = null
 let clientKey: string | undefined
+let sdkModule: Promise<typeof import('@anthropic-ai/sdk')> | null = null
 
 /** Shared SDK client so requests reuse one connection pool; rebuilt if the key changes. */
-export function anthropicClient(): Anthropic {
+export async function anthropicClient(): Promise<Anthropic> {
+  const { default: Anthropic } = await (sdkModule ??= import('@anthropic-ai/sdk'))
   const key = process.env.ANTHROPIC_API_KEY
   if (!client || clientKey !== key) {
     client = new Anthropic({ apiKey: key })
@@ -177,8 +179,25 @@ export const STRICT_LIMITS = { tools: 20, optional: 24, unions: 16 } as const
 
 type Json = Record<string, unknown>
 
-/** Optional and union-typed parameters at every level of a JSON schema. */
-export function strictCounts(schema: unknown): { optional: number; unions: number } {
+type StrictCounts = Readonly<{ optional: number; unions: number }>
+
+const countsCache = new WeakMap<object, StrictCounts>()
+
+/**
+ * Optional and union-typed parameters at every level of a JSON schema. Counts of a frozen
+ * schema (the ones `anthropicJsonSchema` returns) are kept per object.
+ */
+export function strictCounts(schema: unknown): StrictCounts {
+  if (!schema || typeof schema !== 'object' || !Object.isFrozen(schema)) return countSchema(schema)
+  let counts = countsCache.get(schema)
+  if (!counts) {
+    counts = countSchema(schema)
+    countsCache.set(schema, counts)
+  }
+  return counts
+}
+
+function countSchema(schema: unknown): StrictCounts {
   let optional = 0
   let unions = 0
   const walk = (node: unknown): void => {
@@ -193,7 +212,7 @@ export function strictCounts(schema: unknown): { optional: number; unions: numbe
     for (const v of Object.values(n)) walk(v)
   }
   walk(schema)
-  return { optional, unions }
+  return Object.freeze({ optional, unions })
 }
 
 /** Connector (MCP) tools give up strict mode first; the built-in tools keep it. */
@@ -269,9 +288,11 @@ function toolCallsOf(msg: Anthropic.Message): ToolCall[] {
     .map((b) => ({ id: b.id, name: b.name, input: (b.input ?? {}) as Record<string, unknown> }))
 }
 
-export function createAnthropicProvider(getClient: () => Anthropic = anthropicClient): LlmProvider {
-  const send = (params: CreateParams, signal?: AbortSignal): Promise<Anthropic.Message> =>
-    getClient().messages.create(params, { signal })
+export function createAnthropicProvider(
+  getClient: () => Anthropic | Promise<Anthropic> = anthropicClient
+): LlmProvider {
+  const send = async (params: CreateParams, signal?: AbortSignal): Promise<Anthropic.Message> =>
+    (await getClient()).messages.create(params, { signal })
 
   return {
     id: 'anthropic',
@@ -299,10 +320,9 @@ export function createAnthropicProvider(getClient: () => Anthropic = anthropicCl
     },
 
     async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
-      const events = await getClient().messages.create(
-        { ...buildParams(req), stream: true },
-        { signal }
-      )
+      const events = await (
+        await getClient()
+      ).messages.create({ ...buildParams(req), stream: true }, { signal })
       let text = ''
       let model = req.model
       let stopReason = ''
@@ -353,7 +373,7 @@ export function createAnthropicProvider(getClient: () => Anthropic = anthropicCl
 
     async warmup(): Promise<void> {
       try {
-        await getClient().models.list({ limit: 1 })
+        await (await getClient()).models.list({ limit: 1 })
       } catch (e) {
         console.warn('[warmup] anthropic:', (e as Error).message)
       }
