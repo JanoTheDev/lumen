@@ -19,7 +19,7 @@ import {
   notesFile,
   updateNote
 } from '../../../src/main/speech/dictation/notes'
-import { loadStats, summarize } from '../../../src/main/speech/dictation/stats'
+import { flushDictationStats, loadStats, summarize } from '../../../src/main/speech/dictation/stats'
 
 const fakeKey = (): string => ['sk', 'proj', 'B'.repeat(40)].join('-')
 
@@ -64,6 +64,7 @@ describe('notes store', () => {
     setStatus.mockClear()
   })
   afterEach(() => {
+    flushDictationStats()
     setConfigDir(null)
     rmSync(dir, { recursive: true, force: true })
   })

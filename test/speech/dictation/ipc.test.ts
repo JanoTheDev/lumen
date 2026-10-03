@@ -13,6 +13,7 @@ import { invokeHandler, resetElectronMock } from '../../helpers/electron-mock'
 import { saveConfig, setConfigDir } from '../../../src/main/config'
 import { registerDictationLogIpc } from '../../../src/main/ipc/dictation-log'
 import { recordDictation } from '../../../src/main/speech/dictation/history'
+import { flushDictationStats } from '../../../src/main/speech/dictation/stats'
 import { REDACTED_NOTICE } from '../../../src/main/ipc/dictation-log'
 
 const agent = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ beforeEach(() => {
   registerDictationLogIpc()
 })
 afterEach(() => {
+  flushDictationStats()
   setConfigDir(null)
   rmSync(dir, { recursive: true, force: true })
 })

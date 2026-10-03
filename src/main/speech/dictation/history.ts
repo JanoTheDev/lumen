@@ -3,7 +3,15 @@
 // redacted before anything is stored; at most MAX_ENTRIES, none older than KEEP_DAYS. Off
 // with `dictation.history: false` or while memory private mode is on. Stats (T46) count
 // every dictation either way, without text.
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'fs'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
 import type { DictationHistoryEntry, DictationSource } from '@shared/dictation-history'
@@ -89,21 +97,56 @@ export function prune(entries: DictationHistoryEntry[], now = Date.now()): Dicta
   return entries.filter((e) => e.t >= cutoff).slice(-MAX_ENTRIES)
 }
 
+/** Entry count, first entry's time and byte size of the file as last read or written. */
+interface FileState {
+  file: string
+  count: number
+  oldest: number | undefined
+  size: number
+}
+
+let state: FileState | null = null
+
+function fileSize(file: string): number {
+  try {
+    return statSync(file).size
+  } catch {
+    return 0
+  }
+}
+
+function remember(file: string, entries: DictationHistoryEntry[]): void {
+  state = { file, count: entries.length, oldest: entries[0]?.t, size: fileSize(file) }
+}
+
 function readAll(): DictationHistoryEntry[] {
   const file = historyFile()
-  if (!existsSync(file)) return []
+  if (!existsSync(file)) {
+    state = { file, count: 0, oldest: undefined, size: 0 }
+    return []
+  }
   const out: DictationHistoryEntry[] = []
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim()) continue
     const e = parseLine(line)
     if (e) out.push(e)
   }
+  remember(file, out)
   return out
 }
 
 function writeAll(entries: DictationHistoryEntry[]): void {
   mkdirSync(dictationDir(), { recursive: true })
-  writeFileSync(historyFile(), entries.map((e) => JSON.stringify(e) + '\n').join(''), 'utf8')
+  const file = historyFile()
+  writeFileSync(file, entries.map((e) => JSON.stringify(e) + '\n').join(''), 'utf8')
+  remember(file, entries)
+}
+
+/** Count and oldest entry, read from the file only when it changed outside this module. */
+function currentState(): FileState {
+  const file = historyFile()
+  if (state?.file !== file || state.size !== fileSize(file)) readAll()
+  return state as FileState
 }
 
 /** Newest first, pruned. */
@@ -127,7 +170,9 @@ export function deleteHistoryEntry(id: string): boolean {
 }
 
 export function clearHistory(): void {
-  rmSync(historyFile(), { force: true })
+  const file = historyFile()
+  rmSync(file, { force: true })
+  state = { file, count: 0, oldest: undefined, size: 0 }
 }
 
 export function historyEnabled(): boolean {
@@ -137,12 +182,15 @@ export function historyEnabled(): boolean {
 
 /** Appends one entry; compacts the file when it has grown past the cap. */
 export function appendHistory(entry: DictationHistoryEntry, now = Date.now()): void {
+  const cur = currentState()
+  const line = JSON.stringify(entry) + '\n'
   mkdirSync(dictationDir(), { recursive: true })
-  appendFileSync(historyFile(), JSON.stringify(entry) + '\n', 'utf8')
-  const all = readAll()
-  const oldest = all[0]?.t ?? now
-  if (all.length > MAX_ENTRIES + 50 || oldest < now - KEEP_DAYS * 86_400_000)
-    writeAll(prune(all, now))
+  appendFileSync(cur.file, line, 'utf8')
+  cur.count++
+  cur.oldest ??= entry.t
+  cur.size += Buffer.byteLength(line, 'utf8')
+  if (cur.count > MAX_ENTRIES + 50 || cur.oldest < now - KEEP_DAYS * 86_400_000)
+    writeAll(prune(readAll(), now))
 }
 
 /**

@@ -16,7 +16,7 @@ import {
   toEntry
 } from '../../../src/main/speech/dictation/history'
 import { dictationDir } from '../../../src/main/speech/dictation/recovery'
-import { loadStats, summarize } from '../../../src/main/speech/dictation/stats'
+import { flushDictationStats, loadStats, summarize } from '../../../src/main/speech/dictation/stats'
 
 const DAY = 86_400_000
 // Built at runtime so no key-shaped literal sits in the repo.
@@ -28,6 +28,7 @@ beforeEach(() => {
   setConfigDir(dir)
 })
 afterEach(() => {
+  flushDictationStats()
   setConfigDir(null)
   rmSync(dir, { recursive: true, force: true })
 })

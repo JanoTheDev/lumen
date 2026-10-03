@@ -1,13 +1,14 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setConfigDir } from '../../../src/main/config'
 import {
   addToStats,
   countWords,
   dayKey,
   emptyStats,
+  flushDictationStats,
   loadStats,
   recordStats,
   resetStats,
@@ -80,6 +81,7 @@ describe('dictation stats (file)', () => {
     setConfigDir(dir)
   })
   afterEach(() => {
+    flushDictationStats()
     setConfigDir(null)
     rmSync(dir, { recursive: true, force: true })
   })
@@ -91,6 +93,23 @@ describe('dictation stats (file)', () => {
     expect(summarize(loadStats()).sessions).toBe(1)
     resetStats()
     expect(summarize(loadStats()).totalWords).toBe(0)
+  })
+
+  it('writes recorded stats after a short delay or on flush', () => {
+    vi.useFakeTimers()
+    try {
+      recordStats({ words: 4, t: Date.now() })
+      expect(existsSync(statsFile())).toBe(false)
+      vi.advanceTimersByTime(2000)
+      expect(JSON.parse(readFileSync(statsFile(), 'utf8')).days).not.toEqual({})
+      recordStats({ words: 3, t: Date.now() })
+      flushDictationStats()
+      const sum = summarize({ v: 1, days: JSON.parse(readFileSync(statsFile(), 'utf8')).days })
+      expect(sum.totalWords).toBe(7)
+      expect(summarize(loadStats()).totalWords).toBe(7)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a corrupt or hostile file loads as empty or sanitised', () => {
