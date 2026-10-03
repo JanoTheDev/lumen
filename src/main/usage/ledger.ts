@@ -106,6 +106,12 @@ let dirOverride: string | null = null
 // Off until the app enables it, so tests and scripts never write into the real home folder.
 let persist = false
 const months = new Map<string, UsageRow[]>()
+/** Months whose lines are in time order (most are: lines are appended as calls happen). */
+const ordered = new Set<string>()
+/** Month keys on disk, read once. */
+let diskMonths: Set<string> | null = null
+/** Month files whose last line was checked for a torn write. */
+const checkedTail = new Set<string>()
 const pending = new Map<string, UsageRow[]>()
 let timer: NodeJS.Timeout | null = null
 const listeners = new Set<(row: UsageRow) => void>()
@@ -149,13 +155,14 @@ function load(month: string): UsageRow[] {
   const cached = months.get(month)
   if (cached) return cached
   const rows: UsageRow[] = []
+  ordered.add(month)
   if (persist) {
     try {
       const path = fileFor(month)
       if (existsSync(path))
         for (const line of readFileSync(path, 'utf8').split('\n')) {
           const r = parseLine(line)
-          if (r) rows.push(r)
+          if (r) pushRow(month, rows, r)
         }
     } catch (e) {
       console.warn(`[usage] ${month} unreadable: ${(e as Error).message}`)
@@ -163,6 +170,12 @@ function load(month: string): UsageRow[] {
   }
   months.set(month, rows)
   return rows
+}
+
+function pushRow(month: string, rows: UsageRow[], row: UsageRow): void {
+  const last = rows[rows.length - 1]
+  if (last && last.t > row.t) ordered.delete(month)
+  rows.push(row)
 }
 
 function clean(row: UsageRow): UsageRow {
@@ -224,7 +237,7 @@ export function recordCall(entry: UsageEntry): UsageRow {
 
 function addRow(row: UsageRow): void {
   const month = monthKey(row.t)
-  load(month).push(row)
+  pushRow(month, load(month), row)
   for (const fn of listeners) {
     try {
       fn(row)
@@ -274,8 +287,12 @@ function endsMidLine(path: string): boolean {
  * Appends whole lines. After a torn last line the new lines start on a line of their own, so
  * the first one is not glued to the fragment (and lost on the next read).
  */
-function appendLines(path: string, lines: string[]): void {
-  appendFileSync(path, (endsMidLine(path) ? '\n' : '') + lines.join('\n') + '\n', 'utf8')
+function appendLines(month: string, lines: string[]): void {
+  const path = fileFor(month)
+  const torn = !checkedTail.has(month) && endsMidLine(path)
+  appendFileSync(path, (torn ? '\n' : '') + lines.join('\n') + '\n', 'utf8')
+  checkedTail.add(month)
+  diskMonths?.add(month)
 }
 
 /** Writes pending lines now. Never throws. */
@@ -292,7 +309,7 @@ export function flushLedger(): void {
   for (const [month, rows] of pending) {
     try {
       appendLines(
-        fileFor(month),
+        month,
         rows.map((r) => JSON.stringify(r))
       )
       pending.delete(month)
@@ -306,14 +323,18 @@ export function flushLedger(): void {
 export function ledgerMonths(): string[] {
   const keys = new Set(months.keys())
   if (persist) {
-    try {
-      for (const f of readdirSync(ledgerDir())) {
-        const m = /^(\d{4}-\d{2})\.ndjson$/.exec(f)
-        if (m) keys.add(m[1])
+    if (!diskMonths) {
+      diskMonths = new Set()
+      try {
+        for (const f of readdirSync(ledgerDir())) {
+          const m = /^(\d{4}-\d{2})\.ndjson$/.exec(f)
+          if (m) diskMonths.add(m[1])
+        }
+      } catch {
+        // no folder yet
       }
-    } catch {
-      // no folder yet
     }
+    for (const m of diskMonths) keys.add(m)
   }
   return [...keys].sort()
 }
@@ -326,6 +347,8 @@ export function pruneLedger(now = new Date()): void {
     generation++
     months.delete(month)
     pending.delete(month)
+    diskMonths?.delete(month)
+    checkedTail.delete(month)
     if (persist) {
       try {
         rmSync(fileFor(month), { force: true })
@@ -341,10 +364,10 @@ export function importRows(rows: UsageRow[]): void {
   generation++
   for (const row of rows) {
     const month = monthKey(row.t)
-    load(month).push(row)
+    pushRow(month, load(month), row)
     if (!persist) continue
     mkdirSync(ledgerDir(), { recursive: true })
-    appendLines(fileFor(month), [JSON.stringify(row)])
+    appendLines(month, [JSON.stringify(row)])
   }
 }
 
@@ -372,11 +395,14 @@ export function queryUsage(q: UsageQuery = {}): UsageRow[] {
   const out: UsageRow[] = []
   const first = monthKey(from)
   const last = monthKey(Math.max(from, to - 1))
+  let inOrder = true
   for (const month of ledgerMonths()) {
     if (month < first || month > last) continue
-    for (const r of load(month)) if (r.t >= from && r.t < to && matches(r, q.filter)) out.push(r)
+    const rows = load(month)
+    if (!ordered.has(month)) inOrder = false
+    for (const r of rows) if (r.t >= from && r.t < to && matches(r, q.filter)) out.push(r)
   }
-  return out.sort((a, b) => a.t - b.t)
+  return inOrder ? out : out.sort((a, b) => a.t - b.t)
 }
 
 export function startOfMonth(d: Date): Date {
@@ -470,11 +496,18 @@ export function monthTotals(filter: UsageFilter = {}, now = new Date()): UsageTo
   return totals(queryUsage({ from: startOfMonth(now), to: now.getTime() + 1, filter }))
 }
 
+function forgetMonths(): void {
+  months.clear()
+  ordered.clear()
+  diskMonths = null
+  checkedTail.clear()
+}
+
 /** Turns on reading and writing the month files (app start). */
 export function enableLedger(): void {
   generation++
   persist = true
-  months.clear()
+  forgetMonths()
   pending.clear()
 }
 
@@ -485,7 +518,7 @@ export function setLedgerDir(dir: string | null): void {
   generation++
   dirOverride = dir
   persist = dir !== null
-  months.clear()
+  forgetMonths()
   pending.clear()
 }
 
@@ -493,7 +526,7 @@ export function setLedgerDir(dir: string | null): void {
 export function resetLedgerCache(): void {
   flushLedger()
   generation++
-  months.clear()
+  forgetMonths()
 }
 
 /** A small marker file in the ledger folder (one-time jobs such as the migration). */
