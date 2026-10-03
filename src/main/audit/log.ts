@@ -166,7 +166,8 @@ export function listAudit(date: string, taskId?: string): AuditEntry[] {
   return out
 }
 
-function describe(e: AuditEntry): string {
+/** One action in plain words ("clicked “Reply”", "typed 12 characters"). */
+export function describeAuditEntry(e: AuditEntry): string {
   const a = e.action
   const what =
     a.type === 'type'
@@ -187,7 +188,7 @@ function describe(e: AuditEntry): string {
 /** "What did you just do?": the last task's actions in plain words. */
 export function lastTaskSummary(): string {
   if (!last.length) return 'I haven’t done anything on your computer yet.'
-  const lines = last.slice(-8).map((e) => `- ${describe(e)}`)
+  const lines = last.slice(-8).map((e) => `- ${describeAuditEntry(e)}`)
   const more = last.length > 8 ? `\n…and ${last.length - 8} earlier steps.` : ''
   return `Here’s what I just did:\n${lines.join('\n')}${more}`
 }
