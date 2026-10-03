@@ -91,11 +91,14 @@ const FRAME_CACHE = 8
 const BLUR_PAUSE_MS = 60_000
 const BLUR_POLL_MS = 5000
 const RESUME_OFFER_DELAY_MS = 4000
+/** The packs load this long after start unless something needs them sooner. */
+const REGISTRY_LOAD_DELAY_MS = 3000
 /** "start lesson 2" refers to the list "teach me <app>" read out this recently. */
 const LIST_TTL_MS = 5 * 60_000
 const LIST_MAX = 9
 
 let registry: SkillRegistry | null = null
+let registryRoots: { builtin: string; user: string } | null = null
 let store: ProgressStore | null = null
 let runner: LessonRunner | null = null
 let offer: ResumeOffer | null = null
@@ -474,10 +477,10 @@ async function recordedApp(): Promise<RecordedApp | null> {
   const w = await recentForeground(900)
   if (!w) return null
   const process = w.process || w.exe
-  const skill = registry?.matchApp({ process, title: w.title })
+  const skill = packRegistry()?.matchApp({ process, title: w.title })
   if (skill) return { id: skill.id, name: skill.name, process }
   const id = appIdFor(null, process)
-  return { id, name: registry?.get(id)?.name ?? id, process }
+  return { id, name: packRegistry()?.get(id)?.name ?? id, process }
 }
 
 /** A screenshot the user asked for during a recording (memory only). */
@@ -537,12 +540,12 @@ function installRecorder(base: string): void {
     say: (text) => announce(text, { kind: 'answer' }),
     lessonsDir: () => userLessonsDir(skillsRoot),
     draftFile: () => join(base, 'teach', 'draft.lesson.json'),
-    reload: () => registry?.load(),
+    reload: () => packRegistry()?.load(),
     play: (lesson) => {
       if (!runner) return false
       offer = null
       runner.start(lesson, {
-        skill: registry?.get(lesson.app) ?? null,
+        skill: packRegistry()?.get(lesson.app) ?? null,
         source: 'generated',
         autoStart: true,
         ...pacingFor(loadConfig().a11y)
@@ -550,7 +553,7 @@ function installRecorder(base: string): void {
       return true
     },
     lessonRunning: () => !!runner?.running(),
-    appName: (id) => registry?.get(id)?.name ?? id,
+    appName: (id) => packRegistry()?.get(id)?.name ?? id,
     log: (msg) => log('plan', msg),
     handled: HANDLED,
     skillOut: (input) => (skillSink ? skillSink(input) : Promise.resolve())
@@ -610,16 +613,16 @@ export function importTutorialFrom(src: TutorialSource, appId?: string): Promise
     { appId },
     {
       fetch: pinnedFetch(),
-      app: (id) => importApp(registry?.get(id)),
+      app: (id) => importApp(packRegistry()?.get(id)),
       appByName: (name) => {
-        const all = registry?.all() ?? []
+        const all = packRegistry()?.all() ?? []
         const first =
           name
             .replace(/[^A-Za-z0-9 ]/g, ' ')
             .trim()
             .split(/\s+/)[0] ?? ''
         const id = matchAppOnly(name, all) ?? (first ? matchAppOnly(first, all) : null)
-        return importApp(id ? registry?.get(id) : null)
+        return importApp(id ? packRegistry()?.get(id) : null)
       },
       complete: async (system, user, signal) => {
         const { llm, model, effort } = getProvider('fast')
@@ -786,6 +789,18 @@ function realPorts(): Ports {
 // ---- Public API ----
 
 export function skillRegistry(): SkillRegistry | null {
+  return packRegistry()
+}
+
+/** The app packs and lessons, read from disk the first time they are needed. */
+function packRegistry(): SkillRegistry | null {
+  if (registry || !registryRoots) return registry
+  registry = new SkillRegistry(registryRoots).load()
+  for (const p of registry.problems()) log('fail', `skill pack: ${p.file}: ${p.message}`)
+  log(
+    'plan',
+    `teach: ${registry.all().length} packs, ${registry.all().reduce((n, s) => n + s.lessons.length, 0)} lessons`
+  )
   return registry
 }
 
@@ -808,7 +823,7 @@ export function startLesson(
   id: string,
   opts: { stepIndex?: number; autoStart?: boolean } = {}
 ): boolean {
-  const found = registry?.lesson(id)
+  const found = packRegistry()?.lesson(id)
   if (!found || !runner || refuseWhileRecording()) return false
   offer = null
   const active = store?.get().active
@@ -843,6 +858,7 @@ function startGenerated(lesson: Lesson, skill: Skill | null): void {
 
 /** Writes the last generated lesson to the user's lessons; null when there is none. */
 export function saveGeneratedLesson(name?: string): Lesson | null {
+  const registry = packRegistry()
   const last = lastGenerated
   if (!last || !registry || !skillsRoot) return null
   const dir = userLessonsDir(skillsRoot)
@@ -887,7 +903,7 @@ export function startOrResume(id: string): boolean {
   }
   const o = store
     ? resumeOffer(store.get(), Date.now(), (lid) => {
-        const f = registry?.lesson(lid)
+        const f = packRegistry()?.lesson(lid)
         return f ? { lesson: f.lesson, appName: f.skill.name } : null
       })
     : null
@@ -913,12 +929,14 @@ export function startReview(id: string): { ok: boolean; error?: string } {
 }
 
 export function listLessons(appId?: string): LessonListItem[] {
+  const registry = packRegistry()
   if (!registry || !store) return []
   const mine = new Set(registry.userLessons().map((x) => x.lesson.id))
   return lessonList(registry.all(), store.get(), mine, appId)
 }
 
 export function lessonProgress(): LessonProgressView {
+  const registry = packRegistry()
   if (!registry || !store) return { active: null, recent: [], apps: [], reviews: [] }
   return progressView(
     store.get(),
@@ -931,6 +949,7 @@ export function lessonProgress(): LessonProgressView {
 
 /** Deletes one of the user's own lessons (never a pack lesson). */
 export function deleteLesson(id: string): boolean {
+  const registry = packRegistry()
   if (!registry || !skillsRoot) return false
   if (!registry.userLessons().some((x) => x.lesson.id === id)) return false
   const ok = deleteUserLesson(userLessonsDir(skillsRoot), id)
@@ -956,7 +975,7 @@ function listAppLessons(skill: Skill): unknown {
 }
 
 function candidates(): LessonCandidate[] {
-  return (registry?.all() ?? []).flatMap((s) =>
+  return (packRegistry()?.all() ?? []).flatMap((s) =>
     s.lessons.map((l) => ({ id: l.id, title: l.title, appId: s.id, appName: s.name }))
   )
 }
@@ -965,7 +984,7 @@ function resumeOffered(): boolean {
   const o = offer
   if (!o || !runner) return false
   offer = null
-  if (o.lesson && !registry?.lesson(o.lessonId)) {
+  if (o.lesson && !packRegistry()?.lesson(o.lessonId)) {
     // Generated lesson kept inline in the progress file.
     runner.start(o.lesson, {
       ...pacingFor(loadConfig().a11y),
@@ -985,6 +1004,7 @@ function resumeOffered(): boolean {
  * undefined and goes on to the assistant with lesson context.
  */
 export function interceptLesson(utterance: string): unknown | undefined {
+  const registry = packRegistry()
   if (!runner || !registry) return undefined
   // While recording, only the recording's own commands; nothing starts a lesson.
   if (recordingNow()) return recorder?.intercept(utterance)
@@ -1088,7 +1108,7 @@ function installVideo(): void {
       if (!st?.lesson) return null
       return {
         title: st.lesson.title,
-        app: registry?.get(st.skillId ?? st.lesson.app)?.name ?? st.lesson.app,
+        app: packRegistry()?.get(st.skillId ?? st.lesson.app)?.name ?? st.lesson.app,
         index: st.index,
         says: st.lesson.steps.map((s) => s.say)
       }
@@ -1120,6 +1140,7 @@ function watchFocus(): void {
     }
     void recentForeground(BLUR_POLL_MS).then((w) => {
       // The lesson or step may have moved on while the agent answered.
+      const registry = packRegistry()
       if (!w || !registry || watchedStep(r) !== step) return
       if (away?.step !== step) away = null
       const here = registry.matchApp({ process: w.process || w.exe, title: w.title })?.id
@@ -1136,7 +1157,7 @@ function watchFocus(): void {
 
 /** The waiting step whose app focus is watched ("lesson#index"), else null. */
 function watchedStep(r: LessonRunner): string | null {
-  const skill = registry?.get(r.state.skillId ?? '')
+  const skill = packRegistry()?.get(r.state.skillId ?? '')
   // Windows lessons span many apps; lessons-only skills cannot tell their app.
   const watched = !!skill && skill.id !== 'windows' && hasMatchRules(skill)
   if (!r.running() || r.state.phase !== 'step.waiting' || !watched) return null
@@ -1145,7 +1166,7 @@ function watchedStep(r: LessonRunner): string | null {
 
 function installLearning(): void {
   learning = createLearning({
-    registry: () => registry,
+    registry: () => packRegistry(),
     store: () => store,
     runner: () => runner,
     config: () => loadConfig().teach,
@@ -1189,15 +1210,8 @@ export function installTeach(): void {
   })
   for (const m of moved.migrated) log('done', `guide "${m.guide}" is now lesson ${m.lessonId}`)
   for (const f of moved.failed) log('fail', `guide not migrated: ${f.file} (${f.reason})`)
-  registry = new SkillRegistry({
-    builtin: join(app.getAppPath(), 'skills'),
-    user: skillsRoot
-  }).load()
-  for (const p of registry.problems()) log('fail', `skill pack: ${p.file}: ${p.message}`)
-  log(
-    'plan',
-    `teach: ${registry.all().length} packs, ${registry.all().reduce((n, s) => n + s.lessons.length, 0)} lessons`
-  )
+  registryRoots = { builtin: join(app.getAppPath(), 'skills'), user: skillsRoot }
+  setTimeout(packRegistry, REGISTRY_LOAD_DELAY_MS).unref?.()
 
   store = new ProgressStore(join(base, 'teach', 'progress.json'))
   runner = new LessonRunner(realPorts(), { progress: store })
@@ -1205,7 +1219,7 @@ export function installTeach(): void {
   setLessonContextProvider(() => runner?.context() ?? null)
   setLessonActiveProbe(() => !!runner?.running())
   setTeachHandler(
-    makeShowMeHow({ registry: () => registry, start: startGenerated, howto: howtoForeground })
+    makeShowMeHow({ registry: () => packRegistry(), start: startGenerated, howto: howtoForeground })
   )
 
   bus.on('lesson.command', (e) => {
@@ -1221,13 +1235,13 @@ export function installTeach(): void {
   installLearning()
   installRecorder(base)
   installVideo()
-  installPackSupport({ registry: () => registry, skillsRoot: () => skillsRoot })
-  installChallenges({ registry: () => registry, store: () => store })
-  installBridgeOffer((id) => registry?.lesson(id)?.skill.id ?? null)
+  installPackSupport({ registry: () => packRegistry(), skillsRoot: () => skillsRoot })
+  installChallenges({ registry: () => packRegistry(), store: () => store })
+  installBridgeOffer((id) => packRegistry()?.lesson(id)?.skill.id ?? null)
 
   // Passive resume offer once the bar can show it; nothing starts by itself.
   offer = resumeOffer(store.get(), Date.now(), (id) => {
-    const f = registry?.lesson(id)
+    const f = packRegistry()?.lesson(id)
     return f ? { lesson: f.lesson, appName: f.skill.name } : null
   })
   if (offer) {
