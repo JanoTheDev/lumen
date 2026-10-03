@@ -1,6 +1,6 @@
 // Voice session controller of the assistant window: records on `voice:start`, transcribes,
 // sends the query (or dictation) to main and runs what comes back. Draws nothing; the bar
-// shows the state main pushes and reads the input level from --voice-level.
+// shows the state main pushes and reads the input level from voiceLevel().
 import { useEffect, useRef } from 'react'
 import type { ModelResponse } from '@shared/types'
 import { useVoice, shouldDropTranscript, type VoiceResultInfo } from '../voice/useVoice'
