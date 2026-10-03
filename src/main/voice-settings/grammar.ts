@@ -115,18 +115,109 @@ const F = '(?:(?:the|my|your) )?'
 
 // ---- per-row sentences ----
 
+const ON_VERBS = '(?:turn on|switch on|enable|activate)'
+const OFF_VERBS = '(?:turn off|switch off|disable|deactivate|dont use|do not use|no more)'
+const NUMBER_RE = '(\\d+(?:\\.\\d+)?)(?: (percent|times|x))?'
+
+interface BoolForms {
+  on: RegExp
+  off: RegExp
+  start?: RegExp
+  stop?: RegExp
+  show?: RegExp
+  hide?: RegExp
+}
+
+interface NumberForms {
+  more: RegExp
+  up: RegExp
+  less: RegExp
+  down: RegExp
+  reset: RegExp
+  to: RegExp
+}
+
+interface NameSet {
+  needsScope: boolean
+  query: RegExp[]
+  bool?: BoolForms
+  enumForms?: RegExp[]
+  number?: NumberForms
+}
+
 interface Compiled {
   row: SettingRow
   /** Regexes over all names / the names that need Lumen in the words. */
-  sets: { names: string; multi: string; needsScope: boolean }[]
+  sets: NameSet[]
+}
+
+function queryForms(N: string): RegExp[] {
+  return [
+    new RegExp(`^(?:what is|whats|what s|tell me) (?:my|your) ${N}(?: set to| setting| now| at)?$`),
+    new RegExp(`^(?:what is|whats|what s) (?:the )?${N} (?:set to|setting)$`),
+    new RegExp(
+      `^(?:is|are) ${F}${N} (?:on|off|enabled|disabled|turned on|turned off|active|switched on|switched off)$`
+    )
+  ]
+}
+
+function boolForms(row: SettingRow, N: string, multi: string): BoolForms {
+  const forms: BoolForms = {
+    on: new RegExp(`^${ON_VERBS} ${F}${N}$|^(?:turn|switch) ${F}${N} on$|^${F}${N} on$`),
+    off: new RegExp(`^${OFF_VERBS} ${F}${N}$|^(?:turn|switch) ${F}${N} off$|^${F}${N} off$`)
+  }
+  if (multi) {
+    const M = `(?:${multi})`
+    forms.start = new RegExp(`^(?:start|start using) ${F}${M}$`)
+    forms.stop = new RegExp(`^(?:stop|stop using) ${F}${M}$`)
+  }
+  if (row.visual) {
+    forms.show = new RegExp(`^show ${F}${N}$`)
+    forms.hide = new RegExp(`^hide ${F}${N}$|^(?:dont|stop) show(?:ing)? ${F}${N}$`)
+  }
+  return forms
+}
+
+function enumForms(row: EnumRow, N: string): RegExp[] {
+  const V = alt(row.values.flatMap((v) => v.words))
+  return [
+    new RegExp(
+      `^(?:set|change|switch|make|put) ${F}${N} (?:to|into) (?:the |a )?(${V})(?: ${N})?$`
+    ),
+    new RegExp(`^(?:use|switch to|change to|go to|pick|choose) (?:the |a )?(${V}) ${N}$`),
+    new RegExp(`^make ${F}${N} (${V})$`)
+  ]
+}
+
+function numberForms(row: NumberRow, N: string): NumberForms {
+  const more = alt(row.more)
+  const less = alt(row.less)
+  const step = '(?:a (?:little |bit |lot )?)?'
+  return {
+    more: new RegExp(`^(?:make|turn) ${F}${N} ${step}(?:${more})$`),
+    up: new RegExp(`^(?:increase|raise|turn up) ${F}${N}$|^${F}${N} up$`),
+    less: new RegExp(`^(?:make|turn) ${F}${N} ${step}(?:${less})$`),
+    down: new RegExp(`^(?:decrease|lower|reduce|turn down) ${F}${N}$|^${F}${N} down$`),
+    reset: new RegExp(
+      `^(?:reset|restore) ${F}${N}(?: to (?:normal|default))?$|^(?:set|put) ${F}${N} (?:back )?to (?:normal|default)$`
+    ),
+    to: new RegExp(`^(?:set|change|make|put) ${F}${N} to ${NUMBER_RE}$`)
+  }
 }
 
 function compile(row: SettingRow): Compiled {
-  const sets: Compiled['sets'] = []
+  const sets: NameSet[] = []
   const add = (names: string[], needsScope: boolean): void => {
     if (!names.length) return
     const multi = names.filter((n) => n.includes(' '))
-    sets.push({ names: alt(names), multi: multi.length ? alt(multi) : '', needsScope })
+    const N = `(?:${alt(names)})`
+    const set: NameSet = { needsScope, query: queryForms(N) }
+    if (row.kind === 'number') set.number = numberForms(row, N)
+    else {
+      if (row.kind === 'enum') set.enumForms = enumForms(row, N)
+      set.bool = boolForms(row, N, multi.length ? alt(multi) : '')
+    }
+    sets.push(set)
   }
   add(row.names, row.scope === 'ambiguous')
   add(row.scopedNames ?? [], true)
@@ -135,24 +226,13 @@ function compile(row: SettingRow): Compiled {
 
 const COMPILED = SETTINGS.map(compile)
 
-const ON_VERBS = '(?:turn on|switch on|enable|activate)'
-const OFF_VERBS = '(?:turn off|switch off|disable|deactivate|dont use|do not use|no more)'
-
-function boolOp(n: string, row: SettingRow, names: string, multi: string): boolean | null {
-  const N = `(?:${names})`
-  if (new RegExp(`^${ON_VERBS} ${F}${N}$|^(?:turn|switch) ${F}${N} on$|^${F}${N} on$`).test(n))
-    return true
-  if (new RegExp(`^${OFF_VERBS} ${F}${N}$|^(?:turn|switch) ${F}${N} off$|^${F}${N} off$`).test(n))
-    return false
-  if (multi) {
-    const M = `(?:${multi})`
-    if (new RegExp(`^(?:start|start using) ${F}${M}$`).test(n)) return true
-    if (new RegExp(`^(?:stop|stop using) ${F}${M}$`).test(n)) return false
-  }
-  if (row.visual) {
-    if (new RegExp(`^show ${F}${N}$`).test(n)) return true
-    if (new RegExp(`^hide ${F}${N}$|^(?:dont|stop) show(?:ing)? ${F}${N}$`).test(n)) return false
-  }
+function boolOp(n: string, f: BoolForms): boolean | null {
+  if (f.on.test(n)) return true
+  if (f.off.test(n)) return false
+  if (f.start?.test(n)) return true
+  if (f.stop?.test(n)) return false
+  if (f.show?.test(n)) return true
+  if (f.hide?.test(n)) return false
   return null
 }
 
@@ -160,16 +240,7 @@ function valueOf(row: EnumRow, said: string): EnumRow['values'][number] | undefi
   return row.values.find((v) => v.words.includes(said))
 }
 
-function enumOp(n: string, row: EnumRow, names: string): SetOp | null {
-  const N = `(?:${names})`
-  const V = alt(row.values.flatMap((v) => v.words))
-  const forms = [
-    new RegExp(
-      `^(?:set|change|switch|make|put) ${F}${N} (?:to|into) (?:the |a )?(${V})(?: ${N})?$`
-    ),
-    new RegExp(`^(?:use|switch to|change to|go to|pick|choose) (?:the |a )?(${V}) ${N}$`),
-    new RegExp(`^make ${F}${N} (${V})$`)
-  ]
+function enumOp(n: string, row: EnumRow, forms: RegExp[]): SetOp | null {
   for (const re of forms) {
     const m = re.exec(n)
     const v = m && valueOf(row, m[1])
@@ -178,40 +249,13 @@ function enumOp(n: string, row: EnumRow, names: string): SetOp | null {
   return null
 }
 
-const NUMBER_RE = '(\\d+(?:\\.\\d+)?)(?: (percent|times|x))?'
-
-function numberOp(n: string, row: NumberRow, names: string): SetOp | null {
-  const N = `(?:${names})`
-  const more = alt(row.more)
-  const less = alt(row.less)
-  const step = '(?:a (?:little |bit |lot )?)?'
-  if (new RegExp(`^(?:make|turn) ${F}${N} ${step}(?:${more})$`).test(n)) return { step: 1 }
-  if (new RegExp(`^(?:increase|raise|turn up) ${F}${N}$|^${F}${N} up$`).test(n)) return { step: 1 }
-  if (new RegExp(`^(?:make|turn) ${F}${N} ${step}(?:${less})$`).test(n)) return { step: -1 }
-  if (new RegExp(`^(?:decrease|lower|reduce|turn down) ${F}${N}$|^${F}${N} down$`).test(n))
-    return { step: -1 }
-  if (
-    new RegExp(
-      `^(?:reset|restore) ${F}${N}(?: to (?:normal|default))?$|^(?:set|put) ${F}${N} (?:back )?to (?:normal|default)$`
-    ).test(n)
-  )
-    return { reset: true }
-  const m = new RegExp(`^(?:set|change|make|put) ${F}${N} to ${NUMBER_RE}$`).exec(n)
+function numberOp(n: string, f: NumberForms): SetOp | null {
+  if (f.more.test(n) || f.up.test(n)) return { step: 1 }
+  if (f.less.test(n) || f.down.test(n)) return { step: -1 }
+  if (f.reset.test(n)) return { reset: true }
+  const m = f.to.exec(n)
   if (m) return { number: Number(m[1]), percent: m[2] === 'percent' }
   return null
-}
-
-function queryOf(n: string, names: string): boolean {
-  const N = `(?:${names})`
-  return (
-    new RegExp(
-      `^(?:what is|whats|what s|tell me) (?:my|your) ${N}(?: set to| setting| now| at)?$`
-    ).test(n) ||
-    new RegExp(`^(?:what is|whats|what s) (?:the )?${N} (?:set to|setting)$`).test(n) ||
-    new RegExp(
-      `^(?:is|are) ${F}${N} (?:on|off|enabled|disabled|turned on|turned off|active|switched on|switched off)$`
-    ).test(n)
-  )
 }
 
 function rowCommand(n: string, scoped: boolean, c: Compiled): SettingsCommand | null {
@@ -230,19 +274,19 @@ function rowCommand(n: string, scoped: boolean, c: Compiled): SettingsCommand | 
   }
   for (const s of c.sets) {
     if (s.needsScope && !scoped) continue
-    if (row.queries?.some((re) => re.test(n)) || queryOf(n, s.names))
+    if (row.queries?.some((re) => re.test(n)) || s.query.some((re) => re.test(n)))
       return { kind: 'query', id: row.id }
-    if (row.kind === 'number') {
-      const op = numberOp(n, row, s.names)
+    if (s.number) {
+      const op = numberOp(n, s.number)
       if (op) return { kind: 'set', id: row.id, op }
       continue
     }
-    if (row.kind === 'enum') {
-      const op = enumOp(n, row, s.names)
+    if (row.kind === 'enum' && s.enumForms) {
+      const op = enumOp(n, row, s.enumForms)
       if (op) return { kind: 'set', id: row.id, op }
       if (row.onValue === undefined) continue
     }
-    const on = boolOp(n, row, s.names, s.multi)
+    const on = s.bool ? boolOp(n, s.bool) : null
     if (on !== null) return { kind: 'set', id: row.id, op: { on } }
   }
   return null
@@ -360,6 +404,15 @@ const NOT_A_VOICE = new Set([
 ])
 
 const VOICE_NAME = '([a-z]+(?: [a-z]+){0,2})'
+const VOICE_EXPLICIT_RE = new RegExp(
+  `^(?:change|set|switch) (?:your|the) voice to (?:the |a )?${VOICE_NAME}(?: voice)?$`
+)
+const VOICE_PLAIN_RE = new RegExp(
+  `^(?:use|switch to|change to|try|pick) (?:the )?voice ${VOICE_NAME}$`
+)
+const VOICE_NAME_FIRST_RE = new RegExp(
+  `^(?:use|switch to|change to|try|pick) (?:the |a )?${VOICE_NAME} voice$`
+)
 
 function voiceCommand(n: string): SettingsCommand | null {
   if (
@@ -384,12 +437,8 @@ function voiceCommand(n: string): SettingsCommand | null {
       name: /^(?:female|woman)/.test(gender[1]) ? 'female' : 'male',
       explicit: true
     }
-  const explicit = new RegExp(
-    `^(?:change|set|switch) (?:your|the) voice to (?:the |a )?${VOICE_NAME}(?: voice)?$`
-  ).exec(n)
-  const plain =
-    new RegExp(`^(?:use|switch to|change to|try|pick) (?:the )?voice ${VOICE_NAME}$`).exec(n) ??
-    new RegExp(`^(?:use|switch to|change to|try|pick) (?:the |a )?${VOICE_NAME} voice$`).exec(n)
+  const explicit = VOICE_EXPLICIT_RE.exec(n)
+  const plain = VOICE_PLAIN_RE.exec(n) ?? VOICE_NAME_FIRST_RE.exec(n)
   const m = explicit ?? plain
   if (!m) return null
   const name = m[1]
@@ -464,20 +513,20 @@ const SECTION_ALIASES: [string, SettingsSection, boolean][] = [
 const OPEN = '(?:open|show|show me|go to|take me to|bring up|pull up|display)'
 const PAGE = '(?:settings|setting|section|page|options|preferences)'
 const SECTION_RE = alt(SECTION_ALIASES.map((a) => a[0]))
+const OPEN_PAGE_RE = new RegExp(`^${OPEN} ${F}(${SECTION_RE}) ${PAGE}$`)
+const OPEN_SETTINGS_FOR_RE = new RegExp(
+  `^${OPEN} (?:the )?(?:settings|options|preferences) (?:for|on|about) (?:the )?(${SECTION_RE})$`
+)
+const OPEN_SETTINGS_RE = new RegExp(`^${OPEN} ${F}(?:settings|options|preferences)$`)
 
 function openCommand(n: string, scoped: boolean): SettingsCommand | null {
-  const m =
-    new RegExp(`^${OPEN} ${F}(${SECTION_RE}) ${PAGE}$`).exec(n) ??
-    new RegExp(
-      `^${OPEN} (?:the )?(?:settings|options|preferences) (?:for|on|about) (?:the )?(${SECTION_RE})$`
-    ).exec(n)
+  const m = OPEN_PAGE_RE.exec(n) ?? OPEN_SETTINGS_FOR_RE.exec(n)
   if (m) {
     const hit = SECTION_ALIASES.find((a) => a[0] === m[1])
     if (!hit || (hit[2] && !scoped)) return null
     return { kind: 'open', section: hit[1] }
   }
-  if (scoped && new RegExp(`^${OPEN} ${F}(?:settings|options|preferences)$`).test(n))
-    return { kind: 'open', section: null }
+  if (scoped && OPEN_SETTINGS_RE.test(n)) return { kind: 'open', section: null }
   return null
 }
 
