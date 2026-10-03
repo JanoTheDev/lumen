@@ -1,4 +1,5 @@
-// Where one final transcript goes, first match wins:
+// Where one final transcript goes, first match wins. This is the pure decision, built from the
+// same matchers the app runs:
 //   1. empty                → nothing ("Didn't catch that")
 //   2. a confirm is waiting → yes / no / always, in the voice language (stop counts as no)
 //   3. a lesson runs        → lesson word, whole utterance only (07 parseLessonCommand)
@@ -7,12 +8,28 @@
 //                             only while something acts. Word boundaries ("stopwatch" is not)
 //   6. everything else      → the query pipeline, with the voice language
 //
-// This is the pure decision, built from the same matchers the app runs. At runtime the steps
-// are executed where they live: the query IPC (confirm: agent-mode answerAlways, a11y
-// beforeUtterance), then the intercept chain (agent-mode, query/local: teach interceptLesson,
-// 06 grammar via setLocalGrammar, prefilter cancel), then the pipeline. router-hook.ts adds the
-// two things that chain does not do itself: other languages' short answers and "stop, …"
-// while acting.
+// The live order (ipc/query.ts `assistant:query`, then the intercept chain in index.ts, then
+// pipeline.ts runTurn) has more steps around these:
+//   a. router-hook prepareVoiceText: other languages' short answers, "stop, …" while acting
+//   b. agent-mode answerAlways: "always" on a grantable policy confirm
+//   c. agent-mode interceptAgentUtterance while a foreground task runs: stop words first,
+//      else the answer to its ask_user question; "keep going" on its own "Keep going?" card;
+//      go / stop / wait during the countdown; stop, wait / pause, resume while it runs
+//   d. a11y beforeUtterance: yes / no on a waiting confirm (anything else drops the card),
+//      caption corrections
+//   e. intercept chain: interceptClaudeCode (with coding-skill draft review), interceptStyles
+//      (style draft review), interceptAgentMode (skill making and draft review, task chat,
+//      "what did you do"), interceptRoutines, interceptFace, interceptHelpers,
+//      interceptDeictic, interceptDocs, interceptLabels, interceptLocal (teach interceptLesson
+//      with the recorded-lesson draft review, an ambiguous skill trigger, 06's grammar, then
+//      prefilter guide / memory / cancel words). Draft review words go only to the newest
+//      waiting draft, and bare "no" / "cancel" / "forget it" discard one only while nothing
+//      runs (query/drafts)
+//   f. a running agent task asks before a new request replaces it
+//   g. the request queue: preempt (a pointed-at file shared, auto-detected dictation), then
+//      runTurn: "resume the task", usage questions, buddies (draft review, making, calling),
+//      answer-card follow-ups, read-the-web, "in the background …" / skill triggers, then
+//      the router (or legacy planner) and the model, show me how, agent-mode tasks
 import type { VoiceLanguage } from '@shared/config'
 import {
   IDLE_CONTEXT,
