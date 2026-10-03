@@ -59,19 +59,42 @@ export function similarity(a: string, b: string): number {
 }
 
 function levenshtein(a: string, b: string): number {
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i)
+  let prev = new Uint32Array(b.length + 1)
+  let cur = new Uint32Array(b.length + 1)
+  for (let j = 0; j <= b.length; j++) prev[j] = j
   for (let i = 1; i <= a.length; i++) {
-    const cur = [i]
+    cur[0] = i
+    const ca = a.charCodeAt(i - 1)
     for (let j = 1; j <= b.length; j++)
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (ca === b.charCodeAt(j - 1) ? 0 : 1)
+      )
+    const t = prev
     prev = cur
+    cur = t
   }
   return prev[b.length]
 }
 
-function phrasesOf(s: LoadedSkill): string[] {
-  const own = s.manifest.triggers.map(normalizeUtterance).filter(Boolean)
-  return [...own, s.manifest.name.replace(/-/g, ' ')]
+interface SkillPhrases {
+  skill: LoadedSkill
+  phrases: string[]
+  own: Set<string>
+}
+
+function phraseTable(registry: SkillRegistry): readonly SkillPhrases[] {
+  return registry.memo('trigger-phrases', () =>
+    registry.enabled().map((skill) => {
+      const normalized = skill.manifest.triggers.map(normalizeUtterance)
+      return {
+        skill,
+        phrases: [...normalized.filter(Boolean), skill.manifest.name.replace(/-/g, ' ')],
+        own: new Set(normalized)
+      }
+    })
+  )
 }
 
 interface Scored {
@@ -92,9 +115,8 @@ export function matchSkillTrigger(
   const said = forms(norm)
   const threshold = ctx.threshold ?? DEFAULT_THRESHOLD
   const best = new Map<string, Scored>()
-  for (const skill of registry.enabled()) {
-    const own = new Set(skill.manifest.triggers.map(normalizeUtterance))
-    for (const phrase of phrasesOf(skill)) {
+  for (const { skill, phrases, own } of phraseTable(registry)) {
+    for (const phrase of phrases) {
       // The bare skill name only counts with "run/use ... (skill)" or said alone.
       for (const f of own.has(phrase) ? said : [said[said.length - 1]]) {
         const raw = similarity(f, phrase)

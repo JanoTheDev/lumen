@@ -47,6 +47,20 @@ function line(m: SkillManifest, untrusted = false): string {
 
 /** L1 for the cached prefix; "" when no skill is enabled. */
 export function skillIndexText(registry: SkillRegistry, ctx: SkillIndexContext = {}): string {
+  const app = ctx.app ?? null
+  const maxSkills = ctx.maxSkills ?? INDEX_MAX_SKILLS
+  const maxTokens = ctx.maxTokens ?? INDEX_MAX_TOKENS
+  return registry.memo(`index|${maxSkills}|${maxTokens}|${app ?? ''}`, () =>
+    buildIndex(registry, app, maxSkills, maxTokens)
+  )
+}
+
+function buildIndex(
+  registry: SkillRegistry,
+  app: string | null,
+  maxSkills: number,
+  maxTokens: number
+): string {
   const loaded = registry.enabled()
   const skills = loaded.map((s) => s.manifest)
   if (!skills.length) return ''
@@ -55,14 +69,11 @@ export function skillIndexText(registry: SkillRegistry, ctx: SkillIndexContext =
   )
   const lineOf = (m: SkillManifest): string => line(m, untrusted.has(m.name))
   const head = untrusted.size ? `${HEADER}\n${UNTRUSTED_SKILLS_NOTE}` : HEADER
-  const maxSkills = ctx.maxSkills ?? INDEX_MAX_SKILLS
-  const maxTokens = ctx.maxTokens ?? INDEX_MAX_TOKENS
   const all = skills.map(lineOf)
   const full = [head, ...all].join('\n')
   // Everything fits: alphabetical, independent of the foreground app, so the prefix stays put.
   if (skills.length <= maxSkills && estimateTokens(full) <= maxTokens) return full
 
-  const app = ctx.app ?? null
   const ranked = [...skills].sort((a, b) => {
     const boost = (m: SkillManifest): number => (app && m.apps.includes(app) ? 0 : 1)
     return boost(a) - boost(b) || a.name.localeCompare(b.name)

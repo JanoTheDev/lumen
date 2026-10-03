@@ -30,6 +30,7 @@ export const SKILL_PACK_KIND = 'agent-skill'
 const APP_PACK_MANIFEST = 'skill.json'
 /** Folders in skills/ and ~/.ai-overlay/skills that are not skills. */
 export const RESERVED_DIRS = new Set(['schema', 'builtin', 'user', 'lessons', 'skills'])
+const MAX_MEMOS = 64
 
 export type SkillOrigin = SkillSummary['origin']
 
@@ -98,6 +99,9 @@ export class SkillRegistry {
   private listeners = new Set<() => void>()
   private watcher: FSWatcher | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
+  private generation = 0
+  private memoKey = ''
+  private memos = new Map<string, unknown>()
 
   constructor(
     readonly roots: SkillRoots,
@@ -106,6 +110,7 @@ export class SkillRegistry {
 
   /** (Re)reads every location. Broken skills are skipped and listed in problems(). */
   load(): this {
+    this.generation++
     this.skills.clear()
     this.problemList = []
     this.conflictList = []
@@ -147,19 +152,58 @@ export class SkillRegistry {
   }
 
   all(): LoadedSkill[] {
-    return [...this.skills.values()].sort((a, b) => a.manifest.name.localeCompare(b.manifest.name))
+    return [...this.sorted()]
   }
 
   /** Switched-on task skills, by name. Reply styles (`kind: style`) are in styles(). */
   enabled(): LoadedSkill[] {
-    return this.all().filter(
-      (s) => s.manifest.kind !== 'style' && !this.opts.state?.isDisabled(s.manifest.name)
+    return [...this.enabledList()]
+  }
+
+  /**
+   * A value derived from the loaded skills and their on/off and trust state, built once and
+   * kept until a load or a state change. Callers must not mutate what they get back.
+   */
+  memo<T>(key: string, build: () => T): T {
+    const version = this.version()
+    if (version !== this.memoKey) {
+      this.memoKey = version
+      this.memos.clear()
+    }
+    if (this.memos.has(key)) return this.memos.get(key) as T
+    const value = build()
+    if (this.memos.size >= MAX_MEMOS) this.memos.clear()
+    this.memos.set(key, value)
+    return value
+  }
+
+  /** Changes whenever the loaded skills or their saved on/off and trust state change. */
+  version(): string {
+    const st = this.opts.state?.get()
+    if (!st) return String(this.generation)
+    const pins = Object.entries(st.pins)
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+    return `${this.generation}|${st.disabled.join(',')}|${st.trusted.join(',')}|${pins.join(',')}`
+  }
+
+  private sorted(): readonly LoadedSkill[] {
+    return this.memo('all', () =>
+      [...this.skills.values()].sort((a, b) => a.manifest.name.localeCompare(b.manifest.name))
+    )
+  }
+
+  private enabledList(): readonly LoadedSkill[] {
+    return this.memo('enabled', () =>
+      this.sorted().filter(
+        (s) => s.manifest.kind !== 'style' && !this.opts.state?.isDisabled(s.manifest.name)
+      )
     )
   }
 
   /** Reply styles, switched on or off. */
   styles(): LoadedSkill[] {
-    return this.all().filter((s) => s.manifest.kind === 'style')
+    return this.sorted().filter((s) => s.manifest.kind === 'style')
   }
 
   get(name: string): LoadedSkill | null {
