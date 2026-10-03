@@ -17,8 +17,10 @@ import {
 } from './marks'
 import { phrase, type PhraseId } from './phrases'
 import { PageReader, type ReaderState } from './reader'
+import { helpTopicText } from './help-topics'
 import {
   commandSheet,
+  helpTopic,
   parseCommand,
   type Command,
   type CommandArgs,
@@ -98,8 +100,17 @@ export interface A11yIo {
   lessonActive?(): boolean
   /** An answer card is on screen. */
   answerShown(): boolean
-  /** Answer card / timer commands; false when there is nothing to act on. */
-  answer(op: 'pin' | 'longer' | 'close'): boolean
+  /** An answer is on screen or was in the last two minutes ("repeat that", "copy the answer"). */
+  recentAnswer?(): boolean
+  /**
+   * Answer card / timer commands; false when there is nothing to act on. `repeat` speaks the
+   * recent answer once, `copy` puts its text on the clipboard.
+   */
+  answer(op: 'pin' | 'longer' | 'close' | 'repeat' | 'copy'): boolean
+  /** The button of the bar's notice, shown now or a moment ago ("Undo", "Unmute"); else null. */
+  notice?(): 'undo' | 'unmute' | null
+  /** Presses the notice's button; false when that notice is gone. */
+  pressNotice?(action: 'undo' | 'unmute'): boolean
   log(msg: string): void
   /** 05 describeScreen: the spoken description. */
   describe(detail: 'brief' | 'full'): Promise<string>
@@ -258,6 +269,8 @@ export class A11yCommands {
       lessonActive: this.io.lessonActive?.() ?? false,
       autoScrolling: !!this.autoScroll,
       answerShown: this.io.answerShown(),
+      recentAnswer: this.io.recentAnswer?.() ?? this.io.answerShown(),
+      notice: this.io.notice?.() ?? null,
       reading: this.reader.active,
       described: this.io.now() - this.describedAt < DESCRIBED_MS
     }
@@ -315,6 +328,12 @@ export class A11yCommands {
       const node = findByName(this.io.labelNodes?.(known) ?? known, String(cmd.args.text))
       if (!node) return null
       cmd.args.elementId = node.id
+      return undefined
+    }
+    if (cmd.id === 'lumen.help-topic') {
+      const group = helpTopic(String(cmd.args.text), this.context())
+      if (!group) return null
+      cmd.args.spoken = helpTopicText(group)
       return undefined
     }
     if (cmd.id === 'lumen.help') {
@@ -448,6 +467,23 @@ export class A11yCommands {
         return
       case 'answer.close':
         this.io.answer('close')
+        return
+      case 'answer.repeat':
+        if (!this.io.answer('repeat')) throw new UserError('No answer to repeat')
+        return
+      case 'answer.copy':
+        if (!this.io.answer('copy')) throw new UserError('No answer to copy')
+        this.io.feedback('Copied.', true)
+        return
+      case 'notice.undo':
+      case 'notice.unmute': {
+        const action = cmd.id === 'notice.undo' ? 'undo' : 'unmute'
+        if (!this.io.pressNotice?.(action))
+          throw new UserError(action === 'undo' ? 'Nothing to undo' : 'Sound is not muted')
+        return
+      }
+      case 'lumen.help-topic':
+        this.io.say(String(cmd.args.spoken))
         return
       case 'lumen.settings':
         this.io.openSettings()

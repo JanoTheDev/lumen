@@ -3,8 +3,10 @@
 import { GRAMMAR, SHEET_EXTRAS, type Category, type Gate, type GrammarEntry } from './grammar/en'
 import { parseKeys } from './grammar/keys'
 import { NUMBER_SLOT, parseNumber } from './grammar/numbers'
+import { findHelpGroup, helpGroups, topicKey, type HelpRow } from './help-topics'
 
 export type { Category, Gate, GrammarEntry }
+export { registerHelpRows, type HelpRow, type HelpGroupOptions } from './help-topics'
 
 export interface CommandContext {
   marksShown: boolean
@@ -21,6 +23,10 @@ export interface CommandContext {
   described?: boolean
   /** A lesson is running (its words come first). */
   lessonActive?: boolean
+  /** An answer is on screen or was in the last two minutes ("repeat that", "copy the answer"). */
+  recentAnswer?: boolean
+  /** The button of the bar's notice ("Undo", "Unmute"), shown now or a moment ago. */
+  notice?: 'undo' | 'unmute' | null
 }
 
 export const IDLE_CONTEXT: CommandContext = {
@@ -157,6 +163,12 @@ function gateHolds(gate: Gate | undefined, ctx: CommandContext): boolean {
       return !!ctx.lessonActive
     case 'busy-target':
       return false
+    case 'recent-answer':
+      return !!ctx.recentAnswer
+    case 'notice-undo':
+      return ctx.notice === 'undo'
+    case 'notice-unmute':
+      return ctx.notice === 'unmute'
   }
 }
 
@@ -321,7 +333,10 @@ export const GATE_WHEN: Record<Gate, string> = {
   guide: 'during a guide',
   reading: 'while Lumen reads aloud',
   described: 'right after a description',
-  lesson: 'during a lesson'
+  lesson: 'during a lesson',
+  'recent-answer': 'right after an answer',
+  'notice-undo': 'while the bar offers Undo',
+  'notice-unmute': 'while the bar offers Unmute'
 }
 
 export interface SheetRow {
@@ -355,5 +370,53 @@ export function commandSheetRows(
       now: gateHolds(e.gate, ctx)
     })
   }
+  // Rows other modules registered (registerHelpRows), one section per group.
+  for (const g of helpGroups()) {
+    for (const r of g.rows) {
+      const key = `${r.say}|${g.title}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push({ category: g.title, say: r.say, does: r.does, now: true })
+    }
+  }
   return out
+}
+
+/** Spoken names of the grammar's own sections, for "what can I say about scrolling". */
+const CATEGORY_TOPIC: Record<Category, { title: string; words: string[] }> = {
+  numbers: { title: 'Numbers', words: ['number', 'mark', 'show number'] },
+  grid: { title: 'The mouse grid', words: ['grid', 'mouse grid'] },
+  pointer: { title: 'The mouse', words: ['mouse', 'click', 'clicking'] },
+  scroll: { title: 'Scrolling', words: ['scroll', 'scrolling'] },
+  keyboard: { title: 'Keyboard and typing', words: ['keyboard', 'typing', 'key', 'type'] },
+  navigation: { title: 'Apps and browsing', words: ['app', 'browser', 'tab', 'navigation'] },
+  windows: { title: 'Windows', words: ['window', 'desktop'] },
+  lumen: { title: 'Lumen', words: ['lumen', 'setting', 'dwell', 'wake word'] },
+  guide: { title: 'Guides', words: ['guide'] },
+  reading: { title: 'Reading aloud', words: ['reading', 'read', 'describe', 'read aloud'] }
+}
+
+/**
+ * The rows for "what can I say about <topic>": a registered group, else one of the grammar's
+ * sections; null when the topic names neither (the utterance goes on to the router).
+ */
+export function helpTopic(
+  topic: string,
+  ctx: CommandContext = IDLE_CONTEXT
+): { title: string; rows: HelpRow[] } | null {
+  const found = findHelpGroup(topic)
+  if (found) return found
+  const t = topicKey(topic)
+  if (!t) return null
+  for (const [cat, info] of Object.entries(CATEGORY_TOPIC) as [
+    Category,
+    typeof CATEGORY_TOPIC.lumen
+  ][]) {
+    if (!info.words.some((w) => topicKey(w) === t)) continue
+    const rows = commandSheet(ctx)
+      .filter((r) => r.category === cat)
+      .map((r) => ({ say: r.say, does: r.does }))
+    return rows.length ? { title: info.title, rows } : null
+  }
+  return null
 }

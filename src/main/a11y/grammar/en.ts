@@ -25,6 +25,12 @@ export type Gate =
   | 'described'
   /** Help sheet only: lesson commands (teach/commands.ts) run before the grammar in a lesson. */
   | 'lesson'
+  /** An answer is on screen or was in the last two minutes ("repeat that", "copy the answer"). */
+  | 'recent-answer'
+  /** The bar's notice has an Undo button (dictation command mode). */
+  | 'notice-undo'
+  /** The bar's notice has an Unmute button (sound output muted). */
+  | 'notice-unmute'
 
 export type Category =
   | 'numbers'
@@ -181,6 +187,46 @@ export const GRAMMAR: GrammarEntry[] = [
     ],
     say: 'mouse grid, mouse grid 2',
     does: 'Show a 3 by 3 grid to point anywhere'
+  },
+
+  // ---- Answer card and notice buttons (gated; plain "copy" / "undo" stay keys) ----
+  {
+    id: 'answer.repeat',
+    category: 'lumen',
+    patterns: [
+      '(repeat|repeat that|repeat it|repeat the answer|repeat your answer|say that again|say it again|what did you say|what was that|read it again|read that again|read the answer|read the answer again)'
+    ],
+    gate: 'recent-answer',
+    say: 'repeat that',
+    does: 'Say the answer again'
+  },
+  {
+    id: 'answer.copy',
+    category: 'lumen',
+    patterns: [
+      '(copy that|copy the answer|copy your answer|copy answer|copy the reply|copy your reply)'
+    ],
+    gate: 'recent-answer',
+    say: 'copy the answer',
+    does: 'Copy the answer text'
+  },
+  {
+    id: 'notice.undo',
+    category: 'lumen',
+    patterns: ['(undo|undo that|undo it|undo the edit|undo the change|undo my edit)'],
+    gate: 'notice-undo',
+    say: 'undo that',
+    does: 'Undo the edit Lumen just made'
+  },
+  {
+    id: 'notice.unmute',
+    category: 'lumen',
+    patterns: [
+      '(unmute|unmute it|unmute that|unmute the sound|unmute sound|turn the sound on|turn sound on|sound on)'
+    ],
+    gate: 'notice-unmute',
+    say: 'unmute',
+    does: 'Turn the sound on and hear the answer'
   },
 
   // ---- Numbers (marks) ----
@@ -770,6 +816,16 @@ export const GRAMMAR: GrammarEntry[] = [
     args: { on: false },
     say: 'stop scanning',
     does: 'Stop switch scanning'
+  },
+  {
+    id: 'lumen.help-topic',
+    category: 'lumen',
+    patterns: [
+      '(what can i say|what can you do|what can i ask|help|commands|voice commands) (about|for|with|in) <text>',
+      '(help me with|show commands for|list commands for) <text>'
+    ],
+    say: 'what can I say about buddies',
+    does: 'Hear the commands of one area'
   },
   {
     id: 'lumen.help',

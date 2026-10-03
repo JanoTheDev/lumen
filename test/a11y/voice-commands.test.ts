@@ -286,7 +286,14 @@ describe('voice command grammar', () => {
             ? { ...ctx, autoScrolling: true }
             : e.gate === 'reading' || e.gate === 'described'
               ? { ...ctx, reading: true, described: true }
-              : ctx
+              : e.gate === 'recent-answer'
+                ? { ...ctx, recentAnswer: true }
+                : e.gate === 'notice-undo' || e.gate === 'notice-unmute'
+                  ? {
+                      ...ctx,
+                      notice: e.gate === 'notice-undo' ? ('undo' as const) : ('unmute' as const)
+                    }
+                  : ctx
       expect(parseCommand(example, c), `${e.id}: "${example}"`).not.toBeNull()
     }
   })

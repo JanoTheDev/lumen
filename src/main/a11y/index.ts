@@ -20,7 +20,7 @@ import { setLocalGrammar } from '../query/router'
 import { flattenElements } from '../query/uia-list'
 import { conversationActive } from '../speech/hotkey'
 import { askPending, onAskSettled } from '../agent-mode/ask'
-import { speakAnswer, speakNow, stopSpeaking } from '../speech/tts'
+import { speakAlert, speakNow, speakOnce, stopSpeaking } from '../speech/tts'
 import * as assistant from '../windows/assistant'
 import * as commandSheet from '../windows/command-sheet'
 import * as screenLayer from '../windows/screen-layer'
@@ -100,7 +100,14 @@ function createAnnouncer(): Announcer {
       const r = await commands.announce(agent, text, priority, { timeoutMs: 2000 })
       return r.spoken
     },
-    speak: (text) => void speakAnswer(text).catch(() => {}),
+    // Also during a turn (errors, confirm prompts): queued after the turn's own speech.
+    speak: (text) => {
+      try {
+        speakAlert(text)
+      } catch {
+        // Nothing to speak with; the bar shows it.
+      }
+    },
     publish: (text, priority, via, kind) =>
       bus.emit({ type: 'a11y.announce', text, priority, via, kind }),
     unspoken: (text, priority, kind) =>
@@ -144,6 +151,23 @@ function feedback(text: string, ok: boolean): void {
     loadConfig().a11y.timings.statusHoldMs
   )
   announce(text, { kind: ok ? 'command' : 'error' })
+}
+
+/**
+ * "Repeat that": the screen reader, else Lumen's voice once even with spoken replies off (the
+ * user asked to hear it). False when nothing could voice it.
+ */
+function voiceOnce(text: string): boolean {
+  const agent = getAgent()
+  if (screenReaderActive() && agent?.hasCapability('announce')) {
+    commands.announce(agent, text, 'polite', { timeoutMs: 2000 }).catch(() => {})
+    return true
+  }
+  try {
+    return speakOnce(text) !== null
+  } catch {
+    return false
+  }
 }
 
 /** Voices `text` through the screen reader, else Lumen's voice; false when neither can. */
@@ -324,10 +348,19 @@ function createIo(): A11yIo {
     guideActive: () => guideState().guideActive,
     lessonActive: () => lessonRunning(),
     answerShown: () => assistant.answerShown(),
+    recentAnswer: () => assistant.recentAnswer() !== null,
     answer: (op) => {
       if (op === 'pin') return assistant.pinAnswer(true)
       if (op === 'longer') return assistant.extendTimers()
+      if (op === 'repeat') return assistant.repeatAnswer()
+      if (op === 'copy') return assistant.copyAnswer()
       assistant.close()
+      return true
+    },
+    notice: () => assistant.noticeAction(),
+    pressNotice: (action) => {
+      if (assistant.noticeAction() !== action) return false
+      assistant.command({ type: action })
       return true
     },
     log: (msg) => log('plan', msg),
@@ -392,6 +425,7 @@ function installFocusNarration(): void {
 export function installA11y(): void {
   if (a11y) return
   announcer = createAnnouncer()
+  assistant.setRepeatSpeaker(voiceOnce)
   const commandsImpl = new A11yCommands(createIo())
   a11y = commandsImpl
   setLocalGrammar((utterance) =>

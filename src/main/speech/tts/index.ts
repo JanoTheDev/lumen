@@ -18,7 +18,7 @@ import { voiceLatency } from '../latency'
 import { forTheEar } from './ear'
 import { openAiTtsAvailable, synthOpenAi } from './openai'
 import { OutputGate, ttsAllowed } from './output'
-import { TurnSpeech, ttsEngine } from './turns'
+import { TurnSpeech, ttsEngine, type TtsEngine } from './turns'
 import { WinVoices } from './win-voices'
 
 const OUTPUT_CHECK_MS = 600
@@ -101,10 +101,13 @@ function synth(
     : helper.synth(text, voice, rate, signal, lang).then((data) => ({ mime: 'audio/wav', data }))
 }
 
-/** Queues `text` for the voice renderer; false when nothing will be played. */
-function say(text: string, turnId: string): boolean {
+/**
+ * Queues `text` for the voice renderer; false when nothing will be played. `orEngine`: the
+ * engine used when spoken replies are off (a one-off the user asked for).
+ */
+function say(text: string, turnId: string, orEngine?: TtsEngine): boolean {
   const cfg = loadConfig()
-  const engine = ttsEngine(cfg.voice.tts, openAiTtsAvailable())
+  const engine = ttsEngine(cfg.voice.tts, openAiTtsAvailable()) ?? orEngine
   const clean = forTheEar(text)
   if (!engine || !clean) return false
   const n = seq++
@@ -157,6 +160,31 @@ export function speakNow(text: string): string | null {
   if (!ttsEngine(loadConfig().voice.tts, openAiTtsAvailable())) {
     throw new Error('Spoken replies are off')
   }
+  stopSpeaking()
+  const id = `preview-${seq}`
+  return say(text, id) ? id : null
+}
+
+/**
+ * Speaks `text` once even when spoken replies are off ("repeat that"): the Windows voice then.
+ * Returns the id its playback reports with, or null when nothing is played (a turn runs).
+ */
+export function speakOnce(text: string): string | null {
+  if (turns.current) return null
+  stopSpeaking()
+  const id = `preview-${seq}`
+  return say(text, id, 'windows') ? id : null
+}
+
+/**
+ * A short message (error, confirm prompt) spoken now, also while a turn runs: then it is
+ * queued after the turn's own speech instead of being dropped. Null when spoken replies are
+ * off or nothing is played.
+ */
+export function speakAlert(text: string): string | null {
+  if (!ttsEngine(loadConfig().voice.tts, openAiTtsAvailable())) return null
+  const turn = turns.current
+  if (turn) return say(text, turn) ? turn : null
   stopSpeaking()
   const id = `preview-${seq}`
   return say(text, id) ? id : null

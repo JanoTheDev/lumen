@@ -87,8 +87,18 @@ function emit(): void {
   send('assistant:state', view)
 }
 
+/** How long after it was last on screen an answer is still "that" for repeat / copy by voice. */
+export const RECENT_ANSWER_MS = 120_000
+/** The newest answer text and when it was last on screen (survives the next recording). */
+let recentAnswerText: { text: string; at: number } | null = null
+/** The newest notice with a button and when it was set (the next recording hides it). */
+let recentNotice: { action: NoticeAction; at: number } | null = null
+
+type NoticeAction = NonNullable<NonNullable<AssistantView['notice']>['action']>
+
 function patch(next: Partial<AssistantView>): void {
   view = { ...view, ...next, visible: true, autoCloseMs: autoCloseMs() }
+  if (view.answer?.markdown) recentAnswerText = { text: view.answer.markdown, at: Date.now() }
   reveal()
   emit()
 }
@@ -362,6 +372,7 @@ export function consumeDenied(): boolean {
 
 /** A one-line notice under the answer (e.g. "Sound is muted" with an Unmute button). */
 export function setNotice(notice: AssistantView['notice']): void {
+  recentNotice = notice?.action ? { action: notice.action, at: Date.now() } : null
   if (!notice && !view.notice) return
   if (!notice) {
     view = { ...view, notice: undefined }
@@ -399,6 +410,48 @@ export function setUndoHandler(fn: () => void): void {
 
 let deps: CommandDeps = { cancel: () => {} }
 
+/** Speaks an answer again even with spoken replies off; false when it could not. */
+let repeatSpeaker: (text: string) => boolean = () => false
+
+/** Set by a11y: Repeat (button or voice) speaks once through the screen reader or TTS. */
+export function setRepeatSpeaker(fn: (text: string) => boolean): void {
+  repeatSpeaker = fn
+}
+
+/** The answer on screen, else the newest one shown in the last `maxAgeMs`; null when none. */
+export function recentAnswer(maxAgeMs = RECENT_ANSWER_MS, now = Date.now()): string | null {
+  if (view.visible && view.answer?.markdown) return view.answer.markdown
+  if (!recentAnswerText || now - recentAnswerText.at > maxAgeMs) return null
+  return recentAnswerText.text
+}
+
+/** "Repeat that" by voice: the recent answer is shown again and spoken once. */
+export function repeatAnswer(): boolean {
+  const text = recentAnswer()
+  if (!text) return false
+  if (!view.visible || view.answer?.markdown !== text) showAnswer(text)
+  if (!repeatSpeaker(plainText(text))) say(plainText(text), { kind: 'answer' })
+  return true
+}
+
+/** "Copy the answer" by voice: the recent answer's text to the clipboard. */
+export function copyAnswer(): boolean {
+  const text = recentAnswer()
+  if (!text) return false
+  clipboard.writeText(text)
+  return true
+}
+
+/**
+ * The button of the notice on screen or set in the last `maxAgeMs` ("Unmute", "Undo");
+ * a recording hides the notice, so the voice command still finds it.
+ */
+export function noticeAction(maxAgeMs = RECENT_ANSWER_MS, now = Date.now()): NoticeAction | null {
+  if (view.visible && view.notice?.action) return view.notice.action
+  if (!recentNotice || now - recentNotice.at > maxAgeMs) return null
+  return recentNotice.action
+}
+
 export function setCommandDeps(d: CommandDeps): void {
   deps = d
 }
@@ -420,7 +473,8 @@ export function command(cmd: AssistantCommand): void {
     case 'repeat':
       if (view.answer) {
         if (deps.speak) deps.speak(view.answer.markdown)
-        else say(plainText(view.answer.markdown), { kind: 'answer' })
+        else if (!repeatSpeaker(plainText(view.answer.markdown)))
+          say(plainText(view.answer.markdown), { kind: 'answer' })
         patch({})
         break
       }
