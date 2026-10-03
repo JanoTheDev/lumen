@@ -2,11 +2,10 @@
 // the user prefers cloud and has a key. Audio arrives as 16 kHz mono WAV from the renderer.
 // The voice language (config voice.language) picks the offline model and tells Whisper what
 // it hears.
-import { toFile } from 'openai'
 import type { SttStatus } from '@shared/channels'
 import { recordFlatCall } from '../../ai/cost'
 import { WHISPER_USD_PER_MIN } from '../../ai/pricing'
-import { openaiClient } from '../../ai/providers/openai'
+import { loadOpenAI, openaiClient } from '../../ai/providers/openai'
 import { loadConfig, type AppConfig } from '../../config'
 import { log } from '../../logger'
 import { speechOrigin } from '../../usage/scope'
@@ -133,7 +132,10 @@ async function transcribeCloud(audio: ArrayBuffer, dictation: boolean): Promise<
   const lang = cfg.voice.language
   const terms = sttTerms(cfg)
   const t0 = Date.now()
-  const result = await openaiClient().audio.transcriptions.create(
+  const { toFile } = await loadOpenAI()
+  const result = await (
+    await openaiClient()
+  ).audio.transcriptions.create(
     {
       // Sent from memory; recordings never touch disk.
       file: await toFile(Buffer.from(audio), wav ? 'recording.wav' : 'recording.webm', {

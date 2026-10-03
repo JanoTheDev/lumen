@@ -4,7 +4,8 @@
 // from the server (Ollama /api/show capabilities, LM Studio /api/v1/models capabilities), else
 // from the name (and no tools). Requests go through the shared chat-completions backend: JSON
 // (schema slot when the server takes one), zod check, one repair turn.
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
+import { loadOpenAI } from './openai'
 import { createChatBackend, resetJsonLevels, type ChatBackend } from './chat-completions'
 import { LlmError } from './types'
 
@@ -289,7 +290,8 @@ export function setLocalServer(s: LocalServer | null): void {
 
 let client: { url: string; sdk: OpenAI } | null = null
 
-function sdkFor(baseUrl: string): OpenAI {
+async function sdkFor(baseUrl: string): Promise<OpenAI> {
+  const { default: OpenAI } = await loadOpenAI()
   const url = `${baseUrl}/v1`
   if (client?.url !== url)
     client = { url, sdk: new OpenAI({ apiKey: 'local', baseURL: url, maxRetries: 0 }) }
@@ -298,7 +300,7 @@ function sdkFor(baseUrl: string): OpenAI {
 
 export function createLocalProvider(
   getServer: () => LocalServer | null = localServer,
-  getClient: (baseUrl: string) => OpenAI = sdkFor
+  getClient: (baseUrl: string) => OpenAI | Promise<OpenAI> = sdkFor
 ): ChatBackend {
   const current = (): LocalServer => {
     const s = getServer()

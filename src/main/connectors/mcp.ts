@@ -1,13 +1,7 @@
 // MCP client manager: one Client per enabled server, connected lazily (the first agent task
 // that wants tools), reconnected with backoff after a failure or a dropped connection, and
 // closed on quit. Calls time out after 30 s; long results are cut to 20k characters.
-import {
-  Client,
-  StreamableHTTPClientTransport,
-  type Tool,
-  type Transport
-} from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import type { Tool, Transport } from '@modelcontextprotocol/client'
 import type { ConnectorServer } from '@shared/connectors'
 import { LumenOAuthProvider, NeedsSignInError, signedIn, type OAuthStore } from './oauth'
 import { launchProblem, type ServerSecrets } from './store'
@@ -315,10 +309,12 @@ function toTool(t: Tool): McpTool {
 
 /** The real connection: @modelcontextprotocol/client over stdio or Streamable HTTP. */
 export const sdkConnect: Connect = async (server, secrets, signal, oauth) => {
+  const { Client, StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client')
   const client = new Client({ name: 'lumen', version: '1.0.0' })
   let stderr = ''
   let transport: Transport
   if (server.transport === 'stdio') {
+    const { StdioClientTransport } = await import('@modelcontextprotocol/client/stdio')
     const t = new StdioClientTransport({
       command: server.command ?? '',
       args: server.args ?? [],

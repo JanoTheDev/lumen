@@ -8,13 +8,13 @@
 import { randomBytes } from 'crypto'
 import { createServer, type Server } from 'http'
 import type { AddressInfo } from 'net'
-import {
+import type {
   auth,
-  type OAuthClientMetadata,
-  type OAuthClientProvider,
-  type OAuthDiscoveryState,
-  type StoredOAuthClientInformation,
-  type StoredOAuthTokens
+  OAuthClientMetadata,
+  OAuthClientProvider,
+  OAuthDiscoveryState,
+  StoredOAuthClientInformation,
+  StoredOAuthTokens
 } from '@modelcontextprotocol/client'
 
 /** What is kept per connector (JSON, encrypted with the other secrets). */
@@ -249,7 +249,7 @@ export async function signIn(
   store: OAuthStore,
   deps: SignInDeps
 ): Promise<void> {
-  const authFn = deps.authFn ?? auth
+  const authFn = deps.authFn ?? (await import('@modelcontextprotocol/client')).auth
   const loop = await (deps.listen ?? listenLoopback)(store.load().port)
   try {
     const prev = store.load()

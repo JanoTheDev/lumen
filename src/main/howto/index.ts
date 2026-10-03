@@ -59,9 +59,9 @@ const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTo
 function paidSearch(): LookupDeps['paid'] {
   const fast = getProvider('fast')
   if (fast.provider === 'openai' && hasKey('openai'))
-    return (q, signal) =>
+    return async (q, signal) =>
       openaiHowto(
-        openaiClient(),
+        await openaiClient(),
         fast.model,
         paidQuestion(q.app, q.version, q.goal, q.maxSearches),
         q.maxSearches,
@@ -70,9 +70,9 @@ function paidSearch(): LookupDeps['paid'] {
       )
   if (!hasKey('anthropic')) return null
   const model = fast.provider === 'anthropic' ? fast.model : SEARCH_FALLBACK_MODEL
-  return (q, signal) =>
+  return async (q, signal) =>
     anthropicHowto(
-      anthropicClient(),
+      await anthropicClient(),
       model,
       paidQuestion(q.app, q.version, q.goal, q.maxSearches),
       q.maxSearches,

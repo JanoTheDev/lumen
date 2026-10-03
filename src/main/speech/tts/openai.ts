@@ -14,7 +14,9 @@ export function openAiTtsAvailable(): boolean {
 /** Returns base64 mp3 for one sentence. */
 export async function synthOpenAi(text: string, voice: string, rate: number): Promise<string> {
   const v = (OPENAI_VOICES as readonly string[]).includes(voice) ? (voice as OpenAiVoice) : 'alloy'
-  const res = await openaiClient().audio.speech.create(
+  const res = await (
+    await openaiClient()
+  ).audio.speech.create(
     {
       model: 'tts-1',
       voice: v,

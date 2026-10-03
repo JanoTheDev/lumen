@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
 import { parseJsonAs } from '../json'
 import { anthropicJsonSchema, openaiStrictSchema } from './structured'
 import {
@@ -22,9 +22,16 @@ import {
 
 let client: OpenAI | null = null
 let clientKey: string | undefined
+let sdkModule: Promise<typeof import('openai')> | null = null
+
+/** The OpenAI SDK, loaded on first use (also by the chat-completions backends). */
+export function loadOpenAI(): Promise<typeof import('openai')> {
+  return (sdkModule ??= import('openai'))
+}
 
 /** Shared SDK client so requests reuse one connection pool; rebuilt if the key changes. */
-export function openaiClient(): OpenAI {
+export async function openaiClient(): Promise<OpenAI> {
+  const { default: OpenAI } = await loadOpenAI()
   const key = process.env.OPENAI_API_KEY
   if (!client || clientKey !== key) {
     client = new OpenAI({ apiKey: key })
@@ -262,9 +269,13 @@ function parseArgs(text: string): Record<string, unknown> {
   }
 }
 
-export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): LlmProvider {
-  const send = (params: CreateParams, signal?: AbortSignal): Promise<OpenAI.Responses.Response> =>
-    getClient().responses.create(params, { signal })
+export function createOpenAIProvider(
+  getClient: () => OpenAI | Promise<OpenAI> = openaiClient
+): LlmProvider {
+  const send = async (
+    params: CreateParams,
+    signal?: AbortSignal
+  ): Promise<OpenAI.Responses.Response> => (await getClient()).responses.create(params, { signal })
 
   return {
     id: 'openai',
@@ -292,10 +303,9 @@ export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): Ll
     },
 
     async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
-      const events = await getClient().responses.create(
-        { ...buildParams(req), stream: true },
-        { signal }
-      )
+      const events = await (
+        await getClient()
+      ).responses.create({ ...buildParams(req), stream: true }, { signal })
       let text = ''
       let final: OpenAI.Responses.Response | null = null
       let refusal = false
@@ -350,7 +360,7 @@ export function createOpenAIProvider(getClient: () => OpenAI = openaiClient): Ll
 
     async warmup(): Promise<void> {
       try {
-        await getClient().models.list()
+        await (await getClient()).models.list()
       } catch (e) {
         console.warn('[warmup] openai:', (e as Error).message)
       }

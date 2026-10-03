@@ -3,7 +3,8 @@
 // GEMINI_API_KEY or the vault), no card. Free-tier prompts and screenshots may be used to improve
 // Google products and read by human reviewers (outside the EEA, UK and Switzerland); Settings
 // says so before a key is saved. Verified against ai.google.dev, 2026-10-01 (plans/05 notes).
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
+import { loadOpenAI } from './openai'
 import { createChatBackend, type ChatBackend } from './chat-completions'
 import { LlmError, type Effort } from './types'
 
@@ -27,7 +28,8 @@ function geminiEffort(_model: string, effort: Effort = 'low'): OpenAI.ReasoningE
 
 let client: { key: string; sdk: OpenAI } | null = null
 
-function sdk(): OpenAI {
+async function sdk(): Promise<OpenAI> {
+  const { default: OpenAI } = await loadOpenAI()
   const key = process.env[GEMINI_ENV]
   if (!key) throw new LlmError('E_NO_KEY', 'No Gemini key yet.')
   // One retry at most: on the free tier a retried 429 only burns more of the minute's quota.
@@ -36,7 +38,7 @@ function sdk(): OpenAI {
   return client.sdk
 }
 
-export function createGeminiProvider(getClient: () => OpenAI = sdk): ChatBackend {
+export function createGeminiProvider(getClient: () => OpenAI | Promise<OpenAI> = sdk): ChatBackend {
   return createChatBackend({
     id: 'gemini',
     client: getClient,
@@ -47,7 +49,7 @@ export function createGeminiProvider(getClient: () => OpenAI = sdk): ChatBackend
     rateLimitMessage: GEMINI_RATE_LIMIT_MESSAGE,
     warmup: async () => {
       try {
-        await getClient().models.list()
+        await (await getClient()).models.list()
       } catch (e) {
         console.warn('[warmup] gemini:', (e as Error).message)
       }

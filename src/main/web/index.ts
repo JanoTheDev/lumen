@@ -133,7 +133,7 @@ const deps: WebDeps = {
     if (!loadConfig().web.paidSearch || !hasKey('anthropic')) return null
     const fast = getProvider('fast')
     const model = fast.provider === 'anthropic' ? fast.model : SEARCH_FALLBACK_MODEL
-    const res = await paidWebSearch(query, anthropicClient(), model, styleLines(), signal)
+    const res = await paidWebSearch(query, await anthropicClient(), model, styleLines(), signal)
     if (res.usage || res.searches) {
       const zero = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 }
       recordUsage(model, res.usage ? toUsage(res.usage) : zero, false, new Date(), {

@@ -4,7 +4,7 @@
 // guarantees structured output, so replies are asked for as JSON (schema slot when the server
 // takes one), checked with zod and repaired once by sending the validation error back. Tool use
 // runs through chat-completions `tools`; whether a model has it is the backend's call.
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
 import type { ZodType } from 'zod'
 import { extractJsonObject, stripNulls } from '../json'
 import { anthropicJsonSchema } from './structured'
@@ -301,7 +301,7 @@ const stopOf = (finish: string | null | undefined): string =>
 export interface ChatBackendOptions {
   id: ProviderId
   /** Client for the current settings; throws LlmError E_NO_KEY when the backend is not usable. */
-  client: () => OpenAI
+  client: () => OpenAI | Promise<OpenAI>
   /** The model accepts images. */
   vision: (model: string) => boolean
   /** The model can drive a tool-use loop (agent mode). */
@@ -345,7 +345,7 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
     req: StructuredRequest<unknown>,
     signal?: AbortSignal
   ): Promise<OpenAI.Chat.ChatCompletion> {
-    const client = o.client()
+    const client = await o.client()
     for (;;) {
       const lvl = level(req)
       try {
@@ -413,7 +413,7 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
     },
 
     async *stream(req: StructuredRequest<unknown>, signal?: AbortSignal): AsyncIterable<ChatChunk> {
-      const client = o.client()
+      const client = await o.client()
       const events = await call(() =>
         client.chat.completions.create(
           {
@@ -445,7 +445,7 @@ export function createChatBackend(o: ChatBackendOptions): ChatBackend {
     },
 
     async toolTurn(req: ToolTurnRequest, signal?: AbortSignal): Promise<ToolTurnResult> {
-      const client = o.client()
+      const client = await o.client()
       const res = await call(() =>
         client.chat.completions.create(buildToolChatParams(req, o.vision(req.model), params), {
           signal

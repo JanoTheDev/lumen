@@ -2,7 +2,8 @@
 // service's docs, 2026-10-01) or a custom base URL, one key (vault provider "compatible", env
 // COMPATIBLE_API_KEY), a model per role. Models come from the service's /models list; OpenRouter
 // also says which take images and tools, the others get the name heuristic and tools assumed.
-import OpenAI from 'openai'
+import type OpenAI from 'openai'
+import { loadOpenAI } from './openai'
 import type { CompatiblePreset } from '@shared/config'
 import { COMPATIBLE_PRESET_INFO } from '@shared/model-providers'
 import { loadConfig } from '../../config'
@@ -141,7 +142,8 @@ function known(model: string): RemoteModel | undefined {
 
 let client: { url: string; key: string; sdk: OpenAI } | null = null
 
-function sdk(): OpenAI {
+async function sdk(): Promise<OpenAI> {
+  const { default: OpenAI } = await loadOpenAI()
   const s = compatibleSettings()
   const key = process.env[COMPATIBLE_ENV]
   if (!s?.baseUrl || !key)
@@ -155,7 +157,9 @@ function sdk(): OpenAI {
   return client.sdk
 }
 
-export function createCompatibleProvider(getClient: () => OpenAI = sdk): ChatBackend {
+export function createCompatibleProvider(
+  getClient: () => OpenAI | Promise<OpenAI> = sdk
+): ChatBackend {
   return createChatBackend({
     id: 'compatible',
     client: getClient,
