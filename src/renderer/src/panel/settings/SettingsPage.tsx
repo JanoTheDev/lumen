@@ -1,47 +1,49 @@
-import { useEffect, useRef, useState, type ComponentType } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type LazyExoticComponent
+} from 'react'
 import { Button, NavList, Toast, icons } from '../../ui'
 import { filterSections, SECTIONS, type SectionId, type SectionProps } from './meta'
 import { useConfig } from './useConfig'
-import { About } from './sections/About'
-import { Background } from './sections/Background'
-import { Bridges } from './sections/Bridges'
-import { Buddies } from './sections/Buddies'
-import { ClaudeCode } from './sections/ClaudeCode'
-import { Connectors } from './sections/Connectors'
-import { Diagnostics } from './sections/Diagnostics'
-import { Accessibility } from './sections/Accessibility'
-import { General } from './sections/General'
-import { Helpers } from './sections/Helpers'
-import { Lessons } from './sections/Lessons'
-import { Look } from './sections/Look'
-import { Memory } from './sections/Memory'
-import { News } from './sections/News'
-import { Models } from './sections/Models'
-import { Privacy } from './sections/Privacy'
-import { Skills } from './sections/Skills'
-import { Usage } from './sections/Usage'
-import { Voice } from './sections/Voice'
 
-const VIEWS: Record<SectionId, ComponentType<SectionProps>> = {
-  general: General,
-  voice: Voice,
-  accessibility: Accessibility,
-  look: Look,
-  models: Models,
-  usage: Usage,
-  memory: Memory,
-  lessons: Lessons,
-  skills: Skills,
-  background: Background,
-  buddies: Buddies,
-  helpers: Helpers,
-  bridges: Bridges,
-  'claude-code': ClaudeCode,
-  connectors: Connectors,
-  news: News,
-  privacy: Privacy,
-  diagnostics: Diagnostics,
-  about: About
+/** One chunk per section, loaded when the section first opens. */
+const lazySection = (
+  load: () => Promise<ComponentType<SectionProps>>
+): LazyExoticComponent<ComponentType<SectionProps>> =>
+  lazy(() => load().then((View) => ({ default: View })))
+
+/** Runs once the lazy section has mounted (after Suspense resolves). */
+function Mounted({ id, onMount }: { id: SectionId; onMount: (id: SectionId) => void }): null {
+  useEffect(() => onMount(id), [id, onMount])
+  return null
+}
+
+const VIEWS: Record<SectionId, LazyExoticComponent<ComponentType<SectionProps>>> = {
+  general: lazySection(() => import('./sections/General').then((m) => m.General)),
+  voice: lazySection(() => import('./sections/Voice').then((m) => m.Voice)),
+  accessibility: lazySection(() => import('./sections/Accessibility').then((m) => m.Accessibility)),
+  look: lazySection(() => import('./sections/Look').then((m) => m.Look)),
+  models: lazySection(() => import('./sections/Models').then((m) => m.Models)),
+  usage: lazySection(() => import('./sections/Usage').then((m) => m.Usage)),
+  memory: lazySection(() => import('./sections/Memory').then((m) => m.Memory)),
+  lessons: lazySection(() => import('./sections/Lessons').then((m) => m.Lessons)),
+  skills: lazySection(() => import('./sections/Skills').then((m) => m.Skills)),
+  background: lazySection(() => import('./sections/Background').then((m) => m.Background)),
+  buddies: lazySection(() => import('./sections/Buddies').then((m) => m.Buddies)),
+  helpers: lazySection(() => import('./sections/Helpers').then((m) => m.Helpers)),
+  bridges: lazySection(() => import('./sections/Bridges').then((m) => m.Bridges)),
+  'claude-code': lazySection(() => import('./sections/ClaudeCode').then((m) => m.ClaudeCode)),
+  connectors: lazySection(() => import('./sections/Connectors').then((m) => m.Connectors)),
+  news: lazySection(() => import('./sections/News').then((m) => m.News)),
+  privacy: lazySection(() => import('./sections/Privacy').then((m) => m.Privacy)),
+  diagnostics: lazySection(() => import('./sections/Diagnostics').then((m) => m.Diagnostics)),
+  about: lazySection(() => import('./sections/About').then((m) => m.About))
 }
 
 export interface SettingsPageProps {
@@ -56,6 +58,9 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
   const prev = useRef<SectionId>(section)
   const [dir, setDir] = useState<'fwd' | 'back'>('fwd')
   const firstRender = useRef(true)
+  /** The section whose view is on screen, and one still loading that the heading waits for. */
+  const shown = useRef<SectionId | null>(null)
+  const focusPending = useRef<SectionId | null>(null)
   // Simple mode lists the essential sections; "Show all settings" lifts that for this visit.
   const [showAll, setShowAll] = useState(false)
   const essentials = !!cfg?.a11y.simpleMode && !showAll
@@ -68,8 +73,16 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
       firstRender.current = false
       return
     }
+    focusPending.current = shown.current === section ? null : section
     headingRef.current?.focus()
   }, [section])
+
+  const viewMounted = useCallback((id: SectionId) => {
+    shown.current = id
+    if (focusPending.current !== id) return
+    focusPending.current = null
+    headingRef.current?.focus()
+  }, [])
 
   const visible = filterSections(query, essentials)
   const meta = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0]
@@ -147,7 +160,14 @@ export function SettingsPage({ section, onNavigate }: SettingsPageProps): JSX.El
               {meta.label}
             </h1>
             {error && <Toast kind="error">{error}</Toast>}
-            {cfg ? <View cfg={cfg} patch={patch} /> : <p className="ui-hint">Loading settings…</p>}
+            {cfg ? (
+              <Suspense fallback={<p className="ui-hint">Loading…</p>}>
+                <View cfg={cfg} patch={patch} />
+                <Mounted id={meta.id} onMount={viewMounted} />
+              </Suspense>
+            ) : (
+              <p className="ui-hint">Loading settings…</p>
+            )}
           </div>
         </main>
       </div>

@@ -1,17 +1,23 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { LiveRegion } from '../ui'
 import { Gallery } from '../ui/Gallery'
 import { useIpc } from '../lib/ipc'
 import { SettingsPage } from './settings/SettingsPage'
 import { Home } from './home/Home'
 import './home/home.css'
-import { Onboarding } from './onboarding/Onboarding'
 import './onboarding/onboarding.css'
-import { TasksPage } from './tasks/TasksPage'
-import { AnswerPage } from '../cards/AnswerPage'
 import './tasks/tasks.css'
 import { isSectionId, type SectionId } from './settings/meta'
 import { parseRoute, type Route } from './routes'
+
+// Home is the window that stays loaded; the other pages load when first opened.
+const Onboarding = lazy(() =>
+  import('./onboarding/Onboarding').then((m) => ({ default: m.Onboarding }))
+)
+const TasksPage = lazy(() => import('./tasks/TasksPage').then((m) => ({ default: m.TasksPage })))
+const AnswerPage = lazy(() =>
+  import('../cards/AnswerPage').then((m) => ({ default: m.AnswerPage }))
+)
 
 function useRoute(): [Route, (hash: string) => void] {
   const [route, setRoute] = useState(() => parseRoute(location.hash))
@@ -40,11 +46,17 @@ export function App(): JSX.Element {
       ) : route.name === 'home' ? (
         <Home />
       ) : route.name === 'onboarding' ? (
-        <Onboarding />
+        <Suspense fallback={<p className="ui-hint">Loading…</p>}>
+          <Onboarding />
+        </Suspense>
       ) : route.name === 'answer' ? (
-        <AnswerPage id={route.id} table={route.table} />
+        <Suspense fallback={<p className="ui-hint">Loading…</p>}>
+          <AnswerPage id={route.id} table={route.table} />
+        </Suspense>
       ) : route.name === 'tasks' ? (
-        <TasksPage id={route.id} />
+        <Suspense fallback={<p className="ui-hint">Loading…</p>}>
+          <TasksPage id={route.id} />
+        </Suspense>
       ) : (
         <SettingsPage section={section} onNavigate={(id) => go(`#/settings/${id}`)} />
       )}
