@@ -32,6 +32,8 @@ import { recordUndo } from '../undo'
 
 // How long an uncertain target stays on screen before the click (cancel window).
 const CONFIRM_MS = 2500
+// How long the click preview (target highlight, pointer) is up before the click lands.
+const PREVIEW_MS = 150
 
 export interface ExecuteOptions {
   /** Zoom-crop refine for low-confidence and point click targets (T14). Default true. */
@@ -150,25 +152,26 @@ async function resolveClick(
   return resolveFirst(rest, ctx)
 }
 
-// Resolves one model action into what the agent runs, refining and previewing clicks.
+// Resolves one model action into what the agent runs, refining clicks; `rect` is the logical
+// rect of a resolved click target (its preview highlight).
 async function resolve(
   action: Action,
-  opts: Required<Pick<ExecuteOptions, 'refine' | 'preview' | 'forceRefine'>> & {
+  opts: Required<Pick<ExecuteOptions, 'refine' | 'forceRefine'>> & {
     signal?: AbortSignal
     targets: Rect[]
   }
-): Promise<AgentAction | null> {
+): Promise<{ scaled: AgentAction | null; rect?: Rect }> {
   const plan = clickPlan(action)
-  if (!plan) return toAgentAction(action, currentFrame())
+  if (!plan) return { scaled: toAgentAction(action, currentFrame()) }
   const ctx: GroundingContext = { ...groundingNow(), signal: opts.signal }
   const r = await resolveClick(plan, ctx)
   if (!r) {
     if (plan.agentFallback) {
       log('step', `${action.type} "${plan.label}": not resolved here, agent searches itself`)
-      return toAgentAction(action, currentFrame())
+      return { scaled: toAgentAction(action, currentFrame()) }
     }
     log('fail', `${action.type} "${plan.label ?? ''}": target not on screen, skipped`)
-    return null
+    return { scaled: null }
   }
   log('step', `${action.type} "${(plan.label ?? '').slice(0, 40)}": ${describeResolved(r)}`)
   let resolved = r
@@ -176,28 +179,23 @@ async function resolve(
     const out = await refineTarget(r, plan.label, opts.signal)
     resolved = out.target
     log('step', `refine ${out.outcome} in ${out.ms}ms: ${describeResolved(resolved)}`)
-    if (opts.signal?.aborted) return null
+    if (opts.signal?.aborted) return { scaled: null }
     if (out.outcome !== 'skipped' && resolved.confidence < LOW_CONFIDENCE) {
       await confirmLowConfidence(resolved, plan.label, opts.signal)
-      if (opts.signal?.aborted) return null
+      if (opts.signal?.aborted) return { scaled: null }
     }
   }
   const target = rectCenter(resolved.physRect)
   opts.targets.push(resolved.physRect)
-  if (opts.preview) {
-    highlight.send('screen:highlights', [
-      { label: 'Clicking here', target_hint: '', bbox: resolved.logicalRect }
-    ])
-    highlight.show()
-    await sleep(600)
-    highlight.clear()
-  }
   const button = 'button' in action ? action.button : undefined
   return {
-    type: 'click',
-    x: Math.round(target.x),
-    y: Math.round(target.y),
-    button: button ?? 'left'
+    scaled: {
+      type: 'click',
+      x: Math.round(target.x),
+      y: Math.round(target.y),
+      button: button ?? 'left'
+    },
+    rect: resolved.logicalRect
   }
 }
 
@@ -253,6 +251,7 @@ export async function executeActions(
   const disarmCancel = armCancel()
 
   let firstClick = true
+  let drawn = false
   let prevType: string | undefined
   try {
     for (const action of actions) {
@@ -271,14 +270,14 @@ export async function executeActions(
         break
       }
       let scaled: AgentAction | null
+      let rect: Rect | undefined
       try {
-        scaled = await resolve(action, {
+        ;({ scaled, rect } = await resolve(action, {
           refine,
-          preview,
           forceRefine,
           signal,
           targets: result.targets
-        })
+        }))
       } catch (e) {
         g.finish(signal?.aborted ? 'cancelled' : 'error')
         if (signal?.aborted) break
@@ -295,8 +294,18 @@ export async function executeActions(
         continue
       }
       console.log('[execute] running:', redactForLog(JSON.stringify(scaled)))
-      // How to reverse it ("undo that", 11 T16), kept only once it ran.
-      const commitUndo = await recordUndo(action, { taskId: gateCtx.taskId })
+      const previewed = preview && showPreview(scaled, rect)
+      drawn ||= previewed
+      // How to reverse it ("undo that", 11 T16), kept only once it ran. The preview stays up
+      // meanwhile, so the user sees where the click lands before it does.
+      const [commitUndo] = await Promise.all([
+        recordUndo(action, { taskId: gateCtx.taskId }),
+        previewed ? sleep(PREVIEW_MS) : undefined
+      ])
+      if (signal?.aborted) {
+        g.finish('cancelled')
+        break
+      }
       let stop: boolean
       try {
         stop = await run(scaled)
@@ -306,19 +315,40 @@ export async function executeActions(
         g.finish(signal?.aborted ? 'cancelled' : 'error')
         throw e
       }
+      if (rect && previewed) highlight.clear()
       if (stop) break
       await sleep(opts.pauseMs ?? (scaled.type === 'hotkey' ? 300 : 150))
     }
   } finally {
     disarmCancel()
-    // The pointer preview was drawn: drop it, without suppressing the layer.
-    if (preview && !firstClick) highlight.clear()
+    // A preview was drawn: drop it, without suppressing the layer.
+    if (drawn) highlight.clear()
     releaseDwell()
   }
 
   result.cancelled = !!signal?.aborted
   if (result.cancelled) log('skip', 'execution aborted by user')
   return result
+
+  /**
+   * Draws a click's preview: its target highlight, and the pointer on the batch's first click.
+   * True when something was drawn.
+   */
+  function showPreview(scaled: AgentAction, rect?: Rect): boolean {
+    if (scaled.type !== 'click') return false
+    if (rect) {
+      highlight.send('screen:highlights', [{ label: 'Clicking here', target_hint: '', bbox: rect }])
+    }
+    const { x, y } = scaled
+    const pointer = firstClick && x != null && y != null
+    if (pointer) {
+      firstClick = false
+      highlight.send('screen:pointer', { ...physToLogical({ x, y }), text: 'Clicking here…' })
+    }
+    if (!rect && !pointer) return false
+    highlight.show()
+    return true
+  }
 
   /** Runs one resolved action; true = stop the batch (the page hit its bottom). */
   async function run(scaled: AgentAction): Promise<boolean> {
@@ -370,22 +400,6 @@ export async function executeActions(
       await agent.request('input', { steps, ...pw }, { signal })
       result.executed++
     } else {
-      // Show pointer preview before first click
-      if (
-        preview &&
-        firstClick &&
-        scaled.type === 'click' &&
-        scaled.x != null &&
-        scaled.y != null
-      ) {
-        firstClick = false
-        highlight.send('screen:pointer', {
-          ...physToLogical({ x: scaled.x, y: scaled.y }),
-          text: 'Clicking here…'
-        })
-        highlight.show()
-        await sleep(300)
-      }
       const actionResult = (await agent.execute(
         scaled.type === 'type' || scaled.type === 'hotkey' ? { ...scaled, ...pw } : scaled
       )) as Record<string, unknown> | null
