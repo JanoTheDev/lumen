@@ -22,6 +22,7 @@ import {
   LlmError,
   type AgentMessage,
   type ChatChunk,
+  type ChatMessage,
   type ChatRequest,
   type LlmProvider,
   type ProviderId,
@@ -130,14 +131,36 @@ export function setDeterministic(on: boolean): void {
 const redactContent = (c: ToolContent): ToolContent =>
   c.type === 'text' ? { ...c, text: redactForModel(c.text) } : c
 
+// Agent loops resend every earlier message on each turn; the messages are never changed once
+// made, so each is redacted once and the same copy goes out again (stable cached prefixes).
+const redactedAgent = new WeakMap<AgentMessage, AgentMessage>()
+const redactedChat = new WeakMap<ChatMessage, ChatMessage>()
+
 function redactAgentMessage(m: AgentMessage): AgentMessage {
-  if (m.role === 'assistant') return { ...m, text: redactForModel(m.text) }
-  return {
-    ...m,
-    content: m.content.map((c) =>
-      c.type === 'tool_result' ? { ...c, content: c.content.map(redactContent) } : redactContent(c)
-    )
+  let out = redactedAgent.get(m)
+  if (out) return out
+  out =
+    m.role === 'assistant'
+      ? { ...m, text: redactForModel(m.text) }
+      : {
+          ...m,
+          content: m.content.map((c) =>
+            c.type === 'tool_result'
+              ? { ...c, content: c.content.map(redactContent) }
+              : redactContent(c)
+          )
+        }
+  redactedAgent.set(m, out)
+  return out
+}
+
+function redactChatMessage(m: ChatMessage): ChatMessage {
+  let out = redactedChat.get(m)
+  if (!out) {
+    out = { ...m, content: redactForModel(m.content) }
+    redactedChat.set(m, out)
   }
+  return out
 }
 
 /**
@@ -148,7 +171,7 @@ function redactAgentMessage(m: AgentMessage): AgentMessage {
 export function prepareRequest<R extends ChatRequest>(req: R): R {
   return {
     ...req,
-    messages: req.messages.map((m) => ({ ...m, content: redactForModel(m.content) })),
+    messages: req.messages.map(redactChatMessage),
     ...(deterministic ? { temperature: 0 } : {})
   }
 }
