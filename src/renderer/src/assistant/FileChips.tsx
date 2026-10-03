@@ -2,7 +2,7 @@
 // with Lumen for this conversation (the preload turns the File into its path; main checks it).
 // Nothing is uploaded here: main reads a file only when a request is about it. Each shared file
 // shows as a chip with its name, size and a remove button.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FileText } from 'lucide-react'
 import type { DroppedFileView, FileDropResult } from '@shared/channels'
 import { IconButton, icons } from '../ui'
@@ -21,10 +21,15 @@ export function FileChips({
   const [files, setFiles] = useState<DroppedFileView[]>([])
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
+  const filesRef = useRef(files)
+  useEffect(() => {
+    filesRef.current = files
+  })
   const shown = !!(files.length || dragging || error)
   useEffect(() => onShown?.(shown), [shown, onShown])
 
-  // The list clears in main when the conversation ends: re-read it whenever the bar changes.
+  // The list clears in main when the conversation ends: re-read it when the bar shows or hides,
+  // and when a turn ends (a file pointed at during the turn joins the list).
   useEffect(() => {
     let alive = true
     invoke('assistant:files')
@@ -56,11 +61,13 @@ export function FileChips({
         let last: FileDropResult | null = null
         const errors: string[] = []
         for (const f of list) {
-          last = await window.lumen
-            .dropFile(f)
-            .catch(
-              (): FileDropResult => ({ ok: false, error: 'That file could not be shared.', files })
-            )
+          last = await window.lumen.dropFile(f).catch(
+            (): FileDropResult => ({
+              ok: false,
+              error: 'That file could not be shared.',
+              files: filesRef.current
+            })
+          )
           if (!last.ok) errors.push(`${f.name}: ${last.error}`)
         }
         if (last && Array.isArray(last.files)) setFiles(last.files)
@@ -77,7 +84,7 @@ export function FileChips({
       window.removeEventListener('dragleave', leave)
       window.removeEventListener('drop', drop)
     }
-  }, [files])
+  }, [])
 
   const remove = (id: string): void => {
     invoke('assistant:file-remove', id)

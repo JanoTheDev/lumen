@@ -46,10 +46,26 @@ const MIN_SPEECH_MS = 300
 // RMS of normal speech sits around 0.05..0.12; scaled so it fills the meter.
 const LEVEL_GAIN = 8
 
-/** Publishes the input level as `--voice-level` (0..1) on :root for the bar's LevelMeter. */
+let voiceLevelNow = 0
+const voiceLevelListeners = new Set<(level: number) => void>()
+
+/** Publishes the input level (0..1, scaled for the meter) for the bar's LevelMeter. */
 export function publishVoiceLevel(level: number): void {
-  const v = Math.min(1, Math.max(0, level * LEVEL_GAIN))
-  document.documentElement.style.setProperty('--voice-level', v.toFixed(3))
+  voiceLevelNow = Math.min(1, Math.max(0, level * LEVEL_GAIN))
+  for (const fn of voiceLevelListeners) fn(voiceLevelNow)
+}
+
+/** The last published input level (0..1). */
+export function voiceLevel(): number {
+  return voiceLevelNow
+}
+
+/** Called on each published level, inside the recording's own frame; returns an unsubscribe. */
+export function onVoiceLevel(fn: (level: number) => void): () => void {
+  voiceLevelListeners.add(fn)
+  return () => {
+    voiceLevelListeners.delete(fn)
+  }
 }
 
 export function computeRms(data: Float32Array): number {

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Markdown } from '../ui'
 import { prefersReducedMotion } from '../ui/motion'
+import { onVoiceLevel, voiceLevel } from '../voice/useVoice'
 import { revealText, smoothLevel } from './model'
 
 /** Keeps children mounted for their exit fade, then unmounts them. */
@@ -71,8 +72,9 @@ export function CrossFadeText({ text, shimmer }: { text: string; shimmer?: boole
 const BAR_SHAPE = [0.55, 0.85, 1, 0.8, 0.5]
 
 /**
- * Five bars driven by the voice level (`--voice-level` on :root, 0..1, written by the voice
- * module without React). Each bar is smoothed (attack 30ms, release 120ms). One bar under
+ * Five bars driven by the voice level (published by the voice module without React, once per
+ * analyser frame). Each bar is smoothed (attack 30ms, release 120ms) and drawn in the voice
+ * module's own frame; after the last level the bars settle on their own frames. One bar under
  * reduced motion.
  */
 export function LevelMeter({ active }: { active: boolean }): JSX.Element {
@@ -82,25 +84,37 @@ export function LevelMeter({ active }: { active: boolean }): JSX.Element {
 
   useEffect(() => {
     if (!active) return
-    const root = document.documentElement
     const levels = BAR_SHAPE.map(() => 0)
-    let raf = 0
+    let tail = 0
     let last = performance.now()
-    const frame = (): void => {
+    const draw = (target: number): boolean => {
       const now = performance.now()
       const dt = now - last
       last = now
-      const raw = parseFloat(root.style.getPropertyValue('--voice-level'))
-      const target = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0
+      let settled = true
       for (let i = 0; i < count; i++) {
-        levels[i] = smoothLevel(levels[i], target * (reduced ? 1 : BAR_SHAPE[i]), dt)
+        const goal = target * (reduced ? 1 : BAR_SHAPE[i])
+        levels[i] = smoothLevel(levels[i], goal, dt)
+        if (Math.abs(levels[i] - goal) > 0.001) settled = false
         const el = bars.current[i]
         if (el) el.style.transform = `scaleY(${0.18 + 0.82 * levels[i]})`
       }
-      raf = requestAnimationFrame(frame)
+      return settled
     }
-    raf = requestAnimationFrame(frame)
-    return () => cancelAnimationFrame(raf)
+    const settle = (): void => {
+      tail = draw(voiceLevel()) ? 0 : requestAnimationFrame(settle)
+    }
+    const off = onVoiceLevel((level) => {
+      cancelAnimationFrame(tail)
+      tail = 0
+      // A zero is the recording's last level: let the bars fall on their own frames.
+      if (!draw(level) && level === 0) tail = requestAnimationFrame(settle)
+    })
+    draw(voiceLevel())
+    return () => {
+      off()
+      cancelAnimationFrame(tail)
+    }
   }, [active, count, reduced])
 
   return (

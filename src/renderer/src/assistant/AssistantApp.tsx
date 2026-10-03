@@ -13,7 +13,7 @@
 //
 // Simple mode (06 T18, a11y.simpleMode): one row at a time (model.simpleRow), the status text
 // only when no row shows, and Repeat and Help always on the bar.
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { AssistantView } from '@shared/channels'
 import type { AssistantPhase } from '@shared/events'
 import { Button, IconButton, icons, type IconComponent } from '../ui'
@@ -27,6 +27,7 @@ import { FileChips } from './FileChips'
 import { MorphSurface } from './MorphSurface'
 import { errorHint, simpleRow, statusLine, type BarRow } from './model'
 import { AnswerText, CrossFadeText, Fade, LevelMeter, RollingNumber } from './parts'
+import { Countdown, filesRefreshKey, latestPerFrame, sizeReporter } from './bar-timing'
 import { StepList } from './StepList'
 import { useBarSettings, useMemoryPending } from './useBarSettings'
 import { VoiceHost } from './VoiceHost'
@@ -79,30 +80,14 @@ function useAutoClose(
   resetKey: string
 ): React.RefObject<HTMLDivElement | null> {
   const line = useRef<HTMLDivElement>(null)
-  const left = useRef(durationMs)
-  useEffect(() => {
-    left.current = durationMs
-    if (line.current) line.current.style.transform = 'scaleX(1)'
-  }, [resetKey, durationMs])
-
-  useEffect(() => {
-    if (!active || paused || durationMs <= 0) return
-    let raf = 0
-    let last = performance.now()
-    const tick = (): void => {
-      const now = performance.now()
-      left.current = Math.max(0, left.current - (now - last))
-      last = now
-      if (line.current) line.current.style.transform = `scaleX(${left.current / durationMs})`
-      if (left.current <= 0) {
-        send('assistant:command', { type: 'close' })
-        return
-      }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [active, paused, durationMs, resetKey])
+  const countdown = useMemo(
+    () => new Countdown(() => send('assistant:command', { type: 'close' })),
+    []
+  )
+  useEffect(() => countdown.reset(), [countdown, resetKey, durationMs])
+  // The line element comes and goes with pinning, so this checks it on every render.
+  useEffect(() => countdown.update(line.current, active && !paused, durationMs))
+  useEffect(() => () => countdown.reset(), [countdown])
   return line
 }
 
@@ -127,7 +112,10 @@ export function AssistantApp(): JSX.Element {
   useEffect(() => {
     viewRef.current = view
   })
-  useIpc('assistant:state', setView)
+  // Streamed text can arrive faster than frames: draw only the newest state of each frame.
+  const frameView = useMemo(() => latestPerFrame<AssistantView>(setView), [])
+  useEffect(() => () => frameView.cancel(), [frameView])
+  useIpc('assistant:state', frameView.push)
   // Main made the window focusable (focus shortcut, a confirm with a screen reader running,
   // the caption editor). Land on the editor, the confirm's default button, else the first bar
   // button (Repeat), so Tab goes Repeat, Copy, Pin, Close, then the answer. The state that
@@ -206,11 +194,15 @@ export function AssistantApp(): JSX.Element {
   useEffect(() => {
     const el = cardRef.current
     if (!el) return
+    const sizes = sizeReporter((s) => send('assistant:resize', s))
     const ro = new ResizeObserver(() => {
-      send('assistant:resize', { w: el.offsetWidth, h: el.offsetHeight })
+      sizes.size(el.offsetWidth, el.offsetHeight)
     })
     ro.observe(el)
-    return () => ro.disconnect()
+    return () => {
+      ro.disconnect()
+      sizes.cancel()
+    }
   }, [hasCard])
 
   // One gentle shake when a new error appears.
@@ -342,7 +334,7 @@ export function AssistantApp(): JSX.Element {
                 }}
               >
                 {closable && v.autoCloseMs > 0 && !pinned && (
-                  <div className="as-countdown" aria-hidden="true">
+                  <div className="as-countdown" data-morph-skip="" aria-hidden="true">
                     <div ref={lineRef} className="as-countdown__fill" />
                   </div>
                 )}
@@ -437,7 +429,10 @@ export function AssistantApp(): JSX.Element {
                   </p>
                 </Fade>
 
-                <FileChips refreshKey={`${view.visible}|${v.phase}`} onShown={onFilesShown} />
+                <FileChips
+                  refreshKey={filesRefreshKey(view.visible, view.phase)}
+                  onShown={onFilesShown}
+                />
 
                 {v.captionEdit ? (
                   <CaptionEditor key={v.captionEdit.mode} edit={v.captionEdit} />

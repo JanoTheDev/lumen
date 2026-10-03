@@ -9,8 +9,11 @@
 // Compact (status only: listening, thinking with nothing else to show) the surface is a short
 // pill; the width springs between the two. During that spring the content keeps its final
 // width, centred and clipped to the moving sides, so text never re-wraps frame by frame.
+//
+// Children marked `data-morph-skip` (absolutely placed overlays) are not rows.
 import { useLayoutEffect, useRef, type HTMLAttributes, type ReactNode, type Ref } from 'react'
 import { animateSpring, prefersReducedMotion, type SpringHandle } from '../ui/motion'
+import { rowGlide, type RowBox } from './bar-timing'
 
 const CAP = 16
 
@@ -59,31 +62,32 @@ export function MorphSurface({
     let spring: SpringHandle | null = null
     // Each row's distance from the card's bottom edge (the card is anchored at the bottom) and
     // its height, to know how much it grew.
-    const rows = new Map<HTMLElement, { d: number; h: number }>()
+    const rows = new Map<HTMLElement, RowBox>()
     const rowSprings = new Map<HTMLElement, { handle: SpringHandle; y: number; grew: number }>()
 
     const flipRows = (animate: boolean): void => {
       const content = contentRef.current
       if (!content) return
       const h = content.offsetHeight
-      const seen = new Set<HTMLElement>()
+      const measured: Array<[HTMLElement, RowBox]> = []
       for (const child of Array.from(content.children)) {
         const el = child as HTMLElement
-        if (getComputedStyle(el).position === 'absolute') continue
+        if (el.dataset.morphSkip !== undefined) continue
+        measured.push([el, { d: h - el.offsetTop, h: el.offsetHeight }])
+      }
+      const seen = new Set<HTMLElement>()
+      for (const [el, now] of measured) {
         seen.add(el)
-        const d = h - el.offsetTop
-        const rh = el.offsetHeight
         const before = rows.get(el)
-        rows.set(el, { d, h: rh })
-        if (!animate || before === undefined || Math.abs(before.d - d) < 0.5) continue
+        rows.set(el, now)
+        if (!animate) continue
         const running = rowSprings.get(el)
-        const from = (running?.y ?? 0) + d - before.d
-        // Growth still hidden by a running glide counts on top of this one.
-        const grew = Math.max(0, rh - before.h + (running ? Math.min(running.y, running.grew) : 0))
+        const glide = rowGlide(before, now, running)
+        if (!glide) continue
         running?.handle.cancel()
-        const entry = { handle: null as unknown as SpringHandle, y: from, grew }
+        const entry = { handle: null as unknown as SpringHandle, y: glide.from, grew: glide.grew }
         entry.handle = animateSpring({
-          from: [from],
+          from: [glide.from],
           to: [0],
           preset: 'snappy',
           onFrame: ([y]) => {
@@ -121,9 +125,11 @@ export function MorphSurface({
       applyClip()
     }
 
-    const ro = new ResizeObserver(() => {
-      const h = box.offsetHeight
-      if (!width.current.spring) width.current.last = box.offsetWidth
+    const ro = new ResizeObserver((entries) => {
+      // Sizes from the observer's entry (offset sizes only where it has none).
+      const size = entries[entries.length - 1]?.borderBoxSize?.[0]
+      const h = size ? size.blockSize : box.offsetHeight
+      if (!width.current.spring) width.current.last = size ? size.inlineSize : box.offsetWidth
       // A width spring changes only the width; the height logic has nothing to do.
       if (Math.abs(h - layout) < 0.5 && shown >= 0) return
       layout = h
