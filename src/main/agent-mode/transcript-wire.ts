@@ -48,7 +48,7 @@ export function chatHeader(id: string): ChatHeader | null {
       if (!t || t.claude) return null
       return backgroundHeader(t, {
         paused: m.isPaused(id),
-        steps: hub.rec(id).steps,
+        steps: (isOpen(t) ? hub.rec(id) : hub.peek(id)).steps,
         steerable: m.steerable(id)
       })
     }
@@ -56,7 +56,7 @@ export function chatHeader(id: string): ChatHeader | null {
       const meta = hub.meta(id)
       if (!meta) return null
       const running = runningAgentTaskId() === id
-      const r = hub.rec(id)
+      const r = running ? hub.rec(id) : hub.peek(id)
       const q = r.openQuestion()
       // Only a card this task asked for (tagged where it was made), never another one on the bar.
       const confirmId = running ? ownedConfirmId(id) : null
@@ -73,7 +73,7 @@ export function chatHeader(id: string): ChatHeader | null {
     case 'claude': {
       const v = getCopilot()?.get(id) ?? null
       if (!v && !hub.has(id)) return null
-      return claudeHeader(id, v, hub.meta(id), hub.rec(id).steps)
+      return claudeHeader(id, v, hub.meta(id), (v ? hub.rec(id) : hub.peek(id)).steps)
     }
   }
 }

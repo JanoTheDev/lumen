@@ -164,6 +164,19 @@ describe('tasks', () => {
     expect(control).toHaveBeenCalledWith('bg_aaaa1', 'stop')
   })
 
+  it('reads headers only of the rows the name fits, and of open rows for "all"', async () => {
+    const { deps, addTask } = makeDeps()
+    for (let i = 0; i < 20; i++) addTask(`bg_old${String(i).padStart(3, '0')}`, `Job ${i}`, 'done')
+    addTask('bg_mail01', 'Summarize my email', 'running')
+    const header = vi.spyOn(deps.tasks, 'header')
+    const v = new ManageVoice(deps)
+    expect(await text(v.turn('stop the email task'))).toBe('Stopped “Summarize my email”.')
+    expect(header).toHaveBeenCalledTimes(1)
+    header.mockClear()
+    await text(v.turn('stop all background tasks'))
+    expect(header).toHaveBeenCalledTimes(1)
+  })
+
   it('asks which one and takes the answer next turn', async () => {
     const { deps, addTask, control } = makeDeps()
     addTask('bg_aaaa1', 'Check the lamp price', 'running')

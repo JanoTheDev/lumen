@@ -2,6 +2,7 @@
 // files, one per background task (bg_), foreground agent task (t_) and Claude session (cc_).
 // Written atomically (temp file + rename); unreadable files are skipped. Background
 // transcripts go with their task; foreground and Claude ones keep the newest KEEP_OTHER.
+// index.json holds the metas of the foreground and Claude transcripts (the chat list).
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'fs'
 import { join } from 'path'
 import { chatIdSchema, type ChatEntry, type JobStep, type SubJob } from '@shared/task-chat'
@@ -9,6 +10,7 @@ import { MAX_JOB_STEPS, type ChatMeta, type TranscriptData } from './transcript'
 import { AtomicFiles } from './atomic-file'
 
 export const KEEP_OTHER = 30
+const INDEX_FILE = 'index.json'
 
 const KINDS = new Set(['user', 'assistant', 'tool', 'question', 'status', 'error', 'result'])
 
@@ -75,6 +77,12 @@ export function parseTranscript(raw: unknown, id: string): TranscriptData | null
   }
 }
 
+const isMeta = (m: unknown): m is ChatMeta =>
+  !!m &&
+  typeof m === 'object' &&
+  typeof (m as ChatMeta).title === 'string' &&
+  typeof (m as ChatMeta).startedAt === 'number'
+
 export class TranscriptStore {
   private readonly files = new AtomicFiles()
 
@@ -108,6 +116,34 @@ export class TranscriptStore {
     return this.files
       .write(this.file(data.id), JSON.stringify(data))
       .catch((e) => console.warn('[transcripts] save failed:', (e as Error).message))
+  }
+
+  /** The saved metas by id; null when there is no readable index. */
+  loadMetas(): Map<string, ChatMeta> | null {
+    try {
+      const raw = JSON.parse(readFileSync(join(this.dir, INDEX_FILE), 'utf8')) as {
+        metas?: Record<string, unknown>
+      }
+      if (!raw?.metas || typeof raw.metas !== 'object') return null
+      const out = new Map<string, ChatMeta>()
+      for (const [id, m] of Object.entries(raw.metas)) if (validId(id) && isMeta(m)) out.set(id, m)
+      return out
+    } catch {
+      return null
+    }
+  }
+
+  saveMetas(metas: ReadonlyMap<string, ChatMeta>, later = false): void {
+    const file = join(this.dir, INDEX_FILE)
+    const text = JSON.stringify({ metas: Object.fromEntries(metas) })
+    const warn = (e: unknown): void =>
+      console.warn('[transcripts] index not saved:', (e as Error).message)
+    if (later) return void this.files.write(file, text).catch(warn)
+    try {
+      this.files.writeSync(file, text)
+    } catch (e) {
+      warn(e)
+    }
   }
 
   remove(id: string): void {

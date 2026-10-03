@@ -77,12 +77,26 @@ export class TranscriptHub {
   private metaIndex(): Map<string, ChatMeta> {
     if (this.index) return this.index
     const index = new Map<string, ChatMeta>()
+    const saved = this.store?.loadMetas() ?? null
+    let stale = !saved
     for (const id of this.store?.ids() ?? []) {
       if (id.startsWith('bg_')) continue
-      const meta = this.recs.get(id)?.meta ?? this.store?.load(id)?.meta
+      if (!saved?.has(id)) stale = true
+      const meta = this.recs.get(id)?.meta ?? saved?.get(id) ?? this.store?.load(id)?.meta
       if (meta) index.set(id, meta)
     }
-    return (this.index = index)
+    if (saved && saved.size !== index.size) stale = true
+    this.index = index
+    if (stale) this.store?.saveMetas(index)
+    return index
+  }
+
+  /** Puts a transcript's meta in the index (and the index file when it changed). */
+  private indexMeta(id: string, meta: ChatMeta, later: boolean): void {
+    const index = this.metaIndex()
+    const had = index.get(id)
+    index.set(id, meta)
+    if (!had || JSON.stringify(had) !== JSON.stringify(meta)) this.store?.saveMetas(index, later)
   }
 
   setHeaderSource(fn: (id: string) => ChatHeader | null): void {
@@ -111,6 +125,18 @@ export class TranscriptHub {
     )
     this.recs.set(id, r)
     return r
+  }
+
+  /** The recorder for `id` to read from; one loaded from disk is not kept. */
+  peek(id: string): TranscriptRecorder {
+    return (
+      this.recs.get(id) ??
+      new TranscriptRecorder(
+        id,
+        { now: () => this.deps.now(), onEntry: () => {} },
+        this.store?.load(id) ?? undefined
+      )
+    )
   }
 
   has(id: string): boolean {
@@ -212,7 +238,7 @@ export class TranscriptHub {
     if (!r || !this.store) return
     if (later) void this.store.saveLater(r.data())
     else this.store.save(r.data())
-    if (r.meta && !id.startsWith('bg_')) this.metaIndex().set(id, r.meta)
+    if (r.meta && !id.startsWith('bg_')) this.indexMeta(id, r.meta, later)
   }
 
   /**
@@ -234,6 +260,7 @@ export class TranscriptHub {
     if (!this.store || index.size <= KEEP_OTHER) return
     const kept = new Set(this.store.prune(null, KEEP_OTHER))
     for (const id of [...index.keys()]) if (!kept.has(id)) index.delete(id)
+    this.store.saveMetas(index)
   }
 
   flushAll(): void {
@@ -245,8 +272,8 @@ export class TranscriptHub {
     this.recs.delete(id)
     this.steers.delete(id)
     this.claudeTasks.delete(id)
-    this.index?.delete(id)
     this.store?.remove(id)
+    if (this.index?.delete(id)) this.store?.saveMetas(this.index)
   }
 
   // ---- background tasks (BackgroundManager.record) ----

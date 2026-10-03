@@ -13,7 +13,7 @@ import {
 import type { BackgroundTask } from '@shared/types'
 import { TranscriptHub, type HubDeps } from '../../src/main/agent-mode/transcript-hub'
 import { KEEP_OTHER, TranscriptStore } from '../../src/main/agent-mode/transcript-store'
-import type { TranscriptData } from '../../src/main/agent-mode/transcript'
+import type { ChatMeta, TranscriptData } from '../../src/main/agent-mode/transcript'
 import {
   backgroundHeader,
   chatSummaries,
@@ -129,6 +129,19 @@ describe('TranscriptHub', () => {
     expect(again.metas().map((m) => m.id)).toEqual(['t_fore01'])
   })
 
+  it('peek reads a saved transcript without keeping it in memory', () => {
+    tmp = tempDir()
+    const store = new TranscriptStore(tmp.dir)
+    const { hub } = hubWith(store)
+    hub.foregroundStart('t_peek01', 'open notepad')
+    hub.foregroundEnd('t_peek01', { status: 'done', summary: 'Done.' })
+    const { hub: again } = hubWith(store)
+    expect(again.peek('t_peek01').entries.map((e) => e.k)).toEqual(['user', 'result'])
+    expect(again.loaded).toBe(0)
+    again.rec('t_peek01')
+    expect(again.peek('t_peek01')).toBe(again.rec('t_peek01'))
+  })
+
   it('keeps foreground steer messages until the runner drains them', () => {
     const { hub } = hubWith()
     hub.foregroundStart('t_fore02', 'fill the form')
@@ -197,7 +210,11 @@ describe('TranscriptHub', () => {
 
 describe('TranscriptHub: memory, disk reads and privacy', () => {
   /** A store in memory that counts loads. */
-  function memStore(): TranscriptStore & { loads: number; files: Map<string, TranscriptData> } {
+  function memStore(): TranscriptStore & {
+    loads: number
+    files: Map<string, TranscriptData>
+    metaFile: Map<string, ChatMeta> | null
+  } {
     const files = new Map<string, TranscriptData>()
     const s = {
       dir: '',
@@ -213,6 +230,11 @@ describe('TranscriptHub: memory, disk reads and privacy', () => {
       remove(id: string) {
         files.delete(id)
       },
+      metaFile: null as Map<string, ChatMeta> | null,
+      loadMetas: () => (s.metaFile ? new Map(s.metaFile) : null),
+      saveMetas(m: ReadonlyMap<string, ChatMeta>) {
+        s.metaFile = new Map(m)
+      },
       ids: () => [...files.keys()],
       prune(_t: unknown, keep = KEEP_OTHER) {
         const ids = [...files.keys()].filter((i) => !i.startsWith('bg_'))
@@ -220,7 +242,11 @@ describe('TranscriptHub: memory, disk reads and privacy', () => {
         return [...files.keys()]
       }
     }
-    return s as unknown as TranscriptStore & { loads: number; files: Map<string, TranscriptData> }
+    return s as unknown as TranscriptStore & {
+      loads: number
+      files: Map<string, TranscriptData>
+      metaFile: Map<string, ChatMeta> | null
+    }
   }
 
   it('reads each saved transcript from disk at most once for the list', () => {
@@ -245,6 +271,32 @@ describe('TranscriptHub: memory, disk reads and privacy', () => {
     hub.meta('t_old001')
     expect(hub.has('cc_old002')).toBe(true)
     expect(store.loads).toBe(2)
+  })
+
+  it('after a restart the list comes from the index; a missing index is rebuilt', () => {
+    const store = memStore()
+    const { hub } = hubWith(store)
+    for (const id of ['t_idx001', 't_idx002']) {
+      hub.foregroundStart(id, `task ${id}`)
+      hub.foregroundEnd(id, { status: 'done', summary: 'ok' })
+    }
+    expect([...(store.metaFile?.keys() ?? [])].sort()).toEqual(['t_idx001', 't_idx002'])
+    store.loads = 0
+    const { hub: again } = hubWith(store)
+    expect(
+      again
+        .metas()
+        .map((m) => m.id)
+        .sort()
+    ).toEqual(['t_idx001', 't_idx002'])
+    expect(store.loads).toBe(0)
+    store.metaFile = null
+    const { hub: third } = hubWith(store)
+    expect(third.metas()).toHaveLength(2)
+    expect(store.loads).toBe(2)
+    expect(store.metaFile?.size).toBe(2)
+    third.remove('t_idx001')
+    expect([...(store.metaFile?.keys() ?? [])]).toEqual(['t_idx002'])
   })
 
   it('drops ended foreground transcripts from memory and keeps the newest on disk', () => {
@@ -301,6 +353,25 @@ describe('TranscriptHub: memory, disk reads and privacy', () => {
 })
 
 describe('TranscriptStore', () => {
+  it('keeps the meta index next to the transcripts, not as a transcript', () => {
+    tmp = tempDir()
+    const store = new TranscriptStore(tmp.dir)
+    expect(store.loadMetas()).toBeNull()
+    const meta: ChatMeta = {
+      kind: 'foreground',
+      title: 'x',
+      phase: 'done',
+      startedAt: 1,
+      modelCalls: 0,
+      costUsd: 0
+    }
+    store.saveMetas(new Map([['t_meta01', meta]]))
+    expect(store.loadMetas()).toEqual(new Map([['t_meta01', meta]]))
+    expect(store.ids()).toEqual([])
+    writeFileSync(join(tmp.dir, 'index.json'), '{')
+    expect(store.loadMetas()).toBeNull()
+  })
+
   it('skips bad ids and files, and prunes orphans', () => {
     tmp = tempDir()
     const store = new TranscriptStore(tmp.dir)

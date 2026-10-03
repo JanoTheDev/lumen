@@ -297,9 +297,12 @@ export class ManageVoice {
             : h.canRunAgain
     }
     // Rows the action fits first ("stop the email task" means the running one).
+    const named = all.filter(
+      (r) => matchNamed(name, [{ id: r.id, name: r.title }], TASK_NOISE).tier > 0
+    )
     const { rows, ids } = this.taskRows(
       name,
-      all.filter((r) => can(r.id))
+      named.filter((r) => can(r.id))
     )
     if (!ids.length) {
       const any = this.taskRows(name, all)
@@ -340,7 +343,10 @@ export class ManageVoice {
   private tasksAll(op: Exclude<TaskOp, 'run-again'>, backgroundOnly: boolean): ManageAnswer {
     const rows = this.d.tasks
       .list()
-      .filter((r) => r.kind !== 'claude' && (!backgroundOnly || r.kind === 'background'))
+      .filter(
+        (r) =>
+          r.kind !== 'claude' && OPEN.has(r.phase) && (!backgroundOnly || r.kind === 'background')
+      )
     let n = 0
     for (const r of rows) {
       const h = this.d.tasks.header(r.id)
