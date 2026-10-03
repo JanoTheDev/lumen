@@ -17,7 +17,7 @@ pub mod tree;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -587,24 +587,64 @@ pub fn element_at(x: i32, y: i32) -> Option<Value> {
 
 // ---- warm-up ---------------------------------------------------------------
 
-static WARM: Mutex<(isize, bool)> = Mutex::new((0, false));
+/// The window waiting for a warm-up: a new window replaces one that has not started yet.
+#[derive(Debug, Default)]
+pub struct WarmQueue {
+    last: isize,
+    pending: Option<isize>,
+}
 
-/// The first snapshot of a new window (esp. Chromium) can take seconds; pay it in the background.
-pub fn warm_up(hwnd: isize) {
-    {
-        let mut w = WARM.lock().unwrap();
-        if hwnd == 0 || w.0 == hwnd || w.1 {
-            return;
+impl WarmQueue {
+    /// Queues `hwnd` unless it is 0 or the window asked for last. True when queued.
+    pub fn offer(&mut self, hwnd: isize) -> bool {
+        if hwnd == 0 || hwnd == self.last {
+            return false;
         }
-        *w = (hwnd, true);
+        self.last = hwnd;
+        self.pending = Some(hwnd);
+        true
     }
-    std::thread::spawn(move || {
-        crate::com_init();
-        if let Err(e) = build(hwnd, DEFAULT_MAX_NODES, true, None) {
-            tracing::debug!("uia warm-up of {hwnd} failed: {}", e.message);
+
+    pub fn take(&mut self) -> Option<isize> {
+        self.pending.take()
+    }
+}
+
+static WARM: (Mutex<WarmQueue>, Condvar) = (Mutex::new(WarmQueue { last: 0, pending: None }), Condvar::new());
+static WARM_WORKER: OnceLock<()> = OnceLock::new();
+
+fn warm_worker() {
+    crate::com_init();
+    loop {
+        let hwnd = {
+            let mut q = WARM.0.lock().unwrap();
+            loop {
+                if let Some(h) = q.take() {
+                    break h;
+                }
+                q = WARM.1.wait(q).unwrap();
+            }
+        };
+        match std::panic::catch_unwind(|| build(hwnd, DEFAULT_MAX_NODES, true, None)) {
+            Ok(Err(e)) => tracing::debug!("uia warm-up of {hwnd} failed: {}", e.message),
+            Err(_) => tracing::debug!("uia warm-up of {hwnd} panicked"),
+            Ok(Ok(_)) => {}
         }
-        WARM.lock().unwrap().1 = false;
+    }
+}
+
+/// The first snapshot of a new window (esp. Chromium) can take seconds; pay it in the background
+/// on one long-lived thread that keeps its UIA client.
+pub fn warm_up(hwnd: isize) {
+    if !WARM.0.lock().unwrap().offer(hwnd) {
+        return;
+    }
+    WARM_WORKER.get_or_init(|| {
+        if let Err(e) = std::thread::Builder::new().name("uia-warm".into()).spawn(warm_worker) {
+            tracing::warn!("uia warm-up thread: {e}");
+        }
     });
+    WARM.1.notify_one();
 }
 
 // ---- focused element -------------------------------------------------------
@@ -801,6 +841,19 @@ mod tests {
         assert_eq!(caret_physical((100, 200), (40, 10, 42, 26), 96, 144), Some(Rect::new(160, 215, 3, 24)));
         // Unknown DPI: no scaling.
         assert_eq!(caret_physical((0, 0), (5, 5, 6, 20), 0, 144), Some(Rect::new(5, 5, 1, 15)));
+    }
+
+    #[test]
+    fn warm_queue_latest_wins_and_skips_repeats() {
+        let mut q = WarmQueue::default();
+        assert!(!q.offer(0));
+        assert!(q.offer(1));
+        assert!(q.offer(2));
+        assert_eq!(q.take(), Some(2));
+        assert_eq!(q.take(), None);
+        assert!(!q.offer(2));
+        assert!(q.offer(1));
+        assert_eq!(q.take(), Some(1));
     }
 
     #[test]
