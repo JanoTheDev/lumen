@@ -18,7 +18,7 @@ import { basename, join } from 'path'
 import { configPath } from '../config'
 import { getAgent } from '../agent/instance'
 import { tarPath } from '../downloads/verified-download'
-import { logFileDir, redact } from './log-file'
+import { flushLogFile, logFileDir, redact } from './log-file'
 import { isPortable } from '../first-run/portable'
 
 const MAX_DUMPS = 5
@@ -88,6 +88,7 @@ function zip(fromDir: string, file: string): Promise<void> {
 export async function writeDiagnostics(file: string): Promise<void> {
   const staging = mkdtempSync(join(tmpdir(), 'lumen-diag-'))
   try {
+    flushLogFile()
     const logs = logFileDir()
     if (logs && existsSync(logs)) {
       mkdirSync(join(staging, 'logs'))

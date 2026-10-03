@@ -59,4 +59,12 @@ describe('logger', () => {
     expect(call).toContain('| $0.00008')
     expect(call).toContain('| 1.20s')
   })
+  it('prints one already-redacted line per call', () => {
+    const key = ['sk', 'ant', 'api03', 'R'.repeat(40)].join('-')
+    log('fail', `401 for ${key}`, { model: 'gpt-5-nano' })
+    expect(console.log).toHaveBeenCalledTimes(1)
+    const call = (console.log as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    expect(call).toContain('401 for')
+    expect(call).not.toContain(key)
+  })
 })

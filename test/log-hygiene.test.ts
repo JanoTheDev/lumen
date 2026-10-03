@@ -42,9 +42,8 @@ describe('redaction over representative log lines', () => {
     vi.spyOn(console, 'log').mockImplementation((l: string) => void out.push(l))
     log('fail', line)
     expect(out).toHaveLength(1)
+    // main.log gets this line with only the tee's key patterns on top, not a second full pass.
     expect(leaks(out[0])).toEqual([])
-    // main.log gets the console line through the file tee's own filter as well.
-    expect(leaks(redactFile(out[0]))).toEqual([])
   })
 
   it.each(LINES)('a raw console.* line is filtered before main.log: %s', (line) => {

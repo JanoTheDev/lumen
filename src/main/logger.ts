@@ -1,4 +1,5 @@
 import { redactForLog } from './actions/redact'
+import { printRedacted } from './diagnostics/log-file'
 
 export type LogTag = 'plan' | 'step' | 'verify' | 'retry' | 'fail' | 'skip' | 'done' | 'time'
 
@@ -25,7 +26,7 @@ export function log(tag: LogTag, message: string, meta: LogMeta = {}): void {
   if (meta.model) parts.push(`| ${meta.model}`)
   if (meta.cost != null) parts.push(`| $${meta.cost.toFixed(5)}`)
   if (meta.timeMs != null) parts.push(`| ${(meta.timeMs / 1000).toFixed(2)}s`)
-  console.log(parts.join(' '))
+  printRedacted(parts.join(' '))
 }
 
 export interface Timer {

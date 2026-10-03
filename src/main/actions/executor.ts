@@ -9,6 +9,7 @@ import { toAgentAction, type AgentAction } from './agent-action'
 import { assertLaunchableUrl, type Origin, type Risk, type TaskState } from './safety'
 import { gate, newTaskId } from './policy'
 import { redactForLog } from './redact'
+import { printRedacted } from '../diagnostics/log-file'
 import { requireAgent } from '../agent/instance'
 import type { AgentBridge } from '../agent/bridge'
 import { canRefine, needsRefine, refineTarget } from '../query/refine'
@@ -293,7 +294,7 @@ export async function executeActions(
         g.finish('error')
         continue
       }
-      console.log('[execute] running:', redactForLog(JSON.stringify(scaled)))
+      printRedacted(`[execute] running: ${redactForLog(JSON.stringify(scaled))}`)
       const previewed = preview && showPreview(scaled, rect)
       drawn ||= previewed
       // How to reverse it ("undo that", 11 T16), kept only once it ran. The preview stays up
