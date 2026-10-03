@@ -3,8 +3,8 @@
 //! page's own text is not readable. Nothing is typed or clicked.
 //!
 //! The foreground window is used when it is a browser, else the front-most browser window.
-//! The browser chrome is walked breadth-first in the control view (page Documents are skipped,
-//! so fields on the page never count); the address bar is the Edit with AutomationId
+//! The browser chrome is walked breadth-first in the control view, one cached round trip per
+//! element for its children (page Documents are skipped, so fields on the page never count); the address bar is the Edit with AutomationId
 //! `urlbar-input` (Firefox), else one named like an address / search bar, else the top-most Edit
 //! above the web content.
 
@@ -96,8 +96,8 @@ pub fn normalize_url(raw: &str) -> Option<String> {
 }
 
 fn control_type(el: &IUIAutomationElement) -> i32 {
-    // SAFETY: current-property read on a live element.
-    unsafe { el.CurrentControlType() }.map(|c| c.0).unwrap_or(0)
+    // SAFETY: cached-property read on a live element.
+    unsafe { el.CachedControlType() }.map(|c| c.0).unwrap_or(0)
 }
 
 fn bstr(r: windows::core::Result<windows::core::BSTR>) -> String {
@@ -122,13 +122,43 @@ fn browser_window() -> Option<isize> {
     window::find_browser()
 }
 
+/// Control-view children of `el` with the address-bar properties cached, in one round trip.
+fn children_of(el: &IUIAutomationElement, cr: &IUIAutomationCacheRequest) -> Vec<IUIAutomationElement> {
+    // SAFETY: COM calls on a live element and this thread's cache request.
+    unsafe {
+        let Ok(arr) = el.BuildUpdatedCache(cr).and_then(|e| e.GetCachedChildren()) else { return vec![] };
+        let n = arr.Length().unwrap_or(0);
+        (0..n).filter_map(|i| arr.GetElement(i).ok()).collect()
+    }
+}
+
+fn chrome_cache(client: &Client) -> Result<IUIAutomationCacheRequest, AgentError> {
+    // SAFETY: COM calls on this thread's client.
+    unsafe {
+        let cr = client.u.CreateCacheRequest().map_err(|e| com_err("CreateCacheRequest", e))?;
+        for pid in [
+            UIA_ControlTypePropertyId,
+            UIA_AutomationIdPropertyId,
+            UIA_NamePropertyId,
+            UIA_BoundingRectanglePropertyId,
+        ] {
+            cr.AddProperty(pid).map_err(|e| com_err("AddProperty", e))?;
+        }
+        cr.SetTreeScope(TreeScope(TreeScope_Element.0 | TreeScope_Children.0))
+            .map_err(|e| com_err("SetTreeScope", e))?;
+        let view = client.u.ControlViewCondition().map_err(|e| com_err("ControlViewCondition", e))?;
+        cr.SetTreeFilter(&view).map_err(|e| com_err("SetTreeFilter", e))?;
+        Ok(cr)
+    }
+}
+
 pub fn cmd_browser_url(_args: &Args, token: &CancelToken) -> CmdResult {
     let hwnd = browser_window().ok_or_else(|| AgentError::not_found("no browser window is open"))?;
     let client = Client::get()?;
-    // SAFETY: COM calls on this thread's client and live elements.
-    let root = unsafe { client.u.ElementFromHandle(HWND(hwnd as *mut _)) }
+    let cr = chrome_cache(&client)?;
+    // SAFETY: COM call on this thread's client.
+    let root = unsafe { client.u.ElementFromHandleBuildCache(HWND(hwnd as *mut _), &cr) }
         .map_err(|e| com_err("ElementFromHandle", e))?;
-    let walker = unsafe { client.u.ControlViewWalker() }.map_err(|e| com_err("ControlViewWalker", e))?;
     let content_top = web_content_child(hwnd).map(|c| window::rect(c).y);
 
     let mut edits: Vec<(Cand, IUIAutomationElement)> = Vec::new();
@@ -147,21 +177,17 @@ pub fn cmd_browser_url(_args: &Args, token: &CancelToken) -> CmdResult {
             continue;
         }
         if ct == UIA_EditControlTypeId.0 {
-            // SAFETY: current-property reads on a live element.
+            // SAFETY: cached-property reads on a live element.
             let (automation_id, name, rect) = unsafe {
                 (
-                    bstr(el.CurrentAutomationId()),
-                    bstr(el.CurrentName()),
-                    el.CurrentBoundingRectangle().map(Rect::from).unwrap_or_default(),
+                    bstr(el.CachedAutomationId()),
+                    bstr(el.CachedName()),
+                    el.CachedBoundingRectangle().map(Rect::from).unwrap_or_default(),
                 )
             };
             edits.push((Cand { automation_id, name, top: rect.y }, el.clone()));
         }
-        let mut child = unsafe { walker.GetFirstChildElement(&el) }.ok();
-        while let Some(c) = child {
-            child = unsafe { walker.GetNextSiblingElement(&c) }.ok();
-            queue.push_back(c);
-        }
+        queue.extend(children_of(&el, &cr));
     }
     let cands: Vec<Cand> = edits.iter().map(|(c, _)| c.clone()).collect();
     let url = pick(&cands, content_top).and_then(|i| normalize_url(&value_of(&edits[i].1)));

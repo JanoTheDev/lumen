@@ -119,6 +119,11 @@ fn run_all() -> Vec<Stats> {
     let (s, out, e) = time(20, || uia::cmd_focus_info(&token).map_err(err));
     let role = out.as_ref().and_then(|v| v.get("role")).cloned().unwrap_or(Value::Null);
     rows.push(Stats { name: "focus_info", note: e.unwrap_or(format!("focused {role}")), samples: s });
+    if window::find_browser().is_some() {
+        let (s, out, e) = time(5, || uia::browser::cmd_browser_url(&Args::new(), &token).map_err(err));
+        let browser = out.as_ref().and_then(|v| v.get("browser")).cloned().unwrap_or(Value::Null);
+        rows.push(Stats { name: "browser_url", note: e.unwrap_or(format!("{browser}")), samples: s });
+    }
 
     let chars = TYPE_TEXT.chars().count();
     let (s, keys, _) = time(200, || Ok(sendinput::key_inputs(&sendinput::text_events(TYPE_TEXT)).len()));
