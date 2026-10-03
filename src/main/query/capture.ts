@@ -25,6 +25,11 @@ export interface CaptureOptions {
   /** Every monitor instead of the foreground one (router needsAllScreens). */
   allScreens?: boolean
   signal?: AbortSignal
+  /**
+   * Publish the result as the current frame and context only once this resolves true; false
+   * returns it unpublished (a capture started before the route was known, then not needed).
+   */
+  publish?: Promise<boolean>
 }
 
 const MAX_IMAGE_WIDTH = 1280
@@ -121,26 +126,38 @@ export async function captureContext(
   const wasVisible = highlight.isVisible()
   const release = highlight.holdHidden()
   const started = Date.now()
-  const [foreground, captured, uia] = await (async () => {
+  const [shot, uia] = await (async () => {
     try {
       if (wasVisible) await sleep(32)
-      return await Promise.all([
+      let uiaSettled = false
+      const snapshot = commands
+        .uiaSnapshot(
+          agent,
+          { scope: 'foreground', maxNodes: 400, interactiveOnly: true },
+          { signal, timeoutMs: UIA_TIMEOUT_MS }
+        )
+        .catch(() => undefined)
+        .then((s) => {
+          uiaSettled = true
+          return s
+        })
+      const framed = Promise.all([
         foregroundOf(agent, signal),
-        framesOf(agent, !!opts.allScreens, signal),
-        commands
-          .uiaSnapshot(
-            agent,
-            { scope: 'foreground', maxNodes: 400, interactiveOnly: true },
-            { signal, timeoutMs: UIA_TIMEOUT_MS }
-          )
-          .catch(() => undefined)
-      ])
+        framesOf(agent, !!opts.allScreens, signal)
+      ]).then(([foreground, captured]) => {
+        // Foreground monitor = frame "1" (marks, UIA list); the others follow by position.
+        const frames = orderFrames(captured, foreground.monitorId)
+        const ocr = ocrFor(agent, frames[0])
+        // UIA still running: a poor snapshot needs the OCR for set-of-marks, so start it now.
+        if (frames[0] && !uiaSettled) void ocr()
+        return { foreground, frames, ocr }
+      })
+      return await Promise.all([framed, snapshot])
     } finally {
       release()
     }
   })()
-  // Foreground monitor = frame "1" (marks, UIA list); the others follow by position.
-  const frames = orderFrames(captured, foreground.monitorId)
+  const { foreground, frames, ocr } = shot
   const first = frames[0]
   if (!foreground.rect && uia) foreground.rect = uia.root.rect
   const skill = matchSkill(foreground) ?? undefined
@@ -160,7 +177,7 @@ export async function captureContext(
     uia,
     uiaQuality: quality,
     skill,
-    ocr: ocrFor(agent, first),
+    ocr,
     signal,
     activeWindow: foreground.title,
     screenshot: first?.data ?? null,
@@ -179,6 +196,8 @@ export async function captureContext(
       marksNote = ` | ${marked.marks.length} marks ${Date.now() - t0}ms`
     }
   }
+  const ms = Date.now() - started
+  const publish = opts.publish ? await opts.publish : true
   if (first) {
     const g = first.geometry
     const onFrame = uia && frameRect ? nodesOnFrame(uia, frameRect).length : 0
@@ -188,11 +207,11 @@ export async function captureContext(
         `${first.monitor ? ` monitor ${first.monitor.id} x${first.monitor.scale}` : ''}` +
         ` | uia ${uia ? `${onFrame} nodes, ${quality}` : 'none'}${marksNote}` +
         `${frames.length > 1 ? ` | +${frames.length - 1} more screens` : ''}` +
-        `${skill ? ` | skill ${skill.id}` : ''} | ${Date.now() - started}ms`
+        `${skill ? ` | skill ${skill.id}` : ''} | ${ms}ms${publish ? '' : ' (unused)'}`
     )
-    setCurrentFrame(g)
+    if (publish) setCurrentFrame(g)
   }
-  setCurrentContext(ctx)
+  if (publish) setCurrentContext(ctx)
   return ctx
 }
 
