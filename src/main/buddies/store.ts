@@ -10,6 +10,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'fs'
 import { join } from 'path'
@@ -111,11 +112,26 @@ export function capNotebook(text: string, max = BUDDY_NOTEBOOK_MAX_BYTES): strin
   return Buffer.byteLength(rest, 'utf8') <= max ? rest : ''
 }
 
+interface Loaded {
+  mtimeMs: number
+  size: number
+  raw: Record<string, unknown>
+}
+
 export class BuddyStore {
+  /** Parsed buddy.md headers, used while the file keeps its time and size. */
+  private readonly loaded = new Map<string, Loaded>()
+
   constructor(
     readonly root: string,
     private readonly opts: BuddyStoreOptions = {}
   ) {}
+
+  /** Drops the parsed buddies (the next read goes to the files). */
+  invalidate(id?: string): void {
+    if (id === undefined) this.loaded.clear()
+    else this.loaded.delete(id)
+  }
 
   private dir(id: string): string {
     if (!isBuddyId(id)) throw new Error(`not a buddy id: ${id}`)
@@ -145,10 +161,30 @@ export class BuddyStore {
 
   /** The buddy, validated and clamped; null when missing or unreadable. */
   get(id: string): Buddy | null {
-    if (!this.exists(id)) return null
+    if (!isBuddyId(id)) return null
+    const file = join(this.root, id, BUDDY_FILE)
+    let st: ReturnType<typeof statSync>
     try {
-      const raw = parseBuddyFile(readFileSync(join(this.dir(id), BUDDY_FILE), 'utf8'))
-      return clampBuddy(id, raw, {
+      st = statSync(file, { throwIfNoEntry: false })
+    } catch {
+      st = undefined
+    }
+    if (!st) {
+      this.loaded.delete(id)
+      return null
+    }
+    try {
+      let hit = this.loaded.get(id)
+      if (!hit || hit.mtimeMs !== st.mtimeMs || hit.size !== st.size) {
+        this.loaded.delete(id)
+        hit = {
+          mtimeMs: st.mtimeMs,
+          size: st.size,
+          raw: parseBuddyFile(readFileSync(file, 'utf8'))
+        }
+        this.loaded.set(id, hit)
+      }
+      return clampBuddy(id, structuredClone(hit.raw), {
         forceUntrusted: this.imported(id),
         now: this.now()
       })
@@ -161,7 +197,9 @@ export class BuddyStore {
   list(): Buddy[] {
     if (!existsSync(this.root)) return []
     const out: Buddy[] = []
-    for (const name of readdirSync(this.root)) {
+    const names = new Set(readdirSync(this.root))
+    for (const id of this.loaded.keys()) if (!names.has(id)) this.loaded.delete(id)
+    for (const name of names) {
       if (!isBuddyId(name)) continue
       const b = this.get(name)
       if (b) out.push(b)
@@ -217,6 +255,7 @@ export class BuddyStore {
     })
     const dir = this.dir(b.id)
     mkdirSync(dir, { recursive: true })
+    this.loaded.delete(b.id)
     atomicWrite(join(dir, BUDDY_FILE), buddyFileText(clean))
     return clean
   }
@@ -245,6 +284,7 @@ export class BuddyStore {
 
   remove(id: string): boolean {
     if (!this.exists(id)) return false
+    this.loaded.delete(id)
     rmSync(this.dir(id), { recursive: true, force: true })
     return true
   }
