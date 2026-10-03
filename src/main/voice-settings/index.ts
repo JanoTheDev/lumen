@@ -38,12 +38,9 @@ async function voices(): ReturnType<SettingsPorts['voices']> {
   }
   const bridge = getAgent()
   if (!bridge) throw new Error('no agent')
-  const list = (await ttsVoices(bridge)).map((v) => ({
-    name: v.name,
-    lang: v.lang,
-    gender: v.gender
-  }))
-  const current = pickWinVoice(list, cfg.voice.ttsVoice, cfg.voice.language)
+  const all = await ttsVoices(bridge)
+  const list = all.map((v) => ({ name: v.name, lang: v.lang, gender: v.gender }))
+  const current = pickWinVoice(all, cfg.voice.ttsVoice, cfg.voice.language)
   return {
     engine: 'windows',
     list,

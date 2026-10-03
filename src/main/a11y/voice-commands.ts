@@ -340,7 +340,8 @@ export const GATE_WHEN: Record<Gate, string> = {
 }
 
 export interface SheetRow {
-  category: Category
+  /** A grammar category, or the title of a registered help group. */
+  category: Category | (string & {})
   say: string
   does: string
   when?: string
