@@ -148,6 +148,25 @@ export class EpisodeStore {
     return out.sort((a, b) => b.date.localeCompare(a.date))
   }
 
+  /** Same as `list()`, with the folders and files read asynchronously. */
+  async listAsync(): Promise<Episode[]> {
+    const out: Episode[] = []
+    const months = (await this.store.listAsync('episodes')).filter((m) => /^\d{4}-\d{2}$/.test(m))
+    for (const month of months) {
+      const files = (await this.store.listAsync(`episodes/${month}`)).filter((f) =>
+        f.endsWith('.md')
+      )
+      const raws = await Promise.all(
+        files.map((f) => this.store.readAsync(`episodes/${month}/${f}`))
+      )
+      for (const raw of raws) {
+        const e = raw ? parseEpisode(raw) : null
+        if (e) out.push(e)
+      }
+    }
+    return out.sort((a, b) => b.date.localeCompare(a.date))
+  }
+
   remove(id: string): boolean {
     if (!ID_RE.test(id) || !this.store.exists(this.rel(id))) return false
     this.store.remove(this.rel(id))

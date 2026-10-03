@@ -7,8 +7,10 @@ import {
   readdirSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'fs'
+import { readFile, readdir } from 'fs/promises'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { isSensitive } from './sensitive'
@@ -29,7 +31,15 @@ export type UpsertResult = 'added' | 'refreshed' | 'replaced' | 'rejected'
 
 export const isoDay = (d: Date): string => d.toISOString().slice(0, 10)
 
+interface ParsedEntry {
+  mtimeMs: number
+  size: number
+  value: unknown
+}
+
 export class MemoryStore {
+  private readonly parsed = new Map<string, ParsedEntry>()
+
   constructor(
     readonly dir: string = DEFAULT_MEMORY_DIR,
     readonly now: () => Date = () => new Date()
@@ -51,8 +61,31 @@ export class MemoryStore {
     }
   }
 
+  /**
+   * `parse` of the file's text, kept until its mtime or size changes (hand edits included) or this
+   * store writes it. Null when the file is missing or unreadable.
+   */
+  readParsed<T>(rel: string, parse: (raw: string) => T): T | null {
+    let st: ReturnType<typeof statSync>
+    try {
+      st = statSync(this.path(rel), { throwIfNoEntry: false })
+    } catch {
+      st = undefined
+    }
+    const hit = this.parsed.get(rel)
+    if (st && hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.value as T
+    this.parsed.delete(rel)
+    if (!st) return null
+    const raw = this.read(rel)
+    if (raw === null) return null
+    const value = parse(raw)
+    this.parsed.set(rel, { mtimeMs: st.mtimeMs, size: st.size, value })
+    return value
+  }
+
   /** Write via temp file + rename so a crash never leaves a half-written file. */
   write(rel: string, content: string): void {
+    this.parsed.delete(rel)
     const full = this.path(rel)
     mkdirSync(dirname(full), { recursive: true })
     const tmp = `${full}.tmp`
@@ -61,13 +94,31 @@ export class MemoryStore {
   }
 
   append(rel: string, content: string): void {
+    this.parsed.delete(rel)
     const full = this.path(rel)
     mkdirSync(dirname(full), { recursive: true })
     appendFileSync(full, content, 'utf8')
   }
 
   remove(rel: string): void {
+    this.parsed.delete(rel)
     rmSync(this.path(rel), { force: true })
+  }
+
+  async readAsync(rel: string): Promise<string | null> {
+    try {
+      return await readFile(this.path(rel), 'utf8')
+    } catch {
+      return null
+    }
+  }
+
+  async listAsync(rel: string): Promise<string[]> {
+    try {
+      return await readdir(this.path(rel))
+    } catch {
+      return []
+    }
   }
 
   list(rel: string): string[] {
@@ -113,8 +164,11 @@ export class FactFile {
   }
 
   read(): Fact[] {
-    const raw = this.store.read(this.rel)
-    if (!raw) return []
+    const facts = this.store.readParsed(this.rel, (raw) => this.parse(raw))
+    return facts ? facts.map((f) => ({ ...f })) : []
+  }
+
+  private parse(raw: string): Fact[] {
     const facts: Fact[] = []
     let section = this.sectionOrder[this.sectionOrder.length - 1] ?? 'Notes'
     for (const line of raw.split(/\r?\n/)) {

@@ -78,6 +78,8 @@ export class Memory {
   private readonly settings: () => MemorySettings
   private index: EpisodeIndex | null = null
   private byId = new Map<string, Episode>()
+  private warming: Promise<void> | null = null
+  private episodeWrites = 0
 
   constructor(private readonly opts: MemoryOptions = {}) {
     this.store = new MemoryStore(opts.dir ?? DEFAULT_MEMORY_DIR, opts.now)
@@ -106,11 +108,30 @@ export class Memory {
   }
 
   private getIndex(): EpisodeIndex {
-    if (this.index) return this.index
-    this.index = createEpisodeIndex(this.opts.index)
-    ;(this.opts.log ?? console.info)(`[memory] episode index: ${this.index.backend}`)
-    for (const e of this.episodes.list()) this.indexEpisode(e)
-    return this.index
+    return this.index ?? this.fillIndex(this.episodes.list())
+  }
+
+  private fillIndex(episodes: Episode[]): EpisodeIndex {
+    const index = createEpisodeIndex(this.opts.index)
+    this.index = index
+    ;(this.opts.log ?? console.info)(`[memory] episode index: ${index.backend}`)
+    for (const e of episodes) this.indexEpisode(e)
+    return index
+  }
+
+  /**
+   * Builds the episode index with asynchronous file reads, so the first search does not have to.
+   * A search before it finishes builds the index itself; an episode saved or deleted meanwhile
+   * leaves the index to that next search.
+   */
+  warmIndex(): Promise<void> {
+    if (this.index) return Promise.resolve()
+    this.warming ??= (async () => {
+      const writes = this.episodeWrites
+      const episodes = await this.episodes.listAsync()
+      if (!this.index && writes === this.episodeWrites) this.fillIndex(episodes)
+    })().finally(() => (this.warming = null))
+    return this.warming
   }
 
   private indexEpisode(e: Episode): void {
@@ -174,6 +195,7 @@ export class Memory {
     if (!this.canWrite()) return { ...result, status: 'private' }
 
     const episode = this.episodes.save(summary.episode)
+    this.episodeWrites++
     if (this.index) this.indexEpisode(episode)
     result.status = 'saved'
     result.episode = episode
@@ -201,6 +223,7 @@ export class Memory {
       result.queued = queue
     }
     this.episodes.prune(s.retentionDays).forEach((id) => this.unindex(id))
+    this.episodeWrites++
     return result
   }
 
@@ -238,7 +261,10 @@ export class Memory {
 
   deleteEpisode(id: string): boolean {
     const ok = this.episodes.remove(id)
-    if (ok) this.unindex(id)
+    if (ok) {
+      this.episodeWrites++
+      this.unindex(id)
+    }
     return ok
   }
 

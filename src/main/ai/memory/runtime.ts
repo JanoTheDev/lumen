@@ -204,6 +204,10 @@ export function startMemory(): void {
     const mem = memory()
     if (mem.session.isStale()) void endSession('restart')
     else if (mem.session.turns().length) armIdle()
+    if (mem.isEnabled())
+      setImmediate(() =>
+        mem.warmIndex().catch((e) => log('fail', `memory index failed: ${(e as Error).message}`))
+      )
   } catch (e) {
     log('fail', `memory start failed: ${(e as Error).message}`)
   }
