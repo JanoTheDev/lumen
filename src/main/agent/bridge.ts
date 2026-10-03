@@ -106,7 +106,14 @@ const DEFAULT_RESTART: RestartPolicy = {
   windowMs: 60000
 }
 
-const QUIET_EVENTS = new Set(['mouse-moved', 'dwell-progress'])
+const QUIET_EVENTS = new Set([
+  'mouse-moved',
+  'dwell-progress',
+  'user-activity',
+  'key-combo',
+  'focus-changed',
+  'uia-event'
+])
 
 function timeoutFor(cmd: string, params: Record<string, unknown>): number {
   if (cmd === 'execute') {

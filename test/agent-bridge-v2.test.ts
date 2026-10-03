@@ -120,6 +120,19 @@ describe('AgentBridge protocol v2', () => {
     bridge.stop()
   })
 
+  it('logs no line for frequent input events', async () => {
+    const { bridge, procs } = setup()
+    await bridge.start()
+    const log = vi.mocked(console.log)
+    log.mockClear()
+    for (const event of ['user-activity', 'key-combo', 'focus-changed', 'uia-event'])
+      procs[0].emitLine({ v: 2, event, data: {} })
+    procs[0].emitLine({ v: 2, event: 'dwell-trigger', data: { x: 1, y: 1 } })
+    const events = log.mock.calls.filter((c) => c[0] === '[bridge] event:').map((c) => c[1])
+    expect(events).toEqual(['dwell-trigger'])
+    bridge.stop()
+  })
+
   it('maps a v2 error object to AgentError with its code', async () => {
     const { bridge, procs } = setup()
     await bridge.start()
