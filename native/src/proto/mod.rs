@@ -5,6 +5,7 @@
 pub mod router;
 pub mod writer;
 
+use serde::Serialize;
 use serde_json::{Map, Value, json};
 
 pub type Args = Map<String, Value>;
@@ -93,17 +94,55 @@ pub fn parse_line(line: &str) -> Option<Result<Request, String>> {
     Some(Ok(Request { id, cmd, args }))
 }
 
+#[derive(Serialize)]
+struct OkFrame<'a> {
+    v: u8,
+    id: &'a Value,
+    ok: bool,
+    result: &'a Value,
+}
+
+#[derive(Serialize)]
+struct ErrorBody<'a> {
+    code: &'a str,
+    message: &'a str,
+}
+
+#[derive(Serialize)]
+struct ErrorFrame<'a> {
+    v: u8,
+    id: &'a Value,
+    ok: bool,
+    error: ErrorBody<'a>,
+}
+
+#[derive(Serialize)]
+struct EventFrame<'a> {
+    v: u8,
+    event: &'a str,
+    data: &'a Value,
+}
+
+fn to_line<T: Serialize>(frame: &T) -> String {
+    serde_json::to_string(frame).unwrap_or_default()
+}
+
 pub fn response_line(id: &Value, result: &CmdResult) -> String {
-    let frame = match result {
-        Ok(result) => json!({"v": 2, "id": id, "ok": true, "result": result}),
-        Err(e) => json!({"v": 2, "id": id, "ok": false, "error": {"code": e.code, "message": e.message}}),
-    };
-    frame.to_string()
+    match result {
+        Ok(result) => to_line(&OkFrame { v: 2, id, ok: true, result }),
+        Err(e) => to_line(&ErrorFrame {
+            v: 2,
+            id,
+            ok: false,
+            error: ErrorBody { code: e.code, message: &e.message },
+        }),
+    }
 }
 
 pub fn event_line(event: &str, data: Value) -> String {
-    let data = if data.is_null() { json!({}) } else { data };
-    json!({"v": 2, "event": event, "data": data}).to_string()
+    let empty = Value::Object(Map::new());
+    let data = if data.is_null() { &empty } else { &data };
+    to_line(&EventFrame { v: 2, event, data })
 }
 
 /// Typed argument accessors that fail with E_INVALID.
@@ -209,6 +248,16 @@ mod tests {
             r#"{"v":2,"id":4,"ok":false,"error":{"code":"E_INVALID","message":"bad"}}"#
         );
         assert_eq!(event_line("x", Value::Null), r#"{"v":2,"event":"x","data":{}}"#);
+        let nested = json!({"z": [1, 2.5, null, {"b": "é
+\"q\"", "a": true}], "a": {"y": -3}});
+        assert_eq!(
+            response_line(&json!("k"), &Ok(nested.clone())),
+            json!({"v": 2, "id": "k", "ok": true, "result": nested}).to_string()
+        );
+        assert_eq!(
+            event_line("e", nested.clone()),
+            json!({"v": 2, "event": "e", "data": nested}).to_string()
+        );
         assert_eq!(event_line("x", json!({"s":"é"})), "{\"v\":2,\"event\":\"x\",\"data\":{\"s\":\"é\"}}");
     }
 
