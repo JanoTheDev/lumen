@@ -3,7 +3,8 @@
 //! - inline: runs on the reader thread and must return within a few ms.
 //! - input: one FIFO worker, so synthetic input never interleaves.
 //! - read: a pool of three for capture, window queries, OCR.
-//! - uia: one dedicated COM worker (UI Automation calls cannot be interrupted).
+//! - uia: one dedicated COM worker for snapshots (UI Automation calls cannot be interrupted).
+//! - uia-light: one more COM worker for short UIA reads, so they never queue behind a snapshot.
 //! - speech: one worker for voice synthesis, so a long reply never fills the read pool.
 //!
 //! Every queued call gets a [`CancelToken`]. `cancel` answers the target with
@@ -30,10 +31,11 @@ pub enum Lane {
     Input,
     Read,
     Uia,
+    UiaLight,
     Speech,
 }
 
-const QUEUED_LANES: [Lane; 4] = [Lane::Input, Lane::Read, Lane::Uia, Lane::Speech];
+const QUEUED_LANES: [Lane; 5] = [Lane::Input, Lane::Read, Lane::Uia, Lane::UiaLight, Lane::Speech];
 
 fn lane_index(lane: Lane) -> usize {
     match lane {
@@ -42,6 +44,7 @@ fn lane_index(lane: Lane) -> usize {
         Lane::Read => 2,
         Lane::Uia => 3,
         Lane::Speech => 4,
+        Lane::UiaLight => 5,
     }
 }
 
@@ -130,7 +133,7 @@ pub struct Router {
     commands: RwLock<HashMap<String, Entry>>,
     inflight: Mutex<HashMap<String, Arc<Call>>>,
     lanes: HashMap<Lane, Sender<Job>>,
-    stats: [LaneStats; 5],
+    stats: [LaneStats; 6],
     timer: Sender<(Instant, Arc<Call>)>,
 }
 
@@ -383,6 +386,11 @@ mod tests {
             Ok(json!({"slept": true}))
         });
         router.register("boom", Lane::Input, None, |_, _| panic!("kaboom"));
+        router.register("uia_sleep", Lane::Uia, None, |args, t| {
+            t.sleep(Duration::from_millis(args["ms"].as_u64().unwrap()))?;
+            Ok(json!({"slept": true}))
+        });
+        router.register("uia_light", Lane::UiaLight, None, |_, _| Ok(json!({"light": true})));
         router.register("speak", Lane::Speech, None, |args, t| {
             t.sleep(Duration::from_millis(args["ms"].as_u64().unwrap()))?;
             Ok(json!({"spoke": true}))
@@ -518,5 +526,21 @@ mod tests {
             assert!(r.cancel(&json!(id)));
         }
         assert_eq!(wait_for(&r, &s, 6).len(), 6);
+    }
+
+    #[test]
+    fn light_uia_reads_do_not_wait_for_a_snapshot() {
+        let (r, s) = setup();
+        r.dispatch(req(40, "uia_sleep", json!({"ms": 60_000})));
+        std::thread::sleep(Duration::from_millis(20));
+        let t0 = Instant::now();
+        r.dispatch(req(41, "uia_light", json!({})));
+        let l = wait_for(&r, &s, 1);
+        assert!(t0.elapsed() < Duration::from_secs(5));
+        assert_eq!(l[0]["id"], 41, "{l:?}");
+        assert_eq!(l[0]["result"]["light"], true);
+        assert!(r.lane_busy(Lane::Uia, Duration::ZERO));
+        assert!(r.cancel(&json!(40)));
+        assert_eq!(wait_for(&r, &s, 2).len(), 2);
     }
 }

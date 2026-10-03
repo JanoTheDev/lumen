@@ -211,13 +211,13 @@ pub fn register_core(app: &Arc<App>) {
     app.cmd("uia_snapshot", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_snapshot(args, token));
     app.cmd("uia_find", Lane::Uia, uia_timeout, |_, args, token| crate::uia::cmd_find(args, token));
     app.cmd("uia_act", Lane::Input, None, |_, args, token| crate::uia::cmd_act(args, token));
-    app.cmd("uia_text", Lane::Uia, Some(crate::uia::text::TIMEOUT_MS), |_, args, token| {
+    app.cmd("uia_text", Lane::UiaLight, Some(crate::uia::text::TIMEOUT_MS), |_, args, token| {
         crate::uia::text::cmd_text(args, token)
     });
-    app.cmd("browser_url", Lane::Uia, Some(crate::uia::browser::TIMEOUT_MS), |_, args, token| {
+    app.cmd("browser_url", Lane::UiaLight, Some(crate::uia::browser::TIMEOUT_MS), |_, args, token| {
         crate::uia::browser::cmd_browser_url(args, token)
     });
-    app.cmd("element_at", Lane::Uia, Some(crate::uia::point::TIMEOUT_MS), |_, args, _| {
+    app.cmd("element_at", Lane::UiaLight, Some(crate::uia::point::TIMEOUT_MS), |_, args, _| {
         crate::uia::point::cmd_element_at(args)
     });
     app.cmd("focus_info", Lane::Read, Some(crate::uia::FOCUS_INFO_TIMEOUT_MS), |_, _, token| {
