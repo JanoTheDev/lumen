@@ -313,7 +313,8 @@ export function registerBuddiesIpc(): void {
       timer = null
       const out = [...ids]
       ids.clear()
-      home.send('buddies:changed', out)
+      // A hidden Home reads the list again on home:shown.
+      if (home.get()?.isVisible()) home.send('buddies:changed', out)
       panel.send('buddies:changed', out)
     }, PUSH_MS)
   }

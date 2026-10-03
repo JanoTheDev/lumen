@@ -7,6 +7,7 @@ import type { BackgroundTask } from '@shared/types'
 
 const h = vi.hoisted(() => ({
   homeSend: vi.fn(),
+  homeVisible: true,
   panelSend: vi.fn(),
   setWorkingBuddy: vi.fn(),
   handlers: new Map<string, (...a: unknown[]) => unknown>()
@@ -17,7 +18,10 @@ vi.mock('electron', () => ({
     handle: (ch: string, fn: (...a: unknown[]) => unknown) => h.handlers.set(ch, fn)
   }
 }))
-vi.mock('../../src/main/windows/home', () => ({ send: h.homeSend }))
+vi.mock('../../src/main/windows/home', () => ({
+  get: () => ({ isVisible: () => h.homeVisible }),
+  send: h.homeSend
+}))
 vi.mock('../../src/main/windows/settings', () => ({ send: h.panelSend }))
 vi.mock('../../src/main/windows/screen-layer', () => ({ setWorkingBuddy: h.setWorkingBuddy }))
 vi.mock('../../src/main/buddies/compose', () => ({ parseSchedule: vi.fn() }))
@@ -323,5 +327,20 @@ describe('buddies:changed', () => {
     vi.advanceTimersByTime(200)
     expect(h.homeSend).toHaveBeenCalledTimes(1)
     expect(h.homeSend).toHaveBeenCalledWith('buddies:changed', ['inbox-buddy'])
+  })
+
+  it('skips a hidden Home, which reads the list again when shown', () => {
+    registerBuddiesIpc()
+    h.homeVisible = false
+    h.homeSend.mockClear()
+    h.panelSend.mockClear()
+    bus.emit({ type: 'buddies.changed', ids: ['inbox-buddy'] })
+    vi.advanceTimersByTime(200)
+    expect(h.homeSend).not.toHaveBeenCalled()
+    expect(h.panelSend).toHaveBeenCalledWith('buddies:changed', ['inbox-buddy'])
+    h.homeVisible = true
+    bus.emit({ type: 'buddies.changed', ids: ['price-buddy'] })
+    vi.advanceTimersByTime(200)
+    expect(h.homeSend).toHaveBeenCalledWith('buddies:changed', ['price-buddy'])
   })
 })
