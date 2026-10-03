@@ -1,5 +1,6 @@
 // Home flyout: the panel entry at #/home in a small window anchored to the tray icon.
-// Created hidden at startup so opening it is instant; closes on blur or Escape.
+// Created hidden shortly after start (or on the first open) so opening it is quick; closes on
+// blur or Escape.
 import { globalShortcut, screen, type BrowserWindow, type Rectangle } from 'electron'
 import type { EventChannel, EventChannels } from '@shared/channels'
 import { createWindow, loadRenderer } from './factory'
@@ -12,6 +13,7 @@ import { log } from '../logger'
 const WIDTH_CSS = 352
 const HEIGHT_CSS = 520
 const GAP = 12
+const CREATE_DELAY_MS = 1500
 
 let win: BrowserWindow | null = null
 let shownAt = 0
@@ -51,7 +53,16 @@ export function anchorBounds(
   return { x, y, width, height }
 }
 
+/** Creates the hidden window a moment after the bar has loaded, unless it exists by then. */
+export function createSoon(bar: BrowserWindow | null, delayMs = CREATE_DELAY_MS): void {
+  const later = (): void => void setTimeout(() => get() || create(), delayMs)
+  if (bar && !bar.isDestroyed() && bar.webContents.isLoading())
+    bar.webContents.once('did-finish-load', later)
+  else later()
+}
+
 export function create(): void {
+  if (get()) return
   win = createWindow({
     width: WIDTH_CSS,
     height: HEIGHT_CSS,
@@ -77,6 +88,7 @@ export function create(): void {
 }
 
 export function show(anchor: Rectangle | null = null): void {
+  if (!get()) create()
   const w = get()
   if (!w) return
   const point = anchor ? { x: anchor.x, y: anchor.y } : screen.getCursorScreenPoint()

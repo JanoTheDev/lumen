@@ -10,6 +10,7 @@ import type { DwellRingData, EventChannel, EventChannels } from '@shared/channel
 import { createWindow, loadRenderer } from './factory'
 import { onBroadcast, registerWindowSet } from './registry'
 import { loadConfig } from '../config'
+import { bus } from '../bus'
 import { mouseEvents } from '../agent/subscriptions'
 
 type Highlight = ScreenScene['highlights'][number]
@@ -291,6 +292,16 @@ function syncDisplays(): void {
   }
 }
 
+/**
+ * Creates the layers at start only when the buddy is on; everything else creates them on
+ * first use, and a starting voice turn or query does it ahead of the answer.
+ */
+export function start(): void {
+  if (loadConfig().buddy.enabled) create()
+  bus.on('voice.started', () => create())
+  bus.on('query.started', () => create())
+}
+
 /** Creates the layers once; later calls do nothing. */
 export function create(): void {
   if (created) return
@@ -304,6 +315,8 @@ export function create(): void {
 // ---- Scene API (old highlight-window calls map onto these) ----
 
 export function setScene(next: Partial<Scene>): void {
+  // Clearing needs no layer; drawing something makes one.
+  if (Object.values(next).some((v) => v !== undefined && !(Array.isArray(v) && !v.length))) create()
   if ('highlights' in next && locateTimer) {
     clearTimeout(locateTimer)
     locateTimer = null
@@ -316,6 +329,7 @@ export function setScene(next: Partial<Scene>): void {
 export function setWorkingBuddy(next: ScreenScene['worker'] | null): void {
   if (next?.name === worker?.name && next?.color === worker?.color) return
   worker = next ? { name: next.name, color: next.color } : null
+  create()
   render()
 }
 
@@ -360,6 +374,7 @@ export function setLocate(items: LocateItem[]): void {
 
 function flash(rect: Rect, style: 'success' | 'failure', ms: number): void {
   const id = `${style}${Date.now().toString(36)}`
+  create()
   scene = { ...scene, highlights: [...scene.highlights, { id, rect, style }] }
   render()
   setTimeout(() => {
@@ -486,6 +501,7 @@ export function dwell(data: DwellRingData): void {
 
 /** Capture mode: the layer under the cursor accepts pointer strokes until it reports back. */
 export function setCapture(on: boolean): void {
+  if (on) create()
   const target = on ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).id : null
   for (const l of layers.values()) {
     const active = on && l.display.id === target
@@ -516,6 +532,7 @@ export function toGlobal(win: BrowserWindow | null, p: Point): Point {
 }
 
 export function onConfigChanged(): void {
+  if (loadConfig().buddy.enabled) create()
   syncCursorFollow()
   render()
 }

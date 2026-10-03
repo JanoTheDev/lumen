@@ -139,8 +139,8 @@ function hardenWebContents(): void {
 
 function createWindows(): void {
   assistantWin.create()
-  screenLayer.create()
-  homeWin.create()
+  screenLayer.start()
+  homeWin.createSoon(assistantWin.get())
   tray.create()
   applyUiScaleOnLoad()
   // First run, or setup never finished: open the setup flow.
