@@ -78,7 +78,7 @@ const manager = new BackgroundManager({
   max: () => settings().max,
   run: (ctl) => runAndRecord(ctl),
   emit: (task) => bus.emit({ type: 'task.changed', task }),
-  save: (task) => store?.save(task),
+  save: (task) => store?.saveSoon(task),
   remove: (id) => {
     store?.remove(id)
     transcripts().remove(id)
@@ -597,5 +597,8 @@ export function installBackground(dir = join(dirname(configPath()), 'tasks')): v
   bus.on('query.done', turnEnded)
   bus.on('query.failed', turnEnded)
   bus.on('query.cancelled', turnEnded)
-  app?.on('before-quit', () => manager.interruptAll())
+  app?.on('before-quit', () => {
+    manager.interruptAll()
+    store?.flushAll()
+  })
 }

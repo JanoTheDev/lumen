@@ -1,5 +1,5 @@
 // Task chat hub, store, headers and voice matching (08 T43).
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { ClaudeSessionView } from '@shared/claude-code'
@@ -112,7 +112,7 @@ describe('TranscriptHub', () => {
     expect(hub.rec(t.id).entries).toHaveLength(0)
   })
 
-  it('saves a moment later, at once on the end, and loads it back', () => {
+  it('saves a moment later, at once on the end, and loads it back', async () => {
     tmp = tempDir()
     const store = new TranscriptStore(tmp.dir)
     const { hub, timers } = hubWith(store)
@@ -120,7 +120,8 @@ describe('TranscriptHub', () => {
     expect(timers).toHaveLength(1)
     expect(existsSync(join(tmp.dir, 't_fore01.json'))).toBe(false)
     timers[0]()
-    expect(existsSync(join(tmp.dir, 't_fore01.json'))).toBe(true)
+    const dir = tmp.dir
+    await vi.waitFor(() => expect(existsSync(join(dir, 't_fore01.json'))).toBe(true))
     hub.foregroundEnd('t_fore01', { status: 'done', summary: 'Wrote hi.' })
     const { hub: again } = hubWith(store)
     expect(again.meta('t_fore01')).toMatchObject({ kind: 'foreground', phase: 'done' })

@@ -196,7 +196,7 @@ export class TranscriptHub {
     if (!this.store || this.timers.has(id)) return
     this.timers.set(
       id,
-      this.deps.setTimer(() => this.flush(id), SAVE_DELAY_MS)
+      this.deps.setTimer(() => this.flush(id, true), SAVE_DELAY_MS)
     )
   }
 
@@ -206,11 +206,12 @@ export class TranscriptHub {
     this.timers.delete(id)
   }
 
-  flush(id: string): void {
+  flush(id: string, later = false): void {
     this.clearTimer(id)
     const r = this.recs.get(id)
     if (!r || !this.store) return
-    this.store.save(r.data())
+    if (later) void this.store.saveLater(r.data())
+    else this.store.save(r.data())
     if (r.meta && !id.startsWith('bg_')) this.metaIndex().set(id, r.meta)
   }
 

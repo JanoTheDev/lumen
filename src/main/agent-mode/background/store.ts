@@ -1,17 +1,13 @@
 // Background task persistence (08 T30): ~/.ai-overlay/tasks/<id>.json, one file per task,
 // results only (never screenshots), written atomically (temp file + rename) so a crash
-// mid-write cannot lose a finished result. Unreadable files are skipped.
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync
-} from 'fs'
+// mid-write cannot lose a finished result. Unreadable files are skipped. Progress of an open
+// task is written at most every SAVE_DELAY_MS (`saveSoon`); an ended task at once.
+import { existsSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import type { BackgroundTask } from '@shared/types'
+import { AtomicFiles } from '../atomic-file'
+
+export const SAVE_DELAY_MS = 500
 
 const ID_RE = /^bg_[a-z0-9]{4,40}$/
 const PHASES = new Set([
@@ -24,6 +20,7 @@ const PHASES = new Set([
   'cancelled',
   'interrupted'
 ])
+const OPEN = new Set(['queued', 'running', 'needs-foreground', 'asking'])
 
 export function parseTask(raw: unknown): BackgroundTask | null {
   if (!raw || typeof raw !== 'object') return null
@@ -48,31 +45,70 @@ export function parseTask(raw: unknown): BackgroundTask | null {
 }
 
 export class TaskStore {
+  private readonly files = new AtomicFiles()
+  private readonly pending = new Map<string, { task: BackgroundTask; timer: NodeJS.Timeout }>()
+
   constructor(private readonly dir: string) {}
+
+  private file(id: string): string {
+    return join(this.dir, `${id}.json`)
+  }
 
   save(task: BackgroundTask): void {
     if (!ID_RE.test(task.id)) return
+    this.drop(task.id)
     try {
-      mkdirSync(this.dir, { recursive: true })
-      const file = join(this.dir, `${task.id}.json`)
-      const tmp = `${file}.${process.pid}.tmp`
-      writeFileSync(tmp, JSON.stringify(task, null, 1), 'utf8')
-      renameSync(tmp, file)
+      this.files.writeSync(this.file(task.id), JSON.stringify(task, null, 1))
     } catch (e) {
       console.warn('[tasks] save failed:', (e as Error).message)
     }
   }
 
+  /** An open task's newest state, written a moment later; an ended task now. */
+  saveSoon(task: BackgroundTask): void {
+    if (!ID_RE.test(task.id)) return
+    if (!OPEN.has(task.phase)) return this.save(task)
+    const p = this.pending.get(task.id)
+    if (p) {
+      p.task = task
+      return
+    }
+    const timer = setTimeout(() => {
+      const q = this.pending.get(task.id)
+      this.pending.delete(task.id)
+      if (!q) return
+      this.files
+        .write(this.file(q.task.id), JSON.stringify(q.task, null, 1))
+        .catch((e) => console.warn('[tasks] save failed:', (e as Error).message))
+    }, SAVE_DELAY_MS)
+    timer.unref?.()
+    this.pending.set(task.id, { task, timer })
+  }
+
+  /** Writes every waiting save now (quit). */
+  flushAll(): void {
+    for (const { task } of [...this.pending.values()]) this.save(task)
+  }
+
+  private drop(id: string): void {
+    const p = this.pending.get(id)
+    if (p) clearTimeout(p.timer)
+    this.pending.delete(id)
+  }
+
   remove(id: string): void {
     if (!ID_RE.test(id)) return
+    this.drop(id)
+    this.files.forget(this.file(id))
     try {
-      rmSync(join(this.dir, `${id}.json`), { force: true })
+      rmSync(this.file(id), { force: true })
     } catch {
       /* gone already */
     }
   }
 
   load(): BackgroundTask[] {
+    this.flushAll()
     if (!existsSync(this.dir)) return []
     const out: BackgroundTask[] = []
     for (const f of readdirSync(this.dir)) {

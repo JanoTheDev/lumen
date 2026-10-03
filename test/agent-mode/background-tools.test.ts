@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import type { BackgroundTask } from '@shared/types'
 import {
   assertFetchable,
@@ -13,7 +13,8 @@ import {
 import { readGranted } from '../../src/main/agent-mode/background/files'
 import { doneLine, noticeVerdict, PRESENT_MS } from '../../src/main/agent-mode/background/presence'
 import { networkAllows } from '../../src/main/agent-mode/background/skills'
-import { parseTask, TaskStore } from '../../src/main/agent-mode/background/store'
+import { parseTask, SAVE_DELAY_MS, TaskStore } from '../../src/main/agent-mode/background/store'
+import { AtomicFiles } from '../../src/main/agent-mode/atomic-file'
 import { backgroundToolDefs } from '../../src/main/agent-mode/background/tools'
 
 const dir = mkdtempSync(join(tmpdir(), 'lumen-bg-'))
@@ -154,6 +155,56 @@ describe('task store', () => {
     s.save({ ...task, title: 'Updated' })
     expect(readdirSync(join(dir, 'atomic'))).toEqual([`${task.id}.json`])
     expect(s.load()).toEqual([{ ...task, title: 'Updated' }])
+  })
+
+  it('writes progress of an open task once per window, an ended task at once', async () => {
+    vi.useFakeTimers()
+    const sync = vi.spyOn(AtomicFiles.prototype, 'writeSync')
+    const later = vi.spyOn(AtomicFiles.prototype, 'write')
+    try {
+      const s = new TaskStore(join(dir, 'soon'))
+      const open = { ...task, id: 'bg_soon01', phase: 'running' as const }
+      for (let i = 0; i < 30; i++) s.saveSoon({ ...open, progress: [`step ${i}`] })
+      expect(sync).not.toHaveBeenCalled()
+      expect(later).not.toHaveBeenCalled()
+      vi.advanceTimersByTime(SAVE_DELAY_MS)
+      expect(later).toHaveBeenCalledTimes(1)
+      await later.mock.results[0].value
+      vi.useRealTimers()
+      expect(s.load()).toEqual([{ ...open, progress: ['step 29'] }])
+      vi.useFakeTimers()
+      s.saveSoon({ ...open, progress: ['more'] })
+      s.saveSoon({ ...open, phase: 'done' })
+      expect(sync).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(SAVE_DELAY_MS)
+      expect(later).toHaveBeenCalledTimes(1)
+      s.saveSoon({ ...open, id: 'bg_soon02', progress: ['quit'] })
+      s.flushAll()
+      expect(sync).toHaveBeenCalledTimes(2)
+      expect(
+        s
+          .load()
+          .map((t) => t.id)
+          .sort()
+      ).toEqual(['bg_soon01', 'bg_soon02'])
+    } finally {
+      sync.mockRestore()
+      later.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('a waiting save does not bring back a removed task', () => {
+    vi.useFakeTimers()
+    try {
+      const s = new TaskStore(join(dir, 'gone'))
+      s.saveSoon({ ...task, id: 'bg_gone01', phase: 'running' })
+      s.remove('bg_gone01')
+      vi.advanceTimersByTime(SAVE_DELAY_MS)
+      expect(s.load()).toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects malformed tasks', () => {

@@ -2,19 +2,11 @@
 // files, one per background task (bg_), foreground agent task (t_) and Claude session (cc_).
 // Written atomically (temp file + rename); unreadable files are skipped. Background
 // transcripts go with their task; foreground and Claude ones keep the newest KEEP_OTHER.
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync
-} from 'fs'
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'fs'
 import { join } from 'path'
 import { chatIdSchema, type ChatEntry, type JobStep, type SubJob } from '@shared/task-chat'
 import { MAX_JOB_STEPS, type ChatMeta, type TranscriptData } from './transcript'
+import { AtomicFiles } from './atomic-file'
 
 export const KEEP_OTHER = 30
 
@@ -84,6 +76,8 @@ export function parseTranscript(raw: unknown, id: string): TranscriptData | null
 }
 
 export class TranscriptStore {
+  private readonly files = new AtomicFiles()
+
   constructor(readonly dir: string) {}
 
   private file(id: string): string {
@@ -102,18 +96,23 @@ export class TranscriptStore {
   save(data: TranscriptData): void {
     if (!validId(data.id)) return
     try {
-      mkdirSync(this.dir, { recursive: true })
-      const file = this.file(data.id)
-      const tmp = `${file}.${process.pid}.tmp`
-      writeFileSync(tmp, JSON.stringify(data), 'utf8')
-      renameSync(tmp, file)
+      this.files.writeSync(this.file(data.id), JSON.stringify(data))
     } catch (e) {
       console.warn('[transcripts] save failed:', (e as Error).message)
     }
   }
 
+  /** The same write off the main thread's critical path; a later `save` or `remove` wins. */
+  saveLater(data: TranscriptData): Promise<void> {
+    if (!validId(data.id)) return Promise.resolve()
+    return this.files
+      .write(this.file(data.id), JSON.stringify(data))
+      .catch((e) => console.warn('[transcripts] save failed:', (e as Error).message))
+  }
+
   remove(id: string): void {
     if (!validId(id)) return
+    this.files.forget(this.file(id))
     try {
       rmSync(this.file(id), { force: true })
     } catch {
