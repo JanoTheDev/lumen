@@ -27,6 +27,7 @@ import {
   stepPrompt,
   type CalibrationStep
 } from './face-view'
+import { sameFaceState } from './face-state'
 
 const POLL_MS = 300
 /** Faster while the head pointer's preview dot shows. */
@@ -44,15 +45,21 @@ function useFaceState(active: boolean, fast = false): FaceState | null {
     const load = (): void => {
       window.lumen
         .invoke('face:state')
-        .then((s) => alive && setState(s))
+        .then((s) => alive && setState((prev) => (sameFaceState(prev, s) ? prev : s)))
         .catch(() => {})
     }
     load()
     if (!active) return () => (alive = false)
-    const t = setInterval(load, fast ? POINTER_POLL_MS : POLL_MS)
+    // Polls skip while the window is hidden; showing it again reads at once.
+    const tick = (): void => {
+      if (!document.hidden) load()
+    }
+    const t = setInterval(tick, fast ? POINTER_POLL_MS : POLL_MS)
+    document.addEventListener('visibilitychange', tick)
     return () => {
       alive = false
       clearInterval(t)
+      document.removeEventListener('visibilitychange', tick)
     }
   }, [active, fast])
   return state
