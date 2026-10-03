@@ -111,6 +111,8 @@ pub struct Client {
     pub elem_cr: IUIAutomationCacheRequest,
     /// [`FOCUS_PROPS`] of the focused element, whatever its view.
     focus_cr: IUIAutomationCacheRequest,
+    /// Name and rect of each element a name search returns.
+    name_cr: IUIAutomationCacheRequest,
 }
 
 thread_local! {
@@ -155,10 +157,16 @@ impl Client {
             focus_cr.SetTreeScope(TreeScope_Element).map_err(|e| com_err("SetTreeScope", e))?;
             let all = u.CreateTrueCondition().map_err(|e| com_err("condition", e))?;
             focus_cr.SetTreeFilter(&all).map_err(|e| com_err("SetTreeFilter", e))?;
+            let name_cr = u.CreateCacheRequest().map_err(|e| com_err("CreateCacheRequest", e))?;
+            for pid in [UIA_NamePropertyId, UIA_BoundingRectanglePropertyId] {
+                name_cr.AddProperty(pid).map_err(|e| com_err("AddProperty", e))?;
+            }
+            name_cr.SetTreeScope(TreeScope_Element).map_err(|e| com_err("SetTreeScope", e))?;
             Ok(Client {
                 tree_cr: request(TreeScope_Subtree)?,
                 elem_cr: request(TreeScope_Element)?,
                 focus_cr,
+                name_cr,
                 u,
             })
         }
@@ -568,10 +576,86 @@ pub fn cmd_act(args: &Args, token: &CancelToken) -> CmdResult {
 }
 
 /// First element named `text` (exact, then substring) anywhere in the window.
-pub fn find_in_window(hwnd: isize, text: &str, token: &CancelToken) -> Result<Option<Node>, AgentError> {
+fn find_in_tree(hwnd: isize, text: &str, token: &CancelToken) -> Result<Option<Rect>, AgentError> {
     let p = build(hwnd, FIND_IN_WINDOW_MAX_NODES, false, Some(token))?;
     let flat = p.flat();
-    Ok(tree::find(&flat, Some(text), None, None, None).into_iter().find(|n| !n.rect.is_empty()).cloned())
+    Ok(tree::find(&flat, Some(text), None, None, None)
+        .into_iter()
+        .find(|n| !n.rect.is_empty())
+        .map(|n| n.rect))
+}
+
+/// The rect of the first element whose name equals `q` (trimmed, lowercase), else of the first
+/// whose name contains it; elements without a visible rect are passed over. Pure.
+pub fn pick_named(cands: &[(String, Rect)], q: &str) -> Option<Rect> {
+    let names: Vec<String> =
+        cands.iter().map(|(n, _)| tree::truncate(n.trim(), tree::NAME_MAX).to_lowercase()).collect();
+    let visible = |i: &usize| !cands[*i].1.is_empty();
+    let exact = (0..cands.len()).filter(|&i| names[i] == q).find(visible);
+    exact
+        .or_else(|| (0..cands.len()).filter(|&i| names[i] != q && names[i].contains(q)).find(visible))
+        .map(|i| cands[i].1)
+}
+
+/// Name and rect of the window's root element, then of every on-screen control element below it
+/// whose name contains `text` (any case), in document order, from one server-side search.
+fn named_in_window(hwnd: isize, text: &str) -> Result<Vec<(String, Rect)>, AgentError> {
+    let root_hwnd = web_content_child(hwnd).unwrap_or(hwnd);
+    let client = Client::get()?;
+    let u = &client.u;
+    // SAFETY: COM calls on this thread's client; the array and its elements are live.
+    unsafe {
+        let root =
+            u.ElementFromHandleBuildCache(HWND(root_hwnd as *mut _), &client.name_cr).map_err(|e| {
+                AgentError::not_found(format!("window {hwnd} has no UI Automation tree ({})", e.message()))
+            })?;
+        let flags = PropertyConditionFlags(
+            PropertyConditionFlags_IgnoreCase.0 | PropertyConditionFlags_MatchSubstring.0,
+        );
+        let named = u
+            .CreatePropertyConditionEx(UIA_NamePropertyId, &VARIANT::from(BSTR::from(text)), flags)
+            .map_err(|e| com_err("condition", e))?;
+        let shown = u
+            .CreateAndCondition(
+                &u.CreatePropertyCondition(UIA_IsControlElementPropertyId, &VARIANT::from(true))
+                    .map_err(|e| com_err("condition", e))?,
+                &u.CreatePropertyCondition(UIA_IsOffscreenPropertyId, &VARIANT::from(false))
+                    .map_err(|e| com_err("condition", e))?,
+            )
+            .map_err(|e| com_err("condition", e))?;
+        let cond = u.CreateAndCondition(&shown, &named).map_err(|e| com_err("condition", e))?;
+        let arr = root
+            .FindAllBuildCache(TreeScope_Descendants, &cond, &client.name_cr)
+            .map_err(|e| com_err("FindAll", e))?;
+        let n = arr.Length().unwrap_or(0);
+        let named = |el: IUIAutomationElement| {
+            let r = el.CachedBoundingRectangle().map(Rect::from).unwrap_or_default();
+            let name = el.CachedName().map(|b| b.to_string()).unwrap_or_default();
+            (name, Rect::new(r.x, r.y, r.w.max(0), r.h.max(0)))
+        };
+        Ok(std::iter::once(root).chain((0..n).filter_map(|i| arr.GetElement(i).ok())).map(named).collect())
+    }
+}
+
+/// Rect of the first element named `text` (exact, then substring) anywhere in the window.
+pub fn find_in_window(hwnd: isize, text: &str, token: &CancelToken) -> Result<Option<Rect>, AgentError> {
+    let q = text.trim().to_lowercase();
+    if q.is_empty() {
+        return find_in_tree(hwnd, text, token);
+    }
+    let t0 = Instant::now();
+    match named_in_window(hwnd, text.trim()) {
+        Ok(cands) => {
+            tracing::debug!("uia hwnd={hwnd} named={} find={:?}", cands.len(), t0.elapsed());
+            token.check()?;
+            Ok(pick_named(&cands, &q))
+        }
+        Err(e) => {
+            tracing::debug!("uia name search in {hwnd} failed, walking the tree: {}", e.message);
+            token.check()?;
+            find_in_tree(hwnd, text, token)
+        }
+    }
 }
 
 /// {rect, role, name} of the control under a physical point (dwell snap-to-element).
@@ -843,6 +927,23 @@ mod tests {
         assert_eq!(caret_physical((100, 200), (40, 10, 42, 26), 96, 144), Some(Rect::new(160, 215, 3, 24)));
         // Unknown DPI: no scaling.
         assert_eq!(caret_physical((0, 0), (5, 5, 6, 20), 0, 144), Some(Rect::new(5, 5, 1, 15)));
+    }
+
+    #[test]
+    fn picks_exact_names_before_substrings() {
+        let r = |x| Rect::new(x, 0, 10, 10);
+        let hidden = Rect::new(9, 9, 0, 0);
+        let cands = vec![
+            ("Save as".to_owned(), r(1)),
+            (" save ".to_owned(), hidden),
+            ("SAVE".to_owned(), r(3)),
+            ("Autosave".to_owned(), r(4)),
+        ];
+        assert_eq!(pick_named(&cands, "save"), Some(r(3)));
+        assert_eq!(pick_named(&cands[..2], "save"), Some(r(1)));
+        assert_eq!(pick_named(&cands, "auto"), Some(r(4)));
+        assert_eq!(pick_named(&cands, "open"), None);
+        assert_eq!(pick_named(&[], "x"), None);
     }
 
     #[test]

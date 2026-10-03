@@ -129,6 +129,32 @@ fn hotkey(keys: &[String], token: &CancelToken) -> Result<(), AgentError> {
     chord(&vks, token)
 }
 
+/// The first rect `find` gives for the window, else for its process's other visible windows
+/// (menus, popups), which are listed only after a miss. Only cancel / timeout errors abort.
+fn first_hit(
+    hwnd: isize,
+    popups: impl FnOnce() -> Vec<isize>,
+    mut find: impl FnMut(isize) -> Result<Option<Rect>, AgentError>,
+) -> Result<Option<Rect>, AgentError> {
+    let mut search = |h: isize| match find(h) {
+        Err(e) if e.code == E_CANCELLED || e.code == E_TIMEOUT => Err(e),
+        Err(e) => {
+            tracing::debug!("uia find in {h}: {}", e.message);
+            Ok(None)
+        }
+        ok => ok,
+    };
+    if let Some(r) = search(hwnd)? {
+        return Ok(Some(r));
+    }
+    for h in popups() {
+        if let Some(r) = search(h)? {
+            return Ok(Some(r));
+        }
+    }
+    Ok(None)
+}
+
 fn uia_find(
     hwnd: isize,
     text: &str,
@@ -139,17 +165,14 @@ fn uia_find(
     let deadline = Instant::now() + wait;
     loop {
         token.check()?;
-        // The window first, then its process's other visible windows (menus, popups).
-        let popups = window::top_level_windows()
-            .into_iter()
-            .filter(|&h| h != hwnd && window::is_visible(h) && window::pid_of(h) == pid);
-        for h in std::iter::once(hwnd).chain(popups) {
-            match crate::uia::find_in_window(h, text, token) {
-                Ok(Some(n)) => return Ok(Some(n.rect)),
-                Ok(None) => {}
-                Err(e) if e.code == E_CANCELLED || e.code == E_TIMEOUT => return Err(e),
-                Err(e) => tracing::debug!("uia find in {h}: {}", e.message),
-            }
+        let popups = || {
+            window::top_level_windows()
+                .into_iter()
+                .filter(|&h| h != hwnd && window::is_visible(h) && window::pid_of(h) == pid)
+                .collect()
+        };
+        if let Some(r) = first_hit(hwnd, popups, |h| crate::uia::find_in_window(h, text, token))? {
+            return Ok(Some(r));
         }
         if Instant::now() >= deadline {
             return Ok(None);
@@ -335,7 +358,39 @@ pub fn cmd_execute(args: &Args, token: &CancelToken) -> CmdResult {
 
 #[cfg(test)]
 mod tests {
-    use super::text_chunks;
+    use super::{first_hit, text_chunks};
+    use crate::geom::Rect;
+    use crate::proto::{AgentError, E_CANCELLED};
+    use std::cell::Cell;
+
+    #[test]
+    fn popups_are_listed_only_after_a_miss() {
+        let listed = Cell::new(false);
+        let popups = || {
+            listed.set(true);
+            vec![7, 8]
+        };
+        let hit = Rect::new(1, 2, 3, 4);
+        assert_eq!(first_hit(5, popups, |_| Ok(Some(hit))).unwrap(), Some(hit));
+        assert!(!listed.get());
+
+        let mut asked = vec![];
+        let found = first_hit(
+            5,
+            || vec![7, 8],
+            |h| {
+                asked.push(h);
+                match h {
+                    5 => Err(AgentError::internal("no tree")),
+                    8 => Ok(Some(hit)),
+                    _ => Ok(None),
+                }
+            },
+        );
+        assert_eq!((found.unwrap(), asked), (Some(hit), vec![5, 7, 8]));
+        let cancelled = first_hit(5, Vec::new, |_| Err(AgentError::new(E_CANCELLED, "cancelled")));
+        assert_eq!(cancelled.unwrap_err().code, E_CANCELLED);
+    }
 
     #[test]
     fn chunks_on_char_boundaries() {
