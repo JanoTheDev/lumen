@@ -5,7 +5,7 @@
 // removed. Separate from the per-app memory facts (ai/memory AppLayer): those are the user's
 // own preferences in markdown, these are machine paths with counters. No Electron.
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { isSensitive } from '../ai/memory/sensitive'
 import { isContentName, noteGoal } from './goal'
 import { majorOf } from './version'
@@ -92,6 +92,44 @@ export function cleanPath(p: AppNotePath): AppNotePath | null {
   return { ui, ...(ids.length ? { automationIds: ids } : {}), ...(shortcut ? { shortcut } : {}) }
 }
 
+/** Loaded files by path, shared by every store (null: no file). */
+const files = new Map<string, NotesFile | null>()
+const dirty = new Set<string>()
+const FLUSH_MS = 5000
+let timer: ReturnType<typeof setTimeout> | null = null
+let exitHooked = false
+
+function save(path: string): void {
+  dirty.delete(path)
+  const f = files.get(path)
+  if (!f?.notes.length) {
+    if (existsSync(path)) unlinkSync(path)
+    return
+  }
+  let json = JSON.stringify(f, null, 1)
+  while (Buffer.byteLength(json) > MAX_FILE_BYTES && f.notes.length > 1) {
+    f.notes.pop()
+    json = JSON.stringify(f, null, 1)
+  }
+  mkdirSync(dirname(path), { recursive: true })
+  const tmp = `${path}.tmp`
+  writeFileSync(tmp, json, 'utf8')
+  renameSync(tmp, path)
+}
+
+/** Writes every changed notes file now (task end, quit). */
+export function flushAppNotes(): void {
+  if (timer) clearTimeout(timer)
+  timer = null
+  for (const path of [...dirty]) {
+    try {
+      save(path)
+    } catch {
+      dirty.delete(path)
+    }
+  }
+}
+
 export class AppNotesStore {
   constructor(
     private readonly dir: string,
@@ -103,34 +141,37 @@ export class AppNotesStore {
   }
 
   read(appId: string): NotesFile | null {
+    const path = this.file(appId)
+    if (files.has(path)) return files.get(path) ?? null
+    let f: NotesFile | null = null
     try {
-      const path = this.file(appId)
-      if (!existsSync(path)) return null
-      const f = JSON.parse(readFileSync(path, 'utf8')) as NotesFile
-      return f && f.version === 1 && Array.isArray(f.notes) ? f : null
+      if (existsSync(path)) {
+        const parsed = JSON.parse(readFileSync(path, 'utf8')) as NotesFile
+        if (parsed && parsed.version === 1 && Array.isArray(parsed.notes)) f = parsed
+      }
     } catch {
-      return null
+      f = null
     }
+    files.set(path, f)
+    return f
   }
 
-  private write(appId: string, f: NotesFile): void {
+  private write(appId: string, f: NotesFile, now = false): void {
     const path = this.file(appId)
-    if (!f.notes.length) {
-      if (existsSync(path)) unlinkSync(path)
-      return
-    }
-    // Newest first; drop the oldest until the file fits.
+    // Newest first; the oldest go past the cap (and past the byte cap when saved).
     f.notes.sort((a, b) => b.at - a.at)
     f.notes = f.notes.slice(0, MAX_NOTES)
-    let json = JSON.stringify(f, null, 1)
-    while (Buffer.byteLength(json) > MAX_FILE_BYTES && f.notes.length > 1) {
-      f.notes.pop()
-      json = JSON.stringify(f, null, 1)
+    files.set(path, f)
+    dirty.add(path)
+    if (now) return save(path)
+    if (!exitHooked) {
+      exitHooked = true
+      process.on('exit', flushAppNotes)
     }
-    mkdirSync(this.dir, { recursive: true })
-    const tmp = `${path}.tmp`
-    writeFileSync(tmp, json, 'utf8')
-    renameSync(tmp, path)
+    if (!timer) {
+      timer = setTimeout(flushAppNotes, FLUSH_MS)
+      timer.unref?.()
+    }
   }
 
   /** The file for this app, with notes of another major version pruned (app updated). */
@@ -194,12 +235,14 @@ export class AppNotesStore {
     n.fails += 1
     const drop = n.fails >= FAILS_TO_DROP
     if (drop) f.notes = f.notes.filter((x) => x !== n)
-    this.write(id.appId, f)
+    this.write(id.appId, f, drop)
     return drop
   }
 
   forget(appId: string): void {
     const path = this.file(appId)
+    files.set(path, null)
+    dirty.delete(path)
     if (existsSync(path)) unlinkSync(path)
   }
 }

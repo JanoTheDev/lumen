@@ -4,7 +4,13 @@ import { join } from 'path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { HowtoCache, PAID_PER_DAY, PAID_PER_TASK } from '../../src/main/howto/cache'
 import { createLearner } from '../../src/main/howto/learn'
-import { AppNotesStore, FAILS_TO_DROP, MAX_FILE_BYTES, goalMatch } from '../../src/main/howto/notes'
+import {
+  AppNotesStore,
+  FAILS_TO_DROP,
+  MAX_FILE_BYTES,
+  flushAppNotes,
+  goalMatch
+} from '../../src/main/howto/notes'
 import { noteGoal } from '../../src/main/howto/goal'
 import type { AppIdentity, HowtoResult } from '../../src/main/howto/types'
 
@@ -61,6 +67,7 @@ describe('app notes', () => {
         ui: ['Menu one', 'Menu two', 'A fairly long button label'],
         automationIds: ['AutomationIdForTheButton' + i]
       })
+    flushAppNotes()
     const file = join(dir, 'paintdotnet.json')
     expect(statSync(file).size).toBeLessThanOrEqual(MAX_FILE_BYTES)
     expect(readFileSync(file, 'utf8')).not.toContain('sk-ant')
@@ -153,6 +160,7 @@ describe('app notes keep the task, not its content (review 4)', () => {
     ).toBe(true)
     s.recordSuccess(PAINT, 'Reply to Sarah saying "I am resigning on Friday"', { ui: ['Reply'] })
     s.recordSuccess(PAINT, 'Attach report-Q3.pdf: the numbers', { ui: ['Attach'] })
+    flushAppNotes()
     const file = readFileSync(join(dir, 'paintdotnet.json'), 'utf8')
     for (const secret of ['anna@clinic', 'positive', 'resigning', 'report-Q3', 'numbers'])
       expect(file).not.toContain(secret)
