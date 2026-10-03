@@ -63,6 +63,25 @@ pub fn pick<'a>(voices: &'a [VoiceInfo], want: &str) -> Option<&'a VoiceInfo> {
     voices.iter().find(|v| v.id == want).or_else(|| voices.iter().find(|v| v.name.eq_ignore_ascii_case(want)))
 }
 
+/// What the synthesizer was last set to, so an unchanged voice or option is not set again.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Applied {
+    voice: Option<String>,
+    rate: Option<f64>,
+    pitch: Option<f64>,
+}
+
+impl Applied {
+    /// Which of voice, rate and pitch to set; a new voice sets both options again.
+    pub fn update(&mut self, voice: &str, rate: f64, pitch: f64) -> (bool, bool, bool) {
+        let v = self.voice.as_deref() != Some(voice);
+        let r = v || self.rate != Some(rate);
+        let p = v || self.pitch != Some(pitch);
+        *self = Applied { voice: Some(voice.to_owned()), rate: Some(rate), pitch: Some(pitch) };
+        (v, r, p)
+    }
+}
+
 /// A RIFF/WAVE header, which is what SpeechSynthesisStream holds.
 pub fn is_wav(bytes: &[u8]) -> bool {
     bytes.len() > 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WAVE"
@@ -152,9 +171,19 @@ pub mod engine {
 
     const POLL: Duration = Duration::from_millis(2);
 
+    struct Synth {
+        synth: SpeechSynthesizer,
+        applied: Applied,
+    }
+
     /// One synthesizer for the process. Calls run on the single speech lane worker, so this
-    /// lock is never contended (voice and options are set per call).
-    static SYNTH: Mutex<Option<SpeechSynthesizer>> = Mutex::new(None);
+    /// lock is never contended (voice and options are set only when they change).
+    static SYNTH: Mutex<Option<Synth>> = Mutex::new(None);
+
+    type VoiceList = Vec<(VoiceInfo, VoiceInformation)>;
+
+    /// The installed voices, read once and again on every `tts_voices` call.
+    static VOICES: Mutex<Option<VoiceList>> = Mutex::new(None);
 
     /// Waits for a WinRT operation, cancelling it when the token fires.
     fn wait<T: RuntimeType + 'static>(op: &IAsyncOperation<T>, token: &CancelToken) -> Result<T, AgentError> {
@@ -176,35 +205,59 @@ pub mod engine {
         })
     }
 
-    fn all() -> windows::core::Result<Vec<(VoiceInfo, VoiceInformation)>> {
+    fn all() -> windows::core::Result<VoiceList> {
         SpeechSynthesizer::AllVoices()?.into_iter().map(|v| Ok((info(&v)?, v))).collect()
     }
 
     pub fn voices() -> Result<Vec<VoiceInfo>, AgentError> {
-        Ok(all()?.into_iter().map(|(i, _)| i).collect())
+        let list = all()?;
+        let infos = list.iter().map(|(i, _)| i.clone()).collect();
+        *VOICES.lock().unwrap() = Some(list);
+        Ok(infos)
+    }
+
+    fn installed(want: &str) -> Result<Option<VoiceInformation>, AgentError> {
+        let mut cache = VOICES.lock().unwrap();
+        if cache.is_none() {
+            *cache = Some(all()?);
+        }
+        let list = cache.as_ref().unwrap();
+        let infos: Vec<VoiceInfo> = list.iter().map(|(i, _)| i.clone()).collect();
+        Ok(pick(&infos, want).and_then(|p| list.iter().find(|(i, _)| i.id == p.id)).map(|(_, v)| v.clone()))
     }
 
     /// WAV bytes and the name of the voice used.
     pub fn synthesize(req: &SynthArgs, token: &CancelToken) -> Result<(Vec<u8>, String), AgentError> {
         let mut guard = SYNTH.lock().unwrap();
         if guard.is_none() {
-            *guard = Some(SpeechSynthesizer::new()?);
+            *guard = Some(Synth { synth: SpeechSynthesizer::new()?, applied: Applied::default() });
         }
-        let synth = guard.as_ref().unwrap();
-        let list = all()?;
-        let infos: Vec<VoiceInfo> = list.iter().map(|(i, _)| i.clone()).collect();
-        let voice = match pick(&infos, &req.voice) {
-            Some(p) => list.into_iter().find(|(i, _)| i.id == p.id).map(|(_, v)| v),
-            None => None,
-        };
-        let voice = match voice {
+        let Synth { synth, applied } = guard.as_mut().unwrap();
+        let voice = match installed(&req.voice)? {
             Some(v) => v,
             None => SpeechSynthesizer::DefaultVoice()?,
         };
-        synth.SetVoice(&voice)?;
-        let opts = synth.Options()?;
-        opts.SetSpeakingRate(req.rate)?;
-        opts.SetAudioPitch(req.pitch)?;
+        let id = voice.Id()?.to_string_lossy();
+        let (set_voice, set_rate, set_pitch) = applied.update(&id, req.rate, req.pitch);
+        let set = || -> windows::core::Result<()> {
+            if set_voice {
+                synth.SetVoice(&voice)?;
+            }
+            if set_rate || set_pitch {
+                let opts = synth.Options()?;
+                if set_rate {
+                    opts.SetSpeakingRate(req.rate)?;
+                }
+                if set_pitch {
+                    opts.SetAudioPitch(req.pitch)?;
+                }
+            }
+            Ok(())
+        };
+        if let Err(e) = set() {
+            *applied = Applied::default();
+            return Err(e.into());
+        }
         let text = HSTRING::from(req.text.as_str());
         let op = if req.ssml {
             synth.SynthesizeSsmlToStreamAsync(&text)?
@@ -322,6 +375,16 @@ mod tests {
         assert_eq!(pick(&list, "microsoft zira").unwrap().id, "B");
         assert!(pick(&list, "").is_none());
         assert!(pick(&list, "alloy").is_none());
+    }
+
+    #[test]
+    fn applied_reports_only_changes() {
+        let mut a = Applied::default();
+        assert_eq!(a.update("A", 1.0, 1.0), (true, true, true));
+        assert_eq!(a.update("A", 1.0, 1.0), (false, false, false));
+        assert_eq!(a.update("B", 1.0, 1.0), (true, true, true));
+        assert_eq!(a.update("B", 1.5, 1.0), (false, true, false));
+        assert_eq!(a.update("B", 1.5, 0.5), (false, false, true));
     }
 
     #[test]
