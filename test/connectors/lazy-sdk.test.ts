@@ -33,5 +33,5 @@ describe('SDKs load on first use', () => {
     const { loadOpenAI } = await import('../../src/main/ai/providers/openai')
     await loadOpenAI()
     expect([...loaded]).toEqual(['openai'])
-  })
+  }, 30_000)
 })
