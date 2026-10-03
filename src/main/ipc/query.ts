@@ -10,6 +10,8 @@ import type { Action, ModelResponse } from '@shared/types'
 import { INVALID, safeParse } from './validate'
 import { beginScope, cancelAll, endScope, isAbortError, type CancelScope } from '../query/cancel'
 import { TaskQueue } from '../query/task-queue'
+import { noteTurnStarted } from '../query/drafts'
+import { errorHoldMs, queryErrorText } from '../query/error-text'
 import type { CallOptions } from '../ai'
 import { loadConfig } from '../config'
 import { log, startTimer } from '../logger'
@@ -76,6 +78,8 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
       cancelAll()
     }
 
+    // An answer may follow now: a bare "cancel" no longer means an older draft (query/drafts).
+    if (!opts.lowDetail) noteTurnStarted()
     setStatus('thinking', 'Thinking', { index: 2, total: 3 })
     const scope = beginScope()
     armEscape()
@@ -97,7 +101,9 @@ export function registerQueryIpc(deps: QueryIpcDeps): void {
         setStatus('error', 'Cancelled', undefined, 1200)
         return CANCELLED
       }
-      setStatus('error', `Error: ${(e as Error).message}`, undefined, 3000)
+      // Plain words: the status line is spoken (announce policy) as well as shown.
+      const text = queryErrorText(e)
+      setStatus('error', text, undefined, errorHoldMs(text))
       throw e
     } finally {
       endScope(scope)

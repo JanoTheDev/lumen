@@ -4,6 +4,7 @@
 import { randomUUID } from 'crypto'
 import type { ModelResponse } from '@shared/types'
 import { isAbortError, type CancelScope } from './cancel'
+import { isAgentDown } from './error-text'
 import { needsScreenshot, takeSpeculative, windowOnlyContext, type QueryContext } from './context'
 import { captureContext } from './capture'
 import { applyOverrides, LOCATE_RE } from './legacy/overrides'
@@ -30,7 +31,7 @@ import { setUsageFeature, withUsageFeature, withUsageScope } from '../usage/scop
 import { refreshLocalModels } from '../ai/providers'
 import { bus } from '../bus'
 import { guideState } from '../guides/session'
-import { requireAgent } from '../agent/instance'
+import { AGENT_DOWN_TEXT, requireAgent } from '../agent/instance'
 import { executeActions } from '../actions/executor'
 import {
   hasPausedTask,
@@ -139,7 +140,9 @@ export async function runQuery(
       log('skip', `turn cancelled (${prompt.length} chars)`)
       bus.emit({ type: 'query.cancelled', turnId })
     } else {
-      bus.emit({ type: 'query.failed', turnId, error: (e as Error).message })
+      // Spoken by the bar: plain words when the native agent is down.
+      const error = isAgentDown(e) ? AGENT_DOWN_TEXT : (e as Error).message
+      bus.emit({ type: 'query.failed', turnId, error })
     }
     throw e
   }
