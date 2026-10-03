@@ -36,7 +36,7 @@ import { allowsForeground } from '../routines/preapproval'
 import { setBuddyNamer } from '../routines/triggers'
 import type { RunEnd } from '../routines/engine'
 import * as assistant from '../windows/assistant'
-import { buddyCreationTurn, setBuddyScheduler } from './creation-voice'
+import { buddyCreation, buddyCreationTurn, setBuddyScheduler } from './creation-voice'
 import { chooseLane, runBuddyForeground } from './foreground'
 import {
   buddies,
@@ -243,11 +243,8 @@ const voice = new BuddyVoice({
 const canSpeakUp = (): boolean =>
   !loadConfig().agent.background.quiet && powerMonitor.getSystemIdleTime() * 1000 < PRESENT_MS
 
-/**
- * The pipeline's buddy turn: making / editing a buddy (T51) first, then calling one. Null when
- * the words are about no buddy.
- */
-export async function buddyTurn(text: string, signal: AbortSignal): Promise<ModelResponse | null> {
+/** Making / editing a buddy by voice (T51); null when the words are not about that. */
+async function creationTurn(text: string): Promise<ModelResponse | null> {
   const said: string[] = []
   const made = await buddyCreationTurn(text, {
     say: (t) => said.push(t),
@@ -256,7 +253,26 @@ export async function buddyTurn(text: string, signal: AbortSignal): Promise<Mode
     canSpeakUp,
     log: (msg) => log('plan', msg)
   })
-  if (made) return say(said.join(' ').trim() || 'Okay.')
+  return made ? say(said.join(' ').trim() || 'Okay.') : null
+}
+
+/**
+ * Intercept chain hook, before 06's grammar: the review words of a waiting buddy draft or
+ * change ("save it", "call it …", "read it back", "discard it"), when it is the newest waiting
+ * draft. Undefined for anything else, so "save it" without a buddy draft stays Ctrl+S.
+ */
+export function interceptBuddyDraft(prompt: string): Promise<ModelResponse> | undefined {
+  if (!buddyCreation()?.claims(prompt)) return undefined
+  return creationTurn(prompt).then((r) => r ?? say('Okay.'))
+}
+
+/**
+ * The pipeline's buddy turn: making / editing a buddy (T51) first, then calling one. Null when
+ * the words are about no buddy.
+ */
+export async function buddyTurn(text: string, signal: AbortSignal): Promise<ModelResponse | null> {
+  const made = await creationTurn(text)
+  if (made) return made
   turnSignal = signal
   try {
     return await voice.turn(text)

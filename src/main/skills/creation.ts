@@ -16,6 +16,7 @@ import { LOCAL_HANDLED } from '../a11y/dispatch'
 import { bus } from '../bus'
 import { getProvider } from '../ai/providers'
 import { log } from '../logger'
+import { claimsReview, setDraftSource } from '../query/drafts'
 import { describeStep, type RecordedApp, type SkeletonStep } from '../teach/recorder'
 import {
   AUTHORING_PROMPT,
@@ -196,6 +197,8 @@ export interface SkillCreation {
   /** The recorder stopped in skill mode. */
   fromRecording(input: RecordedSkillInput): Promise<void>
   draft(): SkillDraft | null
+  /** When the waiting draft or change was made or last read back; null when none waits. */
+  pendingAt(): number | null
   /** The foreground agent task changed (bus agent.task): corrections and failed attempts. */
   noteTask(task: { prompt: string; phase: string } | null): void
   /** A skill run ended (its history entry): the run behind it, and its health. */
@@ -305,7 +308,9 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
       return undefined
     }
     const c = matchDraftCommand(utterance)
-    if (!c) return undefined
+    // Only the newest waiting draft takes review words; a bare "cancel" while work runs
+    // cancels that work (query/drafts).
+    if (!c || !claimsReview('skill', p.at, c)) return undefined
     if (p.kind === 'edit') {
       switch (c.cmd) {
         case 'yes':
@@ -532,6 +537,8 @@ export function createSkillCreation(deps: CreationDeps): SkillCreation {
     },
 
     draft: () => (pending?.kind === 'draft' ? pending.draft : null),
+
+    pendingAt: () => (pending && deps.now() - pending.at <= DRAFT_REVIEW_MS ? pending.at : null),
 
     intercept(utterance) {
       const answered = answerOffer(utterance)
@@ -816,6 +823,7 @@ export function installSkillCreation(
     ...(host.confirm ? { confirm: host.confirm } : {})
   })
   const created = instance
+  setDraftSource('skill', () => created.pendingAt())
   setSkillAuthoringHost(created)
   onSkillRun((name, run) => created.skillRan(name, run, skillRuns(name)))
   bus.on('agent.task', (e) =>

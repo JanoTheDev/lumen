@@ -429,9 +429,14 @@ const DRAFT_PHRASES: Record<'read' | 'play' | 'discard', string[]> = {
     'delete it',
     'delete the draft',
     'throw it away',
-    'forget it'
+    'forget it',
+    "don't save it",
+    'do not save it'
   ]
 }
+
+/** Also the cancel words of running work (query/drafts decides). */
+const BARE_DISCARD = new Set(['forget it'].map(normalize))
 
 function phraseTable<K extends string>(t: Record<K, string[]>): Map<string, K> {
   const m = new Map<string, K>()
@@ -454,13 +459,19 @@ const SAVE_DRAFT_RE =
 /** Reviewing a draft: "save it as dark mode", "read it back", "try it", "discard it". */
 export function matchDraftCommand(
   utterance: string
-): { cmd: 'save'; name?: string } | { cmd: 'read' | 'play' | 'discard' } | null {
+):
+  | { cmd: 'save'; name?: string }
+  | { cmd: 'read' | 'play' }
+  | { cmd: 'discard'; bare?: true }
+  | null {
   if (!utterance || utterance.length > 120) return null
   const save = SAVE_DRAFT_RE.exec(utterance.trim())
   if (save) {
     const name = save.groups?.name?.replace(/[.!?,;:]+$/, '').trim()
     return name ? { cmd: 'save', name } : { cmd: 'save' }
   }
-  const cmd = DRAFT_TABLE.get(normalize(utterance))
+  const n = normalize(utterance)
+  const cmd = DRAFT_TABLE.get(n)
+  if (cmd === 'discard' && BARE_DISCARD.has(n)) return { cmd, bare: true }
   return cmd ? { cmd } : null
 }

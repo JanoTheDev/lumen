@@ -7,6 +7,7 @@
 import type { LessonDraftEdit, RecordingStatus } from '@shared/channels'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { dirname } from 'path'
+import { claimsReview, setDraftSource } from '../query/drafts'
 import { matchDraftCommand, matchRecordingCommand, matchRecordStart } from './commands'
 import { parseLesson, toStoredLesson, type Lesson } from './lesson'
 import type { DraftText } from './recorder'
@@ -94,6 +95,9 @@ export function createRecorder(deps: RecordingDeps): Recorder {
   let draft: Lesson | null = loadDraft()
   let draftAt = 0
   if (draft) phase = 'draft'
+  setDraftSource('lesson', () =>
+    phase === 'draft' && draft && deps.now() - draftAt < VOICE_REVIEW_MS ? draftAt : null
+  )
 
   function loadDraft(): Lesson | null {
     try {
@@ -346,7 +350,9 @@ export function createRecorder(deps: RecordingDeps): Recorder {
       }
       if (phase === 'draft' && draft && deps.now() - draftAt < VOICE_REVIEW_MS) {
         const d = matchDraftCommand(utterance)
-        if (!d) return undefined
+        // Only the newest waiting draft takes review words; a bare "forget it" while work
+        // runs cancels that work (query/drafts).
+        if (!d || !claimsReview('lesson', draftAt, d)) return undefined
         if (d.cmd === 'read') {
           deps.say(readBack(draft))
           return deps.handled

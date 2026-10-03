@@ -525,7 +525,10 @@ export type DraftCommand =
   | { cmd: 'rename'; name: string }
   | { cmd: 'trigger'; phrase: string }
   | { cmd: 'read' }
-  | { cmd: 'discard' }
+  /** `bare`: "no" / "cancel" / "forget it", also the cancel words of running work. */
+  | { cmd: 'discard'; bare?: true }
+
+const BARE_DISCARD_RE = /^(?:no|no thanks|cancel|forget it|never mind|nevermind)$/
 
 /** Review of a waiting draft by voice. */
 export function matchDraftCommand(utterance: string): DraftCommand | null {
@@ -541,8 +544,9 @@ export function matchDraftCommand(utterance: string): DraftCommand | null {
   if (m) return { cmd: 'trigger', phrase: m[1] }
   if (/^(?:read it(?: back)?|read the skill|read it to me|what does it do)$/.test(n))
     return { cmd: 'read' }
+  if (BARE_DISCARD_RE.test(n)) return { cmd: 'discard', bare: true }
   if (
-    /^(?:no|no thanks|discard(?: it| that| the skill)?|delete it|cancel|forget it|throw it away)$/.test(
+    /^(?:discard(?: it| that| this| the draft| the skill)?|delete it|throw it away|dont save it|do not save it|dont keep it)$/.test(
       n
     )
   )

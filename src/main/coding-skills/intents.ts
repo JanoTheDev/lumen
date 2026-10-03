@@ -9,7 +9,8 @@ export type CodingSkillIntent =
   | { kind: 'list'; project?: string }
   | { kind: 'suggest'; project?: string }
   | { kind: 'update'; name: string; explicit: boolean }
-  | { kind: 'draft'; cmd: 'save' | 'discard' | 'read' | 'diff' }
+  /** `bare`: "forget it", also a cancel word of running work. */
+  | { kind: 'draft'; cmd: 'save' | 'discard' | 'read' | 'diff'; bare?: true }
   | { kind: 'save-to-project'; name: string }
 
 /** "this project" / "here" / "in Claude" → undefined (the focused session's project). */
@@ -66,7 +67,12 @@ export function matchCodingSkillIntent(text: string): CodingSkillIntent | null {
 
   m = /^(?:save|keep)(?: it| that| the(?: coding| claude)? skill| this skill)?$/i.exec(t)
   if (m) return { kind: 'draft', cmd: 'save' }
-  if (/^(?:discard|throw away|forget)(?: it| that| the(?: coding| claude)? skill)?$/i.test(t))
+  if (/^forget(?: it| that)?$/i.test(t)) return { kind: 'draft', cmd: 'discard', bare: true }
+  if (
+    /^(?:(?:discard|throw away|forget)(?: it| that| the(?: coding| claude)? skill)?|throw it away|don['’]?t save it|do not save it)$/i.test(
+      t
+    )
+  )
     return { kind: 'draft', cmd: 'discard' }
   if (/^(?:read (?:it|the skill)(?: back)?(?: to me)?|what does the skill say)$/i.test(t))
     return { kind: 'draft', cmd: 'read' }

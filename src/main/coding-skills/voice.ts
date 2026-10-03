@@ -5,6 +5,7 @@ import type { CodingSkillDraft, CodingSkillInfo } from '@shared/coding-skills'
 import { catalogFor } from './detect'
 import { matchCodingSkillIntent, projectWords, type CodingSkillIntent } from './intents'
 import type { CodingSkills } from './service'
+import { claimsReview, setDraftSource } from '../query/drafts'
 
 /** A draft older than this is not what a bare "save it" means. */
 export const DRAFT_VOICE_MS = 10 * 60_000
@@ -78,7 +79,9 @@ function spokenSkill(d: CodingSkillDraft): string {
 }
 
 export class CodingSkillVoice {
-  constructor(private readonly p: VoicePorts) {}
+  constructor(private readonly p: VoicePorts) {
+    setDraftSource('coding-skill', () => this.freshDraft()?.createdAt ?? null)
+  }
 
   private target(name?: string): { path: string; name: string } | null {
     return name ? this.p.matchProject(name) : this.p.focusedProject()
@@ -116,7 +119,9 @@ export class CodingSkillVoice {
     switch (i.kind) {
       case 'draft': {
         const d = this.freshDraft()
-        if (!d) return undefined
+        // Only the newest waiting draft takes review words; a bare "forget it" while work
+        // runs cancels that work (query/drafts).
+        if (!d || !claimsReview('coding-skill', d.createdAt, i)) return undefined
         if (i.cmd === 'discard') {
           s.discard()
           return reply('Discarded the skill.')

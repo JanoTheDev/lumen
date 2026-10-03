@@ -7,10 +7,13 @@
 // The offer "Want a buddy for this?" (offers.ts) is answered here too.
 //
 // The pipeline calls buddyCreationTurn before its own buddy calling grammar; false = not a
-// creation turn. The app wiring (ipc-create.ts) installs the instance; schedules go through the
+// creation turn. The review words of a waiting draft are also claimed early in the intercept
+// chain (calling.ts interceptBuddyDraft), ahead of 06's grammar ("save it" is Ctrl+S there);
+// they go to the newest waiting draft of any kind (query/drafts). The app wiring (ipc-create.ts) installs the instance; schedules go through the
 // scheduler port (setBuddyScheduler, T52's automations with action buddy).
 import type { Buddy, BuddyDraft, BuddySchedule } from '@shared/buddies'
-import { matchDraftCommand } from '../skills/authoring'
+import { claimsReview, setDraftSource } from '../query/drafts'
+import { matchDraftCommand, type DraftCommand } from '../skills/authoring'
 import { matchOfferAnswer } from '../skills/proposals'
 import { safeBuddyName } from './clamp'
 import { buddyFields, buddyPermissionWords, freeBuddyName, type AuthorBuddyResult } from './compose'
@@ -132,6 +135,10 @@ export interface BuddyCreation {
   /** A finished request (foreground or background task): maybe "Want a buddy for this?". */
   noteRequest(prompt: string, ctx: Pick<BuddyTurnCtx, 'notice' | 'canSpeakUp'>): void
   pending(): BuddyDraft | null
+  /** When the waiting draft or change was made or last read back; null when none waits. */
+  pendingAt(): number | null
+  /** The words are a review of the waiting draft or change ("save it", "read it back" …). */
+  claims(text: string): boolean
 }
 
 export function createBuddyCreation(deps: BuddyCreationDeps): BuddyCreation {
@@ -219,20 +226,32 @@ export function createBuddyCreation(deps: BuddyCreationDeps): BuddyCreation {
     return `Saved the change to ${b.name}.${when}`
   }
 
-  async function review(text: string, ctx: BuddyTurnCtx): Promise<string | undefined> {
-    const p = pending
-    if (!p) return undefined
-    const age = deps.now() - p.at
-    if (age > BUDDY_DRAFT_MS) {
-      pending = null
-      return undefined
-    }
+  /** The waiting draft, dropped once it is too old. */
+  function live(): Pending | null {
+    if (pending && deps.now() - pending.at > BUDDY_DRAFT_MS) pending = null
+    return pending
+  }
+
+  /**
+   * The review command for the waiting draft, or null: only when it is the newest draft of any
+   * kind, and a bare "no" / "cancel" only when no other work runs (query/drafts).
+   */
+  function reviewCommand(text: string): DraftCommand | null {
+    const p = live()
+    if (!p) return null
     const c = matchDraftCommand(text)
-    if (!c || c.cmd === 'trigger') return undefined
+    if (!c || c.cmd === 'trigger') return null
+    if (c.cmd === 'yes' && deps.now() - p.at > BUDDY_YES_MS) return null
+    return claimsReview('buddy', p.at, c) ? c : null
+  }
+
+  async function review(text: string, ctx: BuddyTurnCtx): Promise<string | undefined> {
+    const p = live()
+    const c = reviewCommand(text)
+    if (!p || !c || c.cmd === 'trigger') return undefined
     if (p.kind === 'edit') {
       switch (c.cmd) {
         case 'yes':
-          return age <= BUDDY_YES_MS ? saveEdit(p, ctx) : undefined
         case 'save':
           return saveEdit(p, ctx)
         case 'read':
@@ -247,7 +266,7 @@ export function createBuddyCreation(deps: BuddyCreationDeps): BuddyCreation {
     }
     switch (c.cmd) {
       case 'yes':
-        return age <= BUDDY_YES_MS ? saveNew(p) : undefined
+        return saveNew(p)
       case 'save':
         return saveNew(p, c.name)
       case 'rename': {
@@ -383,7 +402,9 @@ export function createBuddyCreation(deps: BuddyCreationDeps): BuddyCreation {
   return {
     turn,
     noteRequest,
-    pending: () => (pending?.kind === 'new' ? pending.draft : null)
+    pending: () => (pending?.kind === 'new' ? pending.draft : null),
+    pendingAt: () => live()?.at ?? null,
+    claims: (text) => !!reviewCommand(text.trim())
   }
 }
 
@@ -393,6 +414,7 @@ let scheduler: BuddyScheduler | null = null
 /** The app's instance (ipc-create.ts installs it). */
 export function setBuddyCreation(c: BuddyCreation | null): void {
   instance = c
+  setDraftSource('buddy', c ? () => c.pendingAt() : null)
 }
 
 export function buddyCreation(): BuddyCreation | null {

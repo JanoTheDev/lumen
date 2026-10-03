@@ -2,6 +2,7 @@
 // kind "style") writes the words of a new reply style, which waits as a draft for the same voice review as skill drafts (skills/authoring
 // matchDraftCommand: "save it", "call it …", "read it back", "discard it"). A saved style is the
 // user's own `kind: style` skill in ~/.ai-overlay/skills. No Electron.
+import { claimsReview } from '../query/drafts'
 import { freeName, matchDraftCommand, slugName } from '../skills/authoring'
 import { STYLE_MAX_CHARS, cleanStyleText } from './style'
 
@@ -106,7 +107,9 @@ export function createStyleMaker(deps: StyleMakerDeps): StyleMaker {
       const d = live()
       if (!d) return null
       const c = matchDraftCommand(utterance)
-      if (!c) return null
+      // Only the newest waiting draft takes review words; a bare "cancel" while work runs
+      // cancels that work.
+      if (!c || !claimsReview('style', d.at, c)) return null
       switch (c.cmd) {
         case 'yes':
           if (deps.now() - d.at > STYLE_YES_MS) return null

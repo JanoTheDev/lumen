@@ -4,6 +4,7 @@ import type { ModelResponse } from '@shared/types'
 import type { ActiveStyle, StyleInfo } from '@shared/styles'
 import { loadConfig } from '../config'
 import { log } from '../logger'
+import { setDraftSource } from '../query/drafts'
 import { INVALID } from '../ipc/validate'
 import { getSkillRegistry } from '../skills'
 import { writeNewSkill } from '../skills/manage'
@@ -40,6 +41,7 @@ const answer = (text: string): ModelResponse => ({ mode: 'answer', text, spoken:
 let maker: StyleMaker | null = null
 
 function styleMaker(): StyleMaker {
+  if (!maker) setDraftSource('style', () => maker?.draft()?.at ?? null)
   maker ??= createStyleMaker({
     now: () => Date.now(),
     async words(like) {
