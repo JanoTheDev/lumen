@@ -512,3 +512,33 @@ describe('audit, notes, memory, connectors, guides, diagnostics', () => {
     )
   })
 })
+
+describe('ordinary requests', () => {
+  it('fall through without touching any store', () => {
+    const { deps } = makeDeps()
+    const used: string[] = []
+    const watch = <T extends object>(o: T, path: string): T =>
+      new Proxy(o, {
+        get(target, key, recv) {
+          const v = Reflect.get(target, key, recv) as unknown
+          const name = `${path}.${String(key)}`
+          if (typeof v === 'function')
+            return (...args: unknown[]) => {
+              if (name !== 'deps.now') used.push(name)
+              return (v as (...a: unknown[]) => unknown).apply(target, args)
+            }
+          return v && typeof v === 'object' ? watch(v as object, name) : v
+        }
+      })
+    const v = new ManageVoice(watch(deps, 'deps'))
+    for (const q of [
+      'what is the weather tomorrow',
+      'open my email',
+      'summarize this page',
+      'click the send button',
+      'write a reply saying thanks'
+    ])
+      expect(v.turn(q)).toBeNull()
+    expect(used).toEqual([])
+  })
+})
