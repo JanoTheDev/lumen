@@ -2,8 +2,17 @@
 // cards show at once (one card spans the width, two share it); arrow buttons and Left / Right
 // move through more, and Tab into a card brings it into view. The nav row is there only when
 // there is somewhere to go. Simple mode shows one card at a time with Back / Next and reads it.
-// The track slides with a transform (compositor only); reduced motion makes it a jump.
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+// The track slides with a transform (compositor only); reduced motion makes it a jump. Only the
+// window and one card on each side are drawn; the other positions are empty items of the same
+// width, so the transform and Tab / arrow moves work as if every card were there.
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent
+} from 'react'
 import type { CardActionKind, CardsView } from '@shared/cards'
 import { Button, IconButton, icons } from '../ui'
 import { CardItem } from './CardItem'
@@ -13,10 +22,17 @@ import { readOrder, windowStart } from './view'
 
 export const STRIP_VISIBLE = 3
 
+/** Indexes [from, to) of the cards drawn for a window starting at `first`. */
+function mountedRange(first: number, visible: number, total: number): [number, number] {
+  return [Math.max(0, first - 1), Math.min(total, first + visible + 1)]
+}
+
 export interface CardStripViewProps {
   view: CardsView
   simple?: boolean
   now?: number
+  /** First card of the window when the strip appears. */
+  initialStart?: number
   onAction: (kind: CardActionKind | 'show-all', cardId?: string, index?: number) => void
   /** Last action result, read out politely. */
   message?: string
@@ -26,13 +42,14 @@ export function CardStripView({
   view,
   simple,
   now: nowProp,
+  initialStart = 0,
   onAction,
   message
 }: CardStripViewProps): JSX.Element {
   const [clock] = useState(Date.now)
   const now = nowProp ?? clock
   const total = view.cards.length
-  const [start, setStart] = useState(0)
+  const [start, setStart] = useState(initialStart)
   const [one, setOne] = useState(0)
   const [spoken, setSpoken] = useState('')
   const listRef = useRef<HTMLUListElement>(null)
@@ -40,9 +57,17 @@ export function CardStripView({
   const first = simple ? Math.min(one, total - 1) : windowStart(start, start, total, visible)
   const showAll = !simple && (total > STRIP_VISIBLE || (view.layout === 'table' && total > 1))
   const paged = total > visible
+  const actionRef = useRef(onAction)
+  useEffect(() => {
+    actionRef.current = onAction
+  })
+  const onCardAction = useCallback(
+    (kind: CardActionKind, index: number, cardId: string) => actionRef.current(kind, cardId, index),
+    []
+  )
 
   const focusCard = (i: number): void => {
-    const el = listRef.current?.querySelectorAll<HTMLElement>('[data-card]')[i]
+    const el = listRef.current?.children[i]?.querySelector<HTMLElement>('[data-card]')
     el?.focus({ preventScroll: true })
   }
   const move = (dir: number): void => {
@@ -56,7 +81,7 @@ export function CardStripView({
   }
   const onKeyDown = (e: KeyboardEvent<HTMLUListElement>): void => {
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
-    const items = Array.from(listRef.current?.querySelectorAll<HTMLElement>('[data-card]') ?? [])
+    const items = Array.from(listRef.current?.children ?? [])
     const at = items.findIndex((el) => el.contains(document.activeElement))
     if (at < 0) return
     e.preventDefault()
@@ -73,6 +98,7 @@ export function CardStripView({
   }
 
   const shown = simple ? [view.cards[first]] : view.cards
+  const [from, to] = simple ? [0, 1] : mountedRange(first, visible, total)
   return (
     <section
       className={`cd-strip${simple ? ' is-simple' : ''}`}
@@ -95,6 +121,8 @@ export function CardStripView({
           {shown.map((card, k) => {
             const i = simple ? first : k
             const off = !simple && (i < first || i >= first + visible)
+            if (k < from || k >= to)
+              return <li key={card.id} className="cd-strip__item is-off" aria-hidden="true" />
             return (
               <li
                 key={card.id}
@@ -111,7 +139,7 @@ export function CardStripView({
                   position={{ index: i + 1, total }}
                   focusable
                   dense
-                  onAction={(kind, index) => onAction(kind, card.id, index)}
+                  onAction={onCardAction}
                 />
               </li>
             )

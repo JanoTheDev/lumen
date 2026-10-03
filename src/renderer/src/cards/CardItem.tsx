@@ -3,7 +3,7 @@
 // the kind's lines (steps, timeline, pros and cons), facts, badges, source, then the buttons; the
 // picture sits first visually only (CSS order). Each kind lays out its own middle; colours come
 // from the card's accent (cards.css). Images are data URLs from main; nothing remote loads here.
-import { useId, type CSSProperties } from 'react'
+import { memo, useId, type CSSProperties } from 'react'
 import type { CardAction, CardActionKind, CardSource, CardTone, CardView } from '@shared/cards'
 import { icons, type IconComponent } from '../ui'
 import {
@@ -46,8 +46,8 @@ export interface CardItemProps {
   level?: 2 | 3
   /** Index in the list from 1, for "2 of 5" labels. */
   position?: { index: number; total: number }
-  /** A button: its kind and its index in the card's actions. */
-  onAction?: (kind: CardActionKind, index: number) => void
+  /** A button: its kind, its index in the card's actions and the card's id. */
+  onAction?: (kind: CardActionKind, index: number, cardId: string) => void
   /** Focus target for arrow-key moves between cards. */
   focusable?: boolean
   /**
@@ -70,14 +70,16 @@ function toolActions(actions: CardAction[], dense?: boolean): { a: CardAction; i
 
 function CardButtons({
   actions,
+  cardId,
   titleId,
   dense,
   onAction
 }: {
   actions: CardAction[]
+  cardId: string
   titleId: string
   dense?: boolean
-  onAction: (kind: CardActionKind, index: number) => void
+  onAction: (kind: CardActionKind, index: number, cardId: string) => void
 }): JSX.Element {
   const primary = primaryAction(actions)
   const main = actions.map((a, i) => ({ a, i })).filter(({ a }) => isMainAction(a))
@@ -96,7 +98,7 @@ function CardButtons({
             title={a.kind === 'link' && a.url ? siteOf(a.url) : undefined}
             style={style as CSSProperties | undefined}
             {...data}
-            onClick={() => onAction(a.kind, i)}
+            onClick={() => onAction(a.kind, i, cardId)}
           >
             {actionLabel(a)}
             {(a.kind === 'link' || a.kind === 'open') && <icons.external className="cd-btn__ext" />}
@@ -115,7 +117,7 @@ function CardButtons({
                 aria-label={actionLabel(a)}
                 aria-describedby={titleId}
                 title={actionLabel(a)}
-                onClick={() => onAction(a.kind, i)}
+                onClick={() => onAction(a.kind, i, cardId)}
               >
                 <Icon />
               </button>
@@ -200,7 +202,7 @@ function KindLines({ card }: { card: CardView }): JSX.Element | null {
   )
 }
 
-export function CardItem({
+function CardItemView({
   card,
   sources,
   now,
@@ -338,6 +340,7 @@ export function CardItem({
         {onAction && card.actions.length > 0 && (
           <CardButtons
             actions={card.actions}
+            cardId={card.id}
             titleId={`${id}-t`}
             dense={dense}
             onAction={onAction}
@@ -345,10 +348,28 @@ export function CardItem({
         )}
       </div>
       {hasImage ? (
-        <img className="cd-card__img" src={card.image!.src} alt={card.image!.alt} />
+        <img
+          className="cd-card__img"
+          src={card.image!.src}
+          alt={card.image!.alt}
+          decoding="async"
+        />
       ) : card.imagePending ? (
         <div className="cd-card__img is-pending" aria-hidden="true" />
       ) : null}
     </article>
   )
 }
+
+const sameProps = (a: CardItemProps, b: CardItemProps): boolean =>
+  a.card === b.card &&
+  a.sources === b.sources &&
+  a.now === b.now &&
+  a.level === b.level &&
+  a.position?.index === b.position?.index &&
+  a.position?.total === b.position?.total &&
+  a.onAction === b.onAction &&
+  a.focusable === b.focusable &&
+  a.dense === b.dense
+
+export const CardItem = memo(CardItemView, sameProps)
