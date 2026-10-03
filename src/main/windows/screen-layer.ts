@@ -24,6 +24,8 @@ interface Layer {
   hideTimer: ReturnType<typeof setTimeout> | null
   hasScene: boolean
   hasBuddy: boolean
+  /** The last dwell frame sent here was active; other layers get one inactive frame. */
+  dwellOn: boolean
 }
 
 const EXIT_MS = 260
@@ -192,10 +194,11 @@ function sendCursorTo(l: Layer): void {
 }
 
 function moveCursor(p: Point): void {
-  if (lastCursor && p.x === lastCursor.x && p.y === lastCursor.y) return
-  lastCursor = p
   const d = screen.getDisplayNearestPoint(p)
   const prev = cursorDisplay
+  // The buddy springs to the point; under a pixel of travel on the same display is invisible.
+  if (lastCursor && d.id === prev && Math.hypot(p.x - lastCursor.x, p.y - lastCursor.y) < 1) return
+  lastCursor = p
   cursorDisplay = d.id
   for (const l of layers.values()) {
     if (l.display.id === d.id || l.display.id === prev) {
@@ -254,7 +257,8 @@ function createLayer(d: Display): void {
     placed: false,
     hideTimer: null,
     hasScene: false,
-    hasBuddy: false
+    hasBuddy: false,
+    dwellOn: false
   }
   layers.set(d.id, l)
   win.webContents.on('did-finish-load', () => {
@@ -472,8 +476,10 @@ export function dwell(data: DwellRingData): void {
         ...shiftPt(p, l.display.bounds),
         target
       })
-    } else {
+      l.dwellOn = data.active
+    } else if (l.dwellOn) {
       l.win.webContents.send('screen:dwell', { ...data, active: false })
+      l.dwellOn = false
     }
   }
 }
