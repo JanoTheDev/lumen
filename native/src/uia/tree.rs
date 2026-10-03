@@ -183,54 +183,92 @@ pub struct Pruned<R> {
     pub order: Vec<usize>,
 }
 
+/// Whether an element of `role` may be kept, so its full node is worth reading. `context`
+/// counts the context nodes kept so far.
+fn may_keep(role: &str, context: usize) -> bool {
+    INTERACTIVE.contains(&role)
+        || role == "document"
+        || (CONTEXT.contains(&role) && context < MAX_CONTEXT_NODES)
+}
+
 /// Keeps nodes passing [`keep`] (all when `!interactive_only`), up to `max_nodes` in BFS order.
 /// Dropped nodes' kept descendants attach to the nearest kept ancestor; siblings stay in
-/// document order. `check` runs per visited node (cancellation).
+/// document order. `role_of` must give the role `info_of` would; `info_of` runs only for the
+/// root and for elements whose role can be kept. `check` runs per visited node (cancellation).
 pub fn prune<R, E>(
     root: R,
     children_of: impl Fn(&R) -> Vec<R>,
+    role_of: impl Fn(&R) -> &'static str,
     info_of: impl Fn(&R) -> Node,
     max_nodes: usize,
     interactive_only: bool,
     mut check: impl FnMut() -> Result<(), E>,
 ) -> Result<Pruned<R>, E> {
     let mut nodes = vec![info_of(&root)];
-    let mut paths: Vec<Vec<usize>> = vec![vec![]];
+    // Every visited element as (its parent's step, its index among the parent's children);
+    // a kept node's document position is the chain of child indices from the root.
+    let mut steps: Vec<(usize, usize)> = vec![(usize::MAX, 0)];
+    let mut node_step: Vec<usize> = vec![0];
     let mut children: Vec<Vec<usize>> = vec![vec![]];
-    let mut queue: VecDeque<(R, usize, Vec<usize>)> =
-        children_of(&root).into_iter().enumerate().map(|(i, c)| (c, 0, vec![i])).collect();
+    let mut queue: VecDeque<(R, usize, usize)> = VecDeque::new();
+    let enqueue = |queue: &mut VecDeque<(R, usize, usize)>,
+                   steps: &mut Vec<(usize, usize)>,
+                   kids: Vec<R>,
+                   attach_to,
+                   from| {
+        for (i, c) in kids.into_iter().enumerate() {
+            steps.push((from, i));
+            queue.push_back((c, attach_to, steps.len() - 1));
+        }
+    };
+    enqueue(&mut queue, &mut steps, children_of(&root), 0, 0);
     let mut raws = vec![root];
     let mut context = 0;
     while nodes.len() < max_nodes.max(1) {
-        let Some((raw, parent, path)) = queue.pop_front() else { break };
+        let Some((raw, parent, step)) = queue.pop_front() else { break };
         check()?;
-        let node = info_of(&raw);
-        let mut kind = if interactive_only { keep(&node) } else { Some("interactive") };
+        let node = (!interactive_only || may_keep(role_of(&raw), context)).then(|| info_of(&raw));
+        let mut kind = match &node {
+            Some(n) if interactive_only => keep(n),
+            Some(_) => Some("interactive"),
+            None => None,
+        };
         if kind == Some("context") {
-            if context >= MAX_CONTEXT_NODES || node.name.is_empty() {
+            if context >= MAX_CONTEXT_NODES || node.as_ref().is_some_and(|n| n.name.is_empty()) {
                 kind = None;
             } else {
                 context += 1;
             }
         }
         let kids = children_of(&raw);
-        let attach_to = if kind.is_some() {
-            let idx = nodes.len();
-            nodes.push(node);
-            paths.push(path.clone());
-            children.push(vec![]);
-            children[parent].push(idx);
-            raws.push(raw);
-            idx
-        } else {
-            parent
+        let attach_to = match (kind, node) {
+            (Some(_), Some(node)) => {
+                let idx = nodes.len();
+                nodes.push(node);
+                node_step.push(step);
+                children.push(vec![]);
+                children[parent].push(idx);
+                raws.push(raw);
+                idx
+            }
+            _ => parent,
         };
-        queue.extend(kids.into_iter().enumerate().map(|(i, c)| {
-            let mut p = path.clone();
-            p.push(i);
-            (c, attach_to, p)
-        }));
+        enqueue(&mut queue, &mut steps, kids, attach_to, step);
     }
+    let paths: Vec<Vec<usize>> = node_step
+        .iter()
+        .map(|&at| {
+            let mut path = vec![];
+            let mut at = at;
+            while at != 0 {
+                let (from, i) = steps[at];
+                path.push(i);
+                at = from;
+            }
+            path.reverse();
+            path
+        })
+        .collect();
     for kids in &mut children {
         kids.sort_by(|a, b| paths[*a].cmp(&paths[*b]));
     }
@@ -295,8 +333,9 @@ pub fn find<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct Fake(&'static str, &'static str, Vec<Fake>);
 
     fn info(f: &Fake) -> Node {
@@ -320,7 +359,7 @@ mod tests {
     }
 
     fn run(root: Fake, max: usize, interactive_only: bool) -> Pruned<Fake> {
-        prune(root, |f| f.2.clone(), info, max, interactive_only, || Ok::<(), ()>(())).unwrap()
+        prune(root, |f| f.2.clone(), |f| f.0, info, max, interactive_only, || Ok::<(), ()>(())).unwrap()
     }
 
     fn sample() -> Fake {
@@ -435,5 +474,115 @@ mod tests {
         apply_state(&mut edit, raw);
         let j = serde_json::to_value(&edit).unwrap();
         assert!(j.get("selected").is_none() && j.get("toggled").is_none() && j.get("expanded").is_none());
+    }
+
+    /// The plain prune (full node for every element, a path per queued element), as an oracle.
+    fn reference_prune<R, E>(
+        root: R,
+        children_of: impl Fn(&R) -> Vec<R>,
+        info_of: impl Fn(&R) -> Node,
+        max_nodes: usize,
+        interactive_only: bool,
+        mut check: impl FnMut() -> Result<(), E>,
+    ) -> Result<Pruned<R>, E> {
+        let mut nodes = vec![info_of(&root)];
+        let mut paths: Vec<Vec<usize>> = vec![vec![]];
+        let mut children: Vec<Vec<usize>> = vec![vec![]];
+        let mut queue: VecDeque<(R, usize, Vec<usize>)> =
+            children_of(&root).into_iter().enumerate().map(|(i, c)| (c, 0, vec![i])).collect();
+        let mut raws = vec![root];
+        let mut context = 0;
+        while nodes.len() < max_nodes.max(1) {
+            let Some((raw, parent, path)) = queue.pop_front() else { break };
+            check()?;
+            let node = info_of(&raw);
+            let mut kind = if interactive_only { keep(&node) } else { Some("interactive") };
+            if kind == Some("context") {
+                if context >= MAX_CONTEXT_NODES || node.name.is_empty() {
+                    kind = None;
+                } else {
+                    context += 1;
+                }
+            }
+            let kids = children_of(&raw);
+            let attach_to = if kind.is_some() {
+                let idx = nodes.len();
+                nodes.push(node);
+                paths.push(path.clone());
+                children.push(vec![]);
+                children[parent].push(idx);
+                raws.push(raw);
+                idx
+            } else {
+                parent
+            };
+            queue.extend(kids.into_iter().enumerate().map(|(i, c)| {
+                let mut p = path.clone();
+                p.push(i);
+                (c, attach_to, p)
+            }));
+        }
+        for kids in &mut children {
+            kids.sort_by(|a, b| paths[*a].cmp(&paths[*b]));
+        }
+        let mut order = Vec::with_capacity(nodes.len());
+        let mut stack = vec![0usize];
+        while let Some(i) = stack.pop() {
+            order.push(i);
+            stack.extend(children[i].iter().rev());
+        }
+        for (n, &i) in order.iter().enumerate() {
+            nodes[i].id = format!("e{}", n + 1);
+        }
+        Ok(Pruned { nodes, children, raws, order })
+    }
+
+    fn arb_tree() -> impl Strategy<Value = Fake> {
+        let roles = prop::sample::select(vec![
+            "button", "edit", "text", "header", "pane", "group", "document", "listitem", "image", "custom",
+        ]);
+        let names = prop::sample::select(vec!["", "a", "b"]);
+        let leaf = (roles.clone(), names.clone()).prop_map(|(r, n)| Fake(r, n, vec![]));
+        leaf.prop_recursive(5, 120, 6, move |inner| {
+            (roles.clone(), names.clone(), prop::collection::vec(inner, 0..6))
+                .prop_map(|(r, n, k)| Fake(r, n, k))
+        })
+    }
+
+    fn summary(p: &Pruned<Fake>) -> Vec<(String, &'static str, String, Vec<usize>)> {
+        p.nodes
+            .iter()
+            .zip(&p.children)
+            .map(|(n, c)| (n.id.clone(), n.role, n.name.clone(), c.clone()))
+            .collect()
+    }
+
+    proptest! {
+        #[test]
+        fn same_nodes_as_the_plain_prune(root in arb_tree(), max in 1usize..60, interactive_only: bool) {
+            let calls = std::cell::Cell::new(0usize);
+            let counted = |f: &Fake| {
+                calls.set(calls.get() + 1);
+                info(f)
+            };
+            let new = prune(root.clone(), |f| f.2.clone(), |f| f.0, counted, max, interactive_only, || Ok::<(), ()>(()))
+                .unwrap();
+            let old = reference_prune(root, |f| f.2.clone(), info, max, interactive_only, || Ok::<(), ()>(())).unwrap();
+            prop_assert_eq!(summary(&new), summary(&old));
+            prop_assert_eq!(&new.order, &old.order);
+            prop_assert!(calls.get() >= new.nodes.len());
+        }
+    }
+
+    #[test]
+    fn dropped_roles_are_not_read() {
+        let calls = std::cell::Cell::new(0usize);
+        let counted = |f: &Fake| {
+            calls.set(calls.get() + 1);
+            info(f)
+        };
+        let p = prune(sample(), |f| f.2.clone(), |f| f.0, counted, 400, true, || Ok::<(), ()>(())).unwrap();
+        // Root + A + label + B + E; the three panes and the group are never read.
+        assert_eq!((p.nodes.len(), calls.get()), (5, 5));
     }
 }

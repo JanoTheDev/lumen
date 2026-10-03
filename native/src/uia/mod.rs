@@ -318,6 +318,8 @@ pub fn build(
     let pruned = tree::prune(
         root,
         cached_children,
+        // SAFETY: cached-property read of a live element.
+        |el| tree::role_of(unsafe { el.CachedControlType() }.map(|c| c.0).unwrap_or(0)),
         |el| node_of(el, &mons),
         max_nodes,
         interactive_only,
