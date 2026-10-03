@@ -15,7 +15,13 @@ import {
   usageForTasks,
   usageReport
 } from '../../src/main/usage/report'
-import { recordCall, setLedgerDir, type UsageRow } from '../../src/main/usage/ledger'
+import {
+  importRows,
+  queryUsage,
+  recordCall,
+  setLedgerDir,
+  type UsageRow
+} from '../../src/main/usage/ledger'
 
 const at = (iso: string, h = 12): number =>
   new Date(`${iso}T${String(h).padStart(2, '0')}:00:00`).getTime()
@@ -195,5 +201,54 @@ describe('usage report from the ledger', () => {
     const r = usageReport('today', {}, now + 10)
     expect(r.sums.calls).toBe(1)
     expect(usageForTasks(['bg_rrrr'], now + 10).bg_rrrr.tokens).toBe(15)
+  })
+
+  it('task costs follow new lines and match a full scan', () => {
+    const now = Date.now()
+    const ids = ['bg_a', 'bg_b', 'bg_c']
+    recordCall({ provider: 'p', model: 'm', in: 10, out: 5, usd: 0.01, taskId: 'bg_a' })
+    expect(usageForTasks(ids, now + 10).bg_a.calls).toBe(1)
+    recordCall({
+      provider: 'p',
+      model: 'm',
+      in: 3,
+      out: 2,
+      usd: 0.02,
+      taskId: 'bg_b',
+      parentTaskId: 'bg_a'
+    })
+    recordCall({
+      provider: 'p',
+      model: 'm',
+      in: 1,
+      out: 1,
+      usd: 0.03,
+      taskId: 'bg_a',
+      parentTaskId: 'bg_a'
+    })
+    recordCall({
+      provider: 'p',
+      model: 'm',
+      in: 9,
+      out: 9,
+      usd: 1,
+      taskId: 'bg_c',
+      billing: 'claude-code'
+    })
+    recordCall({
+      provider: 'p',
+      model: 'm',
+      in: 4,
+      out: 4,
+      usd: 0.04,
+      origin: 'subagent',
+      taskId: 'bg_c'
+    })
+    const live = usageForTasks(ids, now + 20)
+    expect(live).toEqual(taskCosts(queryUsage({ from: 0, to: now + 1000 }), ids))
+    expect(live.bg_a).toMatchObject({ calls: 3, tokens: 22 })
+    expect(live.bg_c.calls).toBe(1)
+    importRows([row({ t: now, taskId: 'bg_b' })])
+    expect(usageForTasks(['bg_b'], now + 30).bg_b.calls).toBe(2)
   })
 })

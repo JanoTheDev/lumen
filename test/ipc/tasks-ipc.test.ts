@@ -5,12 +5,16 @@ import type { ClaudeSessionView } from '@shared/claude-code'
 
 const h = vi.hoisted(() => ({
   homeSend: vi.fn(),
+  homeVisible: true,
   panelSend: vi.fn(),
   onSession: null as null | ((v: ClaudeSessionView) => void)
 }))
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
-vi.mock('../../src/main/windows/home', () => ({ send: h.homeSend }))
+vi.mock('../../src/main/windows/home', () => ({
+  send: h.homeSend,
+  visible: () => h.homeVisible
+}))
 vi.mock('../../src/main/windows/settings', () => ({ send: h.panelSend }))
 vi.mock('../../src/main/claude-code', () => ({
   onSessionChange: (fn: (v: ClaudeSessionView) => void) => (h.onSession = fn)
@@ -54,5 +58,17 @@ describe('tasks:changed', () => {
     h.onSession?.({ ...v, lastLine: 'more' })
     vi.advanceTimersByTime(200)
     expect(h.panelSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('skips a hidden Home window', () => {
+    registerTasksIpc()
+    h.homeVisible = false
+    h.homeSend.mockClear()
+    h.panelSend.mockClear()
+    bus.emit({ type: 'task.changed', task: { id: 'bg_x00002' } as BackgroundTask })
+    vi.advanceTimersByTime(200)
+    expect(h.homeSend).not.toHaveBeenCalled()
+    expect(h.panelSend).toHaveBeenCalled()
+    h.homeVisible = true
   })
 })

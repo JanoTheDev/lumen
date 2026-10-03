@@ -21,6 +21,10 @@ export function get(): BrowserWindow | null {
   return live(win)
 }
 
+export function visible(): boolean {
+  return !!get()?.isVisible()
+}
+
 export function send<C extends EventChannel>(channel: C, ...args: EventChannels[C]): void {
   sendTo(win, channel, ...args)
 }

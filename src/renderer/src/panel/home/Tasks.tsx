@@ -73,7 +73,7 @@ export function Tasks(): JSX.Element | null {
   // Ledger spend with helpers (05 T44); Claude sessions are billed to the user's own plan.
   const costs = useTaskCosts(
     rows.filter((r) => !r.claude).map((r) => r.id),
-    tasks
+    tasks.map((t) => `${t.id}:${t.phase}:${t.counters.modelCalls}:${t.helpers ?? 0}`).join(',')
   )
   if (!rows.length) return null
   return (

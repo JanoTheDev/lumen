@@ -17,7 +17,16 @@ import type {
 } from '@shared/usage'
 import { USAGE_BUCKETS, USAGE_GROUPS } from '@shared/usage'
 import { csvField } from '../docs-out/text'
-import { dayKey, isExternal, queryUsage, startOfDay, startOfMonth, type UsageRow } from './ledger'
+import {
+  dayKey,
+  isExternal,
+  ledgerGeneration,
+  onUsageRecorded,
+  queryUsage,
+  startOfDay,
+  startOfMonth,
+  type UsageRow
+} from './ledger'
 import type { UsageOrigin } from './scope'
 
 export const TOP_N = 20
@@ -294,6 +303,18 @@ function cost(s: UsageSums): UsageCost {
   return { usd: s.usd, tokens: tokensOf(s), calls: s.calls, unpriced: s.unpriced }
 }
 
+/** Adds a line to its task's sums and to its parent task's. */
+function addTaskRow(sums: Map<string, UsageSums>, r: UsageRow, want?: ReadonlySet<string>): void {
+  if (isExternal(r)) return
+  const keys = new Set([r.taskId, r.parentTaskId].filter((k): k is string => !!k))
+  for (const k of keys) {
+    if (want && !want.has(k)) continue
+    const s = sums.get(k) ?? emptySums()
+    add(s, r)
+    sums.set(k, s)
+  }
+}
+
 /** Each task's spend with its helpers (child tasks and sub-agent jobs). */
 export function taskCosts(
   rows: readonly UsageRow[],
@@ -301,17 +322,19 @@ export function taskCosts(
 ): Record<string, UsageCost> {
   const want = new Set(ids)
   const sums = new Map<string, UsageSums>()
-  for (const r of rows) {
-    if (isExternal(r)) continue
-    const keys = new Set([r.taskId, r.parentTaskId].filter((k): k is string => !!k && want.has(k)))
-    for (const k of keys) {
-      const s = sums.get(k) ?? emptySums()
-      add(s, r)
-      sums.set(k, s)
-    }
-  }
+  for (const r of rows) addTaskRow(sums, r, want)
+  return pick(sums, ids)
+}
+
+function pick(
+  sums: ReadonlyMap<string, UsageSums>,
+  ids: readonly string[]
+): Record<string, UsageCost> {
   const out: Record<string, UsageCost> = {}
-  for (const [k, s] of sums) out[k] = cost(s)
+  for (const k of ids) {
+    const s = sums.get(k)
+    if (s) out[k] = cost(s)
+  }
   return out
 }
 
@@ -411,9 +434,26 @@ export function usageCsvFor(range: UsageRange, now = Date.now()): string {
   return usageCsv(queryUsage(rangeBounds(range, now)))
 }
 
+/** Spend per task id since `from`, kept current from recorded lines; rebuilt once a day. */
+let taskIndex: { gen: number; from: number; sums: Map<string, UsageSums> } | null = null
+let taskIndexWatch: (() => void) | null = null
+
+function taskSums(now: number): Map<string, UsageSums> {
+  const from = now - TASK_LOOKBACK_DAYS * DAY_MS
+  if (!taskIndex || taskIndex.gen !== ledgerGeneration() || from - taskIndex.from > DAY_MS) {
+    const sums = new Map<string, UsageSums>()
+    for (const r of queryUsage({ from, to: now + 1 })) addTaskRow(sums, r)
+    taskIndex = { gen: ledgerGeneration(), from, sums }
+    taskIndexWatch ??= onUsageRecorded((r) => {
+      if (taskIndex && r.t >= taskIndex.from) addTaskRow(taskIndex.sums, r)
+    })
+  }
+  return taskIndex.sums
+}
+
 export function usageForTasks(ids: readonly string[], now = Date.now()): Record<string, UsageCost> {
   if (!ids.length) return {}
-  return taskCosts(queryUsage({ from: now - TASK_LOOKBACK_DAYS * DAY_MS, to: now + 1 }), ids)
+  return pick(taskSums(now), ids)
 }
 
 /** This month's spend per automation. */

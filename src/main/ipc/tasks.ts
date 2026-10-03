@@ -101,7 +101,8 @@ export function registerTasksIpc(): void {
     timer = setTimeout(() => {
       timer = null
       const list = m.list()
-      home.send('tasks:changed', list)
+      // A hidden Home reads the list again on home:shown.
+      if (home.visible()) home.send('tasks:changed', list)
       panel.send('tasks:changed', list)
     }, PUSH_MS)
   }

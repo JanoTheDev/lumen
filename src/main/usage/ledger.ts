@@ -109,6 +109,7 @@ const months = new Map<string, UsageRow[]>()
 const pending = new Map<string, UsageRow[]>()
 let timer: NodeJS.Timeout | null = null
 const listeners = new Set<(row: UsageRow) => void>()
+let generation = 0
 
 export function ledgerDir(): string {
   return dirOverride ?? join(dirname(configPath()), 'usage')
@@ -241,6 +242,11 @@ function addRow(row: UsageRow): void {
   }
 }
 
+/** Changes whenever lines appear or go without passing through the listeners. */
+export function ledgerGeneration(): number {
+  return generation
+}
+
 /** Each recorded line (limits and live views). Returns the unsubscribe. */
 export function onUsageRecorded(fn: (row: UsageRow) => void): () => void {
   listeners.add(fn)
@@ -317,6 +323,7 @@ export function pruneLedger(now = new Date()): void {
   const cutoff = monthKey(new Date(now.getFullYear(), now.getMonth() - (KEEP_MONTHS - 1), 1))
   for (const month of ledgerMonths()) {
     if (month >= cutoff) continue
+    generation++
     months.delete(month)
     pending.delete(month)
     if (persist) {
@@ -331,6 +338,7 @@ export function pruneLedger(now = new Date()): void {
 
 /** Writes lines straight to their month files (migration); skips the batch. */
 export function importRows(rows: UsageRow[]): void {
+  generation++
   for (const row of rows) {
     const month = monthKey(row.t)
     load(month).push(row)
@@ -464,6 +472,7 @@ export function monthTotals(filter: UsageFilter = {}, now = new Date()): UsageTo
 
 /** Turns on reading and writing the month files (app start). */
 export function enableLedger(): void {
+  generation++
   persist = true
   months.clear()
   pending.clear()
@@ -473,6 +482,7 @@ export function enableLedger(): void {
 export function setLedgerDir(dir: string | null): void {
   if (timer) clearTimeout(timer)
   timer = null
+  generation++
   dirOverride = dir
   persist = dir !== null
   months.clear()
@@ -482,6 +492,7 @@ export function setLedgerDir(dir: string | null): void {
 /** Test hook: drop everything in memory (lines on disk stay). */
 export function resetLedgerCache(): void {
   flushLedger()
+  generation++
   months.clear()
 }
 
