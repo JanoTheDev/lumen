@@ -1,6 +1,7 @@
 // wait_for (T09): waits for a window title, a UI element or on-screen text instead of a fixed
-// sleep. Checks run at once, then on every agent change hint (focus / UIA events) and at 4 Hz
-// (OCR at 1 Hz, it is the expensive one), until the condition holds or the timeout ends.
+// sleep. Checks run at once, then on every agent change hint (focus / UIA events) and on a poll:
+// titles at 4 Hz, elements at 4 Hz for the first second then slower (UIA events wake the loop),
+// OCR at 1 Hz (it is the expensive one), until the condition holds or the timeout ends.
 import type { WaitForInput } from './tools'
 
 export type WaitCondition = WaitForInput['condition']
@@ -11,14 +12,27 @@ export interface WaitProbe {
   element(name: string, role: string | undefined, signal: AbortSignal): Promise<boolean>
   /** OCR text of the foreground monitor. */
   screenText(signal: AbortSignal): Promise<string>
-  /** Something changed (focus, UIA event); returns an unsubscribe. */
-  onChange?(cb: () => void): () => void
+  /** Something changed (focus, UIA event) while waiting for `kind`; returns an unsubscribe. */
+  onChange?(cb: () => void, kind: WaitCondition['kind']): () => void
   now(): number
 }
 
 export const POLL_MS = 250
 export const OCR_POLL_MS = 1000
 export const MAX_WAIT_MS = 15_000
+
+/** Element poll interval after `elapsed` ms of waiting. */
+export function elementPollMs(elapsed: number): number {
+  if (elapsed < 1000) return POLL_MS
+  if (elapsed < 3000) return 500
+  return 1000
+}
+
+function pollMs(kind: WaitCondition['kind'], elapsed: number): number {
+  if (kind === 'text') return OCR_POLL_MS
+  if (kind === 'element') return elementPollMs(elapsed)
+  return POLL_MS
+}
 
 export interface WaitResult {
   ok: boolean
@@ -68,13 +82,12 @@ export async function waitFor(
 ): Promise<WaitResult> {
   const limit = Math.min(Math.max(0, timeoutMs), MAX_WAIT_MS)
   const t0 = probe.now()
-  const interval = cond.kind === 'text' ? OCR_POLL_MS : POLL_MS
   let wake: (() => void) | null = null
   let changed = false
   const unsubscribe = probe.onChange?.(() => {
     changed = true
     wake?.()
-  })
+  }, cond.kind)
   try {
     for (;;) {
       signal.throwIfAborted()
@@ -86,7 +99,7 @@ export async function waitFor(
       if (ms >= limit) return { ok: false, ms, detail: r.seen }
       if (changed) continue
       await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(done, Math.min(interval, Math.max(0, limit - ms)))
+        const t = setTimeout(done, Math.min(pollMs(cond.kind, ms), Math.max(0, limit - ms)))
         function done(): void {
           clearTimeout(t)
           wake = null

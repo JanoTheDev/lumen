@@ -13,6 +13,7 @@ import type { TaskState } from '../actions/safety'
 import { imageToPhys, logicalToPhys, physToLogical } from '../actions/coords'
 import { getAgent, requireAgent } from '../agent/instance'
 import * as commands from '../agent/commands'
+import { uiaEvents } from '../agent/subscriptions'
 import type { AgentBridge } from '../agent/bridge'
 import { captureContext } from '../query/capture'
 import { currentContext } from '../query/context'
@@ -396,6 +397,18 @@ function wireChanges(): void {
   agent.onEvent('uia-event', fire)
 }
 
+let elementWaits = 0
+
+function wantUiaEvents(): () => void {
+  if (elementWaits++ === 0) uiaEvents.want('wait-for', true)
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    if (--elementWaits === 0) uiaEvents.want('wait-for', false)
+  }
+}
+
 const norm = (s: string): string => s.toLowerCase().replace(/\s+/g, ' ').trim()
 
 function matches(n: ElementNode, name: string, role?: string): boolean {
@@ -416,10 +429,14 @@ export const waitProbe: WaitProbe = {
     const r = await commands.ocr(requireAgent(), {}, { signal })
     return r.lines.map((l) => l.text).join('\n')
   },
-  onChange: (cb) => {
+  onChange: (cb, kind) => {
     wireChanges()
     changeListeners.add(cb)
-    return () => changeListeners.delete(cb)
+    const release = kind === 'element' ? wantUiaEvents() : null
+    return () => {
+      changeListeners.delete(cb)
+      release?.()
+    }
   },
   now: () => Date.now()
 }
