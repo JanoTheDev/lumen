@@ -133,14 +133,23 @@
 }
 
 .cd-card__img.is-pending {
+  position: relative;
+  overflow: hidden;
+}
+
+/* The sheen slides across on the compositor; at rest (reduced motion) it sits outside the box. */
+.cd-card__img.is-pending::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
   background: linear-gradient(
-      100deg,
-      transparent 30%,
-      color-mix(in srgb, var(--fg) 6%, transparent) 50%,
-      transparent 70%
-    )
-    var(--surface-sunken);
-  background-size: 200% 100%;
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, var(--fg) 6%, transparent) 50%,
+    transparent 70%
+  );
+  transform: translateX(-100%);
   animation: cd-sheen 1.4s linear infinite;
 }
 
@@ -157,7 +166,7 @@ img.cd-card__img {
 
 @keyframes cd-sheen {
   to {
-    background-position: -100% 0;
+    transform: translateX(50%);
   }
 }
 
