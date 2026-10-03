@@ -119,16 +119,35 @@ pub fn crop_bgra(px: &[u8], img: Rect, r: Rect) -> Option<(Vec<u8>, Rect)> {
     Some((out, c))
 }
 
+/// Copies a tightly packed BGRA image into a plane that starts at `start` with `stride` bytes
+/// per row. False when either side is too small.
+pub fn copy_into_plane(src: &[u8], w: usize, h: usize, dst: &mut [u8], start: usize, stride: usize) -> bool {
+    let row = w * 4;
+    let need = h.checked_sub(1).map_or(Some(0), |last| {
+        last.checked_mul(stride).and_then(|n| n.checked_add(start)).and_then(|n| n.checked_add(row))
+    });
+    if src.len() < row * h || stride < row || need.is_none_or(|n| dst.len() < n) {
+        return false;
+    }
+    for y in 0..h {
+        let at = start + y * stride;
+        dst[at..at + row].copy_from_slice(&src[y * row..(y + 1) * row]);
+    }
+    true
+}
+
 #[cfg(windows)]
 mod engine {
     use super::*;
     use std::collections::HashMap;
     use std::sync::Mutex;
     use windows::Globalization::Language;
-    use windows::Graphics::Imaging::{BitmapAlphaMode, BitmapPixelFormat, SoftwareBitmap};
+    use windows::Graphics::Imaging::{
+        BitmapAlphaMode, BitmapBufferAccessMode, BitmapPixelFormat, SoftwareBitmap,
+    };
     use windows::Media::Ocr::OcrEngine;
-    use windows::Security::Cryptography::CryptographicBuffer;
-    use windows::core::HSTRING;
+    use windows::Win32::System::WinRT::IMemoryBufferByteAccess;
+    use windows::core::{HSTRING, Interface};
 
     static ENGINES: Mutex<Option<HashMap<String, OcrEngine>>> = Mutex::new(None);
 
@@ -161,6 +180,37 @@ mod engine {
         OcrEngine::MaxImageDimension().unwrap_or(2600)
     }
 
+    /// A Bgra8 bitmap filled straight from `px` (one copy).
+    pub fn bitmap(px: &[u8], w: u32, h: u32) -> Result<SoftwareBitmap, AgentError> {
+        let bmp = SoftwareBitmap::CreateWithAlpha(
+            BitmapPixelFormat::Bgra8,
+            w as i32,
+            h as i32,
+            BitmapAlphaMode::Ignore,
+        )?;
+        let buffer = bmp.LockBuffer(BitmapBufferAccessMode::Write)?;
+        let plane = buffer.GetPlaneDescription(0)?;
+        let reference = buffer.CreateReference()?;
+        let access: IMemoryBufferByteAccess = reference.cast()?;
+        let (mut data, mut cap) = (std::ptr::null_mut::<u8>(), 0u32);
+        // SAFETY: the buffer stays locked while `reference` lives; `data` points at `cap` bytes.
+        let copied = unsafe {
+            access.GetBuffer(&mut data, &mut cap)?;
+            !data.is_null() && {
+                let dst = std::slice::from_raw_parts_mut(data, cap as usize);
+                let (start, stride) = (usize::try_from(plane.StartIndex), usize::try_from(plane.Stride));
+                matches!((start, stride), (Ok(start), Ok(stride))
+                    if copy_into_plane(px, w as usize, h as usize, dst, start, stride))
+            }
+        };
+        let _ = reference.Close();
+        let _ = buffer.Close();
+        if !copied {
+            return Err(AgentError::internal(format!("OCR image {w}x{h} does not fit its pixel data")));
+        }
+        Ok(bmp)
+    }
+
     /// OCR one BGRA image whose top-left sits at (ox, oy).
     pub fn recognize_one(
         engine: &OcrEngine,
@@ -170,14 +220,7 @@ mod engine {
         ox: i32,
         oy: i32,
     ) -> Result<OcrOut, AgentError> {
-        let buffer = CryptographicBuffer::CreateFromByteArray(px)?;
-        let bmp = SoftwareBitmap::CreateCopyWithAlphaFromBuffer(
-            &buffer,
-            BitmapPixelFormat::Bgra8,
-            w as i32,
-            h as i32,
-            BitmapAlphaMode::Ignore,
-        )?;
+        let bmp = bitmap(px, w, h)?;
         let t = std::time::Instant::now();
         let result = engine.RecognizeAsync(&bmp)?.join()?;
         tracing::debug!("ocr recognize {w}x{h} {:?}", t.elapsed());
@@ -325,5 +368,20 @@ mod tests {
         assert_eq!(r, Rect::new(11, 21, 3, 2));
         assert_eq!(&c[..4], &px[(4 + 1) * 4..(4 + 1) * 4 + 4]);
         assert!(crop_bgra(&px, img, Rect::new(0, 0, 5, 5)).is_none());
+    }
+
+    #[test]
+    fn copies_rows_into_a_strided_plane() {
+        let src: Vec<u8> = (0..16).collect();
+        let mut dst = vec![0u8; 2 + 12 * 2];
+        assert!(copy_into_plane(&src, 2, 2, &mut dst, 2, 12));
+        assert_eq!(&dst[2..10], &src[0..8]);
+        assert_eq!(&dst[10..14], &[0, 0, 0, 0]);
+        assert_eq!(&dst[14..22], &src[8..16]);
+        assert!(!copy_into_plane(&src, 2, 2, &mut dst, 2, 4), "stride below a row");
+        assert!(!copy_into_plane(&src, 2, 3, &mut [0u8; 64], 0, 8), "source too small");
+        assert!(!copy_into_plane(&src, 2, 2, &mut [0u8; 15], 0, 8), "plane too small");
+        assert!(!copy_into_plane(&src, 2, 2, &mut dst, 1, usize::MAX), "overflow");
+        assert!(copy_into_plane(&[], 0, 0, &mut [], 0, 0));
     }
 }

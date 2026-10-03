@@ -53,6 +53,7 @@ features = [
   "Storage_Streams",
   "Win32_UI_Accessibility",
   "Win32_System_Variant",
+  "Win32_System_WinRT",
   "Win32_System_Ole",
   "Win32_System_Com_StructuredStorage",
   "Win32_Graphics_Gdi",
