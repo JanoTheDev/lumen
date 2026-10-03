@@ -36,6 +36,10 @@ import { installDeictic, interceptDeictic } from './deictic'
 import { interceptDocs } from './docs-out/answer'
 import { sharePointedFile } from './files/share'
 import { installLabels, interceptLabels } from './labels'
+import { interceptSettings, settingsVoiceHelp } from './voice-settings'
+import { interceptManage, manageVoiceHelp } from './voice-manage'
+import { interceptBuddyDraft } from './buddies/calling'
+import { registerHelpRows } from './a11y/voice-commands'
 import { registerLabelsIpc } from './labels/ipc'
 import { registerFirstsIpc } from './teach/firsts-ipc'
 import { installAgentMode, interceptAgentMode, registerAgentModeIpc } from './agent-mode'
@@ -178,6 +182,11 @@ function registerIpc(): void {
       bus.emit({ type: 'voice.cancelled' })
     }
   })
+  // "What can I say": settings and managing things by name (voice-settings, voice-manage).
+  registerHelpRows('Settings by voice', settingsVoiceHelp, { words: ['settings', 'setting'] })
+  registerHelpRows('Managing things', manageVoiceHelp, {
+    words: ['managing', 'tasks', 'manage']
+  })
   registerQueryIpc({
     intercept: (prompt) =>
       interceptClaudeCode(prompt) ??
@@ -189,6 +198,9 @@ function registerIpc(): void {
       interceptDeictic(prompt) ??
       interceptDocs(prompt) ??
       interceptLabels(prompt) ??
+      interceptBuddyDraft(prompt) ??
+      interceptSettings(prompt) ??
+      interceptManage(prompt) ??
       interceptLocal(prompt),
     preempt: async (prompt, opts, scope) => {
       if (opts.lowDetail) return false
