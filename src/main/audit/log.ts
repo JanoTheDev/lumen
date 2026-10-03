@@ -180,17 +180,37 @@ export function flushAudit(): void {
   }
 }
 
-/** Entries of one day (YYYY-MM-DD), optionally one task's only. */
-export function listAudit(date: string, taskId?: string): AuditEntry[] {
+const LINE_TIME = /^\{"t":"([^"]+)"/
+
+/**
+ * Entries of one day (YYYY-MM-DD), optionally one task's only, optionally only those at or
+ * after `range.from` and before `range.to` (epoch ms); lines outside it are skipped by their
+ * time stamp without being parsed.
+ */
+export function listAudit(
+  date: string,
+  taskId?: string,
+  range?: { from: number; to: number }
+): AuditEntry[] {
   if (!dir || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return []
   flushAudit()
   const file = join(dir, `${date}.ndjson`)
   if (!existsSync(file)) return []
+  const from = range ? new Date(range.from).toISOString() : ''
+  const to = range ? new Date(range.to).toISOString() : ''
   const out: AuditEntry[] = []
   for (const line of readFileSync(file, 'utf8').split('\n')) {
     if (!line.trim()) continue
+    const t = range ? LINE_TIME.exec(line)?.[1] : undefined
+    if (t !== undefined) {
+      if (t < from || t >= to) continue
+    }
     try {
       const e = JSON.parse(line) as AuditEntry
+      if (range && t === undefined) {
+        const at = Date.parse(e.t)
+        if (!(at >= range.from && at < range.to)) continue
+      }
       if (!taskId || e.task === taskId) out.push(e)
     } catch {
       /* a torn last line from a crash */

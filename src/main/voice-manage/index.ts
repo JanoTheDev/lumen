@@ -35,10 +35,8 @@ function auditBetween(from: number, to: number): { ok: boolean; text: string }[]
   days.add(utcDay(to - 1))
   const out: { ok: boolean; text: string; t: number }[] = []
   for (const d of [...days].sort())
-    for (const e of listAudit(d)) {
-      const t = Date.parse(e.t)
-      if (t >= from && t < to) out.push({ ok: e.result === 'ok', text: describeAuditEntry(e), t })
-    }
+    for (const e of listAudit(d, undefined, { from, to }))
+      out.push({ ok: e.result === 'ok', text: describeAuditEntry(e), t: Date.parse(e.t) })
   return out.sort((a, b) => a.t - b.t).map(({ ok, text }) => ({ ok, text }))
 }
 
