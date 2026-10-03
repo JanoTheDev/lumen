@@ -1,4 +1,6 @@
 // Task chat transcript (08 T43): message bubbles, collapsible tool rows, questions, results.
+// Rows are memoised: a delta that touches one entry re-renders only that row.
+import { memo, useMemo } from 'react'
 import type { ChatEntry, ChatHeader, SubJob } from '@shared/task-chat'
 import { Button, Markdown, icons } from '../../ui'
 import {
@@ -111,7 +113,7 @@ function JobSteps({ job }: { job: SubJob }): JSX.Element | null {
   )
 }
 
-function ToolRow({ e }: { e: ToolEntry }): JSX.Element {
+const ToolRow = memo(function ToolRow({ e }: { e: ToolEntry }): JSX.Element {
   if (e.jobs?.length) return <JobsRow e={e} jobs={e.jobs} />
   const detail = e.args || e.result
   const line = (
@@ -146,9 +148,14 @@ function ToolRow({ e }: { e: ToolEntry }): JSX.Element {
       </dl>
     </details>
   )
+})
+
+/** Same rows in the same order (each grouping makes a new array). */
+function sameRows(a: { entries: ToolEntry[] }, b: { entries: ToolEntry[] }): boolean {
+  return a.entries.length === b.entries.length && a.entries.every((e, i) => e === b.entries[i])
 }
 
-function ToolGroup({ entries }: { entries: ToolEntry[] }): JSX.Element {
+const ToolGroup = memo(function ToolGroup({ entries }: { entries: ToolEntry[] }): JSX.Element {
   const last = entries[entries.length - 1]
   const failed = entries.filter((e) => e.status === 'error' || e.status === 'denied').length
   const running = entries.some((e) => e.status === 'running')
@@ -169,23 +176,19 @@ function ToolGroup({ entries }: { entries: ToolEntry[] }): JSX.Element {
       </ol>
     </details>
   )
-}
+}, sameRows)
 
 function Question({
   e,
-  header,
+  question,
   onChoice
 }: {
   e: Extract<ChatEntry, { k: 'question' }>
-  header: ChatHeader
+  question: ChatHeader['question']
   onChoice: (text: string) => void
 }): JSX.Element {
-  const waiting = e.answer === undefined && !!header.question
-  const choices = waiting
-    ? header.question?.choices.length
-      ? header.question.choices
-      : e.choices
-    : []
+  const waiting = e.answer === undefined && !!question
+  const choices = waiting ? (question?.choices.length ? question.choices : e.choices) : []
   return (
     <div className={`chat-card chat-question${waiting ? ' is-waiting' : ''}`}>
       <p className="chat-card__label">
@@ -211,13 +214,16 @@ function Question({
   )
 }
 
-function Entry({
+const Entry = memo(function Entry({
   e,
-  header,
+  kind,
+  question,
   onChoice
 }: {
   e: ChatEntry
-  header: ChatHeader
+  kind: ChatHeader['kind']
+  /** The waiting question, passed to question rows only. */
+  question?: ChatHeader['question']
   onChoice: (text: string) => void
 }): JSX.Element {
   switch (e.k) {
@@ -235,7 +241,7 @@ function Entry({
       return (
         <div className="chat-msg is-assistant">
           <p className="chat-msg__who">
-            {header.kind === 'claude' ? 'Claude' : 'Lumen'}
+            {kind === 'claude' ? 'Claude' : 'Lumen'}
             <time className="chat-msg__time">{time(e.at)}</time>
           </p>
           <Markdown source={e.text} className="chat-msg__text" />
@@ -244,7 +250,7 @@ function Entry({
     case 'tool':
       return <ToolRow e={e} />
     case 'question':
-      return <Question e={e} header={header} onChoice={onChoice} />
+      return <Question e={e} question={question} onChoice={onChoice} />
     case 'status':
       return <p className="chat-status">{e.text}</p>
     case 'error':
@@ -269,9 +275,9 @@ function Entry({
         </div>
       )
   }
-}
+})
 
-export function ChatEntries({
+export const ChatEntries = memo(function ChatEntries({
   entries,
   header,
   dropped,
@@ -282,7 +288,7 @@ export function ChatEntries({
   dropped: number
   onChoice: (text: string) => void
 }): JSX.Element {
-  const items = groupEntries(entries)
+  const items = useMemo(() => groupEntries(entries), [entries])
   return (
     <ol className="chat-log" aria-label={`Conversation with ${header.title}`}>
       {dropped > 0 && (
@@ -298,10 +304,15 @@ export function ChatEntries({
           </li>
         ) : (
           <li key={it.entry.n} className={`chat-item is-${it.entry.k}`}>
-            <Entry e={it.entry} header={header} onChoice={onChoice} />
+            <Entry
+              e={it.entry}
+              kind={header.kind}
+              question={it.entry.k === 'question' ? header.question : undefined}
+              onChoice={onChoice}
+            />
           </li>
         )
       )}
     </ol>
   )
-}
+})

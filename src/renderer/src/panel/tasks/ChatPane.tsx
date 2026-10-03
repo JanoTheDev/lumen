@@ -14,7 +14,9 @@ import {
   applyDelta,
   composerHint,
   composerLabel,
+  followScroll,
   headerFacts,
+  type FollowMark,
   isLive,
   PHASE_TEXT
 } from './chat-view'
@@ -78,6 +80,19 @@ function useNow(live: boolean): number {
     return () => window.clearInterval(t)
   }, [live])
   return now
+}
+
+/** The facts line owns the clock, so the tick re-renders only this line. */
+function HeaderFacts({ h, usage }: { h: ChatHeader; usage: string }): JSX.Element {
+  const now = useNow(isLive(h.phase) && !h.endedAt)
+  return (
+    <p className="chat-head__facts">
+      <span className={`chat-phase is-${h.phase}`}>{PHASE_TEXT[h.phase]}</span>
+      {h.project && <span> · {h.project}</span>}
+      <span> · {headerFacts(h, now)}</span>
+      {usage && <span> · Usage {usage}</span>}
+    </p>
+  )
 }
 
 function Controls({
@@ -178,8 +193,12 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
   const heading = useRef<HTMLHeadingElement>(null)
   const scroller = useRef<HTMLDivElement>(null)
   const pinned = useRef(true)
+  const follow = useRef<FollowMark>({ count: 0, last: undefined, at: 0 })
   const h = view?.header
-  const now = useNow(!!h && isLive(h.phase) && !h.endedAt)
+  const token = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    token.current = h?.question?.token
+  })
   // Ledger spend with helpers (05 T44); Claude sessions are billed to the user's own plan.
   const usage = costLine(
     useTaskCosts(h && h.kind !== 'claude' ? [id] : [], `${h?.modelCalls}|${h?.phase}`)[id]
@@ -190,13 +209,18 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
     if (state === 'ready') heading.current?.focus()
   }, [id, state])
 
-  // Stays at the newest entry unless the user scrolled up to read.
-  const count = view?.entries.length ?? 0
+  // Stays at the newest entry unless the user scrolled up to read; follows only a new or
+  // changed newest row, not a row that changed in place further up.
+  const entries = view?.entries
   useLayoutEffect(() => {
     const el = scroller.current
-    if (el && pinned.current)
-      el.scrollTo({ top: el.scrollHeight, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
-  }, [count, view?.entries])
+    if (!el || !entries) return
+    const now = performance.now()
+    const behavior = followScroll(follow.current, entries, now, prefersReducedMotion())
+    if (!behavior) return
+    follow.current = { count: entries.length, last: entries[entries.length - 1], at: now }
+    if (pinned.current) el.scrollTo({ top: el.scrollHeight, behavior })
+  }, [entries])
 
   const onControl = useCallback(
     (op: ChatControlOp, token?: string) => {
@@ -243,6 +267,8 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
     [id]
   )
 
+  const onChoice = useCallback((c: string) => void onSend(c, token.current), [onSend])
+
   if (state === 'loading') return <p className="ui-hint chat-empty">Loading…</p>
   if (!view || !h)
     return (
@@ -261,12 +287,7 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
           <h1 ref={heading} tabIndex={-1} className="chat-head__title">
             {h.title}
           </h1>
-          <p className="chat-head__facts">
-            <span className={`chat-phase is-${h.phase}`}>{PHASE_TEXT[h.phase]}</span>
-            {h.project && <span> · {h.project}</span>}
-            <span> · {headerFacts(h, now)}</span>
-            {usage && <span> · Usage {usage}</span>}
-          </p>
+          <HeaderFacts h={h} usage={usage} />
         </div>
         <Controls h={h} onControl={onControl} />
       </header>
@@ -294,12 +315,7 @@ export function ChatPane({ id }: { id: string }): JSX.Element {
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
         }}
       >
-        <ChatEntries
-          entries={view.entries}
-          header={h}
-          dropped={view.dropped}
-          onChoice={(c) => void onSend(c, h.question?.token)}
-        />
+        <ChatEntries entries={view.entries} header={h} dropped={view.dropped} onChoice={onChoice} />
       </div>
       {notice && (
         <Toast kind={notice.kind} onDismiss={() => setNotice(null)}>

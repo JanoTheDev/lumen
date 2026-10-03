@@ -21,14 +21,11 @@ export function applyDelta(view: ChatView | null, d: ChatDelta): ChatView | null
   if (d.entries?.length) {
     entries = [...entries]
     for (const e of d.entries) {
-      const i = entries.findIndex((x) => x.n === e.n)
-      if (i >= 0) entries[i] = e
-      else {
-        // Usually the newest: append; an older n goes in its place.
-        let at = entries.length
-        while (at > 0 && entries[at - 1].n > e.n) at--
-        entries.splice(at, 0, e)
-      }
+      // Usually the newest or a recent row: search from the end; an older n goes in its place.
+      let at = entries.length
+      while (at > 0 && entries[at - 1].n > e.n) at--
+      if (at > 0 && entries[at - 1].n === e.n) entries[at - 1] = e
+      else entries.splice(at, 0, e)
     }
   }
   return { ...view, header: d.header ?? view.header, entries }
@@ -43,6 +40,30 @@ export function applyBuffered(view: ChatView, deltas: readonly ChatDelta[]): Cha
   for (const d of deltas)
     if (d.seq === undefined || view.seq === undefined || d.seq > view.seq) v = applyDelta(v, d) ?? v
   return v
+}
+
+/** Deltas closer together than this follow the newest row without the smooth animation. */
+export const FAST_FOLLOW_MS = 250
+
+export interface FollowMark {
+  count: number
+  last: ChatEntry | undefined
+  at: number
+}
+
+/**
+ * How the transcript follows a change: null when no row was added and the newest row is the
+ * same (a running row changed in place), else 'auto' for rapid deltas or reduced motion.
+ */
+export function followScroll(
+  prev: FollowMark,
+  entries: readonly ChatEntry[],
+  now: number,
+  reduced: boolean
+): 'auto' | 'smooth' | null {
+  const last = entries[entries.length - 1]
+  if (entries.length <= prev.count && last === prev.last) return null
+  return reduced || now - prev.at < FAST_FOLLOW_MS ? 'auto' : 'smooth'
 }
 
 /** The list follows a header push only when the row would change (phase or title). */

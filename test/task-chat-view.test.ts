@@ -10,6 +10,8 @@ import {
   applyDelta,
   composerHint,
   duration,
+  FAST_FOLLOW_MS,
+  followScroll,
   groupEntries,
   headerFacts,
   jobsLine,
@@ -251,5 +253,52 @@ describe('sub-agent job steps', () => {
     expect(html).toContain('Read a.example/lamp')
     expect(html).toContain('Price: 10')
     expect(html).toContain('Searched memory')
+  })
+})
+
+describe('delta apply and follow scrolling', () => {
+  const view = (ns: number[]): ChatView => ({
+    header,
+    entries: ns.map((n) => tool(n)),
+    dropped: 0
+  })
+  const ns = (v: ChatView | null): number[] => v?.entries.map((e) => e.n) ?? []
+
+  it('updates in place, appends and slots an older entry into its place', () => {
+    const v = view([1, 3, 5])
+    const inPlace = applyDelta(v, { id: header.id, entries: [tool(3, 'running')] })!
+    expect(ns(inPlace)).toEqual([1, 3, 5])
+    expect(inPlace.entries[1]).toMatchObject({ status: 'running' })
+    expect(inPlace.entries[0]).toBe(v.entries[0])
+    expect(v.entries[1]).toMatchObject({ status: 'ok' })
+    expect(ns(applyDelta(v, { id: header.id, entries: [tool(7)] }))).toEqual([1, 3, 5, 7])
+    expect(ns(applyDelta(v, { id: header.id, entries: [tool(4), tool(0), tool(2)] }))).toEqual([
+      0, 1, 2, 3, 4, 5
+    ])
+    const first = applyDelta(v, { id: header.id, entries: [tool(1, 'running')] })!
+    expect(ns(first)).toEqual([1, 3, 5])
+    expect(first.entries[0]).toMatchObject({ status: 'running' })
+  })
+
+  it('applies 400 deltas onto 400 entries quickly', () => {
+    let v: ChatView | null = view(Array.from({ length: 400 }, (_, i) => i))
+    const t = performance.now()
+    for (let i = 0; i < 400; i++)
+      v = applyDelta(v, { id: header.id, entries: [tool(399 - (i % 400), 'running')] })
+    v = applyDelta(v, { id: header.id, entries: Array.from({ length: 400 }, (_, i) => tool(i)) })
+    expect(performance.now() - t).toBeLessThan(200)
+    expect(ns(v)).toEqual(Array.from({ length: 400 }, (_, i) => i))
+  })
+
+  it('follows only a new or changed newest row, without animation when rapid', () => {
+    const entries = [tool(1), tool(2)]
+    const mark = { count: 2, last: entries[1], at: 1000 }
+    const later = 1000 + FAST_FOLLOW_MS + 1
+    expect(followScroll(mark, [tool(1, 'running'), entries[1]], later, false)).toBeNull()
+    expect(followScroll(mark, [...entries, tool(3)], later, false)).toBe('smooth')
+    expect(followScroll(mark, [entries[0], tool(2, 'running')], later, false)).toBe('smooth')
+    expect(followScroll(mark, [...entries, tool(3)], 1100, false)).toBe('auto')
+    expect(followScroll(mark, [...entries, tool(3)], later, true)).toBe('auto')
+    expect(followScroll({ count: 0, last: undefined, at: 0 }, entries, later, false)).toBe('smooth')
   })
 })
