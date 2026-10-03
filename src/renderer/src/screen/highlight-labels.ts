@@ -50,3 +50,12 @@ export function placeHighlightLabels({
     view
   )
 }
+
+/** What the buddy and its label keep clear of: other highlights and every highlight's pill. */
+export function buddyAvoid(
+  live: readonly Highlight[],
+  targetRect: Rect | undefined,
+  placed: Map<string, Rect>
+): Rect[] {
+  return [...live.map((h) => h.rect).filter((r) => r !== targetRect), ...placed.values()]
+}

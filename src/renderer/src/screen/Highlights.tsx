@@ -2,11 +2,11 @@
 // dim-reveal spotlight and success / failure feedback, plus their number badges and labels.
 // Geometry moves with CSS transitions on the spring curves from motion.ts, so a guide step
 // that keeps its id morphs to the new rect instead of popping.
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import type { Rect } from '@shared/types'
 import type { Present } from './scene'
 import { inflate, type Size } from './geometry'
-import { placeHighlightLabels, ringRect, type Highlight } from './highlight-labels'
+import { ringRect, type Highlight } from './highlight-labels'
 
 export type { Highlight }
 
@@ -88,7 +88,12 @@ export interface HighlightsProps {
   fontPx: number
 }
 
-export function HighlightsSvg({ list, spotFrom, view, fontPx }: HighlightsProps): JSX.Element {
+export const HighlightsSvg = memo(function HighlightsSvg({
+  list,
+  spotFrom,
+  view,
+  fontPx
+}: HighlightsProps): JSX.Element {
   const holes = list.filter((p) => p.item.style === 'dim-reveal')
   const dimLive = holes.some((p) => !p.exiting)
   return (
@@ -137,14 +142,19 @@ export function HighlightsSvg({ list, spotFrom, view, fontPx }: HighlightsProps)
       })}
     </>
   )
-}
+})
 
 /** Number badges and label pills, as HTML so text wraps and stays crisp. */
-export function HighlightLabels(props: HighlightsProps): JSX.Element {
-  const { list, fontPx } = props
+export const HighlightLabels = memo(function HighlightLabels({
+  list,
+  fontPx,
+  placed
+}: HighlightsProps & {
+  /** Pill boxes from placeHighlightLabels, by highlight key. */
+  placed: Map<string, Rect>
+}): JSX.Element {
   const rings = list.map((p) => ({ p, r: ringRect(p.item, fontPx) }))
   const badge = 1.5 * fontPx
-  const placed = placeHighlightLabels(props)
   return (
     <div className="sl-labels" aria-hidden="true">
       {rings.map(({ p, r }) => {
@@ -177,4 +187,4 @@ export function HighlightLabels(props: HighlightsProps): JSX.Element {
       })}
     </div>
   )
-}
+})

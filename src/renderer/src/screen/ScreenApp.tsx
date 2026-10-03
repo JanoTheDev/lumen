@@ -4,14 +4,13 @@
 // scaling maths here (CONTRACTS C4).
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import type { ScreenScene } from '@shared/events'
-import type { Point } from '@shared/types'
 import { invoke, useIpc } from '../lib/ipc'
 import { GridLayer } from '../a11y/GridLayer'
 import { MarksLayer } from '../a11y/MarksLayer'
 import { ScanLayer } from '../a11y/ScanLayer'
 import { DwellRing, DwellUi } from '../a11y/DwellRing'
 import { HighlightLabels, HighlightsSvg, type Highlight } from './Highlights'
-import { placeHighlightLabels } from './highlight-labels'
+import { buddyAvoid, placeHighlightLabels } from './highlight-labels'
 import { Buddy, type BuddyConfig } from './Buddy'
 import { AnnotationTexts, AnnotationsSvg, CaptureLayer } from './Annotations'
 import { usePresence } from './usePresence'
@@ -80,7 +79,6 @@ const highlightKey = (h: Highlight): string => h.id
 
 export function ScreenApp(): JSX.Element {
   const [scene, setScene] = useState<ScreenScene | null>(null)
-  const [cursor, setCursor] = useState<Point | null>(null)
   const view = useView()
   const { buddy: buddyCfg, fontPx } = useLayerConfig()
   const [highlights, updateHighlights] = usePresence<Highlight>(highlightKey, HIGHLIGHT_EXIT_MS)
@@ -96,7 +94,6 @@ export function ScreenApp(): JSX.Element {
     const id = setTimeout(() => setMarks({ marks: undefined, exiting: false }), MARKS_EXIT_MS)
     return () => clearTimeout(id)
   }, [marks])
-  useIpc('screen:cursor', setCursor)
 
   useLayoutEffect(() => {
     try {
@@ -113,13 +110,22 @@ export function ScreenApp(): JSX.Element {
 
   const b = scene?.buddy
   const live = useMemo(() => scene?.highlights ?? [], [scene])
-  const targetRect = b ? live.find((h) => containsPoint(h.rect, b.to))?.rect : undefined
+  const targetRect = useMemo(
+    () => (b ? live.find((h) => containsPoint(h.rect, b.to))?.rect : undefined),
+    [b, live]
+  )
   const annotations = scene?.annotations ?? []
-  const props = { list: highlights, buddyLabel: b?.label, view, fontPx, spotFrom: b?.to }
-  const avoid = [
-    ...live.map((h) => h.rect).filter((r) => r !== targetRect),
-    ...placeHighlightLabels(props).values()
-  ]
+  const buddyLabel = b?.label
+  const spotFrom = b?.to
+  const props = useMemo(
+    () => ({ list: highlights, buddyLabel, view, fontPx, spotFrom }),
+    [highlights, buddyLabel, view, fontPx, spotFrom]
+  )
+  const placed = useMemo(
+    () => placeHighlightLabels({ list: highlights, buddyLabel, view, fontPx }),
+    [highlights, buddyLabel, view, fontPx]
+  )
+  const avoid = useMemo(() => buddyAvoid(live, targetRect, placed), [live, targetRect, placed])
 
   return (
     <>
@@ -135,7 +141,7 @@ export function ScreenApp(): JSX.Element {
         <AnnotationsSvg list={annotations} />
       </svg>
       {scene?.focus && <FocusLabels focus={scene.focus} />}
-      <HighlightLabels {...props} />
+      <HighlightLabels {...props} placed={placed} />
       <AnnotationTexts list={annotations} />
       {scene?.grid && <GridLayer grid={scene.grid} />}
       {marks.marks?.length ? <MarksLayer marks={marks.marks} exiting={marks.exiting} /> : null}
@@ -145,7 +151,6 @@ export function ScreenApp(): JSX.Element {
         buddy={b}
         targetRect={targetRect}
         avoid={avoid}
-        cursor={cursor}
         view={view}
         cfg={buddyCfg}
         fontPx={fontPx}

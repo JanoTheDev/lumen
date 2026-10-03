@@ -1,9 +1,10 @@
 // Cursor buddy (surfaces.md §1, motion.md §3). One rAF loop drives follow, flight, point
 // nudge and the lesson "wait" bob, writing only `transform` and `opacity` on two absolutely
 // positioned elements, so React never re-renders per frame. Geometry is in buddyPath.ts.
-import { useEffect, useLayoutEffect, useRef } from 'react'
+import { memo, useEffect, useLayoutEffect, useRef } from 'react'
 import type { ScreenScene } from '@shared/events'
 import type { Point, Rect } from '@shared/types'
+import { useIpc } from '../lib/ipc'
 import { SPRINGS, atRest, prefersReducedMotion, stepSpring, type SpringState } from '../ui/motion'
 import {
   BUDDY_PX,
@@ -36,7 +37,6 @@ export interface BuddyProps {
   targetRect?: Rect
   /** Other highlighted rects the buddy and its label must not cover. */
   avoid: Rect[]
-  cursor: Point | null
   view: Size
   cfg: BuddyConfig
   fontPx: number
@@ -287,8 +287,16 @@ class BuddyMotion {
   }
 }
 
-export function Buddy(props: BuddyProps): JSX.Element {
-  const { buddy, targetRect, avoid, cursor, view, cfg, fontPx, worker } = props
+const samePoint = (a: Point | null, b: Point | null): boolean =>
+  a === b || (!!a && !!b && a.x === b.x && a.y === b.y)
+
+/**
+ * The cursor arrives on `screen:cursor` up to ~60 times a second; it lives in a ref and drives
+ * the motion directly, so the screen layer does not re-render per move.
+ */
+export const Buddy = memo(function Buddy(props: BuddyProps): JSX.Element {
+  const { buddy, targetRect, avoid, view, cfg, fontPx, worker } = props
+  const cursor = useRef<Point | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
   const pulseRef = useRef<HTMLDivElement>(null)
   const tagRef = useRef<HTMLDivElement>(null)
@@ -345,25 +353,32 @@ export function Buddy(props: BuddyProps): JSX.Element {
           { duration: 300, easing: 'ease-out' }
         )
     }
-    m.goTo(anchor, mode, cursor)
+    m.goTo(anchor, mode, cursor.current)
     // Cursor moves must not restart the flight; the anchor key captures what matters.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchorKey, mode])
 
   // Follow mode, idle hide and leaving this display.
-  useEffect(() => {
+  const syncFollow = (): void => {
     const m = motion.current
+    const p = cursor.current
     if (!m || anchor) return
     labelRef.current?.classList.remove('is-in')
-    if (!showArrow || !cfg.followCursor || !cursor) {
+    if (!showArrow || !cfg.followCursor || !p) {
       m.hide()
       return
     }
-    m.follow(cursor, view)
+    m.follow(p, view)
     if (idleTimer.current) clearTimeout(idleTimer.current)
     idleTimer.current = setTimeout(() => motion.current?.hide(), IDLE_HIDE_MS)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursor?.x, cursor?.y, !!anchor, showArrow, cfg.followCursor, view.w, view.h])
+  }
+  useIpc('screen:cursor', (p) => {
+    if (samePoint(p, cursor.current)) return
+    cursor.current = p
+    syncFollow()
+  })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(syncFollow, [!!anchor, showArrow, cfg.followCursor, view.w, view.h])
 
   useEffect(
     () => () => {
@@ -424,4 +439,4 @@ export function Buddy(props: BuddyProps): JSX.Element {
       </div>
     </>
   )
-}
+})
