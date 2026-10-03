@@ -83,8 +83,24 @@ export function state(): AssistantView {
   return view
 }
 
+/** Streamed answer text reaches the bar at most this often; every other change goes at once. */
+export const STREAM_FLUSH_MS = 50
+let streamTimer: ReturnType<typeof setTimeout> | null = null
+
 function emit(): void {
+  if (streamTimer) {
+    clearTimeout(streamTimer)
+    streamTimer = null
+  }
   send('assistant:state', view)
+}
+
+function emitSoon(): void {
+  if (streamTimer) return
+  streamTimer = setTimeout(() => {
+    streamTimer = null
+    send('assistant:state', view)
+  }, STREAM_FLUSH_MS)
 }
 
 /** How long after it was last on screen an answer is still "that" for repeat / copy by voice. */
@@ -97,10 +113,14 @@ let recentNotice: { action: NoticeAction; at: number } | null = null
 type NoticeAction = NonNullable<NonNullable<AssistantView['notice']>['action']>
 
 function patch(next: Partial<AssistantView>): void {
+  stage(next)
+  emit()
+}
+
+function stage(next: Partial<AssistantView>): void {
   view = { ...view, ...next, visible: true, autoCloseMs: autoCloseMs() }
   if (view.answer?.markdown) recentAnswerText = { text: view.answer.markdown, at: Date.now() }
   reveal()
-  emit()
 }
 
 /** Captions on (deaf / hard of hearing): "I heard" keeps the bar open until dismissed. */
@@ -755,7 +775,7 @@ bus.on('query.started', (e) => {
 bus.on('query.delta', (e) => {
   if (!view.visible) return
   const prev = view.answer?.turnId === e.turnId ? view.answer.markdown : ''
-  patch({
+  stage({
     answer: {
       turnId: e.turnId,
       markdown: prev + e.delta,
@@ -763,6 +783,7 @@ bus.on('query.delta', (e) => {
       pinned: !!view.answer?.pinned
     }
   })
+  emitSoon()
 })
 bus.on('query.done', (e) => {
   if (inFlight === e.turnId) inFlight = null
