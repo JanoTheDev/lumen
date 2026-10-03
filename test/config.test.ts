@@ -87,7 +87,11 @@ describe('config', () => {
 
   it('migrates the default v1 config to the v2 defaults', () => {
     writeRaw(DEFAULT_CONFIG_V1)
-    expect(loadConfig()).toEqual(DEFAULT_CONFIG)
+    // v1 saved spoken replies off explicitly; that choice is kept (new configs speak).
+    expect(loadConfig()).toEqual({
+      ...DEFAULT_CONFIG,
+      voice: { ...DEFAULT_CONFIG.voice, tts: 'off' }
+    })
     expect(lastConfigWarning()).toBeNull()
   })
 

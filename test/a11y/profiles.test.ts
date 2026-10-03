@@ -73,6 +73,13 @@ describe('profiles', () => {
     expect(m['a11y.focusNarration']).toBe(false)
   })
 
+  it('motor – voice speaks with the free Windows voice, also the new default', () => {
+    expect(mergeProfiles(['motor-voice'])['voice.tts']).toBe('windows')
+    expect(DEFAULT_CONFIG_V2.voice.tts).toBe('windows')
+    // A screen reader user still gets no second voice.
+    expect(mergeProfiles(['motor-voice', 'blind'])['voice.tts']).toBe('off')
+  })
+
   it('deaf + blind: screen reader, no speech', () => {
     const m = mergeProfiles(['deaf-hoh', 'blind'])
     expect(m['voice.tts']).toBe('off')

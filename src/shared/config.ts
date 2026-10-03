@@ -894,7 +894,8 @@ export const DEFAULT_CONFIG_V2: ConfigV2 = {
   guideAutoDismissOnMove: DEFAULT_CONFIG_V1.guideAutoDismissOnMove,
   voice: {
     stt: 'local',
-    tts: 'off',
+    // Free and local: a voice-only user hears answers, errors and confirms from the start.
+    tts: 'windows',
     ttsVoice: 'alloy',
     ttsRate: 1,
     bargeIn: false,

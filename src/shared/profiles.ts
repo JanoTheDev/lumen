@@ -51,6 +51,7 @@ export const PROFILES: Record<ProfileId, Profile> = {
       handsFreeMode: true,
       'a11y.voiceCommands': true,
       'a11y.marks.keep': true,
+      'voice.tts': 'windows',
       answerAutoCloseMs: 0,
       'agent.confirm': 'risky',
       guideAutoDismissOnMove: false,
