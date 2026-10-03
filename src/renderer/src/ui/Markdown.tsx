@@ -2,8 +2,17 @@
 // fenced code and links. No raw HTML. Links call onLink and never navigate the window.
 // While streaming, each word is its own span keyed by its position, so only new words mount
 // (and fade in); the final render lays out the same text, so nothing shifts when it ends.
-import { Fragment, type ReactNode } from 'react'
-import { parseBlocks } from './md-parse'
+// Blocks are memoised by content, so while the last block grows the earlier ones stay put.
+import {
+  Fragment,
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  type ReactNode
+} from 'react'
+import { parseBlocks, type MdBlock } from './md-parse'
 
 const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\[[^\]\n]+\]\([^)\s]+\))|(\*[^*\n]+\*|_[^_\n]+_)/g
 const SAFE_URL = /^(https?:|mailto:)/i
@@ -71,42 +80,75 @@ export interface MarkdownProps {
   className?: string
 }
 
-export function Markdown({ source, onLink, streaming, className }: MarkdownProps): JSX.Element {
-  const blocks = parseBlocks(source)
+interface BlockProps {
+  b: MdBlock
+  onLink: (url: string) => void
+  streaming?: boolean
+}
+
+function sameBlock(a: BlockProps, b: BlockProps): boolean {
+  if (a.onLink !== b.onLink || a.streaming !== b.streaming) return false
+  const x = a.b
+  const y = b.b
+  if (x.kind !== y.kind) return false
+  if ('items' in x && 'items' in y)
+    return x.items.length === y.items.length && x.items.every((it, j) => it === y.items[j])
+  return 'text' in x && 'text' in y && x.text === y.text
+}
+
+const Block = memo(function Block({ b, onLink, streaming }: BlockProps): JSX.Element {
+  return (
+    <>
+      {b.kind === 'p' && <p>{renderInline(b.text, onLink, streaming)}</p>}
+      {b.kind === 'h' && (
+        <p className="ui-md__h">
+          <strong>{renderInline(b.text, onLink, streaming)}</strong>
+        </p>
+      )}
+      {b.kind === 'code' && (
+        <pre>
+          <code>{b.text}</code>
+        </pre>
+      )}
+      {(b.kind === 'ul' || b.kind === 'ol') &&
+        (b.kind === 'ul' ? (
+          <ul>
+            {b.items.map((it, j) => (
+              <li key={j}>{renderInline(it, onLink, streaming)}</li>
+            ))}
+          </ul>
+        ) : (
+          <ol>
+            {b.items.map((it, j) => (
+              <li key={j}>{renderInline(it, onLink, streaming)}</li>
+            ))}
+          </ol>
+        ))}
+    </>
+  )
+}, sameBlock)
+
+export const Markdown = memo(function Markdown({
+  source,
+  onLink,
+  streaming,
+  className
+}: MarkdownProps): JSX.Element {
+  const blocks = useMemo(() => parseBlocks(source), [source])
+  // Blocks get one stable link handler that calls the newest onLink.
+  const latest = useRef(onLink)
+  useLayoutEffect(() => {
+    latest.current = onLink
+  })
+  const link = useCallback((url: string) => latest.current?.(url), [])
   return (
     <div
       className={['ui-md', className].filter(Boolean).join(' ')}
       aria-busy={streaming || undefined}
     >
       {blocks.map((b, i) => (
-        <Fragment key={i}>
-          {b.kind === 'p' && <p>{renderInline(b.text, onLink, streaming)}</p>}
-          {b.kind === 'h' && (
-            <p className="ui-md__h">
-              <strong>{renderInline(b.text, onLink, streaming)}</strong>
-            </p>
-          )}
-          {b.kind === 'code' && (
-            <pre>
-              <code>{b.text}</code>
-            </pre>
-          )}
-          {(b.kind === 'ul' || b.kind === 'ol') &&
-            (b.kind === 'ul' ? (
-              <ul>
-                {b.items.map((it, j) => (
-                  <li key={j}>{renderInline(it, onLink, streaming)}</li>
-                ))}
-              </ul>
-            ) : (
-              <ol>
-                {b.items.map((it, j) => (
-                  <li key={j}>{renderInline(it, onLink, streaming)}</li>
-                ))}
-              </ol>
-            ))}
-        </Fragment>
+        <Block key={i} b={b} onLink={link} streaming={streaming} />
       ))}
     </div>
   )
-}
+})
