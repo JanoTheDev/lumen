@@ -33,6 +33,7 @@ import { bus } from '../bus'
 import { guideState } from '../guides/session'
 import { AGENT_DOWN_TEXT, requireAgent } from '../agent/instance'
 import { executeActions } from '../actions/executor'
+import * as highlight from '../windows/highlight'
 import {
   hasPausedTask,
   isResumeRequest,
@@ -195,12 +196,15 @@ async function planLegacy(
   }
 }
 
+/** "open X" / "go to X" without an ordinal or a "from": the keyword check's pure launch. */
+const PURE_LAUNCH_RE = /^(open|launch|go to|navigate to)\s+\w/i
+
 /**
  * LLM steering: the router runs on the fast model while the screen is captured. The capture
  * starts before the route is known (hotkey-up already started one for voice); when the
  * route needs no screen the capture is simply dropped.
  */
-async function planRouted(
+export async function planRouted(
   prompt: string,
   opts: CallOptions,
   scope: CancelScope
@@ -221,31 +225,55 @@ async function planRouted(
   // Follow-up steps (lowDetail) always need the screen and are not routed: the reply mode
   // follows from the follow-up instruction.
   let pending = takeSpeculative()
+  // Started before the route is known for any other non-launch utterance while the overlay
+  // is hidden: kept unpublished (not the current context, never sent) and stopped unless the
+  // route needs the screen.
+  let early: { scope: CancelScope; publish: (use: boolean) => void } | null = null
   if (!pending && (opts.lowDetail || forced || needsScreenshot(utterance))) {
     pending = captureContext(true, { signal: scope.signal })
+    pending.catch(() => {})
+  } else if (!pending && !PURE_LAUNCH_RE.test(utterance) && !highlight.isVisible()) {
+    const capture = scope.child()
+    let publish: (use: boolean) => void = () => {}
+    const decided = new Promise<boolean>((resolve) => (publish = resolve))
+    early = { scope: capture, publish }
+    pending = captureContext(true, { signal: capture.signal, publish: decided })
     pending.catch(() => {})
   }
 
   let route: Route | null = forced
   let activeWindow: string | null = null
-  if (!route && !opts.lowDetail) {
-    const win = await agent.activeWindow()
-    activeWindow = win
-    route = await withUsageFeature('router', () =>
-      routeWithLlm(
-        { utterance, activeWindow: win, guideActive: guideState().guideActive, lastMode },
-        scope.signal
+  try {
+    if (!route && !opts.lowDetail) {
+      const win = await agent.activeWindow()
+      activeWindow = win
+      route = await withUsageFeature('router', () =>
+        routeWithLlm(
+          { utterance, activeWindow: win, guideActive: guideState().guideActive, lastMode },
+          scope.signal
+        )
       )
-    )
+    }
+  } catch (e) {
+    early?.publish(false)
+    early?.scope.cancel()
+    throw e
   }
   if (route) setUsageFeature(route.mode)
-  scope.throwIfCancelled()
-  if (route) log('plan', `route: ${describeRoute(route)}`)
-
   const needsScreen = route ? route.needsScreen : true
   // Another monitor named: capture every monitor (the speculative capture has only the
   // foreground one).
   const allScreens = route ? !!route.needsAllScreens : mentionsOtherScreen(utterance)
+  if (early) {
+    const use = needsScreen && !allScreens && activeWindow !== null && !scope.cancelled
+    early.publish(use)
+    if (!use) {
+      early.scope.cancel()
+      pending = null
+    }
+  }
+  scope.throwIfCancelled()
+  if (route) log('plan', `route: ${describeRoute(route)}`)
   if (allScreens) log('plan', 'capturing every monitor')
   const ctx = allScreens
     ? await captureContext(true, { allScreens: true, signal: scope.signal })
