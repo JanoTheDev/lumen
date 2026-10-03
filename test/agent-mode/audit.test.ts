@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { createHash } from 'crypto'
 import {
+  flushAudit,
   installAudit,
   lastTaskSummary,
   listAudit,
@@ -42,6 +43,7 @@ describe('audit log', () => {
     installAudit(tmp.dir, 30, Date.parse('2026-10-01T12:00:00Z'))
     writeAudit(entry())
     writeAudit(entry({ task: 't_2', result: 'denied', decision: 'blocked' }))
+    flushAudit()
     const lines = readFileSync(join(tmp.dir, '2026-10-01.ndjson'), 'utf8').trim().split('\n')
     expect(lines).toHaveLength(2)
     expect(listAudit('2026-10-01')).toHaveLength(2)

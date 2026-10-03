@@ -2,7 +2,8 @@
 // executed or denied action. Typed text is stored as length + SHA-256; only with
 // `audit.storeTypedText` on is the text kept too, with secrets and passwords redacted. URLs
 // and names go through the secret redactor. Files older than `audit.retentionDays` are pruned
-// at start.
+// at start. Lines are queued and appended every 200 ms, at once for high-risk actions, before
+// a read and on exit.
 import { createHash } from 'crypto'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
@@ -43,6 +44,10 @@ const DAY_MS = 86_400_000
 let dir: string | null = null
 let last: AuditEntry[] = []
 let storeTypedText = false
+let queue = new Map<string, string[]>()
+let timer: ReturnType<typeof setTimeout> | null = null
+let exitHooked = false
+const FLUSH_MS = 200
 
 /** `audit.storeTypedText`: keep typed text (redacted) next to its hash. Off by default. */
 export function setAuditStoreTypedText(on: boolean): void {
@@ -111,6 +116,11 @@ function dayOf(t: string): string {
 
 /** Starts writing to `auditDir` and drops day files older than `retentionDays`. */
 export function installAudit(auditDir: string, retentionDays = 30, now = Date.now()): void {
+  flushAudit()
+  if (!exitHooked) {
+    exitHooked = true
+    process.on('exit', flushAudit)
+  }
   dir = auditDir
   mkdirSync(dir, { recursive: true })
   pruneAudit(retentionDays, now)
@@ -118,6 +128,7 @@ export function installAudit(auditDir: string, retentionDays = 30, now = Date.no
 
 /** Stops writing (tests). */
 export function uninstallAudit(): void {
+  flushAudit()
   dir = null
   last = []
 }
@@ -141,16 +152,38 @@ export function writeAudit(entry: AuditEntry): void {
   if (last.length && last[last.length - 1].task !== entry.task) last = []
   last.push(entry)
   if (!dir) return
-  try {
-    appendFileSync(join(dir, `${dayOf(entry.t)}.ndjson`), `${JSON.stringify(entry)}\n`, 'utf8')
-  } catch (e) {
-    console.warn('[audit] write failed:', (e as Error).message)
+  const file = join(dir, `${dayOf(entry.t)}.ndjson`)
+  const line = `${JSON.stringify(entry)}\n`
+  const lines = queue.get(file)
+  if (lines) lines.push(line)
+  else queue.set(file, [line])
+  if (entry.risk === 'high') flushAudit()
+  else if (!timer) {
+    timer = setTimeout(flushAudit, FLUSH_MS)
+    timer.unref?.()
+  }
+}
+
+/** Appends every queued line now. Never throws. */
+export function flushAudit(): void {
+  if (timer) clearTimeout(timer)
+  timer = null
+  if (!queue.size) return
+  const pending = queue
+  queue = new Map()
+  for (const [file, lines] of pending) {
+    try {
+      appendFileSync(file, lines.join(''), 'utf8')
+    } catch (e) {
+      console.warn('[audit] write failed:', (e as Error).message)
+    }
   }
 }
 
 /** Entries of one day (YYYY-MM-DD), optionally one task's only. */
 export function listAudit(date: string, taskId?: string): AuditEntry[] {
   if (!dir || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return []
+  flushAudit()
   const file = join(dir, `${date}.ndjson`)
   if (!existsSync(file)) return []
   const out: AuditEntry[] = []
