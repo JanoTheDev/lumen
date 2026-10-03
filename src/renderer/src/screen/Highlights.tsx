@@ -3,18 +3,14 @@
 // Geometry moves with CSS transitions on the spring curves from motion.ts, so a guide step
 // that keeps its id morphs to the new rect instead of popping.
 import { useEffect, useState } from 'react'
-import type { ScreenScene } from '@shared/events'
 import type { Rect } from '@shared/types'
 import type { Present } from './scene'
-import { showHighlightLabel } from './scene'
-import { center, inflate, type Size } from './geometry'
-import { pillSize, placeLabels } from './labels'
+import { inflate, type Size } from './geometry'
+import { placeHighlightLabels, ringRect, type Highlight } from './highlight-labels'
 
-export type Highlight = ScreenScene['highlights'][number]
+export type { Highlight }
 
-const RING_PAD = 6
 const RING_RADIUS = 8
-const HOLE_PAD = 8
 const HOLE_RADIUS = 10
 
 /** Rect geometry as CSS so `x/y/width/height` can transition. */
@@ -25,15 +21,6 @@ function geo(r: Rect): React.CSSProperties {
     width: Math.max(0, r.w),
     height: Math.max(0, r.h)
   } as React.CSSProperties
-}
-
-function ringRect(h: Highlight, fontPx: number): Rect {
-  if (h.style === 'ring') {
-    const d = 2.5 * fontPx
-    const c = center(h.rect)
-    return { x: c.x - d / 2, y: c.y - d / 2, w: d, h: d }
-  }
-  return inflate(h.rect, h.style === 'dim-reveal' ? HOLE_PAD : RING_PAD)
 }
 
 /** The three-stroke ring: dark halo, accent, light inner line. Reads on any background. */
@@ -153,18 +140,11 @@ export function HighlightsSvg({ list, spotFrom, view, fontPx }: HighlightsProps)
 }
 
 /** Number badges and label pills, as HTML so text wraps and stays crisp. */
-export function HighlightLabels({ list, buddyLabel, view, fontPx }: HighlightsProps): JSX.Element {
+export function HighlightLabels(props: HighlightsProps): JSX.Element {
+  const { list, fontPx } = props
   const rings = list.map((p) => ({ p, r: ringRect(p.item, fontPx) }))
-  const obstacles = rings.map((x) => x.r)
   const badge = 1.5 * fontPx
-  const requests = rings
-    .filter(({ p }) => showHighlightLabel(p.item.label, buddyLabel))
-    .map(({ p, r }) => ({
-      id: p.key,
-      anchor: p.item.n != null ? { x: r.x, y: r.y - badge / 2, w: r.w, h: r.h + badge / 2 } : r,
-      size: pillSize(p.item.label!, Math.max(14, fontPx))
-    }))
-  const placed = placeLabels(requests, obstacles, view)
+  const placed = placeHighlightLabels(props)
   return (
     <div className="sl-labels" aria-hidden="true">
       {rings.map(({ p, r }) => {

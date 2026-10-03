@@ -143,7 +143,9 @@
   border: 1px solid var(--border-subtle);
   box-shadow: var(--shadow);
   font-size: var(--text-sm);
-  white-space: nowrap;
+  width: max-content;
+  max-width: 18rem;
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, 4px);

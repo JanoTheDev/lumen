@@ -11,6 +11,7 @@ import { MarksLayer } from '../a11y/MarksLayer'
 import { ScanLayer } from '../a11y/ScanLayer'
 import { DwellRing, DwellUi } from '../a11y/DwellRing'
 import { HighlightLabels, HighlightsSvg, type Highlight } from './Highlights'
+import { placeHighlightLabels } from './highlight-labels'
 import { Buddy, type BuddyConfig } from './Buddy'
 import { AnnotationTexts, AnnotationsSvg, CaptureLayer } from './Annotations'
 import { usePresence } from './usePresence'
@@ -113,9 +114,12 @@ export function ScreenApp(): JSX.Element {
   const b = scene?.buddy
   const live = useMemo(() => scene?.highlights ?? [], [scene])
   const targetRect = b ? live.find((h) => containsPoint(h.rect, b.to))?.rect : undefined
-  const avoid = live.map((h) => h.rect).filter((r) => r !== targetRect)
   const annotations = scene?.annotations ?? []
   const props = { list: highlights, buddyLabel: b?.label, view, fontPx, spotFrom: b?.to }
+  const avoid = [
+    ...live.map((h) => h.rect).filter((r) => r !== targetRect),
+    ...placeHighlightLabels(props).values()
+  ]
 
   return (
     <>

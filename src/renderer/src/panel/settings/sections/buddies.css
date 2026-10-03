@@ -132,6 +132,11 @@
   border-left: 3px solid transparent;
 }
 
+.bd-perm > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Wider permissions: a bar and a word, never colour alone. */
 .bd-perm.is-wider {
   border-left-color: var(--warning);

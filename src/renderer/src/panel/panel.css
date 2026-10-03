@@ -126,6 +126,7 @@ body {
 .panel-page {
   max-width: 46rem;
   padding: var(--space-6) var(--space-6) var(--space-8);
+  overflow-x: clip;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -239,6 +240,7 @@ body {
 
 .panel-list__item {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -248,8 +250,9 @@ body {
 }
 
 .panel-list__text {
-  flex: 1;
+  flex: 1 1 14rem;
   min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
 }
@@ -268,10 +271,18 @@ body {
 
 .panel-table th,
 .panel-table td {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2);
   text-align: left;
   vertical-align: top;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel-table :is(th, td):first-child {
+  padding-left: 0;
+}
+
+.panel-table :is(th, td):last-child {
+  padding-right: 0;
 }
 
 .panel-table thead th {
@@ -352,6 +363,16 @@ body {
   gap: var(--space-2);
 }
 
+.panel-note > svg {
+  flex: none;
+}
+
+.panel-note > span:not(.ui-tip) {
+  flex: 1 1 12rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .panel-note.is-ok svg {
   color: var(--success);
 }
@@ -362,4 +383,29 @@ body {
   padding: 0;
   color: var(--accent);
   text-decoration: underline;
+}
+
+.panel-page code {
+  overflow-wrap: anywhere;
+}
+
+.panel-page .ui-btn,
+.home .ui-btn {
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* A tooltip on the last control of a row opens leftwards, so it stays inside the page. */
+.panel .ui-tip:last-child > .ui-tip__bubble,
+.home .ui-tip:last-child > .ui-tip__bubble {
+  left: auto;
+  right: 0;
+  transform: translate(0, 4px);
+}
+
+.panel .ui-tip:last-child:hover > .ui-tip__bubble,
+.panel .ui-tip:last-child:focus-within > .ui-tip__bubble,
+.home .ui-tip:last-child:hover > .ui-tip__bubble,
+.home .ui-tip:last-child:focus-within > .ui-tip__bubble {
+  transform: translate(0, 0);
 }

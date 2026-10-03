@@ -369,7 +369,7 @@ div.chat-tool,
 
 .chat-confirm {
   flex: none;
-  margin: var(--space-3) var(--space-5) 0;
+  margin: var(--space-3) var(--space-5);
 }
 
 .chat-question__text {
