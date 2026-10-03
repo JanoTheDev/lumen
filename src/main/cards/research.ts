@@ -15,6 +15,7 @@ import {
 } from '@shared/cards'
 import type { AgentMessage, ToolCall, ToolDef } from '../ai/providers/types'
 import { isPrivateHost } from '../web/net'
+import { cardColor } from './answer-cards'
 
 // Strict-schema subset (agent-mode/tools.ts): no optional fields at all (Anthropic caps optional
 // parameters across every strict tool of a request), no unions, no numeric bounds. "Not known"
@@ -81,6 +82,11 @@ export const presentCardsInput = z.object({
             'Up to 6 short facts read on the pages. Labels per kind: recipe "Time", "Servings"; product "Store", "Availability"; trip "Departs", "Arrives", "Duration", "Changes" (times exactly as on the page).'
           ),
         badges: z.array(z.string()).describe('Up to 3 short tags ("Sea view", "Free parking").'),
+        accent: z
+          .string()
+          .describe(
+            'Card colour that suits the subject: blue, indigo, purple, pink, red, orange, amber, green, teal, gray or "#rrggbb"; the same for every card unless it means something; "" for the default.'
+          ),
         doLabel: z
           .string()
           .describe('Button label when the user could book or buy it ("Book it"); "" otherwise.')
@@ -493,6 +499,8 @@ export function buildAnswerCards(
       else dropped.push(`${title}: no booking button, ${hostOf(link)} was not read in this task`)
     }
     card.actions = actions
+    const accent = cardColor(c.accent)
+    if (accent) card.accent = accent
     cards.push(card)
   }
   if (!cards.length) return { ok: false, error: 'no cards: give at least one option.' }

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { Action, GuideStep, LocateItem, ModelResponse, Rect, Target } from '@shared/types'
 import { parseJsonAs } from './json'
 import { isBrowser } from './app-context'
+import { extractAnswerCards } from '../cards/answer-cards'
 
 const num = z.number()
 
@@ -150,13 +151,14 @@ function toAction(a: z.infer<typeof actionSchema>, inBrowser: boolean): Action {
 export function toModelResponse(r: ModeReply, activeWindow = ''): ModelResponse {
   switch (r.mode) {
     case 'answer': {
-      const text = r.markdown?.trim() || r.spoken
+      const { markdown, cards } = extractAnswerCards(r.markdown ?? '')
       return {
         mode: 'answer',
-        text,
+        text: markdown || r.spoken,
         spoken: r.spoken,
-        ...(r.markdown ? { markdown: r.markdown } : {}),
-        ...(r.point ? { point: r.point } : {})
+        ...(markdown ? { markdown } : {}),
+        ...(r.point ? { point: r.point } : {}),
+        ...(cards ? { cards } : {})
       }
     }
     case 'clarify':

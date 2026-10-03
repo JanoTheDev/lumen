@@ -2,10 +2,15 @@
 // only, and every price / rating names a source that is in `sources`. Pure (no Electron).
 import { z } from 'zod'
 import {
+  BUTTON_STYLES,
   CARD_ACTIONS,
+  CARD_COLORS,
+  CARD_HEX_RE,
   CARD_KINDS,
   CARD_LAYOUTS,
   CARD_LIMITS as L,
+  CARD_TONES,
+  TRENDS,
   type AnswerCards
 } from '@shared/cards'
 import { isPrivateHost } from '../web/net'
@@ -65,9 +70,25 @@ const rating = z
   })
   .refine((r) => r.value <= r.max, 'rating above its max')
 
+/** A named colour or #rrggbb (renderers keep text readable on it). */
+export const colorSchema = z.union([
+  z.enum(CARD_COLORS),
+  z.custom<`#${string}`>((v) => typeof v === 'string' && CARD_HEX_RE.test(v), '#rrggbb colour')
+])
+
 const action = z
-  .strictObject({ kind: z.enum(CARD_ACTIONS), label: text(L.label).optional() })
-  .refine((a) => a.kind !== 'do' || !!a.label, 'a do action needs a label')
+  .strictObject({
+    kind: z.enum(CARD_ACTIONS),
+    label: text(L.label).optional(),
+    url: https.optional(),
+    style: z.enum(BUTTON_STYLES).optional(),
+    color: colorSchema.optional()
+  })
+  .refine(
+    (a) => !['do', 'link', 'ask'].includes(a.kind) || !!a.label,
+    'do, link and ask actions need a label'
+  )
+  .refine((a) => (a.kind === 'link') === !!a.url, 'a link action (and only a link) has a url')
 
 const card = z.strictObject({
   id,
@@ -81,7 +102,23 @@ const card = z.strictObject({
   facts: z.array(z.strictObject({ label: text(L.label), value: text(L.value) })).max(L.facts),
   badges: z.array(text(L.label)).max(L.badges).optional(),
   links: z.array(z.strictObject({ label: text(L.label), url: https })).max(L.links),
-  actions: z.array(action).max(L.actions)
+  actions: z.array(action).max(L.actions),
+  accent: colorSchema.optional(),
+  tone: z.enum(CARD_TONES).optional(),
+  value: z
+    .strictObject({
+      text: text(L.stat),
+      caption: text(L.label).optional(),
+      trend: z.enum(TRENDS).optional(),
+      change: text(L.label).optional()
+    })
+    .optional(),
+  items: z
+    .array(z.strictObject({ label: text(L.label).optional(), text: text(L.item) }))
+    .max(L.items)
+    .optional(),
+  pros: z.array(text(L.item)).max(L.pros).optional(),
+  cons: z.array(text(L.item)).max(L.pros).optional()
 })
 
 export const answerCardsSchema = z

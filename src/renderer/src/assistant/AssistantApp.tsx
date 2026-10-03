@@ -13,7 +13,7 @@
 //
 // Simple mode (06 T18, a11y.simpleMode): one row at a time (model.simpleRow), the status text
 // only when no row shows, and Repeat and Help always on the bar.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { AssistantView } from '@shared/channels'
 import type { AssistantPhase } from '@shared/events'
 import { Button, IconButton, icons, type IconComponent } from '../ui'
@@ -113,6 +113,8 @@ export function AssistantApp(): JSX.Element {
   const [hover, setHover] = useState(false)
   const [focusWithin, setFocusWithin] = useState(false)
   const [focused, setFocused] = useState(false)
+  const [filesShown, setFilesShown] = useState(false)
+  const onFilesShown = useCallback((on: boolean) => setFilesShown(on), [])
   const settings = useBarSettings()
   const reviewCount = useMemoryPending(settings.memory)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -262,6 +264,22 @@ export function AssistantApp(): JSX.Element {
     resetKey
   )
 
+  // Nothing but the status: the bar is a short pill (it widens, springing, when a row comes).
+  const compact =
+    !settings.simple &&
+    !focused &&
+    !filesShown &&
+    !v.answer &&
+    !v.error &&
+    !v.notice &&
+    !v.confirm &&
+    !v.agentTask &&
+    !v.claude &&
+    !v.step &&
+    !(v.live && !v.live.echo) &&
+    !v.captionEdit &&
+    !v.caption &&
+    !(reviewCount > 0)
   const PhaseIcon = PHASE_ICON[v.phase]
   const listening = v.phase === 'listening'
   const working = v.phase === 'thinking' || v.phase === 'transcribing'
@@ -307,6 +325,7 @@ export function AssistantApp(): JSX.Element {
                 role="region"
                 aria-label="Lumen"
                 className={`as-card is-${v.phase}`}
+                compact={compact}
                 onPointerEnter={() => {
                   setHover(true)
                   send('assistant:interactive', true)
@@ -336,7 +355,11 @@ export function AssistantApp(): JSX.Element {
                     </div>
                   ) : v.answer ? (
                     <div className="as-row as-answer">
-                      <div ref={answerRef} className="as-answer__scroll" tabIndex={0}>
+                      <div
+                        ref={answerRef}
+                        className={`as-answer__scroll${v.answer.cardsId ? ' has-cards' : ''}`}
+                        tabIndex={0}
+                      >
                         <AnswerText
                           markdown={v.answer.markdown}
                           streaming={v.answer.streaming}
@@ -346,7 +369,6 @@ export function AssistantApp(): JSX.Element {
                       {v.answer.cardsId && !v.answer.streaming && (
                         <CardStrip id={v.answer.cardsId} simple={simple} />
                       )}
-                      {v.model && <p className="as-answer__meta">{v.model}</p>}
                     </div>
                   ) : null}
                 </Fade>
@@ -415,7 +437,7 @@ export function AssistantApp(): JSX.Element {
                   </p>
                 </Fade>
 
-                <FileChips refreshKey={`${view.visible}|${v.phase}`} />
+                <FileChips refreshKey={`${view.visible}|${v.phase}`} onShown={onFilesShown} />
 
                 {v.captionEdit ? (
                   <CaptionEditor key={v.captionEdit.mode} edit={v.captionEdit} />
@@ -433,6 +455,11 @@ export function AssistantApp(): JSX.Element {
                       <CrossFadeText text={statusLine(v)} shimmer={working} />
                     </span>
                     {listening && <LevelMeter active={listening} />}
+                    {v.model && v.answer && !v.answer.streaming && !simple && (
+                      <span className="as-model" title="Model that answered">
+                        {v.model}
+                      </span>
+                    )}
                     {settings.style && (
                       <span
                         className="as-style-chip"

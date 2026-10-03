@@ -19,7 +19,8 @@ function ports(): CardsPorts & { [K in keyof CardsPorts]: ReturnType<typeof vi.f
     saveNote: vi.fn(async () => true),
     openPanel: vi.fn(),
     runQuery: vi.fn(),
-    say: vi.fn()
+    say: vi.fn(),
+    copy: vi.fn()
   }
 }
 

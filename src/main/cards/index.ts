@@ -1,7 +1,13 @@
 // Answer cards (05 Phase R): validate, keep per conversation, show under the bar's answer,
 // resolve images in the background, and run the card buttons. The ports keep this testable;
 // `installCards` wires the real ones (bar, panel, executor, notes, announce).
-import type { AnswerCards, CardActionRequest, CardActionResult, CardsView } from '@shared/cards'
+import type {
+  AnswerCards,
+  Card,
+  CardActionRequest,
+  CardActionResult,
+  CardsView
+} from '@shared/cards'
 import { bus } from '../bus'
 import { log } from '../logger'
 import { cardImages, type CardImages } from './images'
@@ -26,6 +32,8 @@ export interface CardsPorts {
   runQuery(text: string): void
   /** One short spoken / announced line. */
   say(text: string): void
+  /** Puts text on the clipboard. */
+  copy(text: string): void
 }
 
 let ports: CardsPorts | null = null
@@ -139,6 +147,26 @@ const ORDINALS = [
   'twelfth'
 ]
 
+/** A card's main text for Copy: the number, the lines, or the title with its facts. */
+export function cardText(card: Card): string {
+  const lines: string[] = [card.title]
+  if (card.value)
+    lines.push([card.value.text, card.value.change, card.value.caption].filter(Boolean).join(' · '))
+  if (card.subtitle) lines.push(card.subtitle)
+  card.items?.forEach((it, i) =>
+    lines.push(
+      card.kind === 'steps'
+        ? `${i + 1}. ${it.text}`
+        : `${it.label ? `${it.label}: ` : '- '}${it.text}`
+    )
+  )
+  card.pros?.forEach((p) => lines.push(`+ ${p}`))
+  card.cons?.forEach((c) => lines.push(`- ${c}`))
+  card.facts.forEach((f) => lines.push(`${f.label}: ${f.value}`))
+  if (card.links[0]) lines.push(card.links[0].url)
+  return lines.join('\n')
+}
+
 export async function cardAction(req: CardActionRequest): Promise<CardActionResult> {
   const set = store.get(req.id) ?? (await loadCards(req.id))
   if (!set) return { ok: false, message: 'Those results are gone. Ask again to see them.' }
@@ -176,6 +204,26 @@ export async function cardAction(req: CardActionRequest): Promise<CardActionResu
           : `Tell me more about ${card.title}`
       )
       return { ok: true }
+    }
+    case 'link': {
+      // The button the user pressed: by index, so two link buttons each open their own page.
+      const a = req.index !== undefined ? card.actions[req.index] : undefined
+      const url = a?.kind === 'link' ? a.url : card.actions.find((x) => x.kind === 'link')?.url
+      if (!url) return { ok: false, message: 'This button has no link.' }
+      const ok = await ports.openUrl(url)
+      return ok ? { ok } : { ok, message: 'I could not open that link.' }
+    }
+    case 'ask': {
+      // An ask button runs exactly the words on it, as if the user said them.
+      const a = req.index !== undefined ? card.actions[req.index] : undefined
+      const label = a?.kind === 'ask' ? a.label : card.actions.find((x) => x.kind === 'ask')?.label
+      if (!label) return { ok: false }
+      ports.runQuery(label)
+      return { ok: true }
+    }
+    case 'copy': {
+      ports.copy(cardText(card))
+      return { ok: true, message: 'Copied.' }
     }
     case 'do': {
       // Booking runs as an agent task in the user's browser (T41, cards/book-install).

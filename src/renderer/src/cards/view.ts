@@ -1,6 +1,16 @@
 // Answer cards (05 Phase R): pure helpers for the bar strip and the panel page. Formatting,
 // screen reader order, sorting, filter chips and the carousel window.
-import type { CardFilter, CardPrice, CardRating, CardSource, CardView } from '@shared/cards'
+import {
+  CARD_COLORS,
+  CARD_HEX_RE,
+  type CardAction,
+  type CardColor,
+  type CardFilter,
+  type CardPrice,
+  type CardRating,
+  type CardSource,
+  type CardView
+} from '@shared/cards'
 
 /** Only local data URLs are drawn (the CSP would block anything else anyway). */
 export const isDataImage = (src: string): boolean => /^data:image\/(jpeg|png);base64,/.test(src)
@@ -31,6 +41,21 @@ export function formatRating(r: CardRating): string {
       ? ` (${r.count.toLocaleString('en')} review${r.count === 1 ? '' : 's'})`
       : ''
   return `${trimNum(r.value)} out of ${trimNum(r.max)}${count}`
+}
+
+/** "8.7/10 · 1,203 reviews": the short form a card shows (screen readers get formatRating). */
+export function shortRating(r: CardRating): string {
+  const count =
+    r.count !== undefined
+      ? ` · ${r.count.toLocaleString('en')} review${r.count === 1 ? '' : 's'}`
+      : ''
+  return `${trimNum(r.value)}/${trimNum(r.max)}${count}`
+}
+
+/** "Booking.com · 1 h ago": the short source line a card shows. */
+export function shortSource(src: CardSource, now: number): string {
+  const ago = checkedAgo(src.checkedAt, now)
+  return ago ? `${src.title} · ${ago}` : src.title
 }
 
 /** "2 h ago" style age of a check; '' for 0. */
@@ -71,7 +96,20 @@ export function readOrder(card: CardView, sources: CardSource[], now: number): s
   if (card.price)
     out.push(`Price ${formatPrice(card.price)}${card.price.note ? `, ${card.price.note}` : ''}`)
   if (card.rating) out.push(`Rated ${formatRating(card.rating)}`)
+  if (card.value)
+    out.push([card.value.text, card.value.change, card.value.caption].filter(Boolean).join(', '))
   if (card.summary) out.push(`${card.summary.text} From ${card.summary.source}`)
+  card.items?.forEach((it, i) =>
+    out.push(
+      card.kind === 'steps'
+        ? `Step ${i + 1}: ${it.text}`
+        : it.label
+          ? `${it.label}: ${it.text}`
+          : it.text
+    )
+  )
+  if (card.pros?.length) out.push(`Pros: ${card.pros.join('; ')}`)
+  if (card.cons?.length) out.push(`Cons: ${card.cons.join('; ')}`)
   for (const f of restFacts(card, line)) out.push(`${f.label}: ${f.value}`)
   if (card.badges?.length) out.push(card.badges.join(', '))
   const src = mainSource(card, sources)
@@ -124,7 +162,8 @@ export function matchesFilter(card: CardView, f: CardFilter): boolean {
     card.title,
     card.subtitle ?? '',
     ...(card.badges ?? []),
-    ...card.facts.map((x) => `${x.label} ${x.value}`)
+    ...card.facts.map((x) => `${x.label} ${x.value}`),
+    ...(card.items ?? []).map((x) => `${x.label ?? ''} ${x.text}`)
   ]
   return hay.some((h) => h.toLowerCase().includes(needle))
 }
@@ -244,4 +283,57 @@ export function bestIds(cards: CardView[]): { cheapest?: string; best?: string }
   if (rated.length > 1)
     out.best = rated.reduce((a, b) => (ratingScore(b.rating) > ratingScore(a.rating) ? b : a)).id
   return out
+}
+
+// ---- look: accent colours and buttons ----
+
+/**
+ * Attributes that colour a card or a button: a named colour as `data-accent` (tuned per theme
+ * in cards.css), a hex as the `--cd-accent` variable. Nothing for none.
+ */
+export function accentAttrs(color?: CardColor): {
+  'data-accent'?: string
+  style?: Record<string, string>
+} {
+  if (!color) return {}
+  if ((CARD_COLORS as readonly string[]).includes(color)) return { 'data-accent': color }
+  if (CARD_HEX_RE.test(color)) return { 'data-accent': 'custom', style: { '--cd-accent': color } }
+  return {}
+}
+
+/** Buttons that say what the card is for; the rest (save, copy, compare, more) are icons. */
+const MAIN_ACTIONS = new Set<CardAction['kind']>(['do', 'open', 'link', 'ask'])
+
+export const isMainAction = (a: CardAction): boolean => MAIN_ACTIONS.has(a.kind)
+
+/**
+ * The index of the card's primary button: one marked primary, else Do (book / buy), else none
+ * (a row of quiet buttons reads calmer than a default blue one on every card).
+ */
+export function primaryAction(actions: readonly CardAction[]): number {
+  const marked = actions.findIndex((a) => a.style === 'primary')
+  if (marked >= 0) return marked
+  return actions.findIndex((a) => a.kind === 'do' && a.style === undefined)
+}
+
+const DEFAULT_LABEL: Record<CardAction['kind'], string> = {
+  open: 'Open',
+  save: 'Save',
+  compare: 'Compare',
+  more: 'Tell me more',
+  do: 'Do it',
+  link: 'Open',
+  ask: 'Ask',
+  copy: 'Copy'
+}
+
+export const actionLabel = (a: CardAction): string => a.label ?? DEFAULT_LABEL[a.kind]
+
+/** Hostname without www for a link card's site line. */
+export function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return ''
+  }
 }

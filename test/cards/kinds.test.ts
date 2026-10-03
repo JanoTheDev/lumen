@@ -209,6 +209,7 @@ describe('trip times from pages read', () => {
             { label: 'Duration', value: '1 h 56 min' }
           ],
           badges: [],
+          accent: '',
           doLabel: ''
         }
       ]
@@ -241,6 +242,7 @@ describe('trip times from pages read', () => {
             rating: [],
             facts: [{ label: 'Opens', value: '09:00' }],
             badges: [],
+            accent: '',
             doLabel: ''
           }
         ]

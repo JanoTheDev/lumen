@@ -26,6 +26,7 @@ const card = (over: Partial<CardInput> = {}): CardInput => ({
   rating: [],
   facts: [],
   badges: [],
+  accent: '',
   doLabel: '',
   ...over
 })
@@ -242,6 +243,7 @@ describe('buildAnswerCards', () => {
             link: 'https://hotels.test/azur',
             price: [{ amount: 140, currency: '€', unit: 'night', note: '3–5 May', sourceId: 's1' }],
             rating: [{ value: 4.4, max: 5, count: 1203, sourceId: 's1' }],
+            accent: '',
             doLabel: 'Book it'
           })
         ]

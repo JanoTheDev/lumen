@@ -9,15 +9,63 @@ export const CARD_KINDS = [
   'trip',
   'recipe',
   'entity',
-  'generic'
+  'generic',
+  // Answer-mode kinds (the model's own knowledge, no sources): a headline number, numbered
+  // steps, a dated timeline, a tip / warning box, pros and cons, and a link worth opening.
+  'stat',
+  'steps',
+  'timeline',
+  'callout',
+  'pros-cons',
+  'link'
 ] as const
 export type CardKind = (typeof CARD_KINDS)[number]
 
 export const CARD_LAYOUTS = ['list', 'grid', 'table', 'carousel'] as const
 export type CardLayout = (typeof CARD_LAYOUTS)[number]
 
-export const CARD_ACTIONS = ['open', 'save', 'compare', 'more', 'do'] as const
+/**
+ * Card buttons. `link` opens its own https url, `ask` runs its label as the user's next
+ * question (what the button says is what runs), `copy` copies the card's main text.
+ */
+export const CARD_ACTIONS = [
+  'open',
+  'save',
+  'compare',
+  'more',
+  'do',
+  'link',
+  'ask',
+  'copy'
+] as const
 export type CardActionKind = (typeof CARD_ACTIONS)[number]
+
+/** Named accent colours; renderers map them to tuned values per theme. */
+export const CARD_COLORS = [
+  'blue',
+  'indigo',
+  'purple',
+  'pink',
+  'red',
+  'orange',
+  'amber',
+  'green',
+  'teal',
+  'gray'
+] as const
+export type CardColorName = (typeof CARD_COLORS)[number]
+/** A named colour or a `#rrggbb` hex. */
+export type CardColor = CardColorName | `#${string}`
+export const CARD_HEX_RE = /^#[0-9a-fA-F]{6}$/
+
+export const CARD_TONES = ['neutral', 'info', 'success', 'warning', 'danger'] as const
+export type CardTone = (typeof CARD_TONES)[number]
+
+export const BUTTON_STYLES = ['primary', 'secondary', 'plain'] as const
+export type CardButtonStyle = (typeof BUTTON_STYLES)[number]
+
+export const TRENDS = ['up', 'down', 'flat'] as const
+export type CardTrend = (typeof TRENDS)[number]
 
 /** Caps the validator enforces (and the renderer may rely on). */
 export const CARD_LIMITS = {
@@ -36,7 +84,11 @@ export const CARD_LIMITS = {
   alt: 200,
   url: 2048,
   text: 2000,
-  summary: 400
+  summary: 400,
+  items: 8,
+  item: 240,
+  pros: 5,
+  stat: 40
 } as const
 
 /** Where a fact came from: a page that was fetched or read, with the time it was checked. */
@@ -100,8 +152,29 @@ export interface CardSummary {
 
 export interface CardAction {
   kind: CardActionKind
-  /** Button label ("Book it", "Buy it"); required for `do`. */
+  /** Button label ("Book it", "Buy it"); required for `do`, `link` and `ask`. */
   label?: string
+  /** `link` only: the https page it opens. */
+  url?: string
+  /** How loud the button is; the card's first primary-able button is primary by default. */
+  style?: CardButtonStyle
+  /** Button colour (primary: its fill, else its text); the card's accent when absent. */
+  color?: CardColor
+}
+
+/** A headline number ("18°C", "$1.2 bn") with what it means and how it moved. */
+export interface CardValue {
+  text: string
+  caption?: string
+  trend?: CardTrend
+  /** "+2.4% today". */
+  change?: string
+}
+
+/** One line of a steps / timeline / generic list ("2019" + "Founded in Berlin"). */
+export interface CardItemLine {
+  label?: string
+  text: string
 }
 
 export interface Card {
@@ -118,6 +191,17 @@ export interface Card {
   badges?: string[]
   links: CardLink[]
   actions: CardAction[]
+  /** Colour of the card's accent line, numbers and default primary button. */
+  accent?: CardColor
+  /** callout: how it reads (tip, success, warning, problem). */
+  tone?: CardTone
+  /** stat: the headline number. */
+  value?: CardValue
+  /** steps / timeline / generic list lines. */
+  items?: CardItemLine[]
+  /** pros-cons. */
+  pros?: string[]
+  cons?: string[]
 }
 
 /** A filter chip the model suggested: a card matches when a badge, fact or subtitle says it. */
@@ -164,6 +248,8 @@ export interface CardActionRequest {
   id: string
   cardId?: string
   action: CardActionKind | 'show-all'
+  /** Index of the button in the card's actions (several `link` / `ask` buttons). */
+  index?: number
 }
 
 export interface CardActionResult {

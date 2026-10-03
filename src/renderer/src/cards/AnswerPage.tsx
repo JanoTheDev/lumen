@@ -34,7 +34,7 @@ export interface AnswerPageViewProps {
   layout: AnswerLayout
   onLayout: (l: AnswerLayout) => void
   now?: number
-  onAction: (kind: CardActionKind, cardId: string) => void
+  onAction: (kind: CardActionKind, cardId: string, index?: number) => void
   message?: string
   /** Initial state (tests). */
   initialSort?: CardSort
@@ -113,7 +113,7 @@ export function AnswerPageView({
                 now={now}
                 level={2}
                 position={{ index: i + 1, total: cards.length }}
-                onAction={(kind) => onAction(kind, card.id)}
+                onAction={(kind, index) => onAction(kind, card.id, index)}
               />
             </li>
           ))}
@@ -228,8 +228,13 @@ export function AnswerPage({ id, table }: { id: string; table?: boolean }): JSX.
             layout={layout}
             onLayout={(l) => (location.hash = `#/answer/${id}${l === 'table' ? '/table' : ''}`)}
             message={message}
-            onAction={(action, cardId) => {
-              void runCardAction({ id, cardId, action }).then((r) => setMessage(r.message ?? ''))
+            onAction={(action, cardId, index) => {
+              void runCardAction({
+                id,
+                cardId,
+                action,
+                ...(index !== undefined ? { index } : {})
+              }).then((r) => setMessage(r.message ?? ''))
             }}
           />
         ) : (

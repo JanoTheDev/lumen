@@ -1,8 +1,8 @@
 // Answer cards IPC (05 Phase R): `cards:get` reads one stored card set, `cards:action` runs a
 // card button. Installs the real ports (bar, panel window, executor, notes, announce).
-import { ipcMain } from 'electron'
+import { clipboard, ipcMain } from 'electron'
 import { z } from 'zod'
-import { CARD_ACTIONS, CARDS_ID_RE } from '@shared/cards'
+import { CARD_ACTIONS, CARD_LIMITS, CARDS_ID_RE } from '@shared/cards'
 import { announce } from '../a11y'
 import { executeActions } from '../actions/executor'
 import { onSessionEnd } from '../ai/memory/runtime'
@@ -28,7 +28,8 @@ const actionSchema = z.strictObject({
     .string()
     .regex(/^[A-Za-z0-9_-]{1,40}$/)
     .optional(),
-  action: z.enum([...CARD_ACTIONS, 'show-all'])
+  action: z.enum([...CARD_ACTIONS, 'show-all']),
+  index: z.number().int().min(0).max(CARD_LIMITS.actions).optional()
 })
 
 export function registerCardsIpc(): void {
@@ -50,7 +51,8 @@ export function registerCardsIpc(): void {
       settingsWin.create(route)
     },
     runQuery: (text) => assistant.send('assistant:run-query', text),
-    say: (text) => announce(text, { kind: 'command' })
+    say: (text) => announce(text, { kind: 'command' }),
+    copy: (text) => clipboard.writeText(text)
   })
   installCardsDisk()
   onSessionEnd(() => endCardsConversation())

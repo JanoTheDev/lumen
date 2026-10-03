@@ -36,9 +36,19 @@ body,
 
 /* ---- Morphing surface: caps keep their corners, the body stretches ---- */
 
+/* Never taller than the window (the answer text scrolls first); compact = a short pill. */
 .as-morph {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: calc(100vh - 1.5rem);
+  margin-inline: auto;
   color: var(--fg);
+}
+
+.as-morph.is-compact {
+  width: min(17.5rem, 100%);
 }
 
 .as-morph__bg {
@@ -109,9 +119,31 @@ body,
 .as-morph__content {
   position: relative;
   display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  min-height: 0;
+  padding: var(--space-3) var(--space-3) var(--space-2) var(--space-4);
+}
+
+/* The answer row is the one that gives up height when the window is short. */
+.as-morph__content > .as-fade:has(> .as-answer) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Text and cards together still taller than the window: the row scrolls as a last resort. */
+.as-answer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.as-answer > .cd-strip {
+  flex: none;
 }
 
 /* ---- Rows ---- */
@@ -146,19 +178,70 @@ body,
   will-change: transform;
 }
 
+@property --as-fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --as-fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Long answers scroll; a soft edge shows there is more above or below. The edges follow the
+   scroll position (a scroll timeline), so a short answer that does not scroll has none. */
 .as-answer__scroll {
+  flex: 0 1 auto;
+  min-height: 1.75rem;
   max-height: 50vh;
   overflow-y: auto;
   font-size: var(--text-lg);
   overscroll-behavior: contain;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--as-fade-top),
+    #000 calc(100% - var(--as-fade-bottom)),
+    transparent
+  );
+  animation: as-scroll-edges linear both;
+  animation-timeline: scroll(self);
 }
 
-.as-answer__meta {
-  margin-top: var(--space-1);
-  font-size: var(--text-sm);
+.as-answer__scroll.has-cards {
+  max-height: min(30vh, 9rem);
+}
+
+@keyframes as-scroll-edges {
+  0% {
+    --as-fade-top: 0px;
+    --as-fade-bottom: 1.5rem;
+  }
+  8% {
+    --as-fade-top: 1rem;
+  }
+  92% {
+    --as-fade-bottom: 1.5rem;
+  }
+  100% {
+    --as-fade-top: 1rem;
+    --as-fade-bottom: 0px;
+  }
+}
+
+/* The model that answered, small and quiet at the end of the status. */
+.as-model {
+  flex: none;
+  overflow: hidden;
+  max-width: 10em;
   color: var(--fg-muted);
-  text-align: right;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .as-error__msg {
@@ -495,7 +578,13 @@ body,
 .as-steps__item {
   display: flex;
   gap: var(--space-2);
-  align-items: baseline;
+  align-items: flex-start;
+}
+
+.as-steps__item > .ui-btn {
+  margin-left: auto;
+  min-height: 2rem;
+  padding-block: 0;
 }
 
 .as-steps__item.is-pending,
@@ -507,10 +596,21 @@ body,
   color: var(--danger, currentColor);
 }
 
+/* One line tall, so the icon sits on the label's first line. */
 .as-steps__icon {
   flex: none;
   display: inline-flex;
-  width: 1em;
+  align-items: center;
+  width: 1.125em;
+  height: calc(1em * var(--leading-body));
+}
+
+.as-steps__item.is-done .as-steps__icon {
+  color: var(--success);
+}
+
+.as-steps__item.is-running .as-steps__icon {
+  color: var(--accent);
 }
 
 .as-steps__details ul {

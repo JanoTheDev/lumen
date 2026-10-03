@@ -1,5 +1,6 @@
 // Types shared by main, preload and renderer. Pure TS: no electron or node imports.
 import type { ClaudePhase } from './claude-code'
+import type { AnswerCards } from './cards'
 
 export interface Point {
   x: number
@@ -161,6 +162,8 @@ export type ModelResponse =
       spoken?: string
       markdown?: string
       point?: Target
+      /** Cards the model drew for this answer (a ```cards block cut from its markdown). */
+      cards?: AnswerCards
       clarify?: boolean
       confidence?: Confidence
       cancelled?: boolean

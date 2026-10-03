@@ -115,6 +115,49 @@ describe('card markup', () => {
     expect(html).not.toMatch(/src="https?:/)
   })
 
+  it('answer kinds draw their own middle, colours and button looks', () => {
+    const base = { facts: [], links: [], actions: [] }
+    const draw = (card: Parameters<typeof CardItem>[0]['card']): string =>
+      renderToStaticMarkup(createElement(CardItem, { card, sources: [], now, onAction: noop }))
+    const steps = draw({
+      ...base,
+      id: 's',
+      kind: 'steps',
+      title: 'Make a rule',
+      accent: 'teal',
+      items: [{ text: 'Open Outlook' }, { text: 'Click Rules' }],
+      actions: [{ kind: 'ask', label: 'Do it for me', style: 'primary' }, { kind: 'copy' }]
+    })
+    expect(steps).toContain('data-accent="teal"')
+    expect(steps).toMatch(/<ol class="cd-steps">.*Open Outlook.*Click Rules.*<\/ol>/)
+    expect(steps).toContain('class="cd-btn is-primary"')
+    expect(steps).toContain('aria-label="Copy"')
+    const stat = draw({
+      ...base,
+      id: 't',
+      kind: 'stat',
+      title: '5 miles',
+      accent: '#0ea5e9',
+      value: { text: '8.05 km', change: '+2%', trend: 'up' },
+      actions: [{ kind: 'copy' }]
+    })
+    expect(stat).toContain('--cd-accent:#0ea5e9')
+    expect(stat).toContain('cd-stat__change is-up')
+    // Only an icon button: it sits in the corner instead of its own row.
+    expect(stat).toContain('tools-only')
+    const pc = draw({
+      ...base,
+      id: 'p',
+      kind: 'pros-cons',
+      title: 'A or B',
+      pros: ['Fast'],
+      cons: ['Big']
+    })
+    expect(pc.indexOf('Fast')).toBeLessThan(pc.indexOf('Big'))
+    const callout = draw({ ...base, id: 'c', kind: 'callout', tone: 'warning', title: 'Careful' })
+    expect(callout).toContain('tone-warning')
+  })
+
   it('a remote image URL is never drawn', () => {
     const v = hotelView()
     const card = { ...v.cards[0], image: { src: 'https://img.test/a.jpg', alt: 'x' } }

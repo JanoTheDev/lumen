@@ -51,6 +51,7 @@ const CARDS = {
       rating: [{ value: 4.4, max: 5, count: 1203, sourceId: 's1' }],
       facts: [{ label: 'Beach', value: '2 min walk' }],
       badges: ['Free parking'],
+      accent: '',
       doLabel: 'Book it'
     },
     {
@@ -64,6 +65,7 @@ const CARDS = {
       rating: [{ value: 9.2, max: 10, count: 0, sourceId: 's1' }],
       facts: [],
       badges: [],
+      accent: '',
       doLabel: ''
     },
     {
@@ -76,6 +78,7 @@ const CARDS = {
       rating: [],
       facts: [{ label: 'Class', value: '4-star' }],
       badges: [],
+      accent: '',
       doLabel: ''
     }
   ],

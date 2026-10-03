@@ -3,6 +3,7 @@
 // the boxes land on the monitor the frame came from.
 import type { GuideStep, LocateItem, ModelResponse, Rect, Target } from '@shared/types'
 import { isUsableRect, rectCenter } from '../actions/coords'
+import { presentCards } from '../cards'
 import { log } from '../logger'
 import * as answer from '../windows/answer'
 import * as highlight from '../windows/highlight'
@@ -144,6 +145,11 @@ async function show(
         text: `1/${bboxSteps.length}: ${first.label || first.target_hint}`
       })
     }
+  } else if (result.mode === 'answer' && result.cards) {
+    highlight.clear()
+    // Shown now and remembered by text, so the bar's answer:show of the same text keeps them.
+    const shown = presentCards(result.text, result.cards, { request: prompt })
+    if (!shown.ok) delete result.cards
   } else if (result.mode === 'action') {
     const hasRealClick = result.actions?.some(
       (a) =>

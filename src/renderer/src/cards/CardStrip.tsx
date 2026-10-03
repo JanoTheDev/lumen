@@ -1,8 +1,9 @@
-// The bar's card strip (05 T37): a carousel of answer cards under the answer text. Three cards
-// show at once; arrow buttons and Left / Right move through them, and Tab into a card brings it
-// into view. Simple mode shows one card at a time with Back / Next and reads it. The track
-// slides with a transform (compositor only); reduced motion makes it a jump.
-import { useRef, useState, type KeyboardEvent } from 'react'
+// The bar's card strip (05 T37): a carousel of answer cards under the answer text. Up to three
+// cards show at once (one card spans the width, two share it); arrow buttons and Left / Right
+// move through more, and Tab into a card brings it into view. The nav row is there only when
+// there is somewhere to go. Simple mode shows one card at a time with Back / Next and reads it.
+// The track slides with a transform (compositor only); reduced motion makes it a jump.
+import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import type { CardActionKind, CardsView } from '@shared/cards'
 import { Button, IconButton, icons } from '../ui'
 import { CardItem } from './CardItem'
@@ -16,7 +17,7 @@ export interface CardStripViewProps {
   view: CardsView
   simple?: boolean
   now?: number
-  onAction: (kind: CardActionKind | 'show-all', cardId?: string) => void
+  onAction: (kind: CardActionKind | 'show-all', cardId?: string, index?: number) => void
   /** Last action result, read out politely. */
   message?: string
 }
@@ -35,9 +36,10 @@ export function CardStripView({
   const [one, setOne] = useState(0)
   const [spoken, setSpoken] = useState('')
   const listRef = useRef<HTMLUListElement>(null)
-  const visible = simple ? 1 : STRIP_VISIBLE
+  const visible = simple ? 1 : Math.min(STRIP_VISIBLE, Math.max(1, total))
   const first = simple ? Math.min(one, total - 1) : windowStart(start, start, total, visible)
-  const showAll = !simple && (total > STRIP_VISIBLE || view.layout === 'table')
+  const showAll = !simple && (total > STRIP_VISIBLE || (view.layout === 'table' && total > 1))
+  const paged = total > visible
 
   const focusCard = (i: number): void => {
     const el = listRef.current?.querySelectorAll<HTMLElement>('[data-card]')[i]
@@ -72,7 +74,11 @@ export function CardStripView({
 
   const shown = simple ? [view.cards[first]] : view.cards
   return (
-    <section className={`cd-strip${simple ? ' is-simple' : ''}`} aria-label="Results">
+    <section
+      className={`cd-strip${simple ? ' is-simple' : ''}`}
+      aria-label="Results"
+      style={{ '--cd-cols': visible } as CSSProperties}
+    >
       <div className="cd-strip__viewport">
         <ul
           ref={listRef}
@@ -104,49 +110,60 @@ export function CardStripView({
                   now={now}
                   position={{ index: i + 1, total }}
                   focusable
-                  onAction={(kind) => onAction(kind, card.id)}
+                  dense
+                  onAction={(kind, index) => onAction(kind, card.id, index)}
                 />
               </li>
             )
           })}
         </ul>
       </div>
-      <div className="cd-strip__nav">
-        {simple ? (
-          <Button icon={icons.arrowLeft} disabled={first === 0} onClick={() => move(-1)}>
-            Back
-          </Button>
-        ) : (
-          <IconButton
-            icon={icons.arrowLeft}
-            label="Previous results"
-            disabled={first === 0}
-            onClick={() => move(-1)}
-          />
-        )}
-        <span className="cd-strip__count" aria-hidden={simple ? undefined : true}>
-          {simple
-            ? `${first + 1} of ${total}`
-            : `${first + 1}–${Math.min(first + visible, total)} of ${total}`}
-        </span>
-        {simple ? (
-          <Button icon={icons.arrowRight} disabled={first + 1 >= total} onClick={() => move(1)}>
-            Next
-          </Button>
-        ) : (
-          <IconButton
-            icon={icons.arrowRight}
-            label="More results"
-            disabled={first + visible >= total}
-            onClick={() => move(1)}
-          />
-        )}
-        {showAll && (
-          <button type="button" className="cd-strip__all" onClick={() => onAction('show-all')}>
-            Show all
-          </button>
-        )}
-      </div>
+      {(paged || showAll) && (
+        <div className="cd-strip__nav">
+          {paged && (
+            <>
+              {simple ? (
+                <Button icon={icons.arrowLeft} disabled={first === 0} onClick={() => move(-1)}>
+                  Back
+                </Button>
+              ) : (
+                <IconButton
+                  icon={icons.arrowLeft}
+                  label="Previous results"
+                  disabled={first === 0}
+                  onClick={() => move(-1)}
+                />
+              )}
+              <span className="cd-strip__count" aria-hidden={simple ? undefined : true}>
+                {simple
+                  ? `${first + 1} of ${total}`
+                  : `${first + 1}–${Math.min(first + visible, total)} of ${total}`}
+              </span>
+              {simple ? (
+                <Button
+                  icon={icons.arrowRight}
+                  disabled={first + 1 >= total}
+                  onClick={() => move(1)}
+                >
+                  Next
+                </Button>
+              ) : (
+                <IconButton
+                  icon={icons.arrowRight}
+                  label="More results"
+                  disabled={first + visible >= total}
+                  onClick={() => move(1)}
+                />
+              )}
+            </>
+          )}
+          {showAll && (
+            <button type="button" className="cd-strip__all" onClick={() => onAction('show-all')}>
+              {total > STRIP_VISIBLE ? `Show all ${total}` : 'Compare'}
+            </button>
+          )}
+        </div>
+      )}
       <p className="visually-hidden" aria-live="polite">
         {message || spoken}
       </p>
@@ -164,8 +181,10 @@ export function CardStrip({ id, simple }: { id: string; simple?: boolean }): JSX
       view={view}
       simple={simple}
       message={message}
-      onAction={(action, cardId) => {
-        void runCardAction({ id, cardId, action }).then((r) => setMessage(r.message ?? ''))
+      onAction={(action, cardId, index) => {
+        void runCardAction({ id, cardId, action, ...(index !== undefined ? { index } : {}) }).then(
+          (r) => setMessage(r.message ?? '')
+        )
       }}
     />
   )

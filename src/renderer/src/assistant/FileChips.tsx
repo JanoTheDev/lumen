@@ -10,10 +10,19 @@ import { invoke } from '../lib/ipc'
 import { formatSize, isFileDrag, MAX_DROP } from './files'
 import './files.css'
 
-export function FileChips({ refreshKey }: { refreshKey: string }): JSX.Element | null {
+export function FileChips({
+  refreshKey,
+  onShown
+}: {
+  refreshKey: string
+  /** Whether the row is drawn (the bar stays compact without it). */
+  onShown?: (shown: boolean) => void
+}): JSX.Element | null {
   const [files, setFiles] = useState<DroppedFileView[]>([])
   const [dragging, setDragging] = useState(false)
   const [error, setError] = useState('')
+  const shown = !!(files.length || dragging || error)
+  useEffect(() => onShown?.(shown), [shown, onShown])
 
   // The list clears in main when the conversation ends: re-read it whenever the bar changes.
   useEffect(() => {
@@ -78,7 +87,7 @@ export function FileChips({ refreshKey }: { refreshKey: string }): JSX.Element |
       .catch(() => {})
   }
 
-  if (!files.length && !dragging && !error) return null
+  if (!shown) return null
   return (
     <div className="as-row as-files">
       {dragging && <p className="as-files__drop">Drop to share with Lumen</p>}
