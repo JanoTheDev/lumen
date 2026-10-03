@@ -16,6 +16,11 @@ async function fetchText(url: string): Promise<string> {
 
 let service: UpdateService | null = null
 
+/** The running update service (null before installUpdates), for voice commands. */
+export function updateService(): UpdateService | null {
+  return service
+}
+
 export function installUpdates(): void {
   if (service) return
   const s = new UpdateService({
